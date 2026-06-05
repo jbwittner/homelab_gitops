@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops
+    targetRevision: main
+    path: apps-definitions/neltharion        # ← pointe vers le DOSSIER d'Applications
+    directory:
+      recurse: true                          # ← lit tous les .yaml du dossier
+  destination:
+    server: https://kubernetes.default.svc   # in-cluster (Neltharion)
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
