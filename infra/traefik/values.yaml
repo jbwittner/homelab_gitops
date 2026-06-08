@@ -21,8 +21,6 @@ ports:
     port: 80
   websecure:
     port: 443
-    tls:
-      enabled: true
 
 # --- redirect HTTP->HTTPS via additionalArguments (PAS via redirectTo) ---
 additionalArguments:
