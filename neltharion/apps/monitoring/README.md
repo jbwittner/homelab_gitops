@@ -22,6 +22,23 @@ All three stateful components use `local-path` PVCs:
 | Grafana | 2 Gi |
 | Alertmanager | 1 Gi |
 
+### Monitoring des volumes
+
+> ⚠️ **local-path crée des PV de type `hostPath`** : le kubelet n'émet donc PAS
+> `kubelet_volume_stats_*` → **pas d'usage disque par-PVC**. De plus la taille du PVC
+> n'est **pas appliquée** (bind-mount : un PVC peut remplir tout le disque). La métrique
+> pertinente est l'usage du filesystem sous-jacent **`/var/mnt/data`** (XFS dédié), exposé
+> par node-exporter (`node_filesystem_*`). De vraies stats par-PVC nécessiteraient un CSI
+> (TopoLVM, OpenEBS, Longhorn) à la place de local-path.
+
+- **Alertes** : déjà couvertes par les règles node-exporter du chart
+  (`NodeFilesystemAlmostOutOfSpace`, `NodeFilesystemSpaceFillingUp`, + variantes inodes),
+  qui s'appliquent à tous les filesystems dont `/var/mnt/data`.
+- **Dashboard** : `volumes-dashboard.configmap.yaml` (ConfigMap `grafana_dashboard=1`,
+  uid `homelab-volumes`, titre « Volumes / local-path ») — usage de `/var/mnt/data`,
+  estimation jours-avant-saturation, inventaire PVC (kube-state-metrics) et taille TSDB
+  Prometheus. Coexiste avec les dashboards upstream.
+
 ## Grafana access
 
 Exposé via une **IngressRoute Traefik** (`ingress-route.yaml`) + un **Certificate cert-manager**
