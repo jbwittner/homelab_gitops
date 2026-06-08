@@ -6,6 +6,16 @@ Pattern : **app-of-apps** + **Argo manages Argo** (Argo gère sa propre config a
 ## TL;DR — commandes d'init
 
 ```bash
+# 0. Installer le contrôleur sealed-secrets EN PREMIER (sinon la repo-cred scellée
+#    appliquée à l'étape 1 ne peut pas être déchiffrée — cf. « Ordre du bootstrap » ci-dessous).
+#    Mêmes nom/namespace/version que l'Application wave 0 → Argo l'adopte sans churn.
+helm install sealed-secrets sealed-secrets \
+  --repo https://bitnami-labs.github.io/sealed-secrets \
+  --version 2.18.6 \
+  --namespace sealed-secrets --create-namespace
+kubectl wait --for=condition=available --timeout=120s \
+  deployment/sealed-secrets -n sealed-secrets
+
 # 1. Installer Argo (server-side OBLIGATOIRE)
 kubectl apply -k infra/argocd --server-side --force-conflicts
 
@@ -107,6 +117,30 @@ git commit -m "Add sealed SSH deploy key for argocd"
 rm argocd-deploy-key argocd-deploy-key.pub
 ```
 
+### 0. Installer le contrôleur sealed-secrets (impératif, AVANT Argo)
+
+> [!danger] Ordre du bootstrap — dépendance circulaire à briser à la main
+> La repo-cred SSH d'Argo (`argocd-repo.sealed-secret.yaml`) est **scellée** et appliquée à
+> l'étape 1. Mais seul le contrôleur **sealed-secrets** peut la déchiffrer en `Secret` exploitable.
+> Or ce contrôleur est normalement déployé par Argo en **wave 0** — qui a justement besoin de la
+> repo-cred déchiffrée pour cloner le repo privé. Sans intervention, Argo ne peut donc jamais
+> démarrer la wave 0. On **brise le cycle** en installant le contrôleur manuellement ici, avec
+> exactement les mêmes nom/namespace/version que l'Application wave 0 : Argo l'**adopte** ensuite
+> sans rien réinstaller.
+
+```bash
+helm install sealed-secrets sealed-secrets \
+  --repo https://bitnami-labs.github.io/sealed-secrets \
+  --version 2.18.6 \
+  --namespace sealed-secrets --create-namespace
+kubectl wait --for=condition=available --timeout=120s \
+  deployment/sealed-secrets -n sealed-secrets
+```
+
+> La génération/scellement de la deploy key (section « Credentials GitHub » ci-dessus) suppose
+> déjà ce contrôleur joignable (`kubeseal --controller-name=sealed-secrets ...`) — c'est la même
+> exigence.
+
 ### 1. Installer Argo (impératif, une seule fois)
 
 > [!important] Le `--server-side --force-conflicts` est **obligatoire**.
@@ -132,10 +166,11 @@ Attendus en `Running` :
 - `argocd-notifications-controller`
 
 > [!warning] K8s 1.36 (bleeding-edge)
-> Le cluster tourne sur Kubernetes **1.36**, très récent. Si des pods Argo crashent en boucle
-> avec des erreurs d'API, c'est un problème de compatibilité version. Bumper Argo vers la dernière
-> `v3.3.x` (≥ v3.3.3 pour le backport de compat K8s récente). En dernier recours, downgrade K8s
-> (gratuit tant que le cluster est vide).
+> Le cluster tourne sur Kubernetes **1.36**, très récent. L'install upstream est actuellement
+> pinnée sur **v3.4.3** dans `kustomization.yaml`. Si des pods Argo crashent en boucle avec des
+> erreurs d'API, c'est un problème de compatibilité version : bumper Argo vers le dernier patch
+> stable de la série `v3.4.x` (mettre à jour le tag dans `kustomization.yaml`). En dernier
+> recours, downgrade K8s (gratuit tant que le cluster est vide).
 
 ### 3. Récupérer le mot de passe admin initial
 

@@ -44,7 +44,19 @@ apps/
 Le dépôt est privé : Argo le lit via une **deploy key SSH** stockée en SealedSecret
 (`infra/argocd/argocd-repo.sealed-secret.yaml`), appliquée dès l'étape 1.
 
+> **Étape 0 obligatoire.** La repo-cred est scellée ; il faut le contrôleur sealed-secrets pour la
+> déchiffrer, mais celui-ci n'arrive normalement qu'en wave 0 (qui a besoin de la cred pour cloner
+> le repo). On installe donc sealed-secrets **à la main d'abord** ; Argo l'adopte ensuite. Détails :
+> [`infra/argocd/README.md`](infra/argocd/README.md).
+
 ```bash
+# 0. Installer le contrôleur sealed-secrets EN PREMIER (mêmes nom/namespace/version que la wave 0)
+helm install sealed-secrets sealed-secrets \
+  --repo https://bitnami-labs.github.io/sealed-secrets \
+  --version 2.18.6 \
+  --namespace sealed-secrets --create-namespace
+kubectl wait --for=condition=available --timeout=120s deployment/sealed-secrets -n sealed-secrets
+
 # 1. Installer Argo + credentials repo scellés (server-side obligatoire)
 kubectl apply -k infra/argocd --server-side --force-conflicts
 

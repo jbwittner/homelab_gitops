@@ -4,8 +4,7 @@ metadata:
   name: whoami
   namespace: whoami
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: argocd.wittnerlab.com
-    external-dns.alpha.kubernetes.io/target: 5.135.136.115
+    external-dns.alpha.kubernetes.io/hostname: whoami.wittnerlab.com
 spec:
   entryPoints:
     - websecure
