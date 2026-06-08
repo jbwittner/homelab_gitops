@@ -17,13 +17,14 @@ service:
 
 # --- ports : 80 (web) et 443 (websecure) ---
 ports:
-  web:
-    port: 8000
-    hostPort: 80
   websecure:
     port: 8443
     hostPort: 443
-    exposedPort: 443      # ← le port que Traefik annonce publiquement (pour le redirect)
+    exposedPort: 443
+  web:
+    port: 8000
+    hostPort: 80
+    exposedPort: 80
 
 # --- redirect HTTP->HTTPS via additionalArguments (PAS via redirectTo) ---
 additionalArguments:
