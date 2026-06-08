@@ -23,6 +23,7 @@ ports:
   websecure:
     port: 8443
     hostPort: 443
+    exposedPort: 443      # ← le port que Traefik annonce publiquement (pour le redirect)
 
 # --- redirect HTTP->HTTPS via additionalArguments (PAS via redirectTo) ---
 additionalArguments:
