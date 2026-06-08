@@ -15,8 +15,16 @@ resources:
   - argocd-ingress-route.yaml
   - argocd-repo.sealed-secret.yaml
   - argocd-webhook.sealed-secret.yaml
+  # Notifications Grafana : token scellé pour ce cluster. DÉCOMMENTER après avoir généré le
+  # fichier via kubeseal (cf. README « Notifications Grafana »). Laissé commenté tant que le
+  # fichier n'existe pas pour garder le kustomize buildable.
+  - argocd-notifications.sealed-secret.yaml
 patches:
   - path: argocd-cmd-params-cm.yaml
     target:
       kind: ConfigMap
       name: argocd-cmd-params-cm
+  - path: argocd-notifications-cm.yaml      # active le service Grafana (notifications)
+    target:
+      kind: ConfigMap
+      name: argocd-notifications-cm

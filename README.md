@@ -36,7 +36,7 @@ neltharion/               # = hub ; destination in-cluster
   infra/                  # un dossier AUTO-CONTENU par composant déployé :
                           #   <name>/<name>.app.yaml + values.yaml (Helm) + ressources annexes
     infra.bootstrap.yaml  # TIER 2 — découvre infra/*/*.app.yaml
-    argocd/               # self-management (wave -1) + install inliné + overlay hub (UI, secrets)
+    argocd/               # self-management (wave -1) + install inliné + overlay hub (UI, secrets, notifications Grafana)
     sealed-secrets/       # wave 0 (Helm, single-source) + README opérationnel
     traefik/              # wave 0 (Helm + values.yaml + namespace)
     cert-manager/         # wave 1 (Helm + values.yaml + ClusterIssuer + token scellé)

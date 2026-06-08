@@ -70,7 +70,7 @@ neltharion/               # = hub; in-cluster destination (https://kubernetes.de
   infra/                  # one SELF-CONTAINED folder per deployed component:
                           #   <name>/<name>.app.yaml + values.yaml (Helm) + aux resources
     infra.bootstrap.yaml  # TIER 2 — discovers infra/*/*.app.yaml
-    argocd/               # self-management (wave -1) — app + inlined install + hub overlay
+    argocd/               # self-management (wave -1) — app + inlined install + hub overlay + Grafana notifications (argocd-notifications-cm patch + sealed token)
     sealed-secrets/       # app only (Helm, single-source) + operational README
     traefik/              # app + values.yaml + namespace (wave 0)
     cert-manager/         # app + values.yaml + ClusterIssuer + sealed token (wave 1)

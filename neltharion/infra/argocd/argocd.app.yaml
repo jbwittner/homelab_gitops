@@ -16,6 +16,15 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
+  ignoreDifferences:
+    # Le Secret argocd-notifications-secret est livré VIDE par l'install upstream puis peuplé
+    # hors-bande par sealed-secrets (clé grafana-apikey). On ignore son /data pour éviter un
+    # OutOfSync permanent — et surtout un selfHeal qui effacerait le token.
+    - group: ""
+      kind: Secret
+      name: argocd-notifications-secret
+      jsonPointers:
+        - /data
   syncPolicy:
     automated:
       selfHeal: true

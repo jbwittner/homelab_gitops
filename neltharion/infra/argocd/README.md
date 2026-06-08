@@ -58,6 +58,8 @@ homelab-gitops/
     ├── argocd-cmd-params-cm.yaml        # patch ConfigMap argocd-cmd-params-cm
     ├── argocd-certificate.yaml          # Certificate cert-manager pour l'UI
     ├── argocd-ingress-route.yaml        # IngressRoute Traefik pour l'UI
+    ├── argocd-notifications-cm.yaml     # patch ConfigMap argocd-notifications-cm (service Grafana)
+    ├── argocd-notifications.sealed-secret.yaml  # token Grafana scellé (à générer, cf. § Notifications)
     ├── argocd-repo.sealed-secret.yaml       # deploy key SSH (scellée)
     └── argocd-webhook.sealed-secret.yaml    # secret webhook GitHub (scellé)
 ```
@@ -202,6 +204,67 @@ kubectl apply -f bootstrap/neltharion.yaml
 
 `neltharion` (tier 1) pointe `neltharion/` (recurse + `include: '*.bootstrap.yaml'`) → crée les deux bootstraps de partie → chacun découvre ses `*.app.yaml` → Argo crée toutes les Applications du cluster et déroule les sync-waves. L'Application `argocd` (wave -1) adopte la config déjà déployée à l'étape 1 → passe `Synced` sans rien changer → **self-management acté**.
 
+## Notifications Grafana
+
+Le `argocd-notifications-controller` (livré par l'install upstream) poste une **annotation Grafana**
+(`POST /api/annotations`) à chaque évènement Argo. Visible ensuite comme marqueur vertical sur les
+dashboards (filtrable par tag `argocd`).
+
+Câblage déclaratif (déjà en place) :
+- `argocd-notifications-cm.yaml` — patch du ConfigMap (vide à l'install) : service Grafana
+  (`apiUrl: http://monitoring-grafana.monitoring.svc/api`), templates, triggers
+  (`on-deployed`, `on-sync-failed`, `on-health-degraded`) et **subscription par défaut** sur
+  toutes les Applications (tag `argocd`).
+- `ignoreDifferences` sur l'Application `argocd` pour `Secret/argocd-notifications-secret` `/data` :
+  le Secret est livré **vide** par l'upstream puis peuplé hors-bande par sealed-secrets — sans ça,
+  `OutOfSync` permanent et `selfHeal` qui effacerait le token.
+
+> Tant que le token n'est pas scellé, le controller logue une erreur d'envoi mais ne crashe pas.
+
+### Générer le token Grafana et le sceller
+
+> Toutes les commandes depuis la **racine du repo**.
+
+```bash
+# 1. Dans Grafana (https://grafana.wittnerlab.com) : Administration → Service accounts →
+#    « Add service account » (role: Editor) → « Add token » (pas d'expiration ou longue TTL).
+#    Copier le token affiché (visible une seule fois).
+
+# 2. Injecter le token dans le placeholder gitignored
+sed -i '' "s|<COLLER_LE_TOKEN_GRAFANA_ICI>|<token>|" \
+  neltharion/infra/argocd/argocd-notifications.secret.yaml
+
+# 3. Sceller (sealed-secrets doit être joignable sur le cluster)
+kubeseal \
+  --controller-name=sealed-secrets \
+  --controller-namespace=sealed-secrets \
+  --format yaml \
+  < neltharion/infra/argocd/argocd-notifications.secret.yaml \
+  > neltharion/infra/argocd/argocd-notifications.sealed-secret.yaml
+
+# 4. Activer la ressource dans le kustomize : décommenter la ligne
+#    « - argocd-notifications.sealed-secret.yaml » dans kustomization.yaml
+
+# 5. Vérifier le build, puis committer (seul le *.sealed-secret.yaml est suivi ;
+#    le *.secret.yaml reste gitignored)
+kubectl kustomize neltharion/infra/argocd >/dev/null && echo OK
+git add neltharion/infra/argocd/argocd-notifications.sealed-secret.yaml \
+        neltharion/infra/argocd/kustomization.yaml
+git commit -m "Add sealed Grafana API token for argocd notifications"
+```
+
+> L'annotation `sealedsecrets.bitnami.com/managed: "true"` (déjà dans le placeholder) permet au
+> contrôleur d'**adopter** le Secret vide créé par l'install upstream au lieu d'échouer.
+
+### Vérifier
+
+```bash
+kubectl logs -n argocd deploy/argocd-notifications-controller
+# Forcer un test sur une app :
+kubectl -n argocd annotate app whoami \
+  notifications.argoproj.io/notified.on-deployed.grafana.argocd- --overwrite  # reset oncePer
+```
+
 ## Self-management — points de vigilance
 
 > [!danger] Pièges du « Argo manages Argo »
@@ -266,3 +329,5 @@ IngressRoute/Certificate en place). Reste :
 
 - [ ] Activer le SSO Authentik (patch `argocd-cm` + `argocd-rbac-cm`) après la wave Authentik.
 - [ ] Bumper le tag Argo dans `neltharion/infra/argocd/kustomization.yaml` si la compat K8s 1.36 l'exige.
+- [ ] **Notifications Grafana** : générer/sceller le token (`argocd-notifications.sealed-secret.yaml`)
+      et décommenter la ressource dans `kustomization.yaml` (cf. § Notifications Grafana).
