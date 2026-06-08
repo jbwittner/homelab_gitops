@@ -28,7 +28,7 @@ ports:
 
 # --- redirect HTTP->HTTPS via additionalArguments (PAS via redirectTo) ---
 additionalArguments:
-  - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+  - "--entrypoints.web.http.redirections.entrypoint.to=:443"
   - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
 
 # --- pas d'ACME : cert-manager gère les certs ---
