@@ -34,22 +34,28 @@ Le fichier `cloudflare-api-token.sealed-secret.yaml` est commité ; `cloudflare-
 
 ## Homelab hostPort — IP cible
 
-Traefik tourne en `hostPort` (pas de LoadBalancer). ExternalDNS ne peut pas déduire l'IP depuis le service — il faut la fournir explicitement sur chaque IngressRoute :
+Traefik tourne en `hostPort` (pas de LoadBalancer). ExternalDNS ne peut pas déduire l'IP depuis le service — il faut la fournir explicitement.
+
+> ⚠️ **La source `traefik-proxy` n'applique PAS `--default-targets`** (seule la source `ingress`
+> le fait). Avec des `IngressRoute`, l'IP via `--default-targets` est donc **ignorée** et aucun
+> record n'est créé (`No endpoints could be generated from Host …` dans les logs). La cible doit
+> être portée par **chaque IngressRoute** :
 
 ```yaml
 metadata:
   annotations:
     external-dns.alpha.kubernetes.io/hostname: mon-service.wittnerlab.com
-    external-dns.alpha.kubernetes.io/target: "<node-public-ip>"
+    external-dns.alpha.kubernetes.io/target: "5.135.136.115"   # IP du nœud
 ```
 
-Ou via `--default-targets` dans `values.yaml` si tous les services partagent la même IP :
+`--default-targets=5.135.136.115` reste dans `values.yaml` comme **filet de sécurité pour
+d'éventuels `Ingress` standards** (la source `ingress`, elle, l'honore). Changement d'IP du nœud :
+éditer cette ligne **et** l'annotation `target` de chaque IngressRoute.
 
-```yaml
-extraArgs:
-  - --traefik-disable-legacy
-  - --default-targets=<node-public-ip>
-```
+> 💡 `--policy=upsert-only` ne supprime jamais : un record créé avant un changement de config
+> survit même si la source ne le régénère plus — d'où des hosts qui « marchent encore » alors que
+> la création de nouveaux hosts est cassée. Pour voir ce qu'external-dns produit réellement :
+> `external_dns_source_endpoints_total` (métrique sur `:7979`) ou un run debug en `--dry-run`.
 
 ## Vérification
 
