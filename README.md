@@ -46,7 +46,7 @@ neltharion/               # = hub ; destination in-cluster
     apps.bootstrap.yaml   # TIER 2 — découvre apps/*/*.app.yaml
     metrics-server/       # wave 2 (Helm, single-source) — metrics Kubernetes (kubelet-insecure-tls pour Talos)
     whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path pour tester le stockage
-    monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana, Alertmanager, node-exporter
+    monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana (IngressRoute/cert), Alertmanager, node-exporter, dashboard volumes
 ```
 
 ## Bootstrap (one-time, impératif)
@@ -92,4 +92,4 @@ Après l'étape 4, tout passe par Git.
 - [`neltharion/infra/cert-manager/README.md`](neltharion/infra/cert-manager/README.md) — ClusterIssuer & token Cloudflare.
 - [`neltharion/infra/external-dns/README.md`](neltharion/infra/external-dns/README.md) — sync DNS Cloudflare.
 - [`neltharion/infra/local-path-provisioner/README.md`](neltharion/infra/local-path-provisioner/README.md) — StorageClass par défaut sur le disque data Talos.
-- [`neltharion/infra/monitoring/README.md`](neltharion/infra/monitoring/README.md) — kube-prometheus-stack, Grafana (grafana.wittnerlab.com), stockage persistant.
+- [`neltharion/apps/monitoring/README.md`](neltharion/apps/monitoring/README.md) — kube-prometheus-stack, Grafana (grafana.wittnerlab.com), stockage persistant & monitoring des volumes.

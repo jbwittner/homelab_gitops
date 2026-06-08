@@ -80,7 +80,7 @@ neltharion/               # = hub; in-cluster destination (https://kubernetes.de
     apps.bootstrap.yaml   # TIER 2 — discovers apps/*/*.app.yaml
     metrics-server/       # app only (Helm, single-source) (wave 2) — --kubelet-insecure-tls pour Talos
     whoami/               # app + Kustomize (inlined manifests) (wave 3) — incl. PVC local-path (storage smoke test)
-    monitoring/           # app + values.yaml + namespace + Grafana IngressRoute/cert (wave 4) — kube-prometheus-stack
+    monitoring/           # app + values.yaml + namespace + Grafana IngressRoute/cert + volumes dashboard (wave 4) — kube-prometheus-stack
 ```
 
 Each component is one self-contained folder: `<name>.app.yaml` carries the boilerplate
