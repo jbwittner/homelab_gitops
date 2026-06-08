@@ -15,7 +15,7 @@ grafana:
     storageClassName: local-path
     size: 2Gi
   ingress:
-    enabled: false
+    enabled: true
     # annotations:
     #   external-dns.alpha.kubernetes.io/hostname: grafana.wittnerlab.com
     # hosts: 
