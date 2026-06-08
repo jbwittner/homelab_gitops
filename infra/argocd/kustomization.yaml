@@ -8,6 +8,7 @@ resources:
   - argocd-repo.sealed-secret.yaml  # générer via bootstrap/README.md avant d'activer
   - argocd-certificate.yaml
   - argocd-ingress-route.yaml
+  - argocd-webhook.sealed-secret.yaml
 
 patches:
   - path: argocd-cmd-params-cm.yaml
