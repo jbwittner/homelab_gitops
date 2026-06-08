@@ -16,10 +16,10 @@ grafana:
     size: 2Gi
   ingress:
     enabled: false
-    annotations:
-      external-dns.alpha.kubernetes.io/hostname: grafana.wittnerlab.com
-    hosts: 
-      - grafana.wittnerlab.com
+    # annotations:
+    #   external-dns.alpha.kubernetes.io/hostname: grafana.wittnerlab.com
+    # hosts: 
+    #   - grafana.wittnerlab.com
 
 alertmanager:
   alertmanagerSpec:
