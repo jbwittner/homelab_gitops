@@ -20,15 +20,6 @@ grafana:
     size: 2Gi
   ingress:
     enabled: true
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
-      external-dns.alpha.kubernetes.io/hostname: grafana.wittnerlab.com
-    hosts:
-      - grafana.wittnerlab.com
-    tls:
-      - secretName: grafana-tls
-        hosts:
-          - grafana.wittnerlab.com
 
 alertmanager:
   alertmanagerSpec:
