@@ -44,6 +44,7 @@ neltharion/               # = hub ; destination in-cluster
     local-path-provisioner/ # wave 1 (Kustomize, manifest upstream pinné + patches) — StorageClass par défaut
   apps/
     apps.bootstrap.yaml   # TIER 2 — découvre apps/*/*.app.yaml
+    metrics-server/       # wave 2 (Helm, single-source) — metrics Kubernetes (kubelet-insecure-tls pour Talos)
     whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path pour tester le stockage
     monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana, Alertmanager, node-exporter
 ```

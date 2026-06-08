@@ -78,6 +78,7 @@ neltharion/               # = hub; in-cluster destination (https://kubernetes.de
     local-path-provisioner/ # app + Kustomize (upstream manifest pinned + patches) (wave 1) — default StorageClass
   apps/
     apps.bootstrap.yaml   # TIER 2 — discovers apps/*/*.app.yaml
+    metrics-server/       # app only (Helm, single-source) (wave 2) — --kubelet-insecure-tls pour Talos
     whoami/               # app + Kustomize (inlined manifests) (wave 3) — incl. PVC local-path (storage smoke test)
     monitoring/           # app + values.yaml + namespace + Grafana IngressRoute/cert (wave 4) — kube-prometheus-stack
 ```
@@ -162,6 +163,7 @@ After step 4 Argo takes over; all further changes go through Git.
 | -1   | argocd (self-management) |
 | 0    | sealed-secrets, traefik |
 | 1    | cert-manager (+ ClusterIssuer overlay), external-dns, local-path-provisioner (default StorageClass) |
+| 2    | metrics-server |
 | 3    | whoami (test app) |
 | 4    | monitoring (kube-prometheus-stack: Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics) |
 
