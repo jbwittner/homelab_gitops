@@ -1,0 +1,3 @@
+# Override cert-manager SPÉCIFIQUE à neltharion (fusionné après values-common.yaml).
+# Aucune valeur Helm propre au cluster ici : l'e-mail ACME et le ClusterIssuer sont
+# portés par cluster-issuer.yaml, pas par les values de la chart.

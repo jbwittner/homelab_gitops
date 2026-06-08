@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/external-dns/
+      chart: external-dns
+      targetRevision: 1.16.1
+      helm:
+        releaseName: external-dns
+        valueFiles:
+          - $src/components/infra/external-dns/values-common.yaml      # provider/env/sources
+          - $src/clusters/neltharion/infra/external-dns/values/values.yaml  # domainFilters, txtOwnerId, IP
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: src
+      path: clusters/neltharion/infra/external-dns                     # namespace + token Cloudflare
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-dns
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

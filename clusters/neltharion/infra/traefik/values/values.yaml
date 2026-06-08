@@ -1,0 +1,3 @@
+# Override Traefik SPÉCIFIQUE à neltharion (fusionné par Helm APRÈS values-common.yaml).
+# Rien de spécifique pour l'instant : la config commune suffit sur ce cluster.
+# Ajouter ici toute valeur propre à neltharion (ex. replicas, ressources, IP).

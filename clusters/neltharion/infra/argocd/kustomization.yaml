@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+# Overlay Argo CD du hub neltharion : base partagée (install + cmd-params) + le
+# SPÉCIFIQUE-hub (UI exposée au domaine wittnerlab.com, credentials repo & webhook scellés
+# pour CE cluster). Sert AUSSI à l'apply manuel du bootstrap (kubectl apply -k ce dossier).
+resources:
+  - ../../../../components/infra/argocd/base
+  - argocd-certificate.yaml
+  - argocd-ingress-route.yaml
+  - argocd-repo.sealed-secret.yaml
+  - argocd-webhook.sealed-secret.yaml
