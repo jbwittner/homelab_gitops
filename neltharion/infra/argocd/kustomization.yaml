@@ -15,9 +15,7 @@ resources:
   - argocd-ingress-route.yaml
   - argocd-repo.sealed-secret.yaml
   - argocd-webhook.sealed-secret.yaml
-  # Notifications Grafana : token scellé pour ce cluster. DÉCOMMENTER après avoir généré le
-  # fichier via kubeseal (cf. README « Notifications Grafana »). Laissé commenté tant que le
-  # fichier n'existe pas pour garder le kustomize buildable.
+  # Notifications Grafana : token scellé pour ce cluster (cf. README « Notifications Grafana »).
   - argocd-notifications.sealed-secret.yaml
 patches:
   - path: argocd-cmd-params-cm.yaml
@@ -28,3 +26,18 @@ patches:
     target:
       kind: ConfigMap
       name: argocd-notifications-cm
+  # Le Secret argocd-notifications-secret est livré VIDE par l'upstream. sealed-secrets refuse
+  # d'écraser un Secret qu'il ne possède pas TANT QUE le Secret LIVE ne porte pas cette annotation
+  # (le contrôleur la vérifie sur le Secret existant, pas sur le template de la SealedSecret).
+  # On l'ajoute donc directement sur le Secret upstream → Argo l'applique → adoption possible.
+  - patch: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: argocd-notifications-secret
+        namespace: argocd
+        annotations:
+          sealedsecrets.bitnami.com/managed: "true"
+    target:
+      kind: Secret
+      name: argocd-notifications-secret

@@ -253,8 +253,20 @@ git add neltharion/infra/argocd/argocd-notifications.sealed-secret.yaml \
 git commit -m "Add sealed Grafana API token for argocd notifications"
 ```
 
-> L'annotation `sealedsecrets.bitnami.com/managed: "true"` (déjà dans le placeholder) permet au
-> contrôleur d'**adopter** le Secret vide créé par l'install upstream au lieu d'échouer.
+> **Adoption du Secret vide.** L'install upstream livre `argocd-notifications-secret` VIDE.
+> sealed-secrets refuse d'écraser un Secret qu'il ne possède pas tant que le **Secret live** ne
+> porte pas l'annotation `sealedsecrets.bitnami.com/managed: "true"` — le contrôleur la vérifie
+> sur le Secret existant, **pas** sur le template de la SealedSecret (que `kubeseal` y place
+> pourtant). C'est donc un **patch kustomize** (dans `kustomization.yaml`) qui ajoute l'annotation
+> directement au Secret upstream ; Argo l'applique → le contrôleur peut alors l'adopter et y
+> écrire la clé `grafana-apikey`.
+>
+> ⚠️ **Migration (ajout de la feature sur un cluster déjà bootstrappé).** Si le Secret vide
+> existait déjà SANS l'annotation, sealed-secrets a échoué puis *abandonné* (`giving up`) ; ajouter
+> l'annotation au Secret live ne re-déclenche PAS la réconciliation (le **spec** de la SealedSecret
+> n'a pas changé). Forcer un re-sync une fois :
+> `kubectl rollout restart deploy/sealed-secrets -n sealed-secrets`. Sur un bootstrap *neuf* le
+> problème n'existe pas : le patch crée le Secret déjà annoté, l'adoption est immédiate.
 
 ### Vérifier
 
