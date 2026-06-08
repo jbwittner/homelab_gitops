@@ -10,8 +10,6 @@ prometheus:
               storage: 10Gi
 
 grafana:
-  ingress:
-    enabled: false
   persistence:
     enabled: true
     storageClassName: local-path
