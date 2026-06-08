@@ -26,7 +26,7 @@ spec:
         valueFiles:
           - $infra-repo/infra/traefik/values.yaml
       # Source pour les ressources auxiliaires (namespace, secrets, etc.)
-    - repoURL: https://github.com/jbwittner/infrastructure
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       ref: infra-repo
       path: infra/traefik
