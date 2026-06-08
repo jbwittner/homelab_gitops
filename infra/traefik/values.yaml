@@ -1,5 +1,5 @@
 # --- hostNetwork : Traefik écoute directement sur 80/443 du nœud ---
-hostNetwork: true
+hostNetwork: false
 
 deployment:
   replicas: 1
