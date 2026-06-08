@@ -12,7 +12,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/jbwittner/homelab_gitops
+    repoURL: git@github.com:jbwittner/homelab_gitops.git
     targetRevision: main
     path: definitions/neltharion/apps
     directory:
