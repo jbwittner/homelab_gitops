@@ -1,5 +1,9 @@
 # Sealed Secrets
 
+> Ce dossier ne contient **aucun manifeste** : le contrôleur sealed-secrets est déployé via
+> la chart Helm référencée dans `definitions/neltharion/infra/sealed-secrets.yaml` (wave 0).
+> Ce README couvre uniquement les procédures opérationnelles (kubeseal, backup/restore de clé).
+
 ## Prérequis
 
 ```bash

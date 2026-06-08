@@ -18,7 +18,7 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 # 4. Mot de passe admin initial
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d ; echo
 
-# 5. Accès UI (port-forward, pas d'ingress encore)
+# 5. Accès UI (port-forward au bootstrap — l'IngressRoute n'est fonctionnel qu'après Traefik + cert-manager)
 kubectl -n argocd port-forward svc/argocd-server 8080:443
 # → https://localhost:8080  (admin + mdp étape 4)
 
@@ -40,19 +40,21 @@ Argo est à la fois ce qui **lit** le repo et un composant **dans** le repo :
 ```
 homelab-gitops/
 ├── bootstrap/
-│   ├── root-infra.yaml               # app-of-apps infra (apply manuel UNE fois)
-│   └── root-apps.yaml                # app-of-apps apps  (apply manuel UNE fois)
+│   ├── root-infra.yaml                  # app-of-apps infra (apply manuel UNE fois)
+│   └── root-apps.yaml                   # app-of-apps apps  (apply manuel UNE fois)
 ├── infra/
-│   └── argocd/                       # kustomize Argo (sert au bootstrap ET au self-management)
+│   └── argocd/                          # kustomize Argo (sert au bootstrap ET au self-management)
 │       ├── kustomization.yaml
 │       ├── namespace.yaml
-│       ├── *.patch.yaml
-│       ├── ingress.yaml              # activé APRÈS cert-manager
-│       └── argocd.sealed-secret.yaml # activé APRÈS sealed-secrets
+│       ├── argocd-cmd-params-cm.yaml    # patch ConfigMap argocd-cmd-params-cm
+│       ├── argocd-certificate.yaml      # Certificate cert-manager pour l'UI
+│       ├── argocd-ingress-route.yaml    # IngressRoute Traefik pour l'UI
+│       ├── argocd-repo.sealed-secret.yaml     # deploy key SSH (scellée)
+│       └── argocd-webhook.sealed-secret.yaml  # secret webhook GitHub (scellé)
 └── definitions/
     └── neltharion/
         ├── infra/
-        │   └── argocd.app.yaml       # Application self-management (path: infra/argocd)
+        │   └── argocd.yaml          # Application self-management (path: infra/argocd)
         └── apps/
 ```
 
@@ -64,9 +66,6 @@ homelab-gitops/
 - `kustomize` ou `kubectl -k` disponible.
 - `kubeseal` installé localement (`brew install kubeseal`).
 - `argocd-repo.sealed-secret.yaml` généré (voir section ci-dessous).
-- Dans `infra/argocd/kustomization.yaml` : `ingress.yaml`
-  **retiré des `resources`** pour le premier apply (pas encore de cert-manager).
-- Patches nettoyés de l'ancien contexte (repoURL `jbwittner/infrastructure`, SSO Authentik).
 
 ### Credentials GitHub (repo privé — SSH deploy key)
 
@@ -147,7 +146,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 Login : `admin` + ce mot de passe.
 
-### 4. Accéder à l'UI (port-forward — pas d'ingress encore)
+### 4. Accéder à l'UI (port-forward au bootstrap)
 
 ```bash
 kubectl -n argocd port-forward svc/argocd-server 8080:443
@@ -155,7 +154,9 @@ kubectl -n argocd port-forward svc/argocd-server 8080:443
 
 → https://localhost:8080 (certificat auto-signé, accepter l'avertissement).
 
-L'ingress propre (TLS via cert-manager) sera activé plus tard, après la wave cert-manager.
+L'`IngressRoute` Traefik + TLS cert-manager (`argocd-ingress-route.yaml` /
+`argocd-certificate.yaml`) est dans le bundle mais ne devient fonctionnelle qu'une fois
+Traefik (wave 0) et cert-manager (wave 1) déployés. Avant ça, utiliser le port-forward.
 
 ### 5. Lancer les app-of-apps (déclenche tout le reste)
 
@@ -178,30 +179,30 @@ kubectl apply -f bootstrap/root-infra.yaml -f bootstrap/root-apps.yaml
 >   se stabiliser, ne pas resync en boucle.
 > - Si diff persistant sur un webhook/CRD : ajouter un `ignoreDifferences` ciblé.
 
-## Ordre des sync-waves (cible)
+## Ordre des sync-waves
+
+Référence faisant foi : la table dans [`CLAUDE.md`](../../CLAUDE.md) (déployé vs roadmap).
+Rappel de l'état déployé :
 
 | Wave | Composants |
 |---|---|
 | -1 | argocd (self-management) |
-| 0 | sealed-secrets |
-| 1 | local-path-provisioner, cert-manager (chart), ingress-nginx, cert-manager-config |
-| 2 | cnpg (opérateur) |
-| 3 | forgejo, authentik |
-| 4 | monitoring, postfix |
+| 0 | sealed-secrets, traefik |
+| 1 | cert-manager (+ cert-manager-config), external-dns |
+| 3 | whoami (app de test) |
 
 ## Réactivations différées
 
-Une fois les dépendances en place, **décommenter dans `infra/argocd/kustomization.yaml`** :
-- `ingress.yaml` → après cert-manager + ingress-nginx (wave 1).
-- `argocd.sealed-secret.yaml` → après sealed-secrets (wave 0) + réinjection de la clé du contrôleur.
-- SSO Authentik (patch `argocd-cm` + `argocd-rbac-cm`) → après Authentik (wave 3).
+L'UI Argo est déjà exposée via `argocd-ingress-route.yaml` + `argocd-certificate.yaml`
+(actifs dans `infra/argocd/kustomization.yaml`). Reste en roadmap :
+- SSO Authentik (patch `argocd-cm` + `argocd-rbac-cm`) → à ajouter après Authentik (wave 3).
 
-Chaque réactivation = éditer le kustomize, push Git, Argo resync tout seul (self-managed).
+Chaque activation = éditer le kustomize, push Git, Argo resync tout seul (self-managed).
 
 ## DR — points à retenir
 
 - Le bootstrap impératif (étape 1) est le **seul geste manuel** ; à refaire en reconstruction.
-- Après l'étape 1, tout est déclaratif : `root.yaml` rejoue toute la stack depuis Git.
+- Après l'étape 1, tout est déclaratif : les deux roots (`root-infra.yaml` / `root-apps.yaml`) rejouent toute la stack depuis Git.
 - Argo lit **GitHub** (source primaire), pas Forgejo → pas de cycle, DR déterministe.
 - La clé du contrôleur **sealed-secrets** doit être réinjectée AVANT que le contrôleur démarre
   (sinon SealedSecrets indéchiffrables). Procédure DR déjà testée.
@@ -226,10 +227,8 @@ kubectl logs -n argocd statefulset/argocd-application-controller
 
 ## TODO
 
-- [ ] Vérifier pods `Running` (compat K8s 1.36).
-- [ ] Bumper version Argo vers dernière `v3.3.x` si besoin compat.
-- [ ] Créer `argocd.app.yaml` (self-management, ServerSideApply=true, prune=false, wave -1).
-- [ ] Créer `bootstrap/root-infra.yaml` + `root-apps.yaml` et les appliquer.
-- [ ] Vérifier que l'Application `argocd` passe `Synced`.
-- [ ] Nettoyer patches de l'ancien contexte (`jbwittner/infrastructure`, SSO).
-- [ ] Réactiver ingress/sealed-secret/SSO au fil des waves.
+Bootstrap et self-management acquis (Argo installé, roots appliqués, `argocd` `Synced`,
+IngressRoute/Certificate en place). Reste :
+
+- [ ] Activer le SSO Authentik (patch `argocd-cm` + `argocd-rbac-cm`) après la wave Authentik.
+- [ ] Bumper le tag Argo dans `kustomization.yaml` si la compat K8s 1.36 l'exige.
