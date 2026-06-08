@@ -1,7 +1,7 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: whoami
+  name: whoami-http
   namespace: whoami
 spec:
   entryPoints:
@@ -9,6 +9,26 @@ spec:
   routes:
     - match: Host(`whoami.wittnerlab.com`)
       kind: Rule
+      middlewares:
+        - name: https-redirect
+          namespace: traefik
       services:
         - name: whoami
           port: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: whoami-https
+  namespace: whoami
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`whoami.wittnerlab.com`)
+      kind: Rule
+      services:
+        - name: whoami
+          port: 80
+  tls:
+    secretName: whoami-tls
