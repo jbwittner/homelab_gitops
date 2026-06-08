@@ -79,6 +79,7 @@ neltharion/               # = hub; in-cluster destination (https://kubernetes.de
   apps/
     apps.bootstrap.yaml   # TIER 2 — discovers apps/*/*.app.yaml
     whoami/               # app + Kustomize (inlined manifests) (wave 3) — incl. PVC local-path (storage smoke test)
+    monitoring/           # app + values.yaml + namespace + Grafana IngressRoute/cert (wave 4) — kube-prometheus-stack
 ```
 
 Each component is one self-contained folder: `<name>.app.yaml` carries the boilerplate
@@ -162,6 +163,7 @@ After step 4 Argo takes over; all further changes go through Git.
 | 0    | sealed-secrets, traefik |
 | 1    | cert-manager (+ ClusterIssuer overlay), external-dns, local-path-provisioner (default StorageClass) |
 | 3    | whoami (test app) |
+| 4    | monitoring (kube-prometheus-stack: Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics) |
 
 ## Roadmap / planned (not yet in the repo)
 
@@ -171,7 +173,7 @@ Not deployed — keep this separate from the deployed table above. Assign waves 
 |------|-----------|
 | 2    | cnpg (operator) |
 | 3    | forgejo, authentik (+ Argo SSO patches) |
-| 4    | monitoring, postfix |
+| 4    | postfix |
 
 ## Self-management pitfalls
 
