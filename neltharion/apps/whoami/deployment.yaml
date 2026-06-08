@@ -5,6 +5,9 @@ metadata:
   namespace: whoami
 spec:
   replicas: 1
+  # Volume RWO node-local : Recreate évite le multi-attach (2 pods sur le même PV) au rollout.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: whoami
@@ -18,3 +21,11 @@ spec:
           image: traefik/whoami:latest
           ports:
             - containerPort: 80
+          # Montre que le PV local-path est bien provisionné et monté (test de stockage).
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: whoami-data

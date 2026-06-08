@@ -1,0 +1,14 @@
+# PVC de test pour valider local-path-provisioner (StorageClass par défaut du cluster).
+# Pas de storageClassName : on s'appuie volontairement sur la classe par défaut.
+# Le binding est WaitForFirstConsumer → le PV n'est provisionné qu'au scheduling du pod whoami.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: whoami-data
+  namespace: whoami
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

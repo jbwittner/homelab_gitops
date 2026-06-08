@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# local-path-provisioner (Rancher) — guide Talos "Local Storage".
+# Base = manifest upstream PINNÉ par tag (Namespace + RBAC + Deployment + ConfigMap
+# local-path-config + StorageClass local-path). Bump = changer le tag ci-dessous ET
+# l'image docker.io/rancher/local-path-provisioner du Deployment (versionnée dans le
+# manifest, donc suit automatiquement le tag). Releases :
+# https://github.com/rancher/local-path-provisioner/releases
+resources:
+  - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.36/deploy/local-path-storage.yaml
+
+# Adaptations cluster (cf. guide Talos) :
+#  - config.json    → stockage sur le volume data Talos (/var/mnt/data/...)
+#  - StorageClass   → classe par défaut du cluster (mono-node, pas d'autre CSI)
+#  - Namespace      → PSA privileged (les helper-pods montent un hostPath)
+patches:
+  - path: patch-config.yaml
+  - path: patch-default-storageclass.yaml
+  - path: patch-namespace-psa.yaml

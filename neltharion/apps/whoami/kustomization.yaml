@@ -5,6 +5,7 @@ kind: Kustomization
 # cluster copierait ce dossier et adapterait ces deux fichiers à son propre domaine.
 resources:
   - namespace.yaml
+  - pvc.yaml
   - deployment.yaml
   - service.yaml
   - certificate.yaml

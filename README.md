@@ -41,9 +41,10 @@ neltharion/               # = hub ; destination in-cluster
     traefik/              # wave 0 (Helm + values.yaml + namespace)
     cert-manager/         # wave 1 (Helm + values.yaml + ClusterIssuer + token scellé)
     external-dns/         # wave 1 (Helm + values.yaml + namespace + token scellé)
+    local-path-provisioner/ # wave 1 (Kustomize, manifest upstream pinné + patches) — StorageClass par défaut
   apps/
     apps.bootstrap.yaml   # TIER 2 — découvre apps/*/*.app.yaml
-    whoami/               # wave 3 (Kustomize, manifests inlinés)
+    whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path pour tester le stockage
 ```
 
 ## Bootstrap (one-time, impératif)
@@ -88,3 +89,4 @@ Après l'étape 4, tout passe par Git.
 - [`neltharion/infra/traefik/README.md`](neltharion/infra/traefik/README.md) — ingress hostPort, redirection HTTP→HTTPS, exposer une app.
 - [`neltharion/infra/cert-manager/README.md`](neltharion/infra/cert-manager/README.md) — ClusterIssuer & token Cloudflare.
 - [`neltharion/infra/external-dns/README.md`](neltharion/infra/external-dns/README.md) — sync DNS Cloudflare.
+- [`neltharion/infra/local-path-provisioner/README.md`](neltharion/infra/local-path-provisioner/README.md) — StorageClass par défaut sur le disque data Talos.

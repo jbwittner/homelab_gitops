@@ -1,0 +1,8 @@
+# Fait de local-path la StorageClass par défaut du cluster : sur ce mono-node il n'y a
+# pas d'autre CSI, donc tout PVC sans storageClassName doit l'utiliser.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
