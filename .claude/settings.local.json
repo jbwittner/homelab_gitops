@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(rtk helm *)"
+      "Bash(rtk helm *)",
+      "Bash(rtk git *)"
     ]
   }
 }

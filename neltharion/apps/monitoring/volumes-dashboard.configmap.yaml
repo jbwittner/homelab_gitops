@@ -1,0 +1,226 @@
+# Dashboard Grafana « Volumes / local-path » — chargé par le sidecar Grafana (label
+# grafana_dashboard=1), coexiste avec les dashboards upstream de kube-prometheus-stack.
+#
+# Rappel limite local-path : les PV sont de type hostPath → pas de kubelet_volume_stats_*
+# (usage par-PVC indisponible). On monitore donc le filesystem sous-jacent /var/mnt/data
+# (node-exporter) + l'inventaire des PVC (kube-state-metrics). Datasource uid: prometheus.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-volumes
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Homelab"
+data:
+  volumes-localpath.json: |
+    {
+      "uid": "homelab-volumes",
+      "title": "Volumes / local-path",
+      "tags": ["homelab", "storage"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "1m",
+      "time": { "from": "now-7d", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "mountpoint",
+            "type": "custom",
+            "label": "Mountpoint local-path",
+            "query": "/var/mnt/data",
+            "current": { "text": "/var/mnt/data", "value": "/var/mnt/data" },
+            "options": [
+              { "text": "/var/mnt/data", "value": "/var/mnt/data", "selected": true }
+            ]
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "% utilisé ($mountpoint)",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"} / node_filesystem_size_bytes{mountpoint=\"$mountpoint\"})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 75 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Disponible ($mountpoint)",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 1, "color": { "mode": "fixed", "fixedColor": "blue" } } },
+          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Capacité totale ($mountpoint)",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "node_filesystem_size_bytes{mountpoint=\"$mountpoint\"}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 1 } },
+          "options": { "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Jours avant saturation (est., tendance 6h)",
+          "description": "node_filesystem_avail / vitesse de décroissance sur 6h. Une valeur très élevée = volume non en train de se remplir.",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"} / clamp_min(-deriv(node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"}[6h]), 1) / 86400"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 14 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Usage $mountpoint (utilisé vs total)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "legendFormat": "Utilisé",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "node_filesystem_size_bytes{mountpoint=\"$mountpoint\"} - node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"}"
+            },
+            {
+              "refId": "B",
+              "legendFormat": "Total",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "node_filesystem_size_bytes{mountpoint=\"$mountpoint\"}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "fillOpacity": 10, "showPoints": "never" } } }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "% utilisé $mountpoint",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "legendFormat": "% utilisé",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"} / node_filesystem_size_bytes{mountpoint=\"$mountpoint\"})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "custom": { "fillOpacity": 10, "showPoints": "never" },
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 } ] }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "type": "table",
+          "title": "Inventaire PVC (taille demandée — NON appliquée par local-path)",
+          "description": "local-path ne fait pas respecter la taille du PVC : valeur indicative. L'usage réel partagé est sur /var/mnt/data.",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "format": "table",
+              "instant": true,
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "kube_persistentvolumeclaim_resource_requests_storage_bytes"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": {
+              "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true, "endpoint": true, "service": true, "container": true, "pod": true, "uid": true, "prometheus": true, "storageclass": true },
+              "renameByName": { "namespace": "Namespace", "persistentvolumeclaim": "PVC", "Value": "Taille demandée" }
+            } }
+          ],
+          "fieldConfig": { "defaults": {}, "overrides": [ { "matcher": { "id": "byName", "options": "Taille demandée" }, "properties": [ { "id": "unit", "value": "bytes" }, { "id": "decimals", "value": 1 } ] } ] }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Taille TSDB Prometheus (plus gros consommateur)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "refId": "A",
+              "legendFormat": "blocks",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum(prometheus_tsdb_storage_blocks_bytes)"
+            },
+            {
+              "refId": "B",
+              "legendFormat": "WAL",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum(prometheus_tsdb_wal_storage_size_bytes)"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "fillOpacity": 10, "showPoints": "never" } } }
+        }
+      ]
+    }
