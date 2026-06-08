@@ -9,12 +9,11 @@ changement — la doc fait partie de la définition de « terminé ». Concrète
 
 - Si tu ajoutes/supprimes/déplaces un composant, manifeste ou fichier : mets à jour ce
   `CLAUDE.md` (layout, tables sync-wave « deployed » vs « roadmap »), le `README.md` racine,
-  et le `README.md` du composant concerné (`components/<infra|apps>/<composant>/README.md`
-  pour la partie partagée, `clusters/<cluster>/...` pour le spécifique-cluster).
+  et le `README.md` du composant concerné (`<cluster>/<infra|apps>/<composant>/README.md`).
 - Quand un élément de la **Roadmap** est déployé, le déplacer dans la table « deployed ».
 - Toute référence à un fichier/chemin dans la doc doit pointer vers un fichier qui existe
   réellement. Vérification rapide : `grep` les noms de fichiers cités et confronter à
-  `find clusters components -name '*.yaml'`.
+  `find <cluster> -name '*.yaml'`.
 - Ne jamais laisser la doc décrire un état « cible » comme s'il était en place : marquer
   explicitement *implémenté* vs *prévu*.
 
@@ -26,71 +25,72 @@ workloads land on the target cluster (in-cluster for the hub, remote `destinatio
 <cluster>` for spokes). Today the only cluster is **neltharion** (Talos / Kubernetes 1.36,
 ingress via **Traefik**), which also acts as the hub.
 
-Deployments follow a two-axis convention:
+Deployments are organised per-cluster and **self-contained** — no shared `components/` tree.
+Everything for a cluster lives under `<cluster>/{infra,apps}/`, one **self-contained folder
+per deployed component** (its presence = the component runs on that cluster) holding the
+`<name>.app.yaml` Argo `Application`, its merged Helm `values.yaml`, and the cluster's auxiliary
+resources (namespace, sealed-secrets, ClusterIssuer, Kustomize). When a second cluster is added
+the whole `<cluster>/` folder is **copied** and adapted — duplication is the accepted trade-off
+for a flat, simple layout (no DRY base sharing).
 
-- **`components/{infra,apps}/<name>/`** — cluster-agnostic shared bases (common Helm values,
-  Kustomize bases).
-- **`clusters/<cluster>/{infra,apps}/`** — per-cluster layer: one `<name>.app.yaml` Argo
-  `Application` **per deployed component** (its presence = the component runs on that cluster)
-  + the cluster-specific overrides (values, namespaces, sealed-secrets, Kustomize patches).
+The cluster is deployed through a **3-tier app-of-apps**:
 
-Helm components use a **native multi-source** Application: the chart source layers
-`valueFiles` (`$src/components/...values-common.yaml` then `$src/clusters/...values.yaml`,
-Helm merges in order), and a second git source (`ref: src`) renders the cluster's auxiliary
-resources (namespace, sealed-secrets). One app-of-apps **per cluster** (`bootstrap/root-<cluster>.yaml`)
-discovers that cluster's Applications via `directory.recurse + include: '*.app.yaml'` (the
-glob, matched against the full relative path with `*` crossing `/`, keeps everything that is
-not an `*.app.yaml` — values, kustomizations, sealed-secrets — out of the root).
+- **Tier 1** — `bootstrap/<cluster>.yaml` (`kubectl apply -f` once on the hub) discovers the two
+  part-bootstraps via `directory.recurse + include: '*.bootstrap.yaml'`.
+- **Tier 2** — `<cluster>/infra/infra.bootstrap.yaml` and `<cluster>/apps/apps.bootstrap.yaml`,
+  each discovering its components via `recurse + include: '*.app.yaml'`.
+- **Tier 3** — the component `<name>.app.yaml` files.
+
+The two distinct suffixes (`.bootstrap.yaml` vs `.app.yaml`) are what keep the tiers from
+matching each other: the glob is matched against the full relative path with `*` crossing `/`,
+so `*.bootstrap.yaml` at tier 1 catches only the two part-bootstraps and `*.app.yaml` at tier 2
+catches only the components (everything else — values, kustomizations, sealed-secrets — is left
+out of both).
+
+Helm components still use a **native multi-source** Application: the chart source loads one local
+`valueFiles` (`$src/<cluster>/infra/<name>/values.yaml`) and a second git source (`ref: src`)
+renders the cluster's auxiliary resources (namespace, sealed-secrets) that the chart does not
+produce. Single-source is used where there is nothing extra (sealed-secrets, Kustomize apps).
 
 Source of truth for Argo is **GitHub** (not Forgejo), so the sync loop is: push to `main` →
 Argo detects change → reconciles cluster.
 
 > **SealedSecrets are per-cluster.** A SealedSecret is encrypted against one cluster's
 > controller key, so each cluster runs its own `sealed-secrets` and keeps its own re-sealed
-> secrets under `clusters/<cluster>/`.
+> secrets under `<cluster>/`.
 
 ## Repository layout
 
 ```
 bootstrap/
-  root-neltharion.yaml    # app-of-apps for the neltharion cluster; kubectl apply -f once on the hub
-                          # (one root-<cluster>.yaml per onboarded cluster)
+  neltharion.yaml         # TIER 1 app-of-apps; kubectl apply -f once on the hub
+                          # (one <cluster>.yaml per onboarded cluster)
 
-components/               # SHARED bases, cluster-agnostic (mirror of infra/apps)
-  infra/
-    traefik/values-common.yaml        # common Traefik Helm values
-    cert-manager/values-common.yaml   # common cert-manager values (crds.enabled)
-    external-dns/values-common.yaml   # common external-dns values (provider/env/sources)
-    argocd/base/                      # shared Argo bundle: pinned install.yaml + cmd-params patch
-    sealed-secrets/                   # operational README only (controller is Helm-deployed)
+neltharion/               # = hub; in-cluster destination (https://kubernetes.default.svc)
+  infra/                  # one SELF-CONTAINED folder per deployed component:
+                          #   <name>/<name>.app.yaml + values.yaml (Helm) + aux resources
+    infra.bootstrap.yaml  # TIER 2 — discovers infra/*/*.app.yaml
+    argocd/               # self-management (wave -1) — app + inlined install + hub overlay
+    sealed-secrets/       # app only (Helm, single-source) + operational README
+    traefik/              # app + values.yaml + namespace (wave 0)
+    cert-manager/         # app + values.yaml + ClusterIssuer + sealed token (wave 1)
+    external-dns/         # app + values.yaml + namespace + sealed token (wave 1)
   apps/
-    whoami/base/                      # Kustomize base (Deployment, Service, Certificate, IngressRoute)
-
-clusters/
-  neltharion/             # = hub; in-cluster destination (https://kubernetes.default.svc)
-    infra/                # one SELF-CONTAINED folder per deployed component:
-                          #   <name>/<name>.app.yaml + values/values.yaml (Helm override)
-                          #   + aux resources (namespace, sealed-secrets, kustomization)
-      argocd/             # self-management (wave -1) — app + hub overlay (UI Cert/IngressRoute, sealed secrets)
-      sealed-secrets/     # app only (Helm, single-source, no override)
-      traefik/            # app + values/ + namespace (wave 0)
-      cert-manager/       # app + values/ + ClusterIssuer + sealed token (wave 1)
-      external-dns/       # app + values/ + namespace + sealed token (wave 1)
-    apps/
-      whoami/             # app + Kustomize overlay → components/apps/whoami/base (wave 3)
+    apps.bootstrap.yaml   # TIER 2 — discovers apps/*/*.app.yaml
+    whoami/               # app + Kustomize (inlined manifests) (wave 3)
 ```
 
 Each component is one self-contained folder: `<name>.app.yaml` carries the boilerplate
-(repoURL, syncPolicy, destination), `values/` holds that cluster's Helm override(s), and the
-remaining files are the cluster's auxiliary Kustomize resources (namespace, sealed-secrets,
-ClusterIssuer). The `<name>.app.yaml` and `values/` are ignored both by the root glob and by
-the folder's own `kustomization.yaml`. The gitignored `*.secret.yaml` plaintext placeholders
-(for kubeseal regeneration) live next to their sealed counterparts under
-`clusters/neltharion/infra/argocd/`.
+(repoURL, syncPolicy, destination), `values.yaml` (at the folder root) holds that component's
+merged Helm values, and the remaining files are the auxiliary Kustomize resources (namespace,
+sealed-secrets, ClusterIssuer). The `<name>.app.yaml` and `values.yaml` are ignored both by the
+tier-2 glob (`*.app.yaml`) and by the folder's own `kustomization.yaml` (which lists its
+resources explicitly). The gitignored `*.secret.yaml` plaintext placeholders (for kubeseal
+regeneration) live next to their sealed counterparts under `neltharion/infra/argocd/`.
 
 ## Bootstrap procedure (one-time, imperative)
 
-The repo is private. Argo reads it via an **SSH deploy key** stored as a SealedSecret in `clusters/neltharion/infra/argocd/argocd-repo.sealed-secret.yaml` — applied in step 1 alongside Argo itself. See `clusters/neltharion/infra/argocd/README.md` for how to generate/regenerate it.
+The repo is private. Argo reads it via an **SSH deploy key** stored as a SealedSecret in `neltharion/infra/argocd/argocd-repo.sealed-secret.yaml` — applied in step 1 alongside Argo itself. See `neltharion/infra/argocd/README.md` for how to generate/regenerate it.
 
 > **Ordre du bootstrap (dépendance circulaire).** La repo-cred est *scellée* ; seul le contrôleur
 > sealed-secrets peut la déchiffrer. Ce contrôleur est normalement déployé par Argo en wave 0, qui a
@@ -109,8 +109,8 @@ helm install sealed-secrets sealed-secrets \
 kubectl wait --for=condition=available --timeout=120s deployment/sealed-secrets -n sealed-secrets
 
 # 1. Install Argo + sealed repo credentials (server-side mandatory — CRD annotations exceed client-side limit)
-#    Same Kustomize dir as the self-managed `argocd` Application (clusters/neltharion/infra/argocd).
-kubectl apply -k clusters/neltharion/infra/argocd --server-side --force-conflicts
+#    Same Kustomize dir as the self-managed `argocd` Application (neltharion/infra/argocd).
+kubectl apply -k neltharion/infra/argocd --server-side --force-conflicts
 
 # 2. Wait for Argo to be ready
 kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
@@ -118,8 +118,9 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 # 3. Retrieve initial admin password
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
-# 4. Apply the cluster's app-of-apps root (triggers everything else)
-kubectl apply -f bootstrap/root-neltharion.yaml
+# 4. Apply the cluster's tier-1 app-of-apps (triggers everything else)
+#    neltharion.yaml → infra.bootstrap.yaml + apps.bootstrap.yaml → every component *.app.yaml
+kubectl apply -f bootstrap/neltharion.yaml
 ```
 
 After step 4 Argo takes over; all further changes go through Git.
@@ -127,24 +128,30 @@ After step 4 Argo takes over; all further changes go through Git.
 ### Onboarding another cluster (spoke)
 
 1. Register the spoke as an Argo **cluster secret** on the hub (sealed), named `<cluster>`.
-2. Create `clusters/<cluster>/{infra,apps}/` with the `<name>.app.yaml` you want there
-   (each with `destination.name: <cluster>`), their overlays/values, and **re-sealed** secrets.
-3. `kubectl apply -f bootstrap/root-<cluster>.yaml` on the hub.
+2. **Copy** the whole `neltharion/` folder to `<cluster>/`, adapt each `<name>.app.yaml`
+   (`destination.name: <cluster>`), the two `*.bootstrap.yaml` (name + `path`), `values.yaml`,
+   and **re-seal** every secret against the spoke's controller key.
+   > ⚠️ Application names are **global** in the hub's `argocd` namespace. `neltharion`,
+   > `neltharion-infra`, `neltharion-apps` are cluster-prefixed, but the component names
+   > (`argocd`, `traefik`, `cert-manager`, …) are **not** — when copying, prefix their
+   > `metadata.name` with the cluster (or rely on `destination.name`) to avoid collisions.
+3. `cp bootstrap/neltharion.yaml bootstrap/<cluster>.yaml`, adapt name + `path`, then
+   `kubectl apply -f bootstrap/<cluster>.yaml` on the hub.
 
 ## Adding a new application
 
-1. Create the component folder `clusters/<cluster>/<category>/<name>/` with
-   `<name>.app.yaml` (an `argoproj.io/v1alpha1 Application`) inside it.
-2. Put shared bits in `components/<category>/<name>/` (Helm `values-common.yaml` and/or a
-   Kustomize `base/`); put cluster-specific bits in the same component folder: Helm overrides
-   in `values/values.yaml`, auxiliary Kustomize resources (namespace, sealed-secrets) at the
-   folder root with a `kustomization.yaml`.
-3. For Helm components, layer values via `valueFiles` (`$src/components/...values-common.yaml`
-   then `$src/clusters/.../<name>/values/values.yaml`) with a `ref: src` git source whose
-   `path` is the component folder; for Kustomize apps, reference the base from the cluster
-   overlay. Single-source is fine when there is no customization (sealed-secrets).
+1. Create the component folder `<cluster>/<category>/<name>/` with `<name>.app.yaml`
+   (an `argoproj.io/v1alpha1 Application`) inside it. Everything for the component lives here.
+2. For Helm components, put the merged Helm values in `<name>/values.yaml` and the auxiliary
+   Kustomize resources (namespace, sealed-secrets, issuers) at the folder root with a
+   `kustomization.yaml`. For Kustomize apps, put the manifests in the folder and list them in
+   `kustomization.yaml`.
+3. For Helm components, point `valueFiles` at the single local file
+   (`$src/<cluster>/<category>/<name>/values.yaml`) and keep a `ref: src` git source whose
+   `path` is the component folder (for the aux resources). Single-source is fine when there is
+   nothing extra (sealed-secrets, plain Kustomize apps).
 4. Assign a `sync-wave` annotation consistent with the wave table below.
-5. Push to `main`; the cluster's root Application (recurse + `include: '*.app.yaml'`) picks it up.
+5. Push to `main`; the part's tier-2 bootstrap (recurse + `include: '*.app.yaml'`) picks it up.
 
 ## Sync-wave order (deployed)
 
@@ -176,7 +183,7 @@ Not deployed — keep this separate from the deployed table above. Assign waves 
 ## Planned Argo activations
 
 The Argo UI is already exposed via `argocd-ingress-route.yaml` + `argocd-certificate.yaml`
-(both active in `clusters/neltharion/infra/argocd/kustomization.yaml`). Still on the roadmap:
+(both active in `neltharion/infra/argocd/kustomization.yaml`). Still on the roadmap:
 
 - SSO Authentik patches (`argocd-cm`, `argocd-rbac-cm`) → add after Authentik lands (wave 3).
 
@@ -202,4 +209,4 @@ kubectl logs -n argocd statefulset/argocd-application-controller
 
 ## K8s 1.36 compatibility note
 
-The cluster runs Kubernetes 1.36 (bleeding-edge). The `components/infra/argocd/base/kustomization.yaml` pins the upstream install manifest via a versioned tag URL (currently `v3.4.3`). If Argo pods crash-loop with API errors after an upgrade, bump to the latest stable Argo patch — update the tag there.
+The cluster runs Kubernetes 1.36 (bleeding-edge). The `neltharion/infra/argocd/kustomization.yaml` pins the upstream install manifest via a versioned tag URL (currently `v3.4.3`). If Argo pods crash-loop with API errors after an upgrade, bump to the latest stable Argo patch — update the tag there.

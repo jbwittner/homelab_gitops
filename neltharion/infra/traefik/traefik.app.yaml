@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://traefik.github.io/charts
+      chart: traefik
+      targetRevision: 39.0.9
+      helm:
+        releaseName: traefik
+        valueFiles:
+          - $src/neltharion/infra/traefik/values.yaml
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: src
+      path: neltharion/infra/traefik                                   # namespace (PSA privileged)
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

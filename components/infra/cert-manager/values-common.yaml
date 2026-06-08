@@ -1,6 +1,0 @@
-# Values cert-manager PARTAGÉES (agnostiques du cluster).
-# Surcharges par cluster : clusters/<cluster>/infra/cert-manager/values/values.yaml.
-
-# Installer les CRDs avec la chart (remplace l'ancien valuesObject inline).
-crds:
-  enabled: true

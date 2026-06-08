@@ -1,0 +1,31 @@
+# Values external-dns de neltharion (dossier autonome).
+# Pour un autre cluster : copier ce dossier et adapter domainFilters / txtOwnerId /
+# --default-targets.
+
+provider:
+  name: cloudflare
+
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: api-token
+
+sources:
+  - ingress
+  - traefik-proxy
+
+domainFilters:
+  - wittnerlab.com
+
+# Identifiant du cluster dans les enregistrements TXT de ownership
+txtOwnerId: neltharion
+
+# Homelab hostPort (pas de LoadBalancer) : l'IP cible du nœud est fournie une seule fois
+# ici via --default-targets (source de vérité unique). Les IngressRoutes ne portent donc
+# plus d'annotation external-dns.alpha.kubernetes.io/target ; elles ne déclarent que le
+# hostname. Changement d'IP = éditer cette ligne seule.
+extraArgs:
+  - --traefik-disable-legacy
+  - --default-targets=5.135.136.115

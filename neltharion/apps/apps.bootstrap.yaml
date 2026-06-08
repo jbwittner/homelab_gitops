@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: neltharion-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # App-of-apps de la partie APPS de neltharion : découvre tous les composants apps
+  # (recurse + include '*.app.yaml' → matche apps/<name>/<name>.app.yaml, PAS ce fichier
+  # *.bootstrap.yaml qui a un suffixe différent).
+  project: default
+  source:
+    repoURL: git@github.com:jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: neltharion/apps
+    directory:
+      recurse: true
+      include: '*.app.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

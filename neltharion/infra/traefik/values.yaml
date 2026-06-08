@@ -1,0 +1,43 @@
+# Values Traefik de neltharion (dossier autonome).
+# Pour un autre cluster : copier ce dossier et adapter ce fichier si besoin.
+
+# --- hostNetwork : Traefik écoute directement sur 80/443 du nœud ---
+hostNetwork: false
+
+deployment:
+  replicas: 1
+
+# --- rolling update adapté au hostNetwork (sinon erreur maxUnavailable) ---
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+# --- Service en ClusterIP : pas de LoadBalancer sur BM ---
+service:
+  type: ClusterIP
+
+# --- ports : 80 (web) et 443 (websecure) ---
+ports:
+  websecure:
+    port: 8443
+    hostPort: 443
+    exposedPort: 443
+  web:
+    port: 8000
+    hostPort: 80
+    exposedPort: 80
+
+# --- redirect HTTP->HTTPS via additionalArguments (PAS via redirectTo) ---
+additionalArguments:
+  - "--entrypoints.web.http.redirections.entrypoint.to=:443"
+  - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+# --- pas d'ACME : cert-manager gère les certs ---
+# (volontairement aucune section certResolver / acme)
+
+# --- dashboard : désactivé par défaut (port-forward si besoin) ---
+ingressRoute:
+  dashboard:
+    enabled: false
