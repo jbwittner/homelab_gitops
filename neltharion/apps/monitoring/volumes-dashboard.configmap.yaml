@@ -4,6 +4,9 @@
 # Rappel limite local-path : les PV sont de type hostPath → pas de kubelet_volume_stats_*
 # (usage par-PVC indisponible). On monitore donc le filesystem sous-jacent /var/mnt/data
 # (node-exporter) + l'inventaire des PVC (kube-state-metrics). Datasource uid: prometheus.
+#
+# Les tuiles stat sont en instant:true (valeur courante) — sinon, sur une fenêtre large et
+# avec peu d'historique, la requête range tombe entre deux pas et renvoie « No data ».
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -21,9 +24,9 @@ data:
       "tags": ["homelab", "storage"],
       "timezone": "browser",
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "1m",
-      "time": { "from": "now-7d", "to": "now" },
+      "time": { "from": "now-6h", "to": "now" },
       "templating": {
         "list": [
           {
@@ -48,6 +51,7 @@ data:
           "targets": [
             {
               "refId": "A",
+              "instant": true,
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"} / node_filesystem_size_bytes{mountpoint=\"$mountpoint\"})"
             }
@@ -77,12 +81,13 @@ data:
           "targets": [
             {
               "refId": "A",
+              "instant": true,
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"}"
             }
           ],
           "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 1, "color": { "mode": "fixed", "fixedColor": "blue" } } },
-          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+          "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
         },
         {
           "id": 3,
@@ -93,6 +98,7 @@ data:
           "targets": [
             {
               "refId": "A",
+              "instant": true,
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "node_filesystem_size_bytes{mountpoint=\"$mountpoint\"}"
             }
@@ -104,12 +110,13 @@ data:
           "id": 4,
           "type": "stat",
           "title": "Jours avant saturation (est., tendance 6h)",
-          "description": "node_filesystem_avail / vitesse de décroissance sur 6h. Une valeur très élevée = volume non en train de se remplir.",
+          "description": "node_filesystem_avail / vitesse de décroissance sur 6h. Une valeur très élevée = volume non en train de se remplir. Nécessite ~6h d'historique pour être fiable.",
           "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "refId": "A",
+              "instant": true,
               "datasource": { "type": "prometheus", "uid": "prometheus" },
               "expr": "node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"} / clamp_min(-deriv(node_filesystem_avail_bytes{mountpoint=\"$mountpoint\"}[6h]), 1) / 86400"
             }
@@ -204,6 +211,7 @@ data:
           "id": 8,
           "type": "timeseries",
           "title": "Taille TSDB Prometheus (plus gros consommateur)",
+          "description": "blocks = 0 tant qu'aucun bloc n'a été compacté (les premières ~2h, tout est dans le WAL).",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
