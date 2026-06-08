@@ -1,0 +1,25 @@
+provider:
+  name: cloudflare
+
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: api-token
+
+sources:
+  - ingress
+  - traefik-proxy
+
+domainFilters:
+  - wittnerlab.com
+
+# Identifiant du cluster dans les enregistrements TXT de ownership
+txtOwnerId: neltharion
+
+# Homelab hostPort (pas de LoadBalancer) : l'IP cible doit être fournie
+# soit ici en default-targets, soit via annotation sur chaque IngressRoute :
+#   external-dns.alpha.kubernetes.io/target: "<node-public-ip>"
+extraArgs:
+  - --traefik-disable-legacy
