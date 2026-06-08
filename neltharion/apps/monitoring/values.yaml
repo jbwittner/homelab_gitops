@@ -16,6 +16,13 @@ grafana:
     enabled: true
     storageClassName: local-path
     size: 2Gi
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: grafana.wittnerlab.com
+    hosts: 
+      - grafana.wittnerlab.com
 
 alertmanager:
   alertmanagerSpec:
