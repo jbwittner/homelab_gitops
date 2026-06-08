@@ -5,12 +5,10 @@ metadata:
   namespace: whoami
 spec:
   entryPoints:
-    - websecure
+    - web
   routes:
     - match: Host(`whoami.wittnerlab.com`)
       kind: Rule
       services:
         - name: whoami
           port: 80
-  tls:
-    secretName: whoami-tls
