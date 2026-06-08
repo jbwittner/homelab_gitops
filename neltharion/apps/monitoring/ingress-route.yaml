@@ -1,0 +1,18 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: grafana.wittnerlab.com
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`grafana.wittnerlab.com`)
+      kind: Rule
+      services:
+        - name: monitoring-grafana
+          port: 80
+  tls:
+    secretName: grafana-tls

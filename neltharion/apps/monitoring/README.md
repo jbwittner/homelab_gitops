@@ -24,6 +24,12 @@ All three stateful components use `local-path` PVCs:
 
 ## Grafana access
 
+Exposé via une **IngressRoute Traefik** (`ingress-route.yaml`) + un **Certificate cert-manager**
+(`certificate.yaml`, secret `grafana-tls`, ClusterIssuer `letsencrypt-prod`), comme whoami/argocd.
+L'Ingress généré par le chart est désactivé (`grafana.ingress.enabled: false`) : un Ingress
+standard reste `Progressing` dans Argo car le service Traefik (ClusterIP) ne lui publie aucun
+`status.loadBalancer.ingress`.
+
 URL: `https://grafana.wittnerlab.com`
 
 Username: `admin`

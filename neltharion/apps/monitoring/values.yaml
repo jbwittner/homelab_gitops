@@ -14,8 +14,12 @@ grafana:
     enabled: true
     storageClassName: local-path
     size: 2Gi
+  # Exposition via une IngressRoute Traefik + Certificate cert-manager
+  # (ingress-route.yaml / certificate.yaml), pas l'Ingress générée par le chart :
+  # un Ingress standard reste Progressing dans Argo car Traefik (service ClusterIP)
+  # ne publie aucun status.loadBalancer.ingress dessus.
   ingress:
-    enabled: true
+    enabled: false
 
 alertmanager:
   alertmanagerSpec:
