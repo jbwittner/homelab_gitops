@@ -12,24 +12,32 @@ Source of truth for Argo is **GitHub** (not Forgejo), so the sync loop is: push 
 
 ```
 bootstrap/
-  root.yaml               # app-of-apps; kubectl apply -f once, never again
+  root-infra.yaml         # app-of-apps for infra; kubectl apply -f once, never again
+  root-apps.yaml          # app-of-apps for apps;  kubectl apply -f once, never again
 
 infra/
   argocd/                 # Kustomize bundle used for BOTH bootstrap AND self-management
     kustomization.yaml    # base + patches; some entries commented out until deps are ready
     namespace.yaml
+    argocd-repo.secret.yaml        # gitignored — SSH private key placeholder
+    argocd-repo.sealed-secret.yaml # committed — sealed repo credentials for Argo
 
 definitions/
   neltharion/
     infra/
       argocd.yaml         # Application: self-management (wave -1, prune: false, ServerSideApply)
-    apps/                 # future apps, one .app.yaml per component
+      sealed-secrets.yaml # Application: sealed-secrets controller (wave 0)
+      sealed-secrets/
+        README.md         # kubeseal usage, key backup/restore
+    apps/                 # future apps, one .yaml per component
 ```
 
 ## Bootstrap procedure (one-time, imperative)
 
+The repo is private. Argo reads it via an **SSH deploy key** stored as a SealedSecret in `infra/argocd/argocd-repo.sealed-secret.yaml` — applied in step 1 alongside Argo itself. See `infra/argocd/README.md` for how to generate/regenerate it.
+
 ```bash
-# 1. Install Argo (server-side is mandatory — CRD annotations exceed client-side limit)
+# 1. Install Argo + sealed repo credentials (server-side mandatory — CRD annotations exceed client-side limit)
 kubectl apply -k infra/argocd --server-side --force-conflicts
 
 # 2. Wait for Argo to be ready
@@ -38,8 +46,8 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 # 3. Retrieve initial admin password
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
-# 4. Apply the root app-of-apps (triggers everything else)
-kubectl apply -f bootstrap/root.yaml
+# 4. Apply the two app-of-apps roots (triggers everything else)
+kubectl apply -f bootstrap/root-infra.yaml -f bootstrap/root-apps.yaml
 ```
 
 After step 4 Argo takes over; all further changes go through Git.
@@ -72,8 +80,9 @@ After step 4 Argo takes over; all further changes go through Git.
 ## Deferred activations (uncomment in `infra/argocd/kustomization.yaml` when ready)
 
 - `ingress.yaml` → after cert-manager + ingress-nginx (wave 1)
-- `argocd.sealed-secret.yaml` → after sealed-secrets (wave 0) + sealed-secrets controller key reinjection
 - SSO Authentik patches (`argocd-cm`, `argocd-rbac-cm`) → after Authentik (wave 3)
+
+Note: `argocd-repo.sealed-secret.yaml` is already active from bootstrap (not deferred).
 
 ## Useful commands
 

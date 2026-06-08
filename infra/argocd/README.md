@@ -40,7 +40,8 @@ Argo est à la fois ce qui **lit** le repo et un composant **dans** le repo :
 ```
 homelab-gitops/
 ├── bootstrap/
-│   └── root.yaml                     # app-of-apps racine (apply manuel UNE fois)
+│   ├── root-infra.yaml               # app-of-apps infra (apply manuel UNE fois)
+│   └── root-apps.yaml                # app-of-apps apps  (apply manuel UNE fois)
 ├── infra/
 │   └── argocd/                       # kustomize Argo (sert au bootstrap ET au self-management)
 │       ├── kustomization.yaml
@@ -61,9 +62,51 @@ homelab-gitops/
 - Cluster Talos `Ready` (`kubectl get nodes` → `ns3058844 Ready`).
 - Contexte kubectl pointé sur Neltharion (`kubectl config current-context`).
 - `kustomize` ou `kubectl -k` disponible.
-- Dans `infra/argocd/kustomization.yaml` : `ingress.yaml` et `argocd.sealed-secret.yaml`
-  **retirés des `resources`** pour le premier apply (pas encore de cert-manager / sealed-secrets).
+- `kubeseal` installé localement (`brew install kubeseal`).
+- `argocd-repo.sealed-secret.yaml` généré (voir section ci-dessous).
+- Dans `infra/argocd/kustomization.yaml` : `ingress.yaml`
+  **retiré des `resources`** pour le premier apply (pas encore de cert-manager).
 - Patches nettoyés de l'ancien contexte (repoURL `jbwittner/infrastructure`, SSO Authentik).
+
+### Credentials GitHub (repo privé — SSH deploy key)
+
+Argo CD accède au repo via une **deploy key SSH** : lecture seule, scopée à ce repo uniquement, révocable sans toucher au compte GitHub. Le secret est scellé et commité dans `infra/argocd/argocd-repo.sealed-secret.yaml` — il est appliqué en même temps qu'Argo au bootstrap.
+
+**Générer la deploy key et le SealedSecret**
+
+> Toutes les commandes ci-dessous sont à lancer depuis la **racine du repo**.
+
+```bash
+# 1. Générer une paire de clés ED25519 dédiée (sans passphrase)
+ssh-keygen -t ed25519 -C "argocd@neltharion" -f argocd-deploy-key -N ""
+# → argocd-deploy-key     (clé privée — gitignored)
+# → argocd-deploy-key.pub (clé publique — à déposer sur GitHub)
+
+# 2. Ajouter la clé publique comme deploy key sur GitHub
+#    https://github.com/jbwittner/homelab_gitops/settings/keys
+#    Title : argocd-neltharion | Allow write access : NON (lecture seule)
+cat argocd-deploy-key.pub
+
+# 3. Injecter la clé privée dans le fichier secret (gitignored)
+#    Remplacer le placeholder par le contenu de la clé
+sed -i '' "s|<COLLER_LA_CLÉ_PRIVÉE_ICI>|$(cat argocd-deploy-key)|" \
+  infra/argocd/argocd-repo.secret.yaml
+
+# 4. Sceller (sealed-secrets doit être joignable sur le cluster)
+kubeseal \
+  --controller-name=sealed-secrets \
+  --controller-namespace=sealed-secrets \
+  --format yaml \
+  < infra/argocd/argocd-repo.secret.yaml \
+  > infra/argocd/argocd-repo.sealed-secret.yaml
+
+# 5. Committer le sealed (argocd-deploy-key* et *.secret.yaml restent gitignored)
+git add infra/argocd/argocd-repo.sealed-secret.yaml
+git commit -m "Add sealed SSH deploy key for argocd"
+
+# 6. Supprimer les clés locales (la privée est scellée, la publique est sur GitHub)
+rm argocd-deploy-key argocd-deploy-key.pub
+```
 
 ### 1. Installer Argo (impératif, une seule fois)
 
@@ -114,17 +157,15 @@ kubectl -n argocd port-forward svc/argocd-server 8080:443
 
 L'ingress propre (TLS via cert-manager) sera activé plus tard, après la wave cert-manager.
 
-### 5. Lancer l'app-of-apps (déclenche tout le reste)
+### 5. Lancer les app-of-apps (déclenche tout le reste)
 
 > Seulement APRÈS qu'Argo tourne.
 
 ```bash
-kubectl apply -f bootstrap/root.yaml
+kubectl apply -f bootstrap/root-infra.yaml -f bootstrap/root-apps.yaml
 ```
 
-Le root pointe `definitions/neltharion` (recurse) → Argo crée toutes les Applications →
-déroule les sync-waves. L'Application `argocd` (wave -1) adopte la config déjà déployée à
-l'étape 1 → passe `Synced` sans rien changer → **self-management acté**.
+`root-infra` pointe `definitions/neltharion/infra` et `root-apps` pointe `definitions/neltharion/apps` (recurse sur chacun) → Argo crée toutes les Applications → déroule les sync-waves. L'Application `argocd` (wave -1) adopte la config déjà déployée à l'étape 1 → passe `Synced` sans rien changer → **self-management acté**.
 
 ## Self-management — points de vigilance
 
@@ -188,7 +229,7 @@ kubectl logs -n argocd statefulset/argocd-application-controller
 - [ ] Vérifier pods `Running` (compat K8s 1.36).
 - [ ] Bumper version Argo vers dernière `v3.3.x` si besoin compat.
 - [ ] Créer `argocd.app.yaml` (self-management, ServerSideApply=true, prune=false, wave -1).
-- [ ] Créer `bootstrap/root.yaml` (path `definitions/neltharion`, recurse).
-- [ ] Appliquer le root → vérifier que l'Application `argocd` passe `Synced`.
+- [ ] Créer `bootstrap/root-infra.yaml` + `root-apps.yaml` et les appliquer.
+- [ ] Vérifier que l'Application `argocd` passe `Synced`.
 - [ ] Nettoyer patches de l'ancien contexte (`jbwittner/infrastructure`, SSO).
 - [ ] Réactiver ingress/sealed-secret/SSO au fil des waves.

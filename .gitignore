@@ -1,0 +1,6 @@
+pub-cert.pem
+*.secret.yaml
+repo-secret.yaml
+*-backup.yaml
+argocd-deploy-key
+argocd-deploy-key.pub
