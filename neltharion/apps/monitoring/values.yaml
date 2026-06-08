@@ -1,3 +1,7 @@
+prometheusOperator:
+  admissionWebhooks:
+    enabled: false
+
 prometheus:
   prometheusSpec:
     storageSpec:
@@ -15,11 +19,7 @@ grafana:
     storageClassName: local-path
     size: 2Gi
   ingress:
-    enabled: true
-    # annotations:
-    #   external-dns.alpha.kubernetes.io/hostname: grafana.wittnerlab.com
-    # hosts: 
-    #   - grafana.wittnerlab.com
+    enabled: false
 
 alertmanager:
   alertmanagerSpec:
