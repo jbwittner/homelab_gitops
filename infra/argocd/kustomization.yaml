@@ -6,3 +6,11 @@ resources:
   - namespace.yaml
   - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.3/manifests/install.yaml
   - argocd-repo.sealed-secret.yaml  # générer via bootstrap/README.md avant d'activer
+  - argocd-certificate.yaml
+  - argocd-ingress-route.yaml
+
+patches:
+  - path: argocd-cmd-params-cm.yaml
+    target:
+      kind: ConfigMap
+      name: argocd-cmd-params-cm
