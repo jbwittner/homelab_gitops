@@ -45,6 +45,7 @@ neltharion/               # = hub ; destination in-cluster
   apps/
     apps.bootstrap.yaml   # TIER 2 — découvre apps/*/*.app.yaml
     metrics-server/       # wave 2 (Helm, single-source) — metrics Kubernetes (kubelet-insecure-tls pour Talos)
+    cnpg/                 # wave 2 (Helm, single-source) — opérateur CloudNativePG
     whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path pour tester le stockage
     monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana (IngressRoute/cert), Alertmanager, node-exporter, dashboard volumes
     renovate/             # wave 5 (Kustomize) — Renovate self-hosted (CLI), 2 CronJobs : un run GitHub (infrastructure + bankwiz_server) et un run Forgejo, config par env vars, tokens scellés

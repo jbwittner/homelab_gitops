@@ -87,6 +87,7 @@ neltharion/               # = hub; in-cluster destination (https://kubernetes.de
   apps/
     apps.bootstrap.yaml   # TIER 2 — discovers apps/*/*.app.yaml
     metrics-server/       # app only (Helm, single-source) (wave 2) — --kubelet-insecure-tls pour Talos
+    cnpg/                 # app only (Helm, single-source) (wave 2) — CloudNativePG operator
     whoami/               # app + Kustomize (inlined manifests) (wave 3) — incl. PVC local-path (storage smoke test)
     monitoring/           # app + values.yaml + namespace + Grafana IngressRoute/cert + volumes dashboard (wave 4) — kube-prometheus-stack
     renovate/             # app + Kustomize (2 CronJobs auto-contenus github+forgejo, config par env vars + 2 sealed Secrets) (wave 5) — Renovate self-hosted CLI, un run par plateforme
@@ -173,7 +174,7 @@ After step 4 Argo takes over; all further changes go through Git.
 | -1   | argocd (self-management) |
 | 0    | sealed-secrets, traefik |
 | 1    | cert-manager (+ ClusterIssuer overlay), external-dns, local-path-provisioner (default StorageClass) |
-| 2    | metrics-server |
+| 2    | metrics-server, cnpg (operator) |
 | 3    | whoami (test app) |
 | 4    | monitoring (kube-prometheus-stack: Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics) |
 | 5    | renovate (self-hosted CLI via CronJob nocturne — met à jour les dépendances par PRs GitHub) |
@@ -184,7 +185,6 @@ Not deployed — keep this separate from the deployed table above. Assign waves 
 
 | Wave | Components |
 |------|-----------|
-| 2    | cnpg (operator) |
 | 3    | forgejo, authentik (+ Argo SSO patches) |
 | 4    | postfix |
 
