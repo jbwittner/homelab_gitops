@@ -1,0 +1,34 @@
+authentik:
+  secret_key: S3Sd8v7Ej6A3j8YHXEbYkkKBs0BsIl
+  postgresql:
+    host: authentik-db-rw
+    name: authentik
+server:
+  env:
+    - name: AUTHENTIK_POSTGRESQL__USER
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-app
+          key: username
+    - name: AUTHENTIK_POSTGRESQL__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-app
+          key: password
+  # Pas d'Ingress k8s : on expose via une IngressRoute Traefik (cf. ingress-route.yaml).
+  # L'Ingress du chart resterait sinon "Progressing" dans Argo (Traefik ClusterIP/hostPort
+  # ne remplit jamais .status.loadBalancer.ingress attendu par le health-check Ingress d'Argo).
+  ingress:
+    enabled: false
+worker:
+  env:
+    - name: AUTHENTIK_POSTGRESQL__USER
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-app
+          key: username
+    - name: AUTHENTIK_POSTGRESQL__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-app
+          key: password
