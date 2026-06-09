@@ -30,4 +30,5 @@ txtOwnerId: neltharion
 # Changement d'IP du nœud = éditer cette ligne ET l'annotation `target` de chaque IngressRoute.
 extraArgs:
 # - --traefik-disable-legacy
+  - --force-default-targets
   - --default-targets=5.135.136.115
