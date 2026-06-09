@@ -206,16 +206,19 @@ Note: `argocd-repo.sealed-secret.yaml` and `argocd-webhook.sealed-secret.yaml` a
 
 ## Useful commands
 
+> **Note : la CLI `argocd` n'est pas installée.** Utiliser uniquement `kubectl`.
+
 ```bash
 # Check application status
 kubectl get applications -n argocd
-argocd app list
 
-# Manual resync
-argocd app sync <name>
+# See sync status / conditions of one app
+kubectl get application monitoring -n argocd -o jsonpath='{.status.conditions}' | jq .
+kubectl get application monitoring -n argocd -o jsonpath='{.status.sync.status}'
 
-# Diff an app
-argocd app diff <name>
+# Trigger a manual resync (patch the operation field)
+kubectl patch application <name> -n argocd --type merge \
+  -p '{"operation":{"initiatedBy":{"username":"admin"},"sync":{"revision":"HEAD"}}}'
 
 # Argo component logs
 kubectl logs -n argocd deploy/argocd-repo-server
