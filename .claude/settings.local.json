@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(rtk kubectl *)",
-      "Bash(kubectl kustomize *)"
+      "Bash(kubectl kustomize *)",
+      "Bash(rtk git *)"
     ]
   }
 }

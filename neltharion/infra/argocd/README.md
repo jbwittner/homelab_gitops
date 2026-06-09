@@ -229,7 +229,8 @@ Rappel de l'état déployé :
 
 L'UI Argo est déjà exposée via `argocd-ingress-route.yaml` + `argocd-certificate.yaml`
 (actifs dans `neltharion/infra/argocd/kustomization.yaml`). Reste en roadmap :
-- SSO Authentik (patch `argocd-cm` + `argocd-rbac-cm`) → à ajouter après Authentik (wave 3).
+- SSO Authentik (patch `argocd-cm` + `argocd-rbac-cm`) → à ajouter après (re)déploiement
+  d'Authentik (actuellement archivé sous `archive/authentik/`, wave 3).
 
 Chaque activation = éditer le kustomize, push Git, Argo resync tout seul (self-managed).
 
@@ -264,5 +265,6 @@ kubectl logs -n argocd statefulset/argocd-application-controller
 Bootstrap et self-management acquis (Argo installé, roots appliqués, `argocd` `Synced`,
 IngressRoute/Certificate en place). Reste :
 
-- [ ] Activer le SSO Authentik (patch `argocd-cm` + `argocd-rbac-cm`) après la wave Authentik.
+- [ ] Activer le SSO Authentik (patch `argocd-cm` + `argocd-rbac-cm`) après (re)déploiement
+      d'Authentik (archivé sous `archive/authentik/`).
 - [ ] Bumper le tag Argo dans `neltharion/infra/argocd/kustomization.yaml` si la compat K8s 1.36 l'exige.
