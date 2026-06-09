@@ -16,7 +16,7 @@ spec:
           containers:
             - name: renovate
               # renovate: datasource=docker depName=renovate/renovate
-              image: renovate/renovate:43.177.9
+              image: renovate/renovate:43.216.4
               env:
                 - name: LOG_LEVEL
                   value: info
