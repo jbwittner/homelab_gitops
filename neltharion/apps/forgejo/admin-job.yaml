@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: forgejo-admin-init
+  namespace: forgejo
+spec:
+  backoffLimit: 20
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-forgejo
+          image: codeberg.org/forgejo/forgejo:15
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until wget -qO- http://forgejo-http.forgejo.svc.cluster.local/api/v1/version > /dev/null 2>&1; do
+                echo "waiting for forgejo HTTP..."
+                sleep 5
+              done
+      containers:
+        - name: create-admin
+          image: codeberg.org/forgejo/forgejo:15
+          command:
+            - /bin/sh
+            - -c
+            - |
+              forgejo admin user create \
+                --admin \
+                --username "$ADMIN_USER" \
+                --password "$ADMIN_PASSWD" \
+                --email "$ADMIN_EMAIL" \
+                --must-change-password=false || \
+              forgejo admin user list | grep -q "$ADMIN_USER"
+          env:
+            - name: ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-admin
+                  key: username
+            - name: ADMIN_PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-admin
+                  key: password
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-admin
+                  key: email
+            - name: FORGEJO_WORK_DIR
+              value: /tmp/forgejo-work
+            - name: FORGEJO__database__DB_TYPE
+              value: postgres
+            - name: _DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-db-app
+                  key: host
+            - name: _DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-db-app
+                  key: port
+            - name: FORGEJO__database__HOST
+              value: "$(_DB_HOST):$(_DB_PORT)"
+            - name: FORGEJO__database__NAME
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-db-app
+                  key: dbname
+            - name: FORGEJO__database__USER
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-db-app
+                  key: username
+            - name: FORGEJO__database__PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-db-app
+                  key: password
+          volumeMounts:
+            - name: work-dir
+              mountPath: /tmp/forgejo-work
+      volumes:
+        - name: work-dir
+          emptyDir: {}

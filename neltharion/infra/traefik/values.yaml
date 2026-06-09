@@ -19,7 +19,7 @@ service:
   spec:
     type: ClusterIP
 
-# --- ports : 80 (web) et 443 (websecure) ---
+# --- ports : 80 (web), 443 (websecure), 2222 (ssh Git Forgejo) ---
 ports:
   websecure:
     port: 8443
@@ -29,6 +29,11 @@ ports:
     port: 8000
     hostPort: 80
     exposedPort: 80
+  ssh:
+    port: 2222
+    hostPort: 2222
+    exposedPort: 2222
+    protocol: TCP
 
 # --- redirect HTTP->HTTPS via additionalArguments (PAS via redirectTo) ---
 additionalArguments:
