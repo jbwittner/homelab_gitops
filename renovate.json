@@ -1,0 +1,56 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "ignorePaths": [
+    "archive"
+  ],
+  "argocd": {
+    "managerFilePatterns": [
+      "/(infra|apps)/.+\\.yaml$/"
+    ]
+  },
+  "kubernetes": {
+    "managerFilePatterns": [
+      "/(infra|apps)/.+\\.yaml$/"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Créer une PR pour les updates majeures sans automerge (revue manuelle requise)",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": false,
+      "automerge": false
+    },
+    {
+      "description": "Automerge des updates patch et pin (faible risque)",
+      "matchUpdateTypes": [
+        "patch",
+        "pin"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "Automerge minor/patch/pin pour Renovate lui-même (image self-hosted)",
+      "matchFileNames": [
+        "**/apps/renovate/**"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin"
+      ],
+      "automerge": true
+    }
+  ],
+  "lockFileMaintenance": {
+    "automerge": true
+  },
+  "separateMinorPatch": true,
+  "ignoreTests": true,
+  "prHourlyLimit": 10,
+  "prConcurrentLimit": 10
+}
