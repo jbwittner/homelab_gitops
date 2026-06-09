@@ -59,5 +59,6 @@ kubectl get secret monitoring-grafana -n monitoring \
 
 ## Argo CD notes
 
+- `argocd.argoproj.io/manifest-generate-paths: /neltharion/apps/monitoring` : la source git suit `main` en entier, donc sans cette annotation Argo relance une sync vers le nouveau SHA à **chaque** commit du repo (même sans rapport). L'annotation restreint la (re)génération des manifests aux commits qui touchent ce dossier. La source Helm distante n'est pas concernée par les commits git.
 - `SkipDryRunOnMissingResource=true` is set because the chart installs its own CRDs (PrometheusRule, ServiceMonitor, etc.) during the same sync.
 - If persistent diffs appear on admission webhooks after chart upgrades, add an `ignoreDifferences` block to `monitoring.app.yaml`.

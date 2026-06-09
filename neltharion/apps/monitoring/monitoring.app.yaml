@@ -5,6 +5,9 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "4"
+    # Ne régénère/sync que si un commit touche ce dossier (évite une sync à chaque commit
+    # du repo, la source git suivant `main` en entier). Sans effet sur la source Helm distante.
+    argocd.argoproj.io/manifest-generate-paths: /neltharion/apps/monitoring
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
