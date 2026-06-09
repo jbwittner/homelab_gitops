@@ -47,6 +47,7 @@ neltharion/               # = hub ; destination in-cluster
     metrics-server/       # wave 2 (Helm, single-source) — metrics Kubernetes (kubelet-insecure-tls pour Talos)
     cnpg/                 # wave 2 (Helm, single-source) — opérateur CloudNativePG
     whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path pour tester le stockage
+    authentik/            # wave 3 (Helm + values.yaml + namespace + CNPG Cluster) — SSO/OIDC (authentik.wittnerlab.com)
     monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana (IngressRoute/cert), Alertmanager, node-exporter, dashboard volumes
     renovate/             # wave 5 (Kustomize) — Renovate self-hosted (CLI), 2 CronJobs : un run GitHub (infrastructure + bankwiz_server) et un run Forgejo, config par env vars, tokens scellés
 ```
@@ -95,4 +96,5 @@ Après l'étape 4, tout passe par Git.
 - [`neltharion/infra/external-dns/README.md`](neltharion/infra/external-dns/README.md) — sync DNS Cloudflare.
 - [`neltharion/infra/local-path-provisioner/README.md`](neltharion/infra/local-path-provisioner/README.md) — StorageClass par défaut sur le disque data Talos.
 - [`neltharion/apps/monitoring/README.md`](neltharion/apps/monitoring/README.md) — kube-prometheus-stack, Grafana (grafana.wittnerlab.com), stockage persistant & monitoring des volumes.
+- [`neltharion/apps/authentik/README.md`](neltharion/apps/authentik/README.md) — SSO/OIDC centralisé, base de données CNPG, procédure de sealed-secret.
 - [`neltharion/apps/renovate/README.md`](neltharion/apps/renovate/README.md) — Renovate self-hosted (CLI) en CronJob, PAT GitHub scellé, périmètre & fréquence.

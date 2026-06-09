@@ -90,6 +90,7 @@ neltharion/               # = hub; in-cluster destination (https://kubernetes.de
     cnpg/                 # app only (Helm, single-source) (wave 2) — CloudNativePG operator
     whoami/               # app + Kustomize (inlined manifests) (wave 3) — incl. PVC local-path (storage smoke test)
     monitoring/           # app + values.yaml + namespace + Grafana IngressRoute/cert + volumes dashboard (wave 4) — kube-prometheus-stack
+    authentik/            # app + values.yaml + namespace + CNPG Cluster + sealed-secret (wave 3) — SSO/OIDC (re-sceller avant sync)
     renovate/             # app + Kustomize (2 CronJobs auto-contenus github+forgejo, config par env vars + 2 sealed Secrets) (wave 5) — Renovate self-hosted CLI, un run par plateforme
 ```
 
@@ -175,7 +176,7 @@ After step 4 Argo takes over; all further changes go through Git.
 | 0    | sealed-secrets, traefik |
 | 1    | cert-manager (+ ClusterIssuer overlay), external-dns, local-path-provisioner (default StorageClass) |
 | 2    | metrics-server, cnpg (operator) |
-| 3    | whoami (test app) |
+| 3    | whoami (test app), authentik (SSO/OIDC — SealedSecret à re-sceller avant sync) |
 | 4    | monitoring (kube-prometheus-stack: Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics) |
 | 5    | renovate (self-hosted CLI via CronJob nocturne — met à jour les dépendances par PRs GitHub) |
 
@@ -185,7 +186,7 @@ Not deployed — keep this separate from the deployed table above. Assign waves 
 
 | Wave | Components |
 |------|-----------|
-| 3    | forgejo, authentik (+ Argo SSO patches) |
+| 3    | forgejo |
 | 4    | postfix |
 
 ## Self-management pitfalls
