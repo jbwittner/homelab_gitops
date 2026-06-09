@@ -77,6 +77,22 @@ spec:
               value: "true"
             - name: FORGEJO__service__DISABLE_REGISTRATION
               value: "true"
+            - name: FORGEJO__service__REQUIRE_SIGNIN_VIEW
+              value: "true"
+            - name: FORGEJO__service__SHOW_REGISTRATION_BUTTON
+              value: "false"
+            - name: FORGEJO__service__ENABLE_NOTIFY_MAIL
+              value: "false"
+            - name: FORGEJO____APP_NAME
+              value: "Wittner Lab"
+            - name: FORGEJO__repository__DEFAULT_BRANCH
+              value: main
+            - name: FORGEJO__repository__DEFAULT_PRIVATE
+              value: "true"
+            - name: FORGEJO__webhook__ALLOWED_HOST_LIST
+              value: "*"
+            - name: FORGEJO__actions__ENABLED
+              value: "true"
           volumeMounts:
             - name: data
               mountPath: /data
