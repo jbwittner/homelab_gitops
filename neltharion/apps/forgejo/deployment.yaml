@@ -72,6 +72,8 @@ spec:
               value: "true"
             - name: FORGEJO__quota__ENABLED
               value: "true"
+            - name: FORGEJO__service__DISABLE_REGISTRATION
+              value: "true"
           volumeMounts:
             - name: data
               mountPath: /data
