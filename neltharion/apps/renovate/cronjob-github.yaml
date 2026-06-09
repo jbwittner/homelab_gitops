@@ -26,7 +26,7 @@ spec:
                 - name: RENOVATE_AUTODISCOVER
                   value: 'false'
                 - name: RENOVATE_REPOSITORIES
-                  value: 'jbwittner/infrastructure,jbwittner/bankwiz_server'
+                  value: 'jbwittner/homelab_gitops'
                 - name: RENOVATE_GIT_AUTHOR
                   value: 'Renovate Bot <bot@renovateapp.com>'
               envFrom:
