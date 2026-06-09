@@ -16,7 +16,8 @@ updateStrategy:
 
 # --- Service en ClusterIP : pas de LoadBalancer sur BM ---
 service:
-  type: ClusterIP
+  spec:
+    type: ClusterIP
 
 # --- ports : 80 (web) et 443 (websecure) ---
 ports:
