@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate-github
+  namespace: renovate
+spec:
+  schedule: '@daily'               # 00h UTC
+  concurrencyPolicy: Forbid        # jamais deux runs GitHub en parallèle
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: renovate
+              # Bumpé par Renovate lui-même (datasource docker) une fois activé sur ce repo.
+              # renovate: datasource=docker depName=renovate/renovate
+              image: renovate/renovate:43.177.9
+              env:
+                - name: LOG_LEVEL
+                  value: info
+                - name: RENOVATE_PLATFORM
+                  value: github
+                - name: RENOVATE_AUTODISCOVER
+                  value: 'false'
+                - name: RENOVATE_REPOSITORIES
+                  value: 'jbwittner/infrastructure,jbwittner/bankwiz_server'
+                - name: RENOVATE_GIT_AUTHOR
+                  value: 'Renovate Bot <bot@renovateapp.com>'
+              envFrom:
+                # Secret renovate-github-env (scellé) : porte RENOVATE_TOKEN (PAT GitHub).
+                - secretRef:
+                    name: renovate-github-env

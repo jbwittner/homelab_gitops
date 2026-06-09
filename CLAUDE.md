@@ -16,6 +16,14 @@ changement — la doc fait partie de la définition de « terminé ». Concrète
   `find <cluster> -name '*.yaml'`.
 - Ne jamais laisser la doc décrire un état « cible » comme s'il était en place : marquer
   explicitement *implémenté* vs *prévu*.
+- **Secrets — toujours documenter les commandes de génération.** Tout composant qui introduit
+  un `Secret`/`SealedSecret` doit fournir, dans son `README.md`, la procédure **complète et
+  copiable** pour le (re)générer : type/scope du token attendu, remplissage du placeholder
+  `*.secret.yaml` (gitignored), puis scellement. **Privilégier le scellement direct contre le
+  contrôleur** (`kubeseal --controller-name=sealed-secrets --controller-namespace=sealed-secrets
+  --format yaml < *.secret.yaml > *.sealed-secret.yaml`) plutôt que le cert local ; ne réserver
+  `--fetch-cert`/`--cert pub-cert.pem` qu'au repli offline. Ne jamais se contenter de « sceller
+  le secret » sans les commandes.
 
 ## What this repo is
 
@@ -81,6 +89,7 @@ neltharion/               # = hub; in-cluster destination (https://kubernetes.de
     metrics-server/       # app only (Helm, single-source) (wave 2) — --kubelet-insecure-tls pour Talos
     whoami/               # app + Kustomize (inlined manifests) (wave 3) — incl. PVC local-path (storage smoke test)
     monitoring/           # app + values.yaml + namespace + Grafana IngressRoute/cert + volumes dashboard (wave 4) — kube-prometheus-stack
+    renovate/             # app + Kustomize (2 CronJobs auto-contenus github+forgejo, config par env vars + 2 sealed Secrets) (wave 5) — Renovate self-hosted CLI, un run par plateforme
 ```
 
 Each component is one self-contained folder: `<name>.app.yaml` carries the boilerplate
@@ -89,7 +98,8 @@ merged Helm values, and the remaining files are the auxiliary Kustomize resource
 sealed-secrets, ClusterIssuer). The `<name>.app.yaml` and `values.yaml` are ignored both by the
 tier-2 glob (`*.app.yaml`) and by the folder's own `kustomization.yaml` (which lists its
 resources explicitly). The gitignored `*.secret.yaml` plaintext placeholders (for kubeseal
-regeneration) live next to their sealed counterparts under `neltharion/infra/argocd/`.
+regeneration) live next to their sealed counterparts (e.g. under `neltharion/infra/argocd/`
+and `neltharion/apps/renovate/`).
 
 ## Bootstrap procedure (one-time, imperative)
 
@@ -166,6 +176,7 @@ After step 4 Argo takes over; all further changes go through Git.
 | 2    | metrics-server |
 | 3    | whoami (test app) |
 | 4    | monitoring (kube-prometheus-stack: Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics) |
+| 5    | renovate (self-hosted CLI via CronJob nocturne — met à jour les dépendances par PRs GitHub) |
 
 ## Roadmap / planned (not yet in the repo)
 

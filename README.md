@@ -47,6 +47,7 @@ neltharion/               # = hub ; destination in-cluster
     metrics-server/       # wave 2 (Helm, single-source) — metrics Kubernetes (kubelet-insecure-tls pour Talos)
     whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path pour tester le stockage
     monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana (IngressRoute/cert), Alertmanager, node-exporter, dashboard volumes
+    renovate/             # wave 5 (Kustomize) — Renovate self-hosted (CLI), 2 CronJobs : un run GitHub (infrastructure + bankwiz_server) et un run Forgejo, config par env vars, tokens scellés
 ```
 
 ## Bootstrap (one-time, impératif)
@@ -93,3 +94,4 @@ Après l'étape 4, tout passe par Git.
 - [`neltharion/infra/external-dns/README.md`](neltharion/infra/external-dns/README.md) — sync DNS Cloudflare.
 - [`neltharion/infra/local-path-provisioner/README.md`](neltharion/infra/local-path-provisioner/README.md) — StorageClass par défaut sur le disque data Talos.
 - [`neltharion/apps/monitoring/README.md`](neltharion/apps/monitoring/README.md) — kube-prometheus-stack, Grafana (grafana.wittnerlab.com), stockage persistant & monitoring des volumes.
+- [`neltharion/apps/renovate/README.md`](neltharion/apps/renovate/README.md) — Renovate self-hosted (CLI) en CronJob, PAT GitHub scellé, périmètre & fréquence.

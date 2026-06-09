@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# App renovate autonome : Renovate self-hosted (CLI), DEUX CronJobs — un par plateforme.
+#   - renovate-github  → platform github  (repos GitHub)   + Secret renovate-github-env
+#   - renovate-forgejo → platform forgejo (repos Forgejo)   + Secret renovate-forgejo-env
+# Chaque cronjob-*.yaml est AUTO-CONTENU (config dupliquée assumée, cf. ethos du repo) ;
+# config 100% via variables d'environnement, token via envFrom sur le Secret scellé.
+# Les *.secret.yaml (placeholders en clair) sont gitignored — PAS des resources ici.
+resources:
+  - namespace.yaml
+  - renovate-github-env.sealed-secret.yaml
+  - renovate-forgejo-env.sealed-secret.yaml
+  - cronjob-github.yaml
+  - cronjob-forgejo.yaml
