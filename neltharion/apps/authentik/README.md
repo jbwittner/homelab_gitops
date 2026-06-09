@@ -10,6 +10,17 @@ Applications déléguant leur authentification à Authentik :
 
 - **URL** : https://authentik.wittnerlab.com
 
+## Exposition (IngressRoute, pas Ingress k8s)
+
+L'accès se fait par une **`IngressRoute` Traefik** (`ingress-route.yaml`), pas par l'`Ingress`
+du chart. `values.yaml` met donc `server.ingress.enabled: false` : avec un Traefik en
+ClusterIP/hostPort, l'`Ingress` k8s du chart resterait `Progressing` à l'infini dans Argo
+(personne ne remplit `.status.loadBalancer.ingress` attendu par le health-check Ingress).
+
+Le TLS est fourni par cert-manager via `certificate.yaml` (`Certificate` `authentik-tls`,
+ClusterIssuer `letsencrypt-prod`), dont le secret `authentik-tls` est référencé par
+l'`IngressRoute`.
+
 ## Dépendances
 
 - **Wave 2** : `cnpg` (opérateur CloudNativePG requis pour `authentik-db`)

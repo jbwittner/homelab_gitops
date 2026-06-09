@@ -15,12 +15,11 @@ server:
         secretKeyRef:
           name: authentik-db-app
           key: password
+  # Pas d'Ingress k8s : on expose via une IngressRoute Traefik (cf. ingress-route.yaml).
+  # L'Ingress du chart resterait sinon "Progressing" dans Argo (Traefik ClusterIP/hostPort
+  # ne remplit jamais .status.loadBalancer.ingress attendu par le health-check Ingress d'Argo).
   ingress:
-    # Specify kubernetes ingress controller class name
-    ingressClassName: traefik
-    enabled: true
-    hosts:
-        - authentik.domain.tld
+    enabled: false
 worker:
   env:
     - name: AUTHENTIK_POSTGRESQL__USER

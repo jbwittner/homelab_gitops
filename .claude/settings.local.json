@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk kubectl *)",
+      "Bash(kubectl kustomize *)"
+    ]
+  }
+}
