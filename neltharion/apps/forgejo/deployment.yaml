@@ -77,6 +77,8 @@ spec:
               value: "true"
             - name: FORGEJO__service__DISABLE_REGISTRATION
               value: "true"
+            - name: FORGEJO__service__REQUIRE_SIGNIN_VIEW
+              value: "false"
             - name: FORGEJO__service__SHOW_REGISTRATION_BUTTON
               value: "false"
             - name: FORGEJO__service__ENABLE_NOTIFY_MAIL
