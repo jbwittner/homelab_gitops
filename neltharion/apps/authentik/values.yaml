@@ -15,7 +15,12 @@ server:
         secretKeyRef:
           name: authentik-db-app
           key: password
-
+  ingress:
+    # Specify kubernetes ingress controller class name
+    ingressClassName: traefik
+    enabled: true
+    hosts:
+        - authentik.domain.tld
 worker:
   env:
     - name: AUTHENTIK_POSTGRESQL__USER
