@@ -15,6 +15,13 @@ server:
         secretKeyRef:
           name: authentik-db-app
           key: password
+  ingress:
+    enabled: true
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: authentik.wittnerlab.com
+    hosts: 
+      - authentik.wittnerlab.com
+
 worker:
   env:
     - name: AUTHENTIK_POSTGRESQL__USER
