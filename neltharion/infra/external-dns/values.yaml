@@ -29,5 +29,5 @@ txtOwnerId: neltharion
 # filet de sécurité pour d'éventuels Ingress standards (source `ingress`).
 # Changement d'IP du nœud = éditer cette ligne ET l'annotation `target` de chaque IngressRoute.
 extraArgs:
-  - --traefik-disable-legacy
+# - --traefik-disable-legacy
   - --default-targets=5.135.136.115
