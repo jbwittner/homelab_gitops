@@ -4,7 +4,7 @@ metadata:
   name: grafana
   namespace: monitoring
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: grafana.wittnerlab.com
+    external-dns.alpha.kubernetes.io/hostname: grafana-neltharion.wittnerlab.com
     # IP du nœud : la source traefik-proxy d'external-dns n'applique PAS --default-targets,
     # il faut donc la cible explicitement sur chaque IngressRoute (cf. infra/external-dns).
     external-dns.alpha.kubernetes.io/target: 5.135.136.115
@@ -12,7 +12,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`grafana.wittnerlab.com`)
+    - match: Host(`grafana-neltharion.wittnerlab.com`)
       kind: Rule
       services:
         - name: monitoring-grafana
