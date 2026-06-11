@@ -49,9 +49,9 @@ Argo est à la fois ce qui **lit** le repo et un composant **dans** le repo :
 
 ```
 homelab-gitops/
-├── bootstrap/
-│   └── neltharion.yaml                  # TIER 1 app-of-apps (apply manuel UNE fois sur le hub)
-└── neltharion/infra/argocd/             # dossier AUTO-CONTENU (bootstrap ET self-management)
+└── neltharion/
+    ├── neltharion.yaml                  # TIER 1 app-of-apps (apply manuel UNE fois sur le hub)
+    └── infra/argocd/                    # dossier AUTO-CONTENU (bootstrap ET self-management)
     ├── argocd.app.yaml                  # Application self-management (path: neltharion/infra/argocd)
     ├── kustomization.yaml               # install.yaml pinné (v3.4.3) + patch cmd-params + spécifique-hub
     ├── namespace.yaml                   # namespace argocd
@@ -197,7 +197,7 @@ Traefik (wave 0) et cert-manager (wave 1) déployés. Avant ça, utiliser le por
 > Seulement APRÈS qu'Argo tourne.
 
 ```bash
-kubectl apply -f bootstrap/neltharion.yaml
+kubectl apply -f neltharion/neltharion.yaml
 ```
 
 `neltharion` (tier 1) pointe `neltharion/` (recurse + `include: '*.bootstrap.yaml'`) → crée les deux bootstraps de partie → chacun découvre ses `*.app.yaml` → Argo crée toutes les Applications du cluster et déroule les sync-waves. L'Application `argocd` (wave -1) adopte la config déjà déployée à l'étape 1 → passe `Synced` sans rien changer → **self-management acté**.
@@ -237,7 +237,7 @@ Chaque activation = éditer le kustomize, push Git, Argo resync tout seul (self-
 ## DR — points à retenir
 
 - Le bootstrap impératif (étape 1) est le **seul geste manuel** ; à refaire en reconstruction.
-- Après l'étape 1, tout est déclaratif : le tier-1 du cluster (`bootstrap/neltharion.yaml`) rejoue toute la stack depuis Git.
+- Après l'étape 1, tout est déclaratif : le tier-1 du cluster (`neltharion/neltharion.yaml`) rejoue toute la stack depuis Git.
 - Argo lit **GitHub** (source primaire), pas Forgejo → pas de cycle, DR déterministe.
 - La clé du contrôleur **sealed-secrets** doit être réinjectée AVANT que le contrôleur démarre
   (sinon SealedSecrets indéchiffrables). Procédure DR déjà testée.

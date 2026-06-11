@@ -15,7 +15,7 @@ spec:
   # Découvre les deux bootstraps de partie (infra.bootstrap.yaml + apps.bootstrap.yaml) via le
   # glob '*.bootstrap.yaml' ; chacun découvre ensuite ses propres '*.app.yaml'. Les deux
   # suffixes distincts (.bootstrap.yaml ici, .app.yaml en tier 2) évitent toute auto-récursion.
-  # Onboarder un cluster = 1 bootstrap/<cluster>.yaml comme celui-ci, appliqué sur le hub.
+  # Onboarder un cluster = 1 <cluster>/<cluster>.yaml comme celui-ci, appliqué sur le hub.
   source:
     repoURL: git@github.com:jbwittner/homelab_gitops.git
     targetRevision: main

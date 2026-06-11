@@ -43,7 +43,7 @@ for a flat, simple layout (no DRY base sharing).
 
 The cluster is deployed through a **3-tier app-of-apps**:
 
-- **Tier 1** — `bootstrap/<cluster>.yaml` (`kubectl apply -f` once on the hub) discovers the two
+- **Tier 1** — `<cluster>/<cluster>.yaml` (`kubectl apply -f` once on the hub) discovers the two
   part-bootstraps via `directory.recurse + include: '*.bootstrap.yaml'`.
 - **Tier 2** — `<cluster>/infra/infra.bootstrap.yaml` and `<cluster>/apps/apps.bootstrap.yaml`,
   each discovering its components via `recurse + include: '*.app.yaml'`.
@@ -70,11 +70,9 @@ Argo detects change → reconciles cluster.
 ## Repository layout
 
 ```
-bootstrap/
-  neltharion.yaml         # TIER 1 app-of-apps; kubectl apply -f once on the hub
-                          # (one <cluster>.yaml per onboarded cluster)
-
 neltharion/               # = hub; in-cluster destination (https://kubernetes.default.svc)
+  neltharion.yaml         # TIER 1 app-of-apps; kubectl apply -f once on the hub
+                          # (one <cluster>/<cluster>.yaml per onboarded cluster)
   infra/                  # one SELF-CONTAINED folder per deployed component:
                           #   <name>/<name>.app.yaml + values.yaml (Helm) + aux resources
     infra.bootstrap.yaml  # TIER 2 — discovers infra/*/*.app.yaml
@@ -135,7 +133,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 
 # 4. Apply the cluster's tier-1 app-of-apps (triggers everything else)
 #    neltharion.yaml → infra.bootstrap.yaml + apps.bootstrap.yaml → every component *.app.yaml
-kubectl apply -f bootstrap/neltharion.yaml
+kubectl apply -f neltharion/neltharion.yaml
 ```
 
 After step 4 Argo takes over; all further changes go through Git.
@@ -150,8 +148,8 @@ After step 4 Argo takes over; all further changes go through Git.
    > `neltharion-infra`, `neltharion-apps` are cluster-prefixed, but the component names
    > (`argocd`, `traefik`, `cert-manager`, …) are **not** — when copying, prefix their
    > `metadata.name` with the cluster (or rely on `destination.name`) to avoid collisions.
-3. `cp bootstrap/neltharion.yaml bootstrap/<cluster>.yaml`, adapt name + `path`, then
-   `kubectl apply -f bootstrap/<cluster>.yaml` on the hub.
+3. `cp neltharion/neltharion.yaml <cluster>/<cluster>.yaml`, adapt name + `path`, then
+   `kubectl apply -f <cluster>/<cluster>.yaml` on the hub.
 
 ## Adding a new application
 

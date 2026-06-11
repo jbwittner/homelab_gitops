@@ -14,7 +14,7 @@ le dossier `<cluster>/` et on l'adapte (duplication assumée pour un layout simp
 
 Déploiement via un **app-of-apps à 3 niveaux** :
 
-- **Tier 1** — `bootstrap/<cluster>.yaml` (`kubectl apply -f` une fois sur le hub) découvre les
+- **Tier 1** — `<cluster>/<cluster>.yaml` (`kubectl apply -f` une fois sur le hub) découvre les
   deux bootstraps de partie via `recurse + include: '*.bootstrap.yaml'`.
 - **Tier 2** — `<cluster>/infra/infra.bootstrap.yaml` et `<cluster>/apps/apps.bootstrap.yaml`,
   chacun découvre ses composants via `recurse + include: '*.app.yaml'`.
@@ -29,10 +29,8 @@ détecte le changement → reconcilie le cluster.
 ## Arborescence
 
 ```
-bootstrap/
-  neltharion.yaml         # TIER 1 — app-of-apps du cluster ; kubectl apply -f UNE fois sur le hub
-
 neltharion/               # = hub ; destination in-cluster
+  neltharion.yaml         # TIER 1 — app-of-apps du cluster ; kubectl apply -f UNE fois sur le hub
   infra/                  # un dossier AUTO-CONTENU par composant déployé :
                           #   <name>/<name>.app.yaml + values.yaml (Helm) + ressources annexes
     infra.bootstrap.yaml  # TIER 2 — découvre infra/*/*.app.yaml
@@ -80,7 +78,7 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
 # 4. Appliquer le tier-1 du cluster — Argo prend le relais (infra + apps bootstraps → composants)
-kubectl apply -f bootstrap/neltharion.yaml
+kubectl apply -f neltharion/neltharion.yaml
 ```
 
 Après l'étape 4, tout passe par Git.
@@ -88,7 +86,6 @@ Après l'étape 4, tout passe par Git.
 ## Documentation
 
 - [`CLAUDE.md`](CLAUDE.md) — architecture détaillée, sync-waves, pièges du self-management, roadmap.
-- [`bootstrap/README.md`](bootstrap/README.md) — procédure de bootstrap.
 - [`neltharion/infra/argocd/README.md`](neltharion/infra/argocd/README.md) — bootstrap & self-management Argo, deploy key.
 - [`neltharion/infra/sealed-secrets/README.md`](neltharion/infra/sealed-secrets/README.md) — kubeseal, backup/restore de clé.
 - [`neltharion/infra/traefik/README.md`](neltharion/infra/traefik/README.md) — ingress hostPort, redirection HTTP→HTTPS, exposer une app.
