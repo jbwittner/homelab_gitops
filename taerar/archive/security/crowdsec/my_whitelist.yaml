@@ -1,0 +1,8 @@
+name: custom/my-whitelist
+description: "Whitelist for trusted administrator IP addresses"
+whitelist:
+  reason: "Trusted admin IP - skipping bans"
+  ip:
+    - "182.67.115.10"
+  cidr:
+    - "3a01:e0a:dc4:1440::/64"

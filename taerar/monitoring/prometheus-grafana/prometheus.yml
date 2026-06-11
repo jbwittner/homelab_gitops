@@ -1,0 +1,19 @@
+# prometheus.yml
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'cadvisor'
+    static_configs:
+      # Utilise le nom du conteneur défini dans ton docker-compose
+      - targets: ['monitoring_cadvisor:8080']
+
+  - job_name: 'crowdsec'
+    static_configs:
+      # Utilise le nom du conteneur défini dans ton docker-compose
+      - targets: ['security_crowdsec_engine:6060']
+
+  - job_name: 'node-exporter'
+    static_configs:
+      # Utilise le nom du conteneur du node-exporter
+      - targets: ['monitoring_node_exporter:9100']

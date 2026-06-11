@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: monitoring_metabase_db
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASS}
+      POSTGRES_DB: ${PG_DB}
+    volumes:
+      - db-data:/var/lib/postgresql/18/docker
+
+  dashboard:
+    image: metabase/metabase:v0.61.0.x
+    container_name: monitoring_metabase_dashboard
+    restart: always
+    healthcheck:
+      test: curl --fail -I http://localhost:3000/api/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    expose:
+      - "3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${PG_DB}
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${PG_USER}
+      MB_DB_PASS: ${PG_PASS}
+      MB_DB_HOST: db
+    networks:
+      - security_network
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  security_network:
+    external: true
+
+volumes:
+  db-data:

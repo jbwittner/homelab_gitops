@@ -1,0 +1,52 @@
+services:
+  crowdsec-db:
+    image: postgres:17-alpine
+    container_name: security_crowdsec_db
+    environment:
+      - POSTGRES_USER=${CROWDSEC_DB_USER}
+      - POSTGRES_PASSWORD=${CROWDSEC_DB_PASSWORD}
+      - POSTGRES_DB=${CROWDSEC_DB_NAME}
+    volumes:
+      - crowdsec_db_data:/var/lib/postgresql/data
+    networks:
+      - security_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CROWDSEC_DB_USER} -d ${CROWDSEC_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.7.8
+    container_name: security_crowdsec_engine
+    environment:
+      # Install specific collections for Traefik
+      - CROWDSEC_BYPASS_DB_VOLUME_CHECK=true
+      - COLLECTIONS=crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/http-dos crowdsecurity/sshd crowdsecurity/postfix
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - crowdsec_config:/etc/crowdsec/
+      # Crowdsec needs to read Traefik's access logs
+      - ./acquis.yaml:/etc/crowdsec/acquis.yaml
+      - ./profiles.yaml:/etc/crowdsec/profiles.yaml
+      # Mount the host authentication logs for the host SSH (port 2222)
+      - /var/log/auth.log:/var/log/auth.log:ro
+    depends_on:
+      crowdsec-db:
+        condition: service_healthy
+    networks:
+      - security_network
+    restart: unless-stopped
+
+  # Note: You would also need a Traefik Bouncer container or plugin
+  # to actually block the visualized threats.
+
+networks:
+  security_network:
+    external: true
+
+volumes:
+  crowdsec_config:
+  crowdsec_db_data:

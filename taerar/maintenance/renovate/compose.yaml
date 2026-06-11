@@ -1,0 +1,26 @@
+services:
+  renovate-forgejo:
+    image: renovate/renovate:43.216.2
+    container_name: maintenance_renovate_forgejo
+    # The container will stop automatically once the job is done
+    restart: "no"
+    environment:
+      # Platform configuration for Forgejo
+      RENOVATE_PLATFORM: forgejo
+      RENOVATE_ENDPOINT: https://forgejo.wittnerlab.com/api/v1
+      
+      RENOVATE_REPOSITORIES: jbwittner/gitops,jbwittner/infra_iaas
+
+      # Authentication tokens (replace with your actual tokens)
+      RENOVATE_TOKEN: ${RENOVATE_FORGEJO_TOKEN}
+      RENOVATE_GITHUB_COM_TOKEN: ${RENOVATE_GITHUB_COM_TOKEN}
+      
+      # Bot behavior settings
+      RENOVATE_AUTODISCOVER: "true"
+      LOG_LEVEL: info
+    volumes:
+      # Dedicated cache volume for this specific instance
+      - renovate-forgejo-cache:/tmp/renovate
+
+volumes:
+  renovate-forgejo-cache:

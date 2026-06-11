@@ -1,0 +1,41 @@
+# Docker Compose configuration for Linkwarden
+services:
+  linkwarden:
+    image: ghcr.io/linkwarden/linkwarden:v2.14.1
+    container_name: tools-linkwarden
+    restart: unless-stopped
+    environment:
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=https://linkwarden.wittnerlab.com
+      - DATABASE_URL=postgresql://linkwarden-user:${POSTGRES_PASSWORD}@postgres:5432/linkwarden-db
+    volumes:
+      - linkwarden-data:/data/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail http://localhost:3000 || exit 1
+      interval: 60s
+      retries: 2
+      start_period: 60s
+      timeout: 15s
+
+  postgres:
+    image: postgres:18.4-alpine3.23
+    container_name: tools-linkwarden-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: linkwarden-user
+      POSTGRES_DB: linkwarden-db
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/18/docker
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "linkwarden-user", "-d", "linkwarden-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  linkwarden-data:
+  postgres-data:

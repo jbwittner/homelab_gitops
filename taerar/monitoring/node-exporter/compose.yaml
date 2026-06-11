@@ -1,0 +1,25 @@
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.11.1
+    container_name: monitoring_node_exporter
+    ports:
+      # Binds port 9100 strictly to localhost on the host machine
+      - "127.0.0.1:9100:9100"
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    privileged: true
+    networks:
+      # Connects node-exporter to the shared network so Prometheus can scrape it
+      - monitoring_net
+
+networks:
+  monitoring_net:
+    external: true

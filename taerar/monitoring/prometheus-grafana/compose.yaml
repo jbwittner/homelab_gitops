@@ -1,0 +1,81 @@
+# docker-compose-monitoring.yml
+services:
+  prometheus:
+    image: prom/prometheus:v3.12.0-distroless
+    container_name: monitoring_prometheus
+    ports:
+      # Binds port 9090 strictly to localhost on the host machine
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.retention.size=5GB'
+    restart: unless-stopped
+    networks:
+      # Connects Prometheus to the shared network so it can scrape metrics
+      - monitoring_net
+      - grafana_net
+      - security_network
+      
+  grafana:
+    image: grafana/grafana:13.1.0-25644485979
+    container_name: monitoring_grafana
+    environment:
+      #- GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      #- GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+
+      # Disable basic authentication and the default login form
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+
+      # Enable the generic OAuth2 authentication
+      - GF_AUTH_GENERIC_OAUTH_ENABLED=true
+      
+      # OAuth2 credentials provided by your identity provider
+      - GF_AUTH_GENERIC_OAUTH_CLIENT_ID=${GF_AUTH_GENERIC_OAUTH_CLIENT_ID}
+      - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=${GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET}
+      
+      # Required scopes for user information
+      - GF_AUTH_GENERIC_OAUTH_SCOPES=openid profile email
+      
+      # Identity provider endpoints
+      - GF_AUTH_GENERIC_OAUTH_AUTH_URL=https://authentik.wittnerlab.com/application/o/authorize/
+      - GF_AUTH_GENERIC_OAUTH_TOKEN_URL=https://authentik.wittnerlab.com/application/o/token/
+      - GF_AUTH_GENERIC_OAUTH_API_URL=https://authentik.wittnerlab.com/application/o/userinfo/
+
+      # Root URL is strictly required for OAuth2 redirection callbacks to work properly
+      - GF_SERVER_ROOT_URL=https://grafana-7a5b6065.wittnerlab.com/
+
+      # Role mapping configuration using JMESPath
+      # The double quotes around the entire string prevent YAML parsing errors
+      - "GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH=contains(groups[*], 'grafana_admins') && 'GrafanaAdmin' || 'Viewer'"
+    volumes:
+      # Persists Grafana data (dashboards, users, data sources)
+      - grafana_data:/var/lib/grafana
+      # Mount the provisioning configuration file
+      - ./provisioning-dashboards:/etc/grafana/provisioning/dashboards
+      # Mount the folder containing the actual JSON dashboard files
+      - ./dashboards:/var/lib/grafana/dashboards
+    restart: unless-stopped
+    networks:
+      - grafana_net
+      - security_network
+
+volumes:
+  grafana_data:
+    # Defines a named volume for Grafana data persistence
+    name: grafana_data
+
+networks:
+  monitoring_net:
+    external: true
+  security_network:
+    external: true
+  grafana_net:
+    # Forces the exact network name without folder prefix
+    name: grafana_net
+    # Explicitly defines it as an internal bridge network
+    driver: bridge

@@ -1,0 +1,35 @@
+services:
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.57.0
+    container_name: monitoring_cadvisor
+    ports:
+      # Binds port 8080 strictly to localhost on the host machine
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      # The /dev/disk mount is kept for compatibility but is less relevant 
+      # now that disk metrics are disabled below
+      - /dev/disk/:/dev/disk:ro
+    command:
+      # Restrict analysis to Docker containers to ignore host-level metrics
+      - "--docker_only=true"
+      # Increase the time between container state checks
+      - "--housekeeping_interval=5s"
+      - "--max_housekeeping_interval=10s"
+      # Disable metrics already handled by node_exporter to save CPU/RAM
+      - "--disable_metrics=advtcp,cpu_topology,cpuset,disk,diskIO,hugetlb,memory_numa,network,oom_event,percpu,perf_event,process,referenced_memory,resctrl,sched,tcp,udp"
+      # Stop storing all Docker labels to drastically reduce memory usage
+      - "--store_container_labels=false"
+    # Always set hard resource limits to prevent host starvation
+    privileged: true
+    restart: unless-stopped
+    networks:
+      # Connects cAdvisor to the shared network so Prometheus can scrape it
+      - monitoring_net
+      
+networks:
+  monitoring_net:
+    external: true

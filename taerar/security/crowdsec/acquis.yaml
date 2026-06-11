@@ -1,0 +1,29 @@
+# 1. Traefik Acquisition
+source: docker
+container_name:
+  - dokploy-traefik
+labels:
+  type: traefik
+
+---
+# 2. Host SSH Acquisition (Port 2222)
+filenames:
+  - /var/log/auth.log
+labels:
+  type: syslog
+
+---
+# 3. Forgejo SSH Acquisition via Docker (Port 4222)
+source: docker
+container_name:
+  - forgejo_server # Replace with your actual Forgejo container name
+labels:
+  type: syslog
+
+---
+# 4. Postfix Acquisition via Docker (Port 587)
+source: docker
+container_name:
+  - postfix_sender # Replace with your actual Postfix container name
+labels:
+  type: parser-docker-postfix
