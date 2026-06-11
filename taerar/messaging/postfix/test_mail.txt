@@ -1,0 +1,6 @@
+From: "Test" <noreply@wittnerlab.com>
+To: "JB" <jeanbaptiste.wittner@outlook.com>
+Subject: Test depuis curl
+Date: Fri, 08 May 2026 12:00:00 +0200
+
+Bonjour, ceci est un test envoyé via curl depuis postfix.wittnerlab.com.

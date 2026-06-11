@@ -1,0 +1,20 @@
+services:
+  shiori:
+    image: ghcr.io/go-shiori/shiori:v1.8.0
+    container_name: tools-shiori
+    environment:
+      # Required for HTTP sessions. Please change this to a secure random string.
+      - SHIORI_HTTP_SECRET_KEY=${SHIORI_SECRET_KEY}
+      # Define the data directory inside the container
+      - SHIORI_DIR=/srv/shiori
+      # Optional: Uncomment and modify if you prefer to use PostgreSQL/MySQL instead of SQLite
+      # - SHIORI_DATABASE_URL=postgres://user:password@db_host:5432/shiori?sslmode=disable
+    expose:
+      - "8080"
+    volumes:
+      # Persist the SQLite database and settings to a local folder named 'shiori-data'
+      - shiori-data:/srv/shiori
+    restart: unless-stopped
+
+volumes:
+  shiori-data:

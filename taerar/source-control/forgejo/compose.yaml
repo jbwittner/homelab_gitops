@@ -1,0 +1,84 @@
+version: "3.8"
+
+services:
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:15.0.2
+    container_name: source_control_forgejo_server
+    restart: always
+    ports:
+      - 4222:22
+    environment:
+      #[server]
+      FORGEJO__server__DOMAIN: wittnerlab.com
+      FORGEJO__server__SSH_DOMAIN: git-ssh.wittnerlab.com
+      FORGEJO__server__HTTP_PORT: 3000
+      FORGEJO__server__ROOT_URL: https://forgejo.wittnerlab.com
+      FORGEJO__server__DISABLE_SSH: false
+      FORGEJO__server__SSH_PORT: 4222
+      FORGEJO__server__SSH_LISTEN_PORT: 22
+
+      #[database]
+      FORGEJO__database__DB_TYPE: postgres
+      FORGEJO__database__HOST: db:5432
+      FORGEJO__database__NAME: ${DATABASE_NAME}
+      FORGEJO__database__USER: ${DATABASE_USER}
+      FORGEJO__database__PASSWD: ${DATABASE_PASSWD}
+
+      #[log]
+      FORGEJO__log__DB_LEVEL: info
+
+      #[security]
+      FORGEJO__security__INSTALL_LOCK: true
+
+      #[service]
+      FORGEJO__service__DISABLE_REGISTRATION: true
+      FORGEJO__service__ALLOW_ONLY_EXTERNAL_REGISTRATION: false
+
+      #[mailer]
+      FORGEJO__mailer__USER: ${MAIL_USER}
+      FORGEJO__mailer__PASSWD: ${MAIL_PASSWD}
+      FORGEJO__mailer__SMTP_ADDR: postfix.wittnerlab.com
+      FORGEJO__mailer__PROTOCOL: smtp+starttls
+      FORGEJO__mailer__SMTP_PORT: 587
+      FORGEJO__mailer__ENABLED: true
+      FORGEJO__mailer__FROM: 'Forgejo wittnerlab <forgejo-noreply@wittnerlab.com>'
+
+      #[openid]
+      FORGEJO__openid__ENABLE_OPENID_SIGNIN: false
+      FORGEJO__openid__ENABLE_OPENID_SIGNUP: false
+      
+      #[oauth2]
+      FORGEJO__oauth2_client__ENABLED: true
+      FORGEJO__oauth2_client__OPENID_CONNECT_SCOPES: 'profile email'
+      FORGEJO__oauth2_client__ENABLE_AUTO_REGISTRATION: true
+      FORGEJO__oauth2_client__USERNAME: nickname
+      FORGEJO__oauth2_client__ACCOUNT_LINKING: auto
+
+    volumes:
+      - forgejo_data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18.4-alpine3.23
+    container_name: source_control_forgejo_db
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - forgejo_db:/var/lib/postgresql/18/docker
+
+volumes:
+  forgejo_data:
+  forgejo_db:

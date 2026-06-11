@@ -1,0 +1,30 @@
+- Developer:
+    - Github:
+        - icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/github.svg
+          href: https://github.com/
+    
+    - Selfhost:
+        - icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/selfh-st.svg
+          href: https://selfh.st/
+
+- Divertissement:
+    - YouTube:
+        - icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/youtube.svg
+          href: https://www.youtube.com/
+    - Netflix:
+        - icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/netflix.svg
+          href: https://www.netflix.com/
+    - Twitch:
+        - icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/twitch.svg
+          href: https://www.twitch.tv/
+    - X:
+        - icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/x.svg
+          href: https://www.x.com/
+
+- IA:
+    - Gemini:
+        - icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/google-gemini.svg
+          href: https://gemini.google.com/
+    - Claude:
+        - icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/claude.svg
+          href: https://claude.ai/

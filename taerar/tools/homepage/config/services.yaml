@@ -1,0 +1,60 @@
+- Cluster Management:
+    - Authentik:
+        href: https://authentik.wittnerlab.com
+        description: Fournisseur d'identité
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/authentik.svg
+    - Dokploy-vps:
+        href: https://dokploy-7a5b6065.wittnerlab.com/
+        description: Platforme de déploiement d'applications (Dokploy)
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/dokploy.svg
+    - Grafana:
+        href: https://grafana-7a5b6065.wittnerlab.com
+        description: Observabilité et dashboards (Dokploy)
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/grafana.svg
+    - Alexstrasza (local uniquement):
+        href: https://alexstrasza.lan.wittnerlab.com
+        description: Interface de gestion Proxmox (maison)
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/proxmox.svg
+    - Anachronos (local uniquement):
+        href: https://anachronos.lan.wittnerlab.com
+        description: Interface de gestion Proxmox (maison)
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/proxmox.svg
+- Applications:
+    - forgejo:
+        href: https://forgejo.wittnerlab.com
+        description: Plateforme de développement collaboratif (Git)
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/forgejo.svg
+    - n8n:
+        href: https://n8n.wittnerlab.com
+        description: Automatisation de workflows
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/n8n.svg
+    - Home Assistant (local uniquement):
+        href: https://homeassistant.lan.wittnerlab.com
+        description: Automatisation de la maison
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/home-assistant.svg
+    - Pi-hole (local uniquement):
+        href: https://pihole.lan.wittnerlab.com/admin
+        description: Bloqueur de publicités réseau
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/pi-hole.svg
+    - Nginx Proxy Manager (local uniquement):
+        href: https://nginx.lan.wittnerlab.com
+        description: Gestionnaire de proxy inverse
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/nginx-proxy-manager.svg
+    - Zigbee2MQTT (local uniquement):
+        href: https://zigbee2mqtt.lan.wittnerlab.com
+        description: Passerelle Zigbee vers MQTT
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/zigbee2mqtt.svg
+- Outils & Utilitaires:
+    - Shiori:
+        href: https://shiori.wittnerlab.com
+        description: Gestionnaire de favoris
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/shiori.webp
+    - IT Tools:
+        href: https://it-tools.wittnerlab.com
+        description: Collection d'outils pour développeurs
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/it-tools.svg
+    - Swagger Editor:
+        href: https://swagger-editor.wittnerlab.com
+        description: Éditeur d'APIs OpenAPI
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/swagger.svg
+    

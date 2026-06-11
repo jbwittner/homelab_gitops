@@ -1,0 +1,7 @@
+services:
+  swagger-editor:
+    image: docker.swagger.io/swaggerapi/swagger-editor:v5.6.2-unprivileged
+    container_name: swagger-editor
+    restart: unless-stopped
+    expose:
+      - "8080"

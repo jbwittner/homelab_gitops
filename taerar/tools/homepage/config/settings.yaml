@@ -1,0 +1,6 @@
+background:
+  image: https://zipline.wittnerlab.com/u/y6fIzs.jpeg
+  opacity: 10 # 0-100
+providers:
+  longhorn:
+    url: http://longhorn-frontend.longhorn-system.svc.cluster.local

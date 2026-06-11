@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  docker-in-docker:
+    image: docker:29.5.3-dind
+    container_name: 'source_control_docker_dind_forgejo_runner'
+    privileged: true # Pas besoin de guillemets pour un booléen
+    command: ['dockerd', '-H', 'tcp://0.0.0.0:2375', '--tls=false']
+    restart: 'unless-stopped'
+    volumes:
+    # 1. Les métadonnées des images
+      - dind_images_meta:/var/lib/docker/image
+      # 2. Les couches physiques des images (et des conteneurs)
+      - dind_images_layers:/var/lib/docker/overlay2
+      # 3. Les volumes nommés (comme tu l'avais demandé précédemment)
+      - dind_volumes_data:/var/lib/docker/volumes
+    networks:
+      - forgejo-net
+
+  runner:
+    image: 'data.forgejo.org/forgejo/runner:12'
+    container_name: 'source_control_forgejo_runner'
+    depends_on:
+      docker-in-docker:
+        condition: service_started
+    user: 1001:1001
+    volumes:
+      - ../../../../files/runner-config.yaml:/data/runner-config.yml:ro
+    restart: 'unless-stopped'
+    command: 'forgejo-runner daemon --config runner-config.yml'
+    networks:
+      - forgejo-net
+
+volumes:
+  runner_data: null
+  dind_images_meta: null
+  dind_images_layers: null
+  dind_volumes_data: null
+  
+networks:
+  forgejo-net:
+    driver: bridge

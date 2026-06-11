@@ -1,0 +1,65 @@
+services:
+  certbot:
+    image: certbot/dns-cloudflare:v5.6.0
+    container_name: messaging_postfix_certbot
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        certbot certonly \
+          --dns-cloudflare \
+          --dns-cloudflare-credentials /cloudflare-secret/cloudflare.ini \
+          --dns-cloudflare-propagation-seconds 20 \
+          --email "${LETSENCRYPT_EMAIL}" \
+          --agree-tos \
+          --no-eff-email \
+          -d "${HOSTNAME}" \
+          --non-interactive \
+          --keep-until-expiring \
+          --server "${LETSENCRYPT_SERVER}"
+        mkdir -p /opt/postfix-certs
+        cp -L /etc/letsencrypt/live/${HOSTNAME}/fullchain.pem /opt/postfix-certs/fullchain.pem
+        cp -L /etc/letsencrypt/live/${HOSTNAME}/privkey.pem /opt/postfix-certs/privkey.pem
+        chmod 644 /opt/postfix-certs/fullchain.pem
+        chmod 644 /opt/postfix-certs/privkey.pem
+        echo "Certificates ready at /opt/postfix-certs"
+    environment:
+      - HOSTNAME=${HOSTNAME}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+      - LETSENCRYPT_SERVER=${LETSENCRYPT_SERVER:-https://acme-v02.api.letsencrypt.org/directory}
+    volumes:
+      - ../../../../files/cloudflare.ini:/cloudflare-secret/cloudflare.ini:ro
+      - letsencrypt_data:/etc/letsencrypt
+      - postfix_certs_data:/opt/postfix-certs
+
+  mail_sender:
+    image: boky/postfix:5.1.0
+    container_name: messaging_postfix_mail_sender
+    restart: unless-stopped
+    ports:
+      - "587:587"
+    environment:
+      - HOSTNAME=${HOSTNAME}
+      - ALLOWED_SENDER_DOMAINS=${ALLOWED_SENDER_DOMAINS}
+      - ENABLE_OPENDKIM=true
+      - DKIM_AUTOGENERATE=true
+      - SMTPD_SASL_USERS=${SMTP_USER}
+      - POSTFIX_smtpd_tls_cert_file=/etc/postfix/certs/fullchain.pem
+      - POSTFIX_smtpd_tls_key_file=/etc/postfix/certs/privkey.pem
+      - POSTFIX_smtpd_tls_security_level=may
+      - POSTFIX_smtpd_sender_restrictions=permit_sasl_authenticated, permit_mynetworks, reject_non_fqdn_sender, reject_unknown_sender_domain
+      - POSTFIX_smtpd_relay_restrictions=permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
+    volumes:
+      - dkim_data:/etc/opendkim/keys
+      - postfix_certs_data:/etc/postfix/certs:ro
+    depends_on:
+      certbot:
+        condition: service_completed_successfully
+
+volumes:
+  dkim_data:
+    driver: local
+  letsencrypt_data:
+    driver: local
+  postfix_certs_data:
+    driver: local
