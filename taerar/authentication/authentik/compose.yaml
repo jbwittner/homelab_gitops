@@ -16,6 +16,8 @@ services:
       POSTGRES_PASSWORD: ${PG_PASS}
       POSTGRES_USER: ${PG_USER}
       POSTGRES_DB: ${PG_DB}
+    networks:
+      - authentik_net
 
   redis:
     image: docker.io/library/redis:8.8.0-alpine
@@ -30,6 +32,8 @@ services:
       timeout: 3s
     volumes:
       - redis:/data
+    networks:
+      - authentik_net
 
   server:
     image: ghcr.io/goauthentik/server:2026.5.2
@@ -64,6 +68,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - authentik_net    # postgresql / redis internes à la stack
+      - messaging_net    # relais SMTP postfix (messaging_postfix_mail_sender:587)
     #labels:
     #  - traefik.http.routers.authentication-authentik-67cnuw-11-web.middlewares=crowdsec-bouncer@file
 
@@ -104,6 +111,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - authentik_net    # postgresql / redis internes à la stack
+      - messaging_net    # relais SMTP postfix (messaging_postfix_mail_sender:587)
 
 volumes:
   database:
@@ -116,3 +126,12 @@ volumes:
     driver: local
   custom-templates:
     driver: local
+
+networks:
+  # Réseau interne de la stack (postgresql, redis, server, worker)
+  authentik_net:
+    driver: bridge
+  # Réseau partagé avec la stack messaging/postfix pour atteindre le relais SMTP en
+  # interne (port 587 non exposé sur l'hôte). À créer une fois : docker network create messaging_net
+  messaging_net:
+    external: true

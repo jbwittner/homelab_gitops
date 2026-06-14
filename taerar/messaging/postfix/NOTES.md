@@ -297,7 +297,21 @@ curl --url 'smtp://postfix.wittnerlab.com:587' \
 > - `Authentication-Results` montre `spf=pass`, `dkim=pass`, `dmarc=pass`
 > - L'IP source n'est pas blacklistée (cf. mxtoolbox.com)
 
-## Tester la délivrabilité (mail-tester.com)
+# Tester la délivrabilité
+
+Deux outils complémentaires, tous deux à lancer **depuis un conteneur attaché à `messaging_net`**
+(le port `587` n'est plus exposé sur l'hôte) :
+
+| Outil | Ce qu'il mesure | Limite |
+|---|---|---|
+| [mail-tester.com](https://www.mail-tester.com/) | Score SpamAssassin + SPF/DKIM/DMARC/PTR/blacklists/contenu | ~3 tests/jour gratuits par IP |
+| [mailreach.co](https://www.mailreach.co/) | **Placement réel** inbox vs spam/promotions chez Gmail/Outlook/Yahoo… | compte requis ; envoi vers une liste de seeds |
+
+> [!note] Contraintes d'envoi communes
+> Les deux tests partagent le **CRLF obligatoire** et le `--ssl-reqd --insecure` (connexion par
+> nom de conteneur) — détaillés dans « Notes communes aux deux tests » en bas de cette section.
+
+## 1. mail-tester.com (score SpamAssassin — limité en requêtes)
 
 [mail-tester.com](https://www.mail-tester.com/) note un mail réel (SPF, DKIM, DMARC,
 reverse DNS, blacklists, contenu). C'est le test de référence avant de brancher une vraie app.
@@ -349,6 +363,68 @@ docker run --rm --network messaging_net \
 >   test_mail_mailtester.txt > /tmp/mail_mailtester.eml
 > ```
 
+## 2. mailreach.co (placement inbox vs spam, multi-fournisseurs)
+
+[mailreach.co](https://www.mailreach.co/) ne donne pas un simple score : il dépose des
+**adresses-pièges (seeds)** chez les principaux fournisseurs et mesure où atterrit réellement le
+mail (boîte de réception, spam, onglet promotions). Le principe MailReach :
+
+1. MailReach affiche un **code unique** à insérer **n'importe où** dans le mail (sujet ou corps).
+2. Il fournit une **liste d'adresses seed** auxquelles envoyer ce mail.
+3. Après l'envoi, cliquer sur « Check placement » → rapport de placement par fournisseur.
+
+### Marche à suivre
+
+1. Sur MailReach (*Spam Test* → nouveau test), copier le **code** et la **liste d'adresses**.
+2. Sur le host, envoyer **un seul** mail contenant le code à **toutes** les adresses (un
+   `--mail-rcpt` par adresse de la liste) :
+
+```sh
+CODE='mailreach-xxxxxxxxxxxx'          # code fourni par MailReach (à mettre dans le mail)
+
+# Colle la liste de seeds MailReach telle quelle : virgules, espaces ET retours
+# à la ligne sont tolérés (on normalise juste après).
+RAW='seed1@gmail.com, seed2@outlook.com
+seed3@yahoo.fr'
+
+# Le code MailReach doit apparaître quelque part dans le mail → ici dans le corps.
+printf 'From: "WittnerLab" <noreply@wittnerlab.com>\r\nTo: <undisclosed-recipients:;>\r\nSubject: Test deliverabilite WittnerLab\r\nDate: %s\r\nMessage-Id: <mailreach-%s@postfix.wittnerlab.com>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nBonjour,\r\n\r\nCeci est un mail de test de delivrabilite via le relais postfix.wittnerlab.com.\r\n\r\n%s\r\n' \
+  "$(date -R)" "$RANDOM" "$CODE" > /tmp/mail_mailreach.eml
+
+# Un --mail-rcpt par adresse — virgules et CR (\r de Windows) convertis en espaces,
+# puis word-splitting. Évite le « 501 Bad recipient address syntax ».
+rcpt_args=()
+for r in $(printf '%s' "$RAW" | tr ',\r' '  '); do
+  rcpt_args+=(--mail-rcpt "$r")
+done
+printf 'Destinataires: %s\n' "${rcpt_args[*]}"   # vérifier la liste AVANT d'envoyer
+
+docker run --rm --network messaging_net \
+  -v /tmp/mail_mailreach.eml:/mail.txt:ro \
+  curlimages/curl:latest \
+  --url 'smtp://messaging_postfix_mail_sender:587' \
+  --ssl-reqd --insecure \
+  --mail-from 'noreply@wittnerlab.com' \
+  "${rcpt_args[@]}" \
+  --upload-file /mail.txt \
+  --user 'noreply@wittnerlab.com:<password>'
+```
+
+3. Revenir sur MailReach → « Check placement » → lire le rapport (viser **Inbox** partout).
+
+> [!tip] Bash requis (`rcpt_args` est un tableau)
+> L'expansion `"${rcpt_args[@]}"` est du **bash**. Sur le host Dokploy (root, bash) c'est bon ;
+> en `sh` pur, écrire les `--mail-rcpt` à la main, un par adresse. Le `printf 'Destinataires…'`
+> affiche la liste construite : **vérifie-la** avant d'envoyer (chaque adresse seule, sans
+> virgule ni espace parasite) — c'est ce qui évite le `501 Bad recipient address syntax`.
+
+> [!note] Un seul envoi, plusieurs destinataires
+> On envoie **un unique** message (un seul `DATA`) avec plusieurs `RCPT TO` — c'est exactement ce
+> qu'attend MailReach (un seul send vers toute la liste de seeds). Le `To:` est mis à
+> `undisclosed-recipients:;` pour ne pas exposer la liste ; MailReach ne lit que le **code**.
+
+## Notes communes aux deux tests
+
 > [!warning] Fins de ligne CRLF obligatoires
 > SMTP (RFC 5322) exige des en-têtes terminés par **CRLF** (`\r\n`). Le fichier `*.txt` est
 > stocké en LF (propre pour le repo) ; envoyé tel quel, Postfix ne reconnaît pas la ligne vide
@@ -361,8 +437,8 @@ docker run --rm --network messaging_net \
 > On force STARTTLS (`--ssl-reqd`) mais on **ignore la vérification du CN** (`--insecure`) :
 > on se connecte par le nom de conteneur `messaging_postfix_mail_sender`, qui ne correspond pas
 > au CN du cert (`postfix.wittnerlab.com`). Le chiffrement client→relais n'influence de toute
-> façon pas le score mail-tester, qui juge la connexion **relais → mail-tester** (SPF/DKIM/DMARC
-> du domaine `wittnerlab.com`).
+> façon pas le résultat de ces tests, qui jugent la connexion **relais → destinataire**
+> (SPF/DKIM/DMARC du domaine `wittnerlab.com`).
 
 ## Renouvellement des certificats
 
@@ -439,7 +515,7 @@ volumes:
 
 ---
 
-# Brancher une app sur le relais (ex. Forgejo)
+# Brancher une app sur le relais (Forgejo, authentik, …)
 
 Chaque app est une **stack Compose séparée** ; pour qu'elle résolve le conteneur
 `messaging_postfix_mail_sender` par son nom, elle doit partager un **réseau Docker externe**
@@ -463,11 +539,30 @@ Côté app, il suffit de :
 1. Rejoindre `messaging_net` (déclaré `external: true`).
 2. Pointer le client SMTP sur `messaging_postfix_mail_sender:587` en `smtp+starttls`.
 3. S'authentifier avec un user présent dans `SMTP_USER` (cf. `example.env`).
-4. Comme on se connecte par nom de conteneur (≠ CN du cert `postfix.wittnerlab.com`), faire
-   **confiance au cert interne** côté client (pour Forgejo : `FORGEJO__mailer__FORCE_TRUST_SERVER_CERT: true`).
+4. On se connecte par **nom de conteneur** (≠ CN du cert `postfix.wittnerlab.com`) : le client
+   doit donc soit faire **confiance au cert interne**, soit ne pas vérifier le CN (cf. tableau).
 
-> Forgejo (`source-control/forgejo`) utilise un user SASL dédié `forgejo-noreply@wittnerlab.com` —
-> il doit exister dans `SMTP_USER` ici **et** correspondre à `MAIL_USER`/`MAIL_PASSWD` côté Forgejo.
+| App | User SASL dédié | Hôte SMTP | Vérif. du cert |
+|---|---|---|---|
+| **Forgejo** (`source-control/forgejo`) | `forgejo-noreply@wittnerlab.com` | `messaging_postfix_mail_sender:587` | doit forcer la confiance : `FORGEJO__mailer__FORCE_TRUST_SERVER_CERT: true` |
+| **authentik** (`authentication/authentik`) | `authentik-noreply@wittnerlab.com` | `messaging_postfix_mail_sender:587` | **rien à faire** — Django STARTTLS ne vérifie pas le cert par défaut |
+
+Chaque user SASL doit exister dans `SMTP_USER` (postfix `example.env`) **et** correspondre aux
+identifiants côté app (`MAIL_USER`/`MAIL_PASSWD` pour Forgejo, `MAILER_USER`/`MAILER_PASSWD` pour
+authentik).
+
+> [!example] authentik (`authentication/authentik`)
+> `server` **et** `worker` rejoignent `messaging_net` et pointent sur le relais via les variables
+> (`example.env`) :
+> ```env
+> MAILER_SMTP_ADDR=messaging_postfix_mail_sender
+> MAILER_SMTP_PORT=587
+> MAILER_USER=authentik-noreply@wittnerlab.com
+> MAILER_PASSWD=<mot de passe SASL authentik>
+> MAILER_FROM=authentik@wittnerlab.com
+> ```
+> côté compose : `AUTHENTIK_EMAIL__USE_TLS=true` (STARTTLS), `USE_SSL=false`. Le `From`
+> (`authentik@wittnerlab.com`) doit être dans `ALLOWED_SENDER_DOMAINS` (`wittnerlab.com`). ✔
 
 ## Historique des décisions
 
@@ -476,6 +571,7 @@ Côté app, il suffit de :
 - **2026-05-08** — Bind-mount `cloudflare.ini` plutôt que volume nommé : compatible "Files/Mounts" Dokploy.
 - **2026-05-08** — Ajout de `LETSENCRYPT_SERVER` paramétrable suite à un incident LE prod (le staging a permis de débloquer les tests).
 - **2026-06-14** — Test mail-tester : score initial ~ -8 (headers avalés car mail en LF) corrigé en envoyant le message en CRLF + Message-Id. Puis `DKIM_INVALID` dû à une clé DNS désynchronisée (clé régénérée par le volume). Décision : **figer la clé DKIM** via bind-mount `files/opendkim-keys/` + `DKIM_AUTOGENERATE=false` (suppression du volume `dkim_data`), sur le modèle de `cloudflare.ini`.
+- **2026-06-14** — Branchement d'**authentik** sur le relais : `server`/`worker` rejoignent `messaging_net`, hôte SMTP = `messaging_postfix_mail_sender:587`, user SASL dédié `authentik-noreply@wittnerlab.com`. Pas de flag de confiance cert (Django STARTTLS ne vérifie pas par défaut).
 
 ## Ressources
 
