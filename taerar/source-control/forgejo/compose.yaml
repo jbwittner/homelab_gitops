@@ -37,15 +37,12 @@ services:
       #[mailer]
       FORGEJO__mailer__USER: ${MAIL_USER}
       FORGEJO__mailer__PASSWD: ${MAIL_PASSWD}
-      FORGEJO__mailer__SMTP_ADDR: messaging_postfix_mail_sender
+      # Utilisation d'un alias pour le relais SMTP interne (messaging_postfix_mail_sender) sur le réseau partagé messaging_net. Le port 587 n'est pas exposé sur l'hôte.
+      FORGEJO__mailer__SMTP_ADDR: postfix.wittnerlab.com
       FORGEJO__mailer__PROTOCOL: smtp+starttls
       FORGEJO__mailer__SMTP_PORT: 587
       FORGEJO__mailer__ENABLED: true
       FORGEJO__mailer__FROM: 'Forgejo wittnerlab <forgejo-noreply@wittnerlab.com>'
-      # On se connecte à Postfix par son nom de conteneur (messaging_postfix_mail_sender),
-      # alors que son cert Let's Encrypt a pour CN postfix.wittnerlab.com → le nom ne matche
-      # pas. La connexion reste chiffrée (STARTTLS), mais on accepte ce cert interne.
-      FORGEJO__mailer__FORCE_TRUST_SERVER_CERT: true
 
       #[openid]
       FORGEJO__openid__ENABLE_OPENID_SIGNIN: false
