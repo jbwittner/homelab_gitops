@@ -36,7 +36,7 @@ services:
       - authentik_net
 
   server:
-    image: ghcr.io/goauthentik/server:2026.5.2
+    image: ghcr.io/goauthentik/server:2026.5.3
     restart: unless-stopped
     container_name: authentication_authentik_server
     command: server
@@ -76,7 +76,7 @@ services:
 
 
   worker:
-    image: ghcr.io/goauthentik/server:2026.5.2
+    image: ghcr.io/goauthentik/server:2026.5.3
     restart: unless-stopped
     container_name: authentication_authentik_worker
     command: worker
