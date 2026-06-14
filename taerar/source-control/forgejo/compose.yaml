@@ -42,6 +42,10 @@ services:
       FORGEJO__mailer__SMTP_PORT: 587
       FORGEJO__mailer__ENABLED: true
       FORGEJO__mailer__FROM: 'Forgejo wittnerlab <forgejo-noreply@wittnerlab.com>'
+      # On se connecte à Postfix par son nom de conteneur (messaging_postfix_mail_sender),
+      # alors que son cert Let's Encrypt a pour CN postfix.wittnerlab.com → le nom ne matche
+      # pas. La connexion reste chiffrée (STARTTLS), mais on accepte ce cert interne.
+      FORGEJO__mailer__FORCE_TRUST_SERVER_CERT: true
 
       #[openid]
       FORGEJO__openid__ENABLE_OPENID_SIGNIN: false
@@ -58,6 +62,9 @@ services:
       - forgejo_data:/data
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+    networks:
+      - forgejo_net          # réseau interne forgejo <-> db
+      - messaging_net        # réseau partagé pour joindre Postfix (mail_sender)
     depends_on:
       db:
         condition: service_healthy
@@ -78,7 +85,16 @@ services:
       POSTGRES_DB: ${DATABASE_NAME}
     volumes:
       - forgejo_db:/var/lib/postgresql/18/docker
+    networks:
+      - forgejo_net          # la db ne parle qu'à forgejo, pas besoin de messaging_net
 
 volumes:
   forgejo_data:
   forgejo_db:
+
+networks:
+  forgejo_net:
+    driver: bridge
+  messaging_net:
+    # Réseau partagé créé manuellement (cf. README) — déclaré ici comme externe.
+    external: true

@@ -312,6 +312,31 @@ docker compose run --rm certbot && docker compose restart postfix_sender
 | [`test_mail.txt`](test_mail.txt) | Mail de test pour `curl` |
 | `../../../../files/cloudflare.ini` | Token API Cloudflare (UI Dokploy "Files/Mounts") |
 
+---
+
+# Brancher une app sur le relais (ex. Forgejo)
+
+Chaque app est une **stack Compose séparée** ; pour qu'elle résolve le conteneur
+`messaging_postfix_mail_sender` par son nom, elle doit partager un **réseau Docker externe**
+avec Postfix (même convention que `security_network` / `monitoring_net`).
+
+```bash
+# À créer une seule fois sur le host, avant de lancer les stacks :
+docker network create messaging_net
+```
+
+`mail_sender` est attaché à `messaging_net` (déclaré `external: true` dans `compose.yaml`).
+Côté app, il suffit de :
+
+1. Rejoindre `messaging_net` (déclaré `external: true`).
+2. Pointer le client SMTP sur `messaging_postfix_mail_sender:587` en `smtp+starttls`.
+3. S'authentifier avec un user présent dans `SMTP_USER` (cf. `example.env`).
+4. Comme on se connecte par nom de conteneur (≠ CN du cert `postfix.wittnerlab.com`), faire
+   **confiance au cert interne** côté client (pour Forgejo : `FORGEJO__mailer__FORCE_TRUST_SERVER_CERT: true`).
+
+> Forgejo (`source-control/forgejo`) utilise un user SASL dédié `forgejo-noreply@wittnerlab.com` —
+> il doit exister dans `SMTP_USER` ici **et** correspondre à `MAIL_USER`/`MAIL_PASSWD` côté Forgejo.
+
 ## Historique des décisions
 
 - **2026-05-08** — Migration de `/etc/letsencrypt:/etc/letsencrypt:ro` (bind hôte) vers une stack autonome avec service `certbot` intégré. Motivation : portabilité Dokploy.

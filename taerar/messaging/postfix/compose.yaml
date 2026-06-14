@@ -52,6 +52,8 @@ services:
     volumes:
       - dkim_data:/etc/opendkim/keys
       - postfix_certs_data:/etc/postfix/certs:ro
+    networks:
+      - messaging_net        # réseau partagé pour que les apps (Forgejo, ...) joignent ce relais
     depends_on:
       certbot:
         condition: service_completed_successfully
@@ -63,3 +65,8 @@ volumes:
     driver: local
   postfix_certs_data:
     driver: local
+
+networks:
+  messaging_net:
+    # Réseau partagé créé manuellement (cf. NOTES.md) — déclaré ici comme externe.
+    external: true
