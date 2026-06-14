@@ -539,23 +539,35 @@ Côté app, il suffit de :
 1. Rejoindre `messaging_net` (déclaré `external: true`).
 2. Pointer le client SMTP sur `messaging_postfix_mail_sender:587` en `smtp+starttls`.
 3. S'authentifier avec un user présent dans `SMTP_USER` (cf. `example.env`).
-4. On se connecte par **nom de conteneur** (≠ CN du cert `postfix.wittnerlab.com`) : le client
-   doit donc soit faire **confiance au cert interne**, soit ne pas vérifier le CN (cf. tableau).
+4. **Le cert TLS et le nom de connexion.** Le relais présente un cert Let's Encrypt dont le CN
+   est `postfix.wittnerlab.com`. Deux familles de clients :
 
-| App | User SASL dédié | Hôte SMTP | Vérif. du cert |
+| App | User SASL dédié | Hôte SMTP à utiliser | Vérif. du cert |
 |---|---|---|---|
-| **Forgejo** (`source-control/forgejo`) | `forgejo-noreply@wittnerlab.com` | `messaging_postfix_mail_sender:587` | doit forcer la confiance : `FORGEJO__mailer__FORCE_TRUST_SERVER_CERT: true` |
-| **authentik** (`authentication/authentik`) | `authentik-noreply@wittnerlab.com` | `messaging_postfix_mail_sender:587` | **rien à faire** — Django STARTTLS ne vérifie pas le cert par défaut |
+| **Forgejo** (`source-control/forgejo`) | `forgejo-noreply@wittnerlab.com` | `messaging_postfix_mail_sender:587` | tolère le mismatch via `FORGEJO__mailer__FORCE_TRUST_SERVER_CERT: true` |
+| **authentik** (`authentication/authentik`) | `authentik-noreply@wittnerlab.com` | **`postfix.wittnerlab.com:587`** (alias réseau) | **vérifie** le cert → impose CN + CA valides (voir ci-dessous) |
+
+> [!important] authentik vérifie le certificat (alias réseau obligatoire)
+> Contrairement à curl (`--insecure`) ou Forgejo (`FORCE_TRUST_SERVER_CERT`), **authentik valide
+> le cert TLS** et n'expose pas d'option pour le désactiver. Si on le pointe sur le **nom de
+> conteneur** `messaging_postfix_mail_sender`, le STARTTLS échoue avec
+> `SSL alert number 42 (bad_certificate)` (le CN du cert ≠ le nom utilisé). Solution : le conteneur
+> `mail_sender` porte un **alias réseau `postfix.wittnerlab.com`** (= CN du cert) sur `messaging_net` —
+> on y connecte authentik par ce nom, et Docker le résout vers le conteneur en interne. Deux
+> conditions pour que la validation passe :
+> 1. **CN** : utiliser `postfix.wittnerlab.com` (l'alias), pas le nom de conteneur.
+> 2. **CA** : le cert doit être un Let's Encrypt **prod** (un cert *staging* a une CA non reconnue
+>    → `bad_certificate` quand même). Vérifier : `LETSENCRYPT_SERVER` = prod.
 
 Chaque user SASL doit exister dans `SMTP_USER` (postfix `example.env`) **et** correspondre aux
 identifiants côté app (`MAIL_USER`/`MAIL_PASSWD` pour Forgejo, `MAILER_USER`/`MAILER_PASSWD` pour
 authentik).
 
 > [!example] authentik (`authentication/authentik`)
-> `server` **et** `worker` rejoignent `messaging_net` et pointent sur le relais via les variables
-> (`example.env`) :
+> `server` **et** `worker` rejoignent `messaging_net` (+ `authentik_net` interne) et pointent sur
+> le relais via les variables (`example.env`) :
 > ```env
-> MAILER_SMTP_ADDR=messaging_postfix_mail_sender
+> MAILER_SMTP_ADDR=postfix.wittnerlab.com    # alias réseau (= CN du cert), PAS le nom de conteneur
 > MAILER_SMTP_PORT=587
 > MAILER_USER=authentik-noreply@wittnerlab.com
 > MAILER_PASSWD=<mot de passe SASL authentik>
@@ -571,7 +583,7 @@ authentik).
 - **2026-05-08** — Bind-mount `cloudflare.ini` plutôt que volume nommé : compatible "Files/Mounts" Dokploy.
 - **2026-05-08** — Ajout de `LETSENCRYPT_SERVER` paramétrable suite à un incident LE prod (le staging a permis de débloquer les tests).
 - **2026-06-14** — Test mail-tester : score initial ~ -8 (headers avalés car mail en LF) corrigé en envoyant le message en CRLF + Message-Id. Puis `DKIM_INVALID` dû à une clé DNS désynchronisée (clé régénérée par le volume). Décision : **figer la clé DKIM** via bind-mount `files/opendkim-keys/` + `DKIM_AUTOGENERATE=false` (suppression du volume `dkim_data`), sur le modèle de `cloudflare.ini`.
-- **2026-06-14** — Branchement d'**authentik** sur le relais : `server`/`worker` rejoignent `messaging_net`, hôte SMTP = `messaging_postfix_mail_sender:587`, user SASL dédié `authentik-noreply@wittnerlab.com`. Pas de flag de confiance cert (Django STARTTLS ne vérifie pas par défaut).
+- **2026-06-14** — Branchement d'**authentik** sur le relais : `server`/`worker` rejoignent `messaging_net`, user SASL dédié `authentik-noreply@wittnerlab.com`. authentik **vérifie** le cert (STARTTLS → `SSL alert 42 bad_certificate` quand on vise le nom de conteneur). Solution : alias réseau `postfix.wittnerlab.com` (= CN du cert) sur `mail_sender`, et authentik pointe `MAILER_SMTP_ADDR=postfix.wittnerlab.com`. Nécessite un cert LE **prod** (staging = CA non reconnue).
 
 ## Ressources
 
