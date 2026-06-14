@@ -56,7 +56,7 @@ services:
       # Clé DKIM persistée hors d'un volume Docker (bind-mount Dokploy "Files/Mounts",
       # même convention que cloudflare.ini). Contient wittnerlab.com.private + .txt.
       # RW car l'entrypoint boky doit chown/chmod les clés au démarrage.
-      - ../../../../files/opendkim-keys:/etc/opendkim/keys
+      - ../../../../files/opendkim-keys/wittnerlab.com.txt:/etc/opendkim/keys/wittnerlab.com.txt:ro
       - postfix_certs_data:/etc/postfix/certs:ro
     networks:
       - messaging_net        # réseau partagé pour que les apps (Forgejo, ...) joignent ce relais
