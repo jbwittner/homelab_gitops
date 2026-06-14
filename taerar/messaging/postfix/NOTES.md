@@ -313,13 +313,12 @@ recharge la page pour voir le score.
    (remplacer l'adresse jetable et le mot de passe SASL) :
 
 ```sh
-MAILTESTER='test-abc123def@srv1.mail-tester.com'
+MAILTESTER='test-xxxx@srv1.mail-tester.com'   # adresse jetable affichée par mail-tester
 
-# Substitue l'adresse ET convertit le fichier en CRLF (obligatoire en SMTP).
-# Le `$(printf '\r')` injecte un vrai octet CR → portable GNU/BSD sed.
-CR=$(printf '\r')
-sed -e "s/<MAILTESTER_ADDRESS>/$MAILTESTER/" -e "s/\$/$CR/" \
-  test_mail_mailtester.txt > /tmp/mail_mailtester.eml
+# Génère le message directement avec des CRLF (obligatoire en SMTP) — aucune
+# dépendance au fichier du repo, donc pas besoin d'être dans un dossier précis.
+printf 'From: "WittnerLab" <noreply@wittnerlab.com>\r\nTo: <%s>\r\nSubject: Test deliverabilite mail-tester\r\nDate: %s\r\nMessage-Id: <test-mailtester@postfix.wittnerlab.com>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nBonjour,\r\n\r\nCeci est un mail de test via le relais Postfix postfix.wittnerlab.com.\r\n' \
+  "$MAILTESTER" "$(date -R)" > /tmp/mail_mailtester.eml
 
 docker run --rm --network messaging_net \
   -v /tmp/mail_mailtester.eml:/mail.txt:ro \
@@ -334,13 +333,23 @@ docker run --rm --network messaging_net \
 
 3. Recharger la page mail-tester → lire le score (viser **10/10**).
 
+> [!tip] Variante « fichier du repo »
+> On peut aussi partir de [`test_mail_mailtester.txt`](test_mail_mailtester.txt) (placeholder
+> `MAILTESTER_ADDRESS` dans le `To:`) en se plaçant dans `taerar/messaging/postfix/`, puis en
+> substituant l'adresse **et** en convertissant en CRLF avant l'envoi :
+> ```sh
+> CR=$(printf '\r')
+> sed -e "s/<MAILTESTER_ADDRESS>/$MAILTESTER/" -e "s/\$/$CR/" \
+>   test_mail_mailtester.txt > /tmp/mail_mailtester.eml
+> ```
+
 > [!warning] Fins de ligne CRLF obligatoires
-> SMTP (RFC 5322) exige des en-têtes terminés par **CRLF** (`\r\n`). Le fichier est stocké en
-> LF (propre pour le repo) ; envoyé tel quel, Postfix ne reconnaît pas la ligne vide qui sépare
-> en-têtes et corps → **tous les headers sont avalés dans le corps** et SpamAssassin signale
-> `MISSING_FROM/TO/SUBJECT/DATE` + `EMPTY_MESSAGE` (score ~ -8, classé spam). La conversion
-> CRLF (`sed ... "s/\$/$CR/"`) avant l'envoi corrige le problème. Ne **pas** committer le fichier
-> en CRLF : la conversion se fait à l'envoi.
+> SMTP (RFC 5322) exige des en-têtes terminés par **CRLF** (`\r\n`). Le fichier `*.txt` est
+> stocké en LF (propre pour le repo) ; envoyé tel quel, Postfix ne reconnaît pas la ligne vide
+> qui sépare en-têtes et corps → **tous les headers sont avalés dans le corps** et SpamAssassin
+> signale `MISSING_FROM/TO/SUBJECT/DATE` + `EMPTY_MESSAGE` (score ~ -8, classé spam). Le `printf`
+> ci-dessus émet directement du CRLF ; la variante fichier le reconstruit via `sed`. Ne **jamais**
+> committer le mot de passe SASL ni l'adresse jetable dans cette note — garder les placeholders.
 
 > [!note] `--ssl-reqd --insecure`
 > On force STARTTLS (`--ssl-reqd`) mais on **ignore la vérification du CN** (`--insecure`) :
