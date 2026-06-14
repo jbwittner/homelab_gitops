@@ -59,7 +59,11 @@ services:
       - ../../../../files/wittnerlab.com.txt:/etc/opendkim/keys/wittnerlab.com.txt:ro
       - postfix_certs_data:/etc/postfix/certs:ro
     networks:
-      - messaging_net        # réseau partagé pour que les apps (Forgejo, ...) joignent ce relais
+      messaging_net:         # réseau partagé pour que les apps (Forgejo, authentik, ...) joignent ce relais
+        # Alias = CN du certificat Let's Encrypt. Les clients qui VÉRIFIENT le cert (authentik)
+        # se connectent à ce nom → la validation TLS passe sans --insecure ni "trust flag".
+        aliases:
+          - postfix.wittnerlab.com
     depends_on:
       certbot:
         condition: service_completed_successfully
