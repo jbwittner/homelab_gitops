@@ -325,6 +325,13 @@ avec Postfix (même convention que `security_network` / `monitoring_net`).
 docker network create messaging_net
 ```
 
+> [!warning] Relais interne uniquement
+> Le port `587` n'est **plus publié sur l'hôte** (`ports:` retiré du `compose.yaml`). Le relais
+> n'est joignable que depuis le réseau Docker `messaging_net`. Les tests `curl` des étapes 1 et 2
+> ci-dessous (qui visent `postfix.wittnerlab.com:587` depuis l'extérieur) ne fonctionnent donc plus
+> tels quels — il faudrait réexposer temporairement le port, ou tester depuis un conteneur du réseau
+> (ex. `docker exec source_control_forgejo_server ...`).
+
 `mail_sender` est attaché à `messaging_net` (déclaré `external: true` dans `compose.yaml`).
 Côté app, il suffit de :
 

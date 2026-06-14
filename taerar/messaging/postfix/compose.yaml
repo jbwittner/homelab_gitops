@@ -36,8 +36,9 @@ services:
     image: boky/postfix:5.1.0
     container_name: messaging_postfix_mail_sender
     restart: unless-stopped
-    ports:
-      - "587:587"
+    # Pas de `ports:` — le relais n'est PAS exposé sur l'hôte. Les apps clientes
+    # (Forgejo, ...) l'atteignent uniquement en interne via le réseau messaging_net,
+    # sur messaging_postfix_mail_sender:587.
     environment:
       - HOSTNAME=${HOSTNAME}
       - ALLOWED_SENDER_DOMAINS=${ALLOWED_SENDER_DOMAINS}
