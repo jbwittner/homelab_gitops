@@ -9,8 +9,6 @@ services:
       RENOVATE_PLATFORM: forgejo
       RENOVATE_ENDPOINT: https://forgejo.wittnerlab.com/api/v1
       
-      RENOVATE_REPOSITORIES: jbwittner/homelab_gitops,jbwittner/homelab_terraform
-
       # Authentication tokens (replace with your actual tokens)
       RENOVATE_TOKEN: ${RENOVATE_FORGEJO_TOKEN}
       RENOVATE_GITHUB_COM_TOKEN: ${RENOVATE_GITHUB_COM_TOKEN}
