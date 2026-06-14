@@ -1,0 +1,14 @@
+From: "WittnerLab" <noreply@wittnerlab.com>
+To: <MAILTESTER_ADDRESS>
+Subject: Test deliverabilite mail-tester
+Date: Sun, 14 Jun 2026 12:00:00 +0200
+Content-Type: text/plain; charset=utf-8
+
+Bonjour,
+
+Ceci est un mail de test envoye via le relais Postfix postfix.wittnerlab.com
+afin de verifier le score de delivrabilite (SPF / DKIM / DMARC / blacklists)
+sur https://www.mail-tester.com/.
+
+Cordialement,
+WittnerLab

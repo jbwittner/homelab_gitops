@@ -291,6 +291,51 @@ curl --url 'smtp://postfix.wittnerlab.com:587' \
 > - `Authentication-Results` montre `spf=pass`, `dkim=pass`, `dmarc=pass`
 > - L'IP source n'est pas blacklistée (cf. mxtoolbox.com)
 
+## Tester la délivrabilité (mail-tester.com)
+
+[mail-tester.com](https://www.mail-tester.com/) note un mail réel (SPF, DKIM, DMARC,
+reverse DNS, blacklists, contenu). C'est le test de référence avant de brancher une vraie app.
+
+**Principe** : le site affiche une adresse **jetable** unique (ex.
+`test-abc123def@srv1.mail-tester.com`). On lui envoie un mail *depuis le relais*, puis on
+recharge la page pour voir le score.
+
+> [!warning] Le port 587 n'est plus exposé
+> Comme expliqué plus bas, `587` n'est joignable que depuis `messaging_net`. On ne peut donc
+> **pas** `curl` depuis l'hôte/l'extérieur : on lance un conteneur `curl` jetable **attaché au
+> réseau** et on vise le relais par son nom de conteneur `messaging_postfix_mail_sender:587`.
+
+### Marche à suivre
+
+1. Ouvrir <https://www.mail-tester.com/> et **copier l'adresse jetable** affichée.
+2. Renseigner cette adresse dans le `To:` de [`test_mail_mailtester.txt`](test_mail_mailtester.txt)
+   (remplacer le placeholder `MAILTESTER_ADDRESS`).
+3. Depuis le dossier `taerar/messaging/postfix/` **sur le host**, lancer (remplacer l'adresse
+   jetable et le mot de passe SASL) :
+
+```sh
+MAILTESTER='test-abc123def@srv1.mail-tester.com'
+
+docker run --rm --network messaging_net \
+  -v "$PWD/test_mail_mailtester.txt:/mail.txt:ro" \
+  curlimages/curl:latest \
+  --url 'smtp://messaging_postfix_mail_sender:587' \
+  --ssl-reqd --insecure \
+  --mail-from 'noreply@wittnerlab.com' \
+  --mail-rcpt "$MAILTESTER" \
+  --upload-file /mail.txt \
+  --user 'noreply@wittnerlab.com:<password>'
+```
+
+4. Recharger la page mail-tester → lire le score (viser **10/10**).
+
+> [!note] `--ssl-reqd --insecure`
+> On force STARTTLS (`--ssl-reqd`) mais on **ignore la vérification du CN** (`--insecure`) :
+> on se connecte par le nom de conteneur `messaging_postfix_mail_sender`, qui ne correspond pas
+> au CN du cert (`postfix.wittnerlab.com`). Le chiffrement client→relais n'influence de toute
+> façon pas le score mail-tester, qui juge la connexion **relais → mail-tester** (SPF/DKIM/DMARC
+> du domaine `wittnerlab.com`).
+
 ## Renouvellement des certificats
 
 Le service `certbot` ne tourne qu'au démarrage. Les certs LE expirent en **90 jours** → planifier côté Dokploy une **scheduled task hebdomadaire** :
@@ -310,6 +355,7 @@ docker compose run --rm certbot && docker compose restart postfix_sender
 | [`compose.yaml`](compose.yaml) | Définition des services + volumes |
 | [`example.env`](example.env) | Template des variables |
 | [`test_mail.txt`](test_mail.txt) | Mail de test pour `curl` |
+| [`test_mail_mailtester.txt`](test_mail_mailtester.txt) | Mail de test pour le score mail-tester.com |
 | `../../../../files/cloudflare.ini` | Token API Cloudflare (UI Dokploy "Files/Mounts") |
 
 ---
