@@ -93,17 +93,23 @@ Ces restrictions empêchent le serveur de devenir un **open relay** (ce qui le m
 
 OpenDKIM signe chaque mail sortant avec une clé privée. Les serveurs destinataires vérifient la signature en récupérant la **clé publique** publiée en DNS.
 
-Au 1er démarrage, la clé est générée dans `/etc/opendkim/keys/<domain>/<selector>.txt`. Il faut la publier :
+Avec `DKIM_AUTOGENERATE=true`, la clé est générée au 1er démarrage dans
+`/etc/opendkim/keys/<domain>.private` (+ `.txt` pour la partie publique), selector par défaut
+`mail`. Il faut publier la partie publique :
 
 ```sh
-docker exec mail_sender cat /etc/opendkim/keys/wittnerlab.com/mail.txt
+docker exec messaging_postfix_mail_sender cat /etc/opendkim/keys/wittnerlab.com.txt
 ```
 
 Puis créer un TXT en DNS :
 
 ```
-<selector>._domainkey.wittnerlab.com  TXT  "v=DKIM1; k=rsa; p=MIGf..."
+mail._domainkey.wittnerlab.com  TXT  "v=DKIM1; h=sha256; k=rsa; s=email; p=MIIBIj..."
 ```
+
+> [!important] En prod cette stack utilise une **clé figée** (`DKIM_AUTOGENERATE=false` +
+> bind-mount), pas l'autogénération. Voir [§ Figer la clé DKIM](#figer-la-clé-dkim-anti-régénération-dns)
+> pour le pourquoi et la procédure.
 
 ## DNS minimum à configurer
 
@@ -370,6 +376,56 @@ docker compose run --rm certbot && docker compose restart postfix_sender
 
 ---
 
+## Figer la clé DKIM (anti-régénération DNS)
+
+> [!danger] Piège vécu (2026-06-14)
+> `DKIM_AUTOGENERATE=true` régénère une **nouvelle** paire de clés dès que le volume des clés
+> est vide (recréation du volume lors d'un redéploiement, `down -v`, migration de host…).
+> La clé privée change mais le TXT DNS reste l'ancien → SpamAssassin renvoie **`DKIM_INVALID`**
+> (signature présente mais invalide). Diagnostic : comparer le `p=` des deux côtés.
+> ```sh
+> # Clé réellement chargée par le conteneur
+> docker exec messaging_postfix_mail_sender cat /etc/opendkim/keys/wittnerlab.com.txt
+> # Clé publiée en DNS
+> dig +short TXT mail._domainkey.wittnerlab.com
+> ```
+> Si les `p=` diffèrent → republier en DNS le `p=` du conteneur (un seul bloc, sans guillemets).
+
+**Fix durable adopté :** sortir DKIM du cycle de vie d'un volume Docker. La clé est fournie via
+un **bind-mount Dokploy "Files/Mounts"** (même convention que `cloudflare.ini`) et
+`DKIM_AUTOGENERATE=false` — la clé ne change donc plus jamais, quel que soit le sort des volumes.
+
+```yaml
+# compose.yaml — service mail_sender
+environment:
+  - ENABLE_OPENDKIM=true
+  - DKIM_AUTOGENERATE=false
+volumes:
+  - ../../../../files/opendkim-keys:/etc/opendkim/keys   # RW : boky chown/chmod au démarrage
+```
+
+### Procédure (déposer la clé sur un nouvel hôte / 1ère mise en place)
+
+1. **Récupérer la clé actuelle** depuis le conteneur en marche (clé privée + publique) :
+   ```sh
+   docker exec messaging_postfix_mail_sender cat /etc/opendkim/keys/wittnerlab.com.private
+   docker exec messaging_postfix_mail_sender cat /etc/opendkim/keys/wittnerlab.com.txt
+   ```
+2. Dans l'UI Dokploy **"Files/Mounts"** de la stack, créer deux fichiers sous le dossier
+   `opendkim-keys/` (→ stockés dans `.../<stack>/files/opendkim-keys/`) :
+   - `opendkim-keys/wittnerlab.com.private` (contenu de la clé privée)
+   - `opendkim-keys/wittnerlab.com.txt` (contenu de la clé publique)
+3. Redéployer. L'entrypoint boky scanne `/etc/opendkim/keys/*.private`, régénère `KeyTable`/
+   `SigningTable` (selector `mail`) et `chown opendkim` les fichiers (d'où le mount **RW**).
+4. Vérifier que DNS (`mail._domainkey.wittnerlab.com`) publie bien le `p=` de cette clé, puis
+   retester sur mail-tester → `DKIM_VALID`.
+
+> [!warning] Ne jamais committer la clé privée
+> Comme `cloudflare.ini`, la clé vit dans le dossier `files/` de Dokploy (hors du checkout git
+> `code/`), pas dans le repo. Le repo ne contient que la **référence** au bind-mount.
+
+---
+
 ## Fichiers de la stack
 
 | Fichier | Rôle |
@@ -379,6 +435,7 @@ docker compose run --rm certbot && docker compose restart postfix_sender
 | [`test_mail.txt`](test_mail.txt) | Mail de test pour `curl` |
 | [`test_mail_mailtester.txt`](test_mail_mailtester.txt) | Mail de test pour le score mail-tester.com |
 | `../../../../files/cloudflare.ini` | Token API Cloudflare (UI Dokploy "Files/Mounts") |
+| `../../../../files/opendkim-keys/` | Clé DKIM figée `wittnerlab.com.{private,txt}` (UI Dokploy "Files/Mounts") |
 
 ---
 
@@ -418,6 +475,7 @@ Côté app, il suffit de :
 - **2026-05-08** — Choix DNS-01 Cloudflare plutôt que HTTP-01 : port 80 non exposé sur le host + ouverture future aux wildcards.
 - **2026-05-08** — Bind-mount `cloudflare.ini` plutôt que volume nommé : compatible "Files/Mounts" Dokploy.
 - **2026-05-08** — Ajout de `LETSENCRYPT_SERVER` paramétrable suite à un incident LE prod (le staging a permis de débloquer les tests).
+- **2026-06-14** — Test mail-tester : score initial ~ -8 (headers avalés car mail en LF) corrigé en envoyant le message en CRLF + Message-Id. Puis `DKIM_INVALID` dû à une clé DNS désynchronisée (clé régénérée par le volume). Décision : **figer la clé DKIM** via bind-mount `files/opendkim-keys/` + `DKIM_AUTOGENERATE=false` (suppression du volume `dkim_data`), sur le modèle de `cloudflare.ini`.
 
 ## Ressources
 

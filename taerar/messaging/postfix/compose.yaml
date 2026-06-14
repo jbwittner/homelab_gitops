@@ -43,7 +43,9 @@ services:
       - HOSTNAME=${HOSTNAME}
       - ALLOWED_SENDER_DOMAINS=${ALLOWED_SENDER_DOMAINS}
       - ENABLE_OPENDKIM=true
-      - DKIM_AUTOGENERATE=true
+      # Clé DKIM FIGÉE (fournie via bind-mount, cf. volumes). autogenerate=false → jamais
+      # de régénération silencieuse qui désynchroniserait le TXT DNS. Voir NOTES.md "Figer la clé DKIM".
+      - DKIM_AUTOGENERATE=false
       - SMTPD_SASL_USERS=${SMTP_USER}
       - POSTFIX_smtpd_tls_cert_file=/etc/postfix/certs/fullchain.pem
       - POSTFIX_smtpd_tls_key_file=/etc/postfix/certs/privkey.pem
@@ -51,7 +53,10 @@ services:
       - POSTFIX_smtpd_sender_restrictions=permit_sasl_authenticated, permit_mynetworks, reject_non_fqdn_sender, reject_unknown_sender_domain
       - POSTFIX_smtpd_relay_restrictions=permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
     volumes:
-      - dkim_data:/etc/opendkim/keys
+      # Clé DKIM persistée hors d'un volume Docker (bind-mount Dokploy "Files/Mounts",
+      # même convention que cloudflare.ini). Contient wittnerlab.com.private + .txt.
+      # RW car l'entrypoint boky doit chown/chmod les clés au démarrage.
+      - ../../../../files/opendkim-keys:/etc/opendkim/keys
       - postfix_certs_data:/etc/postfix/certs:ro
     networks:
       - messaging_net        # réseau partagé pour que les apps (Forgejo, ...) joignent ce relais
@@ -60,8 +65,8 @@ services:
         condition: service_completed_successfully
 
 volumes:
-  dkim_data:
-    driver: local
+  # dkim_data supprimé : la clé DKIM vient désormais d'un bind-mount (cf. mail_sender.volumes)
+  # pour ne plus dépendre du cycle de vie d'un volume Docker.
   letsencrypt_data:
     driver: local
   postfix_certs_data:
