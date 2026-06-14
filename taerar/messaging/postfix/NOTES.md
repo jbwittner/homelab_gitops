@@ -308,16 +308,21 @@ recharge la page pour voir le score.
 ### Marche à suivre
 
 1. Ouvrir <https://www.mail-tester.com/> et **copier l'adresse jetable** affichée.
-2. Renseigner cette adresse dans le `To:` de [`test_mail_mailtester.txt`](test_mail_mailtester.txt)
-   (remplacer le placeholder `MAILTESTER_ADDRESS`).
-3. Depuis le dossier `taerar/messaging/postfix/` **sur le host**, lancer (remplacer l'adresse
-   jetable et le mot de passe SASL) :
+2. Depuis le dossier `taerar/messaging/postfix/` **sur le host**, préparer le message
+   (substitution de l'adresse + conversion en CRLF, cf. encart ci-dessous) puis l'envoyer
+   (remplacer l'adresse jetable et le mot de passe SASL) :
 
 ```sh
 MAILTESTER='test-abc123def@srv1.mail-tester.com'
 
+# Substitue l'adresse ET convertit le fichier en CRLF (obligatoire en SMTP).
+# Le `$(printf '\r')` injecte un vrai octet CR → portable GNU/BSD sed.
+CR=$(printf '\r')
+sed -e "s/<MAILTESTER_ADDRESS>/$MAILTESTER/" -e "s/\$/$CR/" \
+  test_mail_mailtester.txt > /tmp/mail_mailtester.eml
+
 docker run --rm --network messaging_net \
-  -v "$PWD/test_mail_mailtester.txt:/mail.txt:ro" \
+  -v /tmp/mail_mailtester.eml:/mail.txt:ro \
   curlimages/curl:latest \
   --url 'smtp://messaging_postfix_mail_sender:587' \
   --ssl-reqd --insecure \
@@ -327,7 +332,15 @@ docker run --rm --network messaging_net \
   --user 'noreply@wittnerlab.com:<password>'
 ```
 
-4. Recharger la page mail-tester → lire le score (viser **10/10**).
+3. Recharger la page mail-tester → lire le score (viser **10/10**).
+
+> [!warning] Fins de ligne CRLF obligatoires
+> SMTP (RFC 5322) exige des en-têtes terminés par **CRLF** (`\r\n`). Le fichier est stocké en
+> LF (propre pour le repo) ; envoyé tel quel, Postfix ne reconnaît pas la ligne vide qui sépare
+> en-têtes et corps → **tous les headers sont avalés dans le corps** et SpamAssassin signale
+> `MISSING_FROM/TO/SUBJECT/DATE` + `EMPTY_MESSAGE` (score ~ -8, classé spam). La conversion
+> CRLF (`sed ... "s/\$/$CR/"`) avant l'envoi corrige le problème. Ne **pas** committer le fichier
+> en CRLF : la conversion se fait à l'envoi.
 
 > [!note] `--ssl-reqd --insecure`
 > On force STARTTLS (`--ssl-reqd`) mais on **ignore la vérification du CN** (`--insecure`) :

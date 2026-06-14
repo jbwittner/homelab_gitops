@@ -2,6 +2,7 @@ From: "WittnerLab" <noreply@wittnerlab.com>
 To: <MAILTESTER_ADDRESS>
 Subject: Test deliverabilite mail-tester
 Date: Sun, 14 Jun 2026 12:00:00 +0200
+Message-Id: <test-mailtester@postfix.wittnerlab.com>
 Content-Type: text/plain; charset=utf-8
 
 Bonjour,
