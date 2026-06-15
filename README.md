@@ -1,97 +1,19 @@
-# homelab-gitops — multi-cluster (hub : Neltharion)
+# homelab-gitops
 
-Dépôt GitOps du homelab, conçu **multi-cluster** (hub/spoke). Un **Argo CD central** (le
-*hub*) pilote tous les clusters : les `Application` vivent sur le hub, leurs workloads
-atterrissent sur le cluster cible (in-cluster pour le hub, `destination.name: <cluster>`
-pour les spokes). Aujourd'hui le seul cluster est **Neltharion** (Talos / Kubernetes 1.36,
-ingress **Traefik**), qui fait aussi office de hub.
+Dépôt d'infrastructure du homelab. Il regroupe **deux environnements indépendants**, chacun avec
+son modèle de déploiement et sa propre documentation détaillée :
 
-Organisation **par-cluster et auto-contenue** (pas de tree `components/` partagé) : tout vit
-sous `<cluster>/{infra,apps}/`, un dossier **auto-contenu par composant déployé** (sa présence
-= le composant tourne sur ce cluster) avec son `<name>.app.yaml`, son `values.yaml` Helm fusionné
-et ses ressources annexes (namespace, sealed-secrets, ClusterIssuer). Un 2e cluster = on **copie**
-le dossier `<cluster>/` et on l'adapte (duplication assumée pour un layout simple et plat).
+| Environnement | Plateforme | Modèle de déploiement | Documentation |
+|---|---|---|---|
+| **neltharion** | Kubernetes (Talos 1.36), ingress Traefik | **GitOps** via un Argo CD central (hub/spoke). Push sur `main` → Argo reconcilie. | [`neltharion/README.md`](neltharion/README.md) |
+| **taerar** | Docker | Stacks **Docker Compose** gérées via **Dokploy**. Un `compose.yaml` auto-contenu par stack. | [`taerar/README.md`](taerar/README.md) |
 
-Déploiement via un **app-of-apps à 3 niveaux** :
+Chaque environnement vit dans son dossier racine (`neltharion/`, `taerar/`) et documente son
+architecture, ses conventions et ses composants dans son propre `README.md` (puis un `README.md`
+par composant / stack).
 
-- **Tier 1** — `<cluster>/<cluster>.yaml` (`kubectl apply -f` une fois sur le hub) découvre les
-  deux bootstraps de partie via `recurse + include: '*.bootstrap.yaml'`.
-- **Tier 2** — `<cluster>/infra/infra.bootstrap.yaml` et `<cluster>/apps/apps.bootstrap.yaml`,
-  chacun découvre ses composants via `recurse + include: '*.app.yaml'`.
-- **Tier 3** — les `<name>.app.yaml` des composants (dont Argo lui-même, self-management).
+Les composants retirés sont conservés sous [`archive/`](archive/) (neltharion) et
+[`taerar/archive/`](taerar/archive/).
 
-Les deux suffixes distincts (`.bootstrap.yaml` / `.app.yaml`) empêchent les niveaux de se
-matcher entre eux.
-
-**Source de vérité** : ce dépôt **GitHub**. Boucle de sync : push sur `main` → Argo
-détecte le changement → reconcilie le cluster.
-
-## Arborescence
-
-```
-neltharion/               # = hub ; destination in-cluster
-  neltharion.yaml         # TIER 1 — app-of-apps du cluster ; kubectl apply -f UNE fois sur le hub
-  infra/                  # un dossier AUTO-CONTENU par composant déployé :
-                          #   <name>/<name>.app.yaml + values.yaml (Helm) + ressources annexes
-    infra.bootstrap.yaml  # TIER 2 — découvre infra/*/*.app.yaml
-    argocd/               # self-management (wave -1) + install inliné + overlay hub (UI, secrets)
-    sealed-secrets/       # wave 0 (Helm, single-source) + README opérationnel
-    traefik/              # wave 0 (Helm + values.yaml + namespace)
-    cert-manager/         # wave 1 (Helm + values.yaml + ClusterIssuer + token scellé)
-    external-dns/         # wave 1 (Helm + values.yaml + namespace + token scellé)
-    local-path-provisioner/ # wave 1 (Kustomize, manifest upstream pinné + patches) — StorageClass par défaut
-  apps/
-    apps.bootstrap.yaml   # TIER 2 — découvre apps/*/*.app.yaml
-    metrics-server/       # wave 2 (Helm, single-source) — metrics Kubernetes (kubelet-insecure-tls pour Talos)
-    cnpg/                 # wave 2 (Helm, single-source) — opérateur CloudNativePG
-    forgejo/              # wave 3 (Kustomize, manifests bruts) — forge Git + registry packages, CNPG Cluster, PVC 50Gi, SSH port 2222
-    whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path pour tester le stockage
-    monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana (IngressRoute/cert), Alertmanager, node-exporter, dashboard volumes
-    renovate/             # wave 5 (Kustomize) — Renovate self-hosted (CLI), 2 CronJobs : un run GitHub (infrastructure + bankwiz_server) et un run Forgejo, config par env vars, tokens scellés
-```
-
-## Bootstrap (one-time, impératif)
-
-Le dépôt est privé : Argo le lit via une **deploy key SSH** stockée en SealedSecret
-(`neltharion/infra/argocd/argocd-repo.sealed-secret.yaml`), appliquée dès l'étape 1.
-
-> **Étape 0 obligatoire.** La repo-cred est scellée ; il faut le contrôleur sealed-secrets pour la
-> déchiffrer, mais celui-ci n'arrive normalement qu'en wave 0 (qui a besoin de la cred pour cloner
-> le repo). On installe donc sealed-secrets **à la main d'abord** ; Argo l'adopte ensuite. Détails :
-> [`neltharion/infra/argocd/README.md`](neltharion/infra/argocd/README.md).
-
-```bash
-# 0. Installer le contrôleur sealed-secrets EN PREMIER (mêmes nom/namespace/version que la wave 0)
-helm install sealed-secrets sealed-secrets \
-  --repo https://bitnami-labs.github.io/sealed-secrets \
-  --version 2.18.6 \
-  --namespace sealed-secrets --create-namespace
-kubectl wait --for=condition=available --timeout=120s deployment/sealed-secrets -n sealed-secrets
-
-# 1. Installer Argo + credentials repo scellés (server-side obligatoire)
-kubectl apply -k neltharion/infra/argocd --server-side --force-conflicts
-
-# 2. Attendre qu'Argo soit prêt
-kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
-
-# 3. Mot de passe admin initial
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
-
-# 4. Appliquer le tier-1 du cluster — Argo prend le relais (infra + apps bootstraps → composants)
-kubectl apply -f neltharion/neltharion.yaml
-```
-
-Après l'étape 4, tout passe par Git.
-
-## Documentation
-
-- [`CLAUDE.md`](CLAUDE.md) — architecture détaillée, sync-waves, pièges du self-management, roadmap.
-- [`neltharion/infra/argocd/README.md`](neltharion/infra/argocd/README.md) — bootstrap & self-management Argo, deploy key.
-- [`neltharion/infra/sealed-secrets/README.md`](neltharion/infra/sealed-secrets/README.md) — kubeseal, backup/restore de clé.
-- [`neltharion/infra/traefik/README.md`](neltharion/infra/traefik/README.md) — ingress hostPort, redirection HTTP→HTTPS, exposer une app.
-- [`neltharion/infra/cert-manager/README.md`](neltharion/infra/cert-manager/README.md) — ClusterIssuer & token Cloudflare.
-- [`neltharion/infra/external-dns/README.md`](neltharion/infra/external-dns/README.md) — sync DNS Cloudflare.
-- [`neltharion/infra/local-path-provisioner/README.md`](neltharion/infra/local-path-provisioner/README.md) — StorageClass par défaut sur le disque data Talos.
-- [`neltharion/apps/monitoring/README.md`](neltharion/apps/monitoring/README.md) — kube-prometheus-stack, Grafana (grafana.wittnerlab.com), stockage persistant & monitoring des volumes.
-- [`neltharion/apps/forgejo/README.md`](neltharion/apps/forgejo/README.md) — Forgejo (forge Git + registry), CNPG, secret admin, SSH port 2222, quota stockage.
-- [`neltharion/apps/renovate/README.md`](neltharion/apps/renovate/README.md) — Renovate self-hosted (CLI) en CronJob, PAT GitHub scellé, périmètre & fréquence.
+> **Pour les agents** : [`CLAUDE.md`](CLAUDE.md) contient les règles de travail sur ce dépôt
+> (mise à jour de la doc, génération des secrets) et renvoie vers la doc d'environnement.
