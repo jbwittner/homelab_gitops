@@ -34,6 +34,16 @@
       "automerge": true
     },
     {
+      "description": "crowdsec (taerar) : postgres figé sur la lignée 17, v18 non compatible",
+      "matchFileNames": [
+        "**/security/crowdsec/**"
+      ],
+      "matchPackageNames": [
+        "postgres"
+      ],
+      "allowedVersions": "<18"
+    },
+    {
       "description": "Automerge minor/patch/pin pour Renovate lui-même (image self-hosted)",
       "matchFileNames": [
         "**/apps/renovate/**"
