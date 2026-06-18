@@ -40,7 +40,7 @@ services:
           memory: 512M
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:2.26.4
+    image: docker.n8n.io/n8nio/n8n:2.26.6
     restart: unless-stopped
     depends_on:
       n8n-db:
