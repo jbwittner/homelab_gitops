@@ -1,6 +1,6 @@
 services:
   renovate-forgejo:
-    image: renovate/renovate:43.229.1
+    image: renovate/renovate:43.229.3
     container_name: maintenance_renovate_forgejo
     # The container will stop automatically once the job is done
     restart: "no"
