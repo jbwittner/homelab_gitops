@@ -44,9 +44,9 @@
       "allowedVersions": "<18"
     },
     {
-      "description": "Automerge minor/patch/pin pour Renovate lui-même (image self-hosted)",
-      "matchFileNames": [
-        "**/apps/renovate/**"
+      "description": "Automerge minor/patch/pin pour Renovate lui-même (image self-hosted, neltharion + taerar)",
+      "matchPackageNames": [
+        "renovate/renovate"
       ],
       "matchUpdateTypes": [
         "minor",
