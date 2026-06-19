@@ -17,7 +17,7 @@ spec:
             - name: renovate
               # Bumpé par Renovate lui-même (datasource docker) une fois activé sur ce repo.
               # renovate: datasource=docker depName=renovate/renovate
-              image: renovate/renovate:43.232.0
+              image: renovate/renovate:43.233.0
               env:
                 - name: LOG_LEVEL
                   value: info
