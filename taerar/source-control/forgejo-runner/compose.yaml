@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   docker-in-docker:
-    image: docker:29.5.3-dind
+    image: docker:29.6.0-dind
     container_name: 'source_control_docker_dind_forgejo_runner'
     privileged: true # Pas besoin de guillemets pour un booléen
     command: ['dockerd', '-H', 'tcp://0.0.0.0:2375', '--tls=false']
