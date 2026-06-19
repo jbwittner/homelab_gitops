@@ -4,7 +4,7 @@
         description: Fournisseur d'identité
         icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/authentik.svg
     - Dokploy-vps:
-        href: https://dokploy-7a5b6065.wittnerlab.com/
+        href: https://dokploy-taerar.wittnerlab.com
         description: Platforme de déploiement d'applications (Dokploy)
         icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/dokploy.svg
     - Grafana:
