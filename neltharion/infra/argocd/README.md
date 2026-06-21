@@ -56,10 +56,11 @@ homelab-gitops/
     ├── kustomization.yaml               # install.yaml pinné (v3.4.3) + patch cmd-params + spécifique-hub
     ├── namespace.yaml                   # namespace argocd
     ├── argocd-cmd-params-cm.yaml        # patch ConfigMap argocd-cmd-params-cm
+    ├── argocd-ssh-known-hosts-cm.yaml   # patch ConfigMap : clé d'hôte SSH du serveur Git (port 4222)
     ├── argocd-certificate.yaml          # Certificate cert-manager pour l'UI
     ├── argocd-ingress-route.yaml        # IngressRoute Traefik pour l'UI
-    ├── argocd-repo.sealed-secret.yaml       # deploy key SSH (scellée)
-    └── argocd-webhook.sealed-secret.yaml    # secret webhook GitHub (scellé)
+    ├── argocd-repo.sealed-secret.yaml       # deploy key SSH (scellée) — contient AUSSI l'url du repo
+    └── argocd-webhook.sealed-secret.yaml    # secret webhook Forgejo/Gitea (scellé)
 ```
 
 > `kustomization.yaml` liste explicitement ses resources (et ignore donc `argocd.app.yaml`) :
@@ -76,9 +77,13 @@ homelab-gitops/
 - `kubeseal` installé localement (`brew install kubeseal`).
 - `argocd-repo.sealed-secret.yaml` généré (voir section ci-dessous).
 
-### Credentials GitHub (repo privé — SSH deploy key)
+### Credentials Git (repo privé — SSH deploy key)
 
-Argo CD accède au repo via une **deploy key SSH** : lecture seule, scopée à ce repo uniquement, révocable sans toucher au compte GitHub. Le secret est scellé et commité dans `neltharion/infra/argocd/argocd-repo.sealed-secret.yaml` — il est appliqué en même temps qu'Argo au bootstrap.
+> Le repo est hébergé sur le **Forgejo/Gitea auto-hébergé** `git-ssh.wittnerlab.com` (SSH sur le
+> port **4222**). L'url SSH **doit** être de la forme `ssh://git@host:port/path` — la syntaxe SCP
+> `git@host:path` ne supporte pas de port et casserait silencieusement le clone.
+
+Argo CD accède au repo via une **deploy key SSH** : lecture seule, scopée à ce repo uniquement, révocable sans toucher au compte Git. Le secret est scellé et commité dans `neltharion/infra/argocd/argocd-repo.sealed-secret.yaml` — il contient **trois champs** (`url`, `sshPrivateKey`, `type: git`) et est appliqué en même temps qu'Argo au bootstrap. La cohérence est critique : la valeur `url` du secret **doit être identique** au `repoURL` des `*.app.yaml` (`ssh://git@git-ssh.wittnerlab.com:4222/jbwittner/homelab_gitops.git`), sinon Argo n'associe pas les credentials et le repo reste « unauthorized ».
 
 **Générer la deploy key et le SealedSecret**
 
@@ -88,17 +93,20 @@ Argo CD accède au repo via une **deploy key SSH** : lecture seule, scopée à c
 # 1. Générer une paire de clés ED25519 dédiée (sans passphrase)
 ssh-keygen -t ed25519 -C "argocd@neltharion" -f argocd-deploy-key -N ""
 # → argocd-deploy-key     (clé privée — gitignored)
-# → argocd-deploy-key.pub (clé publique — à déposer sur GitHub)
+# → argocd-deploy-key.pub (clé publique — à déposer sur le serveur Git)
 
-# 2. Ajouter la clé publique comme deploy key sur GitHub
-#    https://github.com/jbwittner/homelab_gitops/settings/keys
-#    Title : argocd-neltharion | Allow write access : NON (lecture seule)
+# 2. Ajouter la clé publique comme deploy key du repo sur Forgejo/Gitea
+#    https://git.wittnerlab.com/jbwittner/homelab_gitops/settings/keys
+#    Titre : argocd-neltharion | Accès en écriture : NON (lecture seule)
 cat argocd-deploy-key.pub
 
-# 3. Injecter la clé privée dans le fichier secret (gitignored)
-#    Remplacer le placeholder par le contenu de la clé
+# 3. Renseigner le secret (gitignored) : url + clé privée
+#    - url   : forme ssh://…:4222/… (DOIT matcher le repoURL des app.yaml)
+#    - clé   : remplacer le placeholder par le contenu de la clé privée
 sed -i '' "s|<COLLER_LA_CLÉ_PRIVÉE_ICI>|$(cat argocd-deploy-key)|" \
   neltharion/infra/argocd/argocd-repo.secret.yaml
+# Vérifier que le champ url vaut bien :
+#   ssh://git@git-ssh.wittnerlab.com:4222/jbwittner/homelab_gitops.git
 
 # 4. Sceller (sealed-secrets doit être joignable sur le cluster)
 kubeseal \
@@ -110,10 +118,24 @@ kubeseal \
 
 # 5. Committer le sealed (argocd-deploy-key* et *.secret.yaml restent gitignored)
 git add neltharion/infra/argocd/argocd-repo.sealed-secret.yaml
-git commit -m "Add sealed SSH deploy key for argocd"
+git commit -m "Reseal argocd repo credential for self-hosted Git"
 
-# 6. Supprimer les clés locales (la privée est scellée, la publique est sur GitHub)
+# 6. Supprimer les clés locales (la privée est scellée, la publique est sur le serveur Git)
 rm argocd-deploy-key argocd-deploy-key.pub
+```
+
+**Clé d'hôte SSH (`argocd-ssh-known-hosts-cm`)** — Argo vérifie la clé d'hôte du serveur Git.
+Le serveur auto-hébergé n'est pas dans la liste par défaut (GitHub/GitLab/…), donc il faut
+l'ajouter dans `argocd-ssh-known-hosts-cm.yaml` (patché par la kustomization), **sinon le clone
+échoue en « host key verification failed »** :
+
+Les clés actuelles (ed25519/ecdsa/rsa) y sont déjà renseignées. Pour les régénérer (rotation de
+la clé d'hôte, nouveau serveur) :
+
+```bash
+# Récupérer les clés d'hôte et remplacer le bloc ssh_known_hosts dans argocd-ssh-known-hosts-cm.yaml
+ssh-keyscan -p 4222 git-ssh.wittnerlab.com
+#   (conserver la notation crochets [git-ssh.wittnerlab.com]:4222 pour le port non standard)
 ```
 
 ### 0. Installer le contrôleur sealed-secrets (impératif, AVANT Argo)

@@ -17,7 +17,7 @@ spec:
   # suffixes distincts (.bootstrap.yaml ici, .app.yaml en tier 2) évitent toute auto-récursion.
   # Onboarder un cluster = 1 <cluster>/<cluster>.yaml comme celui-ci, appliqué sur le hub.
   source:
-    repoURL: git@github.com:jbwittner/homelab_gitops.git
+    repoURL: ssh://git@git-ssh.wittnerlab.com:4222/jbwittner/homelab_gitops.git
     targetRevision: main
     path: neltharion
     directory:

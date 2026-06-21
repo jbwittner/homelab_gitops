@@ -11,7 +11,7 @@ spec:
   # *.bootstrap.yaml qui a un suffixe différent).
   project: default
   source:
-    repoURL: git@github.com:jbwittner/homelab_gitops.git
+    repoURL: ssh://git@git-ssh.wittnerlab.com:4222/jbwittner/homelab_gitops.git
     targetRevision: main
     path: neltharion/infra
     directory:
