@@ -61,6 +61,7 @@ neltharion/               # = hub ; destination in-cluster (https://kubernetes.d
     whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path (test stockage)
     monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana, Alertmanager, node-exporter
     renovate/             # wave 5 (Kustomize) — Renovate self-hosted (CLI), 2 CronJobs (GitHub + Forgejo)
+  examples/               # pédagogique only — exemples de manifestes (secret/sealed-secret) ; rien n'est déployé d'ici
 ```
 
 Chaque composant est un dossier auto-contenu : `<name>.app.yaml` porte le boilerplate (repoURL,

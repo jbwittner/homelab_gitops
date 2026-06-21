@@ -8,7 +8,5 @@ kind: Kustomization
 # Les *.secret.yaml (placeholders en clair) sont gitignored — PAS des resources ici.
 resources:
   - namespace.yaml
-  - renovate-github-env.sealed-secret.yaml
   - renovate-forgejo-env.sealed-secret.yaml
-  - cronjob-github.yaml
   - cronjob-forgejo.yaml
