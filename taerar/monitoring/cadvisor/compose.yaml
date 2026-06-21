@@ -1,6 +1,6 @@
 services:
   cadvisor:
-    image: ghcr.io/google/cadvisor:v0.57.0
+    image: ghcr.io/google/cadvisor:v0.60.1
     container_name: monitoring_cadvisor
     ports:
       # Binds port 8080 strictly to localhost on the host machine
