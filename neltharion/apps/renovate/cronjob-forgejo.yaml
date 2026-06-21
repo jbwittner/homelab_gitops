@@ -25,9 +25,9 @@ spec:
                 - name: RENOVATE_ENDPOINT
                   value: 'https://forgejo.wittnerlab.com/'    # ⚠️ URL de TON instance Forgejo (API à la racine)
                 - name: RENOVATE_AUTODISCOVER
-                  value: 'false'
-                - name: RENOVATE_REPOSITORIES
-                  value: 'CHANGE_ME/repo1,CHANGE_ME/repo2'    # ⚠️ repos Forgejo à surveiller
+                  value: 'true'
+                #- name: RENOVATE_REPOSITORIES
+                #  value: 'CHANGE_ME/repo1,CHANGE_ME/repo2'    # ⚠️ repos Forgejo à surveiller
                 - name: RENOVATE_GIT_AUTHOR
                   value: 'Renovate Bot <bot@renovateapp.com>'
               envFrom:
