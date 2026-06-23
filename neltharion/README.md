@@ -60,7 +60,7 @@ neltharion/               # = hub ; destination in-cluster (https://kubernetes.d
     forgejo/              # wave 3 (Kustomize, manifests bruts) — forge Git + registry, CNPG Cluster, PVC 50Gi, SSH 2222
     whoami/               # wave 3 (Kustomize, manifests inlinés) — PVC local-path (test stockage)
     monitoring/           # wave 4 (Helm kube-prometheus-stack) — Prometheus, Grafana, Alertmanager, node-exporter
-    renovate/             # wave 5 (Kustomize) — Renovate self-hosted (CLI), 2 CronJobs (GitHub + Forgejo)
+    renovate/             # wave 5 (Kustomize) — Renovate self-hosted (CLI), 1 CronJob (GitHub)
   examples/               # pédagogique only — exemples de manifestes (secret/sealed-secret) ; rien n'est déployé d'ici
 ```
 

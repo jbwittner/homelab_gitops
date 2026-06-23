@@ -38,5 +38,5 @@ git add neltharion/<infra|apps>/<name>/<secret-name>.sealed-secret.yaml
 Procédures kubeseal détaillées (offline via cert, `--raw`, backup/restore de la clé) :
 [`../infra/sealed-secrets/README.md`](../infra/sealed-secrets/README.md).
 
-Exemple concret en place : [`../apps/renovate/`](../apps/renovate/) (deux secrets
-`renovate-{github,forgejo}-env`).
+Exemple concret en place : [`../apps/renovate/`](../apps/renovate/) (secret
+`renovate-github-env`).
