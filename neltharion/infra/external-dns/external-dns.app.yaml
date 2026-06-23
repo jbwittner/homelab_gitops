@@ -17,7 +17,7 @@ spec:
         releaseName: external-dns
         valueFiles:
           - $src/neltharion/infra/external-dns/values.yaml
-    - repoURL: git@github.com:jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: src
       path: neltharion/infra/external-dns                              # namespace + token Cloudflare

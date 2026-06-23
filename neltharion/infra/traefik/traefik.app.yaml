@@ -17,7 +17,7 @@ spec:
         releaseName: traefik
         valueFiles:
           - $src/neltharion/infra/traefik/values.yaml
-    - repoURL: git@github.com:jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: src
       path: neltharion/infra/traefik                                   # namespace (PSA privileged)

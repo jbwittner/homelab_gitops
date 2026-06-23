@@ -10,7 +10,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git@github.com:jbwittner/homelab_gitops.git
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
     path: neltharion/apps/renovate   # dossier Kustomize autonome (CronJob + config + token scellé)
   destination:
