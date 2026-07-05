@@ -9,9 +9,10 @@ Pattern : **app-of-apps** + **Argo manages Argo** (Argo gère sa propre config a
 # 0. Installer le contrôleur sealed-secrets EN PREMIER (sinon la repo-cred scellée
 #    appliquée à l'étape 1 ne peut pas être déchiffrée — cf. « Ordre du bootstrap » ci-dessous).
 #    Mêmes nom/namespace/version que l'Application wave 0 → Argo l'adopte sans churn.
+helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets
+
 helm install sealed-secrets sealed-secrets \
-  --repo https://bitnami-labs.github.io/sealed-secrets \
-  --version 2.18.6 \
+  --repo https://bitnami.github.io/sealed-secrets \
   --namespace sealed-secrets --create-namespace
 kubectl wait --for=condition=available --timeout=120s \
   deployment/sealed-secrets -n sealed-secrets
