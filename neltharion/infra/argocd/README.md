@@ -6,18 +6,8 @@ Pattern : **app-of-apps** + **Argo manages Argo** (Argo gère sa propre config a
 ## TL;DR — commandes d'init
 
 ```bash
-# 0. Installer le contrôleur sealed-secrets EN PREMIER (sinon la repo-cred scellée
-#    appliquée à l'étape 1 ne peut pas être déchiffrée — cf. « Ordre du bootstrap » ci-dessous).
-#    Mêmes nom/namespace/version que l'Application wave 0 → Argo l'adopte sans churn.
-helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets
-
-helm install sealed-secrets sealed-secrets \
-  --repo https://bitnami.github.io/sealed-secrets \
-  --namespace sealed-secrets --create-namespace
-kubectl wait --for=condition=available --timeout=120s \
-  deployment/sealed-secrets -n sealed-secrets
-
-# 1. Installer Argo (server-side OBLIGATOIRE)
+# 1. Installer Argo EN PREMIER (server-side OBLIGATOIRE). Repo public → clone HTTPS anonyme,
+#    aucun credential ni SealedSecret requis au démarrage.
 kubectl apply -k neltharion/infra/argocd --server-side --force-conflicts
 
 # 2. Vérifier les pods
@@ -32,6 +22,9 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 # 5. Accès UI (port-forward au bootstrap — l'IngressRoute n'est fonctionnel qu'après Traefik + cert-manager)
 kubectl -n argocd port-forward svc/argocd-server 8080:443
 # → https://localhost:8080  (admin + mdp étape 4)
+
+# 6. Lancer le tier-1 → Argo déploie tout le reste (sealed-secrets inclus, wave 0)
+kubectl apply -f neltharion/neltharion.yaml
 
 # (optionnel) login CLI
 argocd login localhost:8080 --username admin --password '<mdp>' --insecure
@@ -58,15 +51,16 @@ homelab-gitops/
     ├── namespace.yaml                   # namespace argocd
     ├── argocd-cmd-params-cm.yaml        # patch ConfigMap argocd-cmd-params-cm
     ├── argocd-certificate.yaml          # Certificate cert-manager pour l'UI
-    ├── argocd-ingress-route.yaml        # IngressRoute Traefik pour l'UI
-    ├── argocd-repo.sealed-secret.yaml       # deploy key SSH (scellée) — contient AUSSI l'url du repo
-    └── argocd-webhook.sealed-secret.yaml    # secret webhook GitHub (scellé)
+    └── argocd-ingress-route.yaml        # IngressRoute Traefik pour l'UI
 ```
 
+> Repo **public** → Argo le clone en HTTPS anonyme : plus aucune deploy key ni SealedSecret
+> repo/webhook dans ce dossier.
+>
 > `kustomization.yaml` liste explicitement ses resources (et ignore donc `argocd.app.yaml`) :
 > l'install upstream pinné, le namespace, le patch cmd-params, et le spécifique-hub
-> (Certificate/IngressRoute UI + secrets scellés). C'est le **même dossier** que l'apply manuel
-> du bootstrap → convergence garantie.
+> (Certificate/IngressRoute UI). C'est le **même dossier** que l'apply manuel du bootstrap →
+> convergence garantie.
 
 ## Bootstrap — procédure complète
 
@@ -74,88 +68,23 @@ homelab-gitops/
 - Cluster Talos `Ready` (`kubectl get nodes` → `ns3058844 Ready`).
 - Contexte kubectl pointé sur Neltharion (`kubectl config current-context`).
 - `kustomize` ou `kubectl -k` disponible.
-- `kubeseal` installé localement (`brew install kubeseal`).
-- `argocd-repo.sealed-secret.yaml` généré (voir section ci-dessous).
 
-### Credentials Git (repo privé — SSH deploy key)
+### Credentials Git (repo public — aucun)
 
-> Le repo est hébergé sur **GitHub** (`github.com`, SSH port 22 standard). L'url utilisée est la
-> forme SCP `git@github.com:jbwittner/homelab_gitops.git` — supportée par Argo et identique au
-> `repoURL` des manifests.
+> Le repo est hébergé sur **GitHub** en **public** (`https://github.com/jbwittner/homelab_gitops.git`,
+> HTTPS anonyme). C'est le `repoURL` de tous les `*.app.yaml`.
 
-Argo CD accède au repo via une **deploy key SSH** : lecture seule, scopée à ce repo uniquement, révocable sans toucher au compte GitHub. Le secret est scellé et commité dans `neltharion/infra/argocd/argocd-repo.sealed-secret.yaml` — il contient **trois champs** (`url`, `sshPrivateKey`, `type: git`) et est appliqué en même temps qu'Argo au bootstrap. La cohérence est critique : la valeur `url` du secret **doit être identique** au `repoURL` des `*.app.yaml` (`git@github.com:jbwittner/homelab_gitops.git`), sinon Argo n'associe pas les credentials et le repo reste « unauthorized ».
+Argo clone le repo **sans credential** : plus de deploy key SSH, plus de SealedSecret repo, plus
+de patch `ssh-known-hosts`. La migration en public a supprimé toute la dépendance circulaire du
+bootstrap : **Argo s'installe en premier**, puis le contrôleur sealed-secrets est déployé par Argo
+en wave 0 comme tout autre composant — aucun pré-install manuel.
 
-**Générer la deploy key et le SealedSecret**
+> Les SealedSecrets d'autres composants (Cloudflare cert-manager/external-dns, PAT Renovate, …)
+> restent scellés contre le contrôleur ; ils se génèrent après coup, une fois sealed-secrets en
+> place (chaque README de composant porte la commande `kubeseal`). Rien de tout ça n'est requis
+> pour amorcer Argo.
 
-> Toutes les commandes ci-dessous sont à lancer depuis la **racine du repo**.
-
-```bash
-# 1. Générer une paire de clés ED25519 dédiée (sans passphrase)
-ssh-keygen -t ed25519 -C "argocd@neltharion" -f argocd-deploy-key -N ""
-# → argocd-deploy-key     (clé privée — gitignored)
-# → argocd-deploy-key.pub (clé publique — à déposer comme deploy key GitHub)
-
-# 2. Ajouter la clé publique comme deploy key du repo sur GitHub
-#    https://github.com/jbwittner/homelab_gitops/settings/keys
-#    Titre : argocd-neltharion | Allow write access : NON (lecture seule)
-cat argocd-deploy-key.pub
-
-# 3. Renseigner le secret (gitignored) : url + clé privée
-#    - url   : git@github.com:jbwittner/homelab_gitops.git (DOIT matcher le repoURL des app.yaml)
-#    - clé   : remplacer le placeholder par le contenu de la clé privée
-sed -i '' "s|<COLLER_LA_CLÉ_PRIVÉE_ICI>|$(cat argocd-deploy-key)|" \
-  neltharion/infra/argocd/argocd-repo.secret.yaml
-# Vérifier que le champ url vaut bien :
-#   git@github.com:jbwittner/homelab_gitops.git
-
-# 4. Sceller (sealed-secrets doit être joignable sur le cluster)
-kubeseal \
-  --controller-name=sealed-secrets \
-  --controller-namespace=sealed-secrets \
-  --format yaml \
-  < neltharion/infra/argocd/argocd-repo.secret.yaml \
-  > neltharion/infra/argocd/argocd-repo.sealed-secret.yaml
-
-# 5. Committer le sealed (argocd-deploy-key* et *.secret.yaml restent gitignored)
-git add neltharion/infra/argocd/argocd-repo.sealed-secret.yaml
-git commit -m "Reseal argocd repo credential for GitHub"
-
-# 6. Supprimer les clés locales (la privée est scellée, la publique est sur GitHub)
-rm argocd-deploy-key argocd-deploy-key.pub
-```
-
-**Clé d'hôte SSH** — Argo vérifie la clé d'hôte du serveur Git avant de cloner. `github.com` fait
-partie de la liste `ssh_known_hosts` **par défaut** livrée avec Argo (GitHub/GitLab/Bitbucket/Azure),
-donc **aucun patch n'est nécessaire** : le `argocd-ssh-known-hosts-cm.yaml` custom (qui ne servait
-qu'au serveur auto-hébergé sur port non standard) a été supprimé avec la migration. Si un jour le
-clone échoue en « host key verification failed », vérifier que le patch n'a pas été ré-ajouté en
-écrasant le défaut.
-
-### 0. Installer le contrôleur sealed-secrets (impératif, AVANT Argo)
-
-> [!danger] Ordre du bootstrap — dépendance circulaire à briser à la main
-> La repo-cred SSH d'Argo (`argocd-repo.sealed-secret.yaml`) est **scellée** et appliquée à
-> l'étape 1. Mais seul le contrôleur **sealed-secrets** peut la déchiffrer en `Secret` exploitable.
-> Or ce contrôleur est normalement déployé par Argo en **wave 0** — qui a justement besoin de la
-> repo-cred déchiffrée pour cloner le repo privé. Sans intervention, Argo ne peut donc jamais
-> démarrer la wave 0. On **brise le cycle** en installant le contrôleur manuellement ici, avec
-> exactement les mêmes nom/namespace/version que l'Application wave 0 : Argo l'**adopte** ensuite
-> sans rien réinstaller.
-
-```bash
-helm install sealed-secrets sealed-secrets \
-  --repo https://bitnami-labs.github.io/sealed-secrets \
-  --version 2.18.6 \
-  --namespace sealed-secrets --create-namespace
-kubectl wait --for=condition=available --timeout=120s \
-  deployment/sealed-secrets -n sealed-secrets
-```
-
-> La génération/scellement de la deploy key (section « Credentials GitHub » ci-dessus) suppose
-> déjà ce contrôleur joignable (`kubeseal --controller-name=sealed-secrets ...`) — c'est la même
-> exigence.
-
-### 1. Installer Argo (impératif, une seule fois)
+### 1. Installer Argo (impératif, une seule fois — EN PREMIER)
 
 > [!important] Le `--server-side --force-conflicts` est **obligatoire**.
 > Sans lui, erreur de CRD trop grosse (`metadata.annotations: Too long`) sur les CRD ApplicationSet.
@@ -253,7 +182,7 @@ Chaque activation = éditer le kustomize, push Git, Argo resync tout seul (self-
 
 - Le bootstrap impératif (étape 1) est le **seul geste manuel** ; à refaire en reconstruction.
 - Après l'étape 1, tout est déclaratif : le tier-1 du cluster (`neltharion/neltharion.yaml`) rejoue toute la stack depuis Git.
-- Argo lit **GitHub** (source de vérité) via deploy key SSH → DR déterministe, indépendant de toute forge auto-hébergée.
+- Argo lit **GitHub public** (source de vérité) en HTTPS anonyme → DR déterministe, sans credential à restaurer, indépendant de toute forge auto-hébergée.
 - La clé du contrôleur **sealed-secrets** doit être réinjectée AVANT que le contrôleur démarre
   (sinon SealedSecrets indéchiffrables). Procédure DR déjà testée.
 

@@ -3,7 +3,9 @@
     "allow": [
       "Bash(rtk kubectl *)",
       "Bash(kubectl kustomize *)",
-      "Bash(rtk git *)"
+      "Bash(rtk git *)",
+      "Bash(rtk grep *)",
+      "Bash(echo \"exit $?\")"
     ]
   }
 }
