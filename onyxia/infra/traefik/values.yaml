@@ -1,0 +1,43 @@
+# Values Traefik d'onyxia (dossier autonome).
+# Bare-metal sans LoadBalancer : Traefik écoute sur les hostPort du nœud. cert-manager gère les certs.
+
+# --- hostNetwork : Traefik n'utilise pas le net de l'hôte ; l'exposition passe par hostPort ---
+hostNetwork: false
+
+deployment:
+  replicas: 1
+
+# --- rolling update (évite l'erreur maxUnavailable avec hostPort) ---
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+# --- Service en ClusterIP : pas de LoadBalancer sur BM (le trafic entre par les hostPort) ---
+service:
+  spec:
+    type: ClusterIP
+
+# --- ports : 80 (web), 443 (websecure) ---
+ports:
+  websecure:
+    port: 8443
+    hostPort: 443
+    exposedPort: 443
+  web:
+    port: 8000
+    hostPort: 80
+    exposedPort: 80
+
+# --- redirect HTTP->HTTPS via additionalArguments (port :443 explicite, PAS to=websecure) ---
+additionalArguments:
+  - "--entrypoints.web.http.redirections.entrypoint.to=:443"
+  - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+# --- pas d'ACME : cert-manager gère les certs (aucune section certResolver / acme) ---
+
+# --- dashboard : désactivé par défaut (port-forward si besoin) ---
+ingressRoute:
+  dashboard:
+    enabled: false

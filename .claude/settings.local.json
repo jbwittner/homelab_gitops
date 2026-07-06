@@ -7,7 +7,9 @@
       "Bash(rtk grep *)",
       "Bash(echo \"exit $?\")",
       "Bash(mv cluster-issuer.yaml cluster-issuer-prod.yaml)",
-      "Bash(rtk ls *)"
+      "Bash(rtk ls *)",
+      "Bash(rtk read *)",
+      "Bash(rtk find *)"
     ]
   }
 }

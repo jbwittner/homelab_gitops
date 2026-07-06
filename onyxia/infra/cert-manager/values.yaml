@@ -1,0 +1,6 @@
+# Values cert-manager d'onyxia (dossier autonome).
+# L'e-mail ACME et les ClusterIssuers sont portés par cluster-issuer-*.yaml, pas ici.
+
+# Installer les CRDs avec la chart.
+crds:
+  enabled: true
