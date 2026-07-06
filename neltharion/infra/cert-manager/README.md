@@ -34,8 +34,11 @@ Ne pas utiliser la clé API globale (trop de droits).
 # 1. Remplir le token dans le fichier gitignored
 #    neltharion/infra/cert-manager/cloudflare-api-token.secret.yaml
 
-# 2. Sceller avec la clé publique du cluster
-kubeseal --cert pub-cert.pem --format yaml \
+# 2. Sceller directement contre le contrôleur sealed-secrets de CE cluster
+kubeseal \
+  --controller-name=sealed-secrets \
+  --controller-namespace=sealed-secrets \
+  --format yaml \
   < neltharion/infra/cert-manager/cloudflare-api-token.secret.yaml \
   > neltharion/infra/cert-manager/cloudflare-api-token.sealed-secret.yaml
 ```
