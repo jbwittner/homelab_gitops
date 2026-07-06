@@ -4,12 +4,15 @@ Instructions pour Claude Code (claude.ai/code) quand il travaille sur ce dépôt
 
 ## Le dépôt en deux mots
 
-Dépôt d'infrastructure du homelab, **deux environnements indépendants** :
+Dépôt d'infrastructure du homelab, **trois environnements indépendants** :
 
 - **neltharion/** — Kubernetes (Talos 1.36) en **GitOps** via un Argo CD central (hub/spoke).
   Toute l'architecture, l'arborescence, les sync-waves, le bootstrap et les pièges du
   self-management sont documentés dans [`neltharion/README.md`](neltharion/README.md) et les
   README par composant sous `neltharion/{infra,apps}/<name>/`.
+- **onyxia/** — Kubernetes en **GitOps** via son **propre Argo CD** (hub autonome). Même pattern
+  app-of-apps que neltharion ; **squelette minimal** (seul Argo self-managed déployé). Voir
+  [`onyxia/README.md`](onyxia/README.md).
 - **taerar/** — stacks **Docker Compose** gérées via **Dokploy**. Conventions (nommage, `.env`,
   réseaux externes partagés) et liste des stacks dans [`taerar/README.md`](taerar/README.md),
   détail dans le README de chaque stack.

@@ -6,6 +6,7 @@ son modèle de déploiement et sa propre documentation détaillée :
 | Environnement | Plateforme | Modèle de déploiement | Documentation |
 |---|---|---|---|
 | **neltharion** | Kubernetes (Talos 1.36), ingress Traefik | **GitOps** via un Argo CD central (hub/spoke). Push sur `main` → Argo reconcilie. | [`neltharion/README.md`](neltharion/README.md) |
+| **onyxia** | Kubernetes | **GitOps** via son **propre Argo CD** (hub autonome). Push sur `main` → Argo reconcilie. Squelette minimal. | [`onyxia/README.md`](onyxia/README.md) |
 | **taerar** | Docker | Stacks **Docker Compose** gérées via **Dokploy**. Un `compose.yaml` auto-contenu par stack. | [`taerar/README.md`](taerar/README.md) |
 
 Chaque environnement vit dans son dossier racine (`neltharion/`, `taerar/`) et documente son

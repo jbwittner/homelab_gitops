@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"        # avant tout le reste
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: onyxia/infra/argocd     # MÊME dossier que l'apply manuel du bootstrap
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: false                             # ⚠️ prune désactivé — Argo se couperait les jambes
+    syncOptions:
+      - ServerSideApply=true                   # ⚠️ doit matcher l'apply manuel
+      - RespectIgnoreDifferences=true

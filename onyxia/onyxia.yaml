@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: onyxia
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: onyxia
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: app-of-apps
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # App-of-apps TIER 1 du cluster onyxia, appliqué sur SON PROPRE hub (kubectl apply de bootstrap).
+  # onyxia est un hub autonome : il fait tourner son propre Argo CD (comme neltharion pour le sien).
+  # Découvre les deux bootstraps de partie (infra.bootstrap.yaml + apps.bootstrap.yaml) via le
+  # glob '*.bootstrap.yaml' ; chacun découvre ensuite ses propres '*.app.yaml'. Les deux
+  # suffixes distincts (.bootstrap.yaml ici, .app.yaml en tier 2) évitent toute auto-récursion.
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: onyxia
+    directory:
+      recurse: true
+      include: '*.bootstrap.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

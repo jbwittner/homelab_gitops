@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: onyxia-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # App-of-apps de la partie APPS d'onyxia : découvre tous les composants apps
+  # (recurse + include '*.app.yaml' → matche apps/<name>/<name>.app.yaml, PAS ce fichier
+  # *.bootstrap.yaml). Aucun composant apps déployé pour l'instant (squelette minimal) :
+  # l'Application rend un set vide et devient Synced sans rien créer.
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: onyxia/apps
+    directory:
+      recurse: true
+      include: '*.app.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
