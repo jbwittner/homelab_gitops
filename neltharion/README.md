@@ -50,7 +50,7 @@ neltharion/               # = hub ; destination in-cluster (https://kubernetes.d
     argocd/               # self-management (wave -1) + install inliné + overlay hub (UI, secrets)
     sealed-secrets/       # wave 0 (Helm, single-source) + README opérationnel
     traefik/              # wave 0 (Helm + values.yaml + namespace)
-    cert-manager/         # wave 1 (Helm + values.yaml + ClusterIssuer + token scellé)
+    cert-manager/         # wave 1 (Helm + values.yaml + ClusterIssuers prod+staging + token scellé)
     external-dns/         # wave 1 (Helm + values.yaml + namespace + token scellé)
     local-path-provisioner/ # wave 1 (Kustomize, manifest upstream pinné + patches) — StorageClass par défaut
   apps/
@@ -188,7 +188,7 @@ kubectl logs -n argocd statefulset/argocd-application-controller
 - [`infra/argocd/`](infra/argocd/README.md) — bootstrap & self-management Argo (repo public, sans credential).
 - [`infra/sealed-secrets/`](infra/sealed-secrets/README.md) — kubeseal, backup/restore de clé.
 - [`infra/traefik/`](infra/traefik/README.md) — ingress hostPort, redirection HTTP→HTTPS, exposer une app.
-- [`infra/cert-manager/`](infra/cert-manager/README.md) — ClusterIssuer & token Cloudflare.
+- [`infra/cert-manager/`](infra/cert-manager/README.md) — ClusterIssuers Let's Encrypt (prod+staging) & token Cloudflare.
 - [`infra/external-dns/`](infra/external-dns/README.md) — sync DNS Cloudflare.
 - [`infra/local-path-provisioner/`](infra/local-path-provisioner/README.md) — StorageClass par défaut.
 - [`apps/monitoring/`](apps/monitoring/README.md) — kube-prometheus-stack, Grafana, stockage persistant.
