@@ -11,8 +11,8 @@ Dépôt d'infrastructure du homelab, **trois environnements indépendants** :
   self-management sont documentés dans [`neltharion/README.md`](neltharion/README.md) et les
   README par composant sous `neltharion/{infra,apps}/<name>/`.
 - **onyxia/** — Kubernetes en **GitOps** via son **propre Argo CD** (hub autonome). Même pattern
-  app-of-apps que neltharion ; **squelette minimal** (seul Argo self-managed déployé). Voir
-  [`onyxia/README.md`](onyxia/README.md).
+  app-of-apps que neltharion ; socle ingress + TLS (argocd, sealed-secrets, traefik, cert-manager).
+  Voir [`onyxia/README.md`](onyxia/README.md).
 - **taerar/** — stacks **Docker Compose** gérées via **Dokploy**. Conventions (nommage, `.env`,
   réseaux externes partagés) et liste des stacks dans [`taerar/README.md`](taerar/README.md),
   détail dans le README de chaque stack.

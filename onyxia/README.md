@@ -7,8 +7,11 @@ détaillée (multi-source Helm, SealedSecrets par-cluster, pièges du self-manag
 
 **Source de vérité** : ce dépôt **GitHub**. Push sur `main` → Argo reconcilie onyxia.
 
-> État actuel : **squelette minimal**. Seul Argo CD (self-management) est déployé ; les parties
-> infra (au-delà d'Argo) et apps sont vides et se remplissent composant par composant.
+> État actuel : socle ingress + TLS en place (Argo, sealed-secrets, traefik, cert-manager). La
+> partie apps est vide et se remplit composant par composant.
+>
+> ⚠️ **cert-manager n'émet pas encore de certs** : le token Cloudflare doit être scellé contre le
+> contrôleur sealed-secrets d'onyxia — voir [`infra/cert-manager/README.md`](infra/cert-manager/README.md).
 
 ## Architecture
 
@@ -34,7 +37,10 @@ onyxia/                     # = hub ; destination in-cluster (https://kubernetes
   onyxia.yaml               # TIER 1 — app-of-apps du cluster ; kubectl apply -f UNE fois sur le hub
   infra/
     infra.bootstrap.yaml    # TIER 2 — découvre infra/*/*.app.yaml
-    argocd/                 # self-management (wave -1) + install inliné (bootstrap ET self-management)
+    argocd/                 # wave -1 self-management + install inliné (bootstrap ET self-management)
+    sealed-secrets/         # wave 0 (Helm, single-source) — contrôleur de déchiffrement + README kubeseal
+    traefik/                # wave 0 (Helm + values.yaml + namespace) — ingress hostPort 80/443, redirect HTTP→HTTPS
+    cert-manager/           # wave 1 (Helm + values.yaml + ClusterIssuers prod+staging + token Cloudflare à sceller)
   apps/
     apps.bootstrap.yaml     # TIER 2 — découvre apps/*/*.app.yaml (aucun composant pour l'instant)
 ```
@@ -44,12 +50,13 @@ onyxia/                     # = hub ; destination in-cluster (https://kubernetes
 | Wave | Composants |
 |------|-----------|
 | -1   | argocd (self-management) |
+| 0    | sealed-secrets, traefik |
+| 1    | cert-manager (+ ClusterIssuers Let's Encrypt prod+staging — token Cloudflare à sceller) |
 
 ## Roadmap (pas encore dans le repo)
 
-À copier/adapter depuis `neltharion/` selon les besoins (sealed-secrets, traefik, cert-manager,
-external-dns, storage, …). Chaque ajout = un dossier auto-contenu `onyxia/<infra|apps>/<name>/`
-+ push `main`.
+À copier/adapter depuis `neltharion/` selon les besoins (external-dns, storage, monitoring, …).
+Chaque ajout = un dossier auto-contenu `onyxia/<infra|apps>/<name>/` + push `main`.
 
 > **SealedSecrets par-cluster.** Un SealedSecret est chiffré contre la clé du contrôleur d'un
 > cluster donné. Quand `sealed-secrets` sera déployé sur onyxia, re-sceller chaque secret contre
@@ -86,3 +93,6 @@ de la partie le capte.
 ## README par composant
 
 - [`infra/argocd/`](infra/argocd/README.md) — bootstrap & self-management Argo (repo public, sans credential).
+- [`infra/sealed-secrets/`](infra/sealed-secrets/README.md) — kubeseal, backup/restore de clé (par-cluster).
+- [`infra/traefik/`](infra/traefik/README.md) — ingress hostPort, redirect HTTP→HTTPS, exposer une app.
+- [`infra/cert-manager/`](infra/cert-manager/README.md) — ClusterIssuers Let's Encrypt & token Cloudflare (à sceller).
