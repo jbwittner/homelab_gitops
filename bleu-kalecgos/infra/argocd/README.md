@@ -24,7 +24,7 @@ kubectl -n argocd port-forward svc/argocd-server 8080:443
 # → https://localhost:8080  (admin + mdp étape 4)
 
 # 6. Lancer le tier-1 → Argo déploie tout le reste (sealed-secrets inclus, wave 0)
-kubectl apply -f bleu-kalecgos/bleu-kalecgos.yaml
+kubectl apply -f bleu-kalecgos/cluster.yaml
 
 # (optionnel) login CLI
 argocd login localhost:8080 --username admin --password '<mdp>' --insecure
