@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+# Argo CD du hub neltharion, dossier autonome : install upstream épinglé + patch cmd-params
+# + le SPÉCIFIQUE-hub (UI exposée au domaine wittnerlab.com, credentials repo & webhook scellés
+# pour CE cluster). Sert AUSSI à l'apply manuel du bootstrap (kubectl apply -k ce dossier).
+#
+# Note compat K8s 1.36 : le tag de l'install.yaml ci-dessous est le point d'épinglage Argo.
+# Si les pods crash-loop après upgrade, bumper le tag vX.Y.Z ici.
+resources:
+  - namespace.yaml
+  - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.5/manifests/install.yaml
+patches:
+  - path: argocd-cmd-params-cm.yaml
+    target:
+      kind: ConfigMap
+      name: argocd-cmd-params-cm
+  - path: argocd-cm.yaml
+    target:
+      kind: ConfigMap
+      name: argocd-cm
