@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bleu-kalecgos-infra
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # App-of-apps de la partie INFRA de bleu-kalecgos : découvre tous les composants infra
+  # (recurse + include '*.app.yaml' → matche infra/<name>/<name>.app.yaml, PAS ce fichier
+  # *.bootstrap.yaml qui a un suffixe différent).
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: bleu-kalecgos/infra
+    directory:
+      recurse: true
+      include: '*.app.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
