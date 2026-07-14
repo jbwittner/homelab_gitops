@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
-    path: neltharion/infra/argocd     # MÊME dossier que l'apply manuel du bootstrap
+    path: bleu-kalecgos/infra/argocd     # MÊME dossier que l'apply manuel du bootstrap
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
