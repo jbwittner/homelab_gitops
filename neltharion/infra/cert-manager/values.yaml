@@ -1,6 +1,0 @@
-# Values cert-manager de neltharion (dossier autonome).
-# L'e-mail ACME et le ClusterIssuer sont portés par cluster-issuer.yaml, pas ici.
-
-# Installer les CRDs avec la chart.
-crds:
-  enabled: true

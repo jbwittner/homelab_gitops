@@ -50,7 +50,7 @@ neltharion/               # = hub ; destination in-cluster (https://kubernetes.d
     argocd/               # self-management (wave -1) + install inliné + overlay hub (UI, secrets)
     sealed-secrets/       # wave 0 (Helm, single-source) + README opérationnel
     traefik/              # wave 0 (Helm + values.yaml + namespace)
-    cert-manager/         # wave 1 (Helm + values.yaml + ClusterIssuer + token scellé)
+    cert-manager/         # wave 1 (Helm + values.yaml + ClusterIssuers prod+staging + token scellé)
     external-dns/         # wave 1 (Helm + values.yaml + namespace + token scellé)
     local-path-provisioner/ # wave 1 (Kustomize, manifest upstream pinné + patches) — StorageClass par défaut
   apps/
@@ -93,25 +93,13 @@ pour régénérer via kubeseal) vivent à côté de leurs `*.sealed-secret.yaml`
 
 ## Bootstrap (one-time, impératif)
 
-Le dépôt est privé : Argo le lit via une **deploy key SSH** stockée en SealedSecret
-(`neltharion/infra/argocd/argocd-repo.sealed-secret.yaml`), appliquée dès l'étape 1.
-
-> **Étape 0 obligatoire (dépendance circulaire).** La repo-cred est scellée ; il faut le
-> contrôleur sealed-secrets pour la déchiffrer, mais celui-ci n'arrive normalement qu'en wave 0
-> (qui a besoin de la cred pour cloner le repo). On installe donc sealed-secrets **à la main
-> d'abord**, avec les mêmes nom/namespace/version que l'Application wave 0 → Argo l'adopte
-> ensuite. La numérotation des sync-waves ne garantit pas cet ordre : c'est ce geste manuel qui
-> le fait. Détails : [`infra/argocd/README.md`](infra/argocd/README.md).
+Le dépôt est **public** sur GitHub : Argo le clone en HTTPS anonyme, sans credential. Aucun
+SealedSecret n'est donc requis pour démarrer — **Argo s'installe en premier**, puis déploie tout
+le reste (sealed-secrets inclus, en wave 0). Plus de dépendance circulaire à briser à la main :
+l'ordre est simplement Argo, puis le tier-1. Détails : [`infra/argocd/README.md`](infra/argocd/README.md).
 
 ```bash
-# 0. Installer le contrôleur sealed-secrets EN PREMIER (mêmes nom/namespace/version que la wave 0)
-helm install sealed-secrets sealed-secrets \
-  --repo https://bitnami-labs.github.io/sealed-secrets \
-  --version 2.18.6 \
-  --namespace sealed-secrets --create-namespace
-kubectl wait --for=condition=available --timeout=120s deployment/sealed-secrets -n sealed-secrets
-
-# 1. Installer Argo + credentials repo scellés (server-side obligatoire — annotations CRD trop grosses pour le client-side)
+# 1. Installer Argo (server-side obligatoire — annotations CRD trop grosses pour le client-side)
 kubectl apply -k neltharion/infra/argocd --server-side --force-conflicts
 
 # 2. Attendre qu'Argo soit prêt
@@ -120,7 +108,8 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 # 3. Mot de passe admin initial
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
-# 4. Appliquer le tier-1 du cluster — Argo prend le relais (infra + apps bootstraps → composants)
+# 4. Appliquer le tier-1 du cluster — Argo prend le relais (infra + apps bootstraps → composants,
+#    dont sealed-secrets en wave 0)
 kubectl apply -f neltharion/neltharion.yaml
 ```
 
@@ -163,8 +152,8 @@ Après l'étape 4, tout passe par Git.
 
 L'UI Argo est déjà exposée via `argocd-ingress-route.yaml` + `argocd-certificate.yaml` (actifs
 dans `infra/argocd/kustomization.yaml`). Reste sur la roadmap : patches SSO Authentik
-(`argocd-cm`, `argocd-rbac-cm`) à ajouter une fois Authentik (re)déployé. `argocd-repo.sealed-secret.yaml`
-et `argocd-webhook.sealed-secret.yaml` sont actifs dès le bootstrap.
+(`argocd-cm`, `argocd-rbac-cm`) à ajouter une fois Authentik (re)déployé. Le repo étant public,
+Argo le clone sans credential — aucun SealedSecret repo/webhook n'est requis au bootstrap.
 
 ## Compat K8s 1.36
 
@@ -196,10 +185,10 @@ kubectl logs -n argocd statefulset/argocd-application-controller
 
 ## README par composant
 
-- [`infra/argocd/`](infra/argocd/README.md) — bootstrap & self-management Argo, deploy key.
+- [`infra/argocd/`](infra/argocd/README.md) — bootstrap & self-management Argo (repo public, sans credential).
 - [`infra/sealed-secrets/`](infra/sealed-secrets/README.md) — kubeseal, backup/restore de clé.
 - [`infra/traefik/`](infra/traefik/README.md) — ingress hostPort, redirection HTTP→HTTPS, exposer une app.
-- [`infra/cert-manager/`](infra/cert-manager/README.md) — ClusterIssuer & token Cloudflare.
+- [`infra/cert-manager/`](infra/cert-manager/README.md) — ClusterIssuers Let's Encrypt (prod+staging) & token Cloudflare.
 - [`infra/external-dns/`](infra/external-dns/README.md) — sync DNS Cloudflare.
 - [`infra/local-path-provisioner/`](infra/local-path-provisioner/README.md) — StorageClass par défaut.
 - [`apps/monitoring/`](apps/monitoring/README.md) — kube-prometheus-stack, Grafana, stockage persistant.

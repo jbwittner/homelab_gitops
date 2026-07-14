@@ -1,8 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: external-dns
-# Ressources annexes spécifiques au cluster (rendues par la 2ᵉ source de l'Application) :
-# namespace + token Cloudflare scellé pour CE cluster.
-resources:
-  - namespace.yaml
-  - cloudflare-api-token.sealed-secret.yaml

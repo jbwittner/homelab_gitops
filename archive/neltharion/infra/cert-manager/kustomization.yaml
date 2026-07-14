@@ -1,7 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 # Config post-install spécifique au cluster (rendue par la 2ᵉ source de l'Application) :
-# le ClusterIssuer (e-mail ACME du cluster) et le token Cloudflare scellé pour CE cluster.
+# les deux ClusterIssuers Let's Encrypt (prod + staging, e-mail ACME du cluster) et le token
+# Cloudflare scellé pour CE cluster.
 resources:
   - cloudflare-api-token.sealed-secret.yaml
-  - cluster-issuer.yaml
+  - cluster-issuer-prod.yaml
+  - cluster-issuer-staging.yaml
