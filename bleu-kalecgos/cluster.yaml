@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: bleu-kalegcos
+  name: cluster-bleu-kalecgos
   namespace: argocd
   labels:
     app.kubernetes.io/name: bleu-kalecgos
