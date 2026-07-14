@@ -1,10 +1,10 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cluster-bleu-kalecgos
+  name: bleu-kalecgos-cluster
   namespace: argocd
   labels:
-    app.kubernetes.io/name: cluster-bleu-kalecgos
+    app.kubernetes.io/name: bleu-kalecgos
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: app-of-apps
   finalizers:
