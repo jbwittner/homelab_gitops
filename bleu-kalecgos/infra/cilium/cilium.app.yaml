@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: cilium
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: cni
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://helm.cilium.io/
+      chart: cilium
+      targetRevision: 1.18.0
+      helm:
+        valueFiles:
+          - $values/bleu-kalecgos/infra/cilium/values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: ""
+      kind: ConfigMap
+      name: cilium-config
+      namespace: kube-system
+      jsonPointers:
+        - /data
