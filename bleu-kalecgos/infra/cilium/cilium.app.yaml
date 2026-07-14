@@ -21,6 +21,9 @@ spec:
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: bleu-kalecgos/infra/cilium/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
