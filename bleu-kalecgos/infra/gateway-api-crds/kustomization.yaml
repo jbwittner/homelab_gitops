@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# CRDs Gateway API, install upstream standard épinglé.
+# Version alignée sur Cilium 1.19.5 → Gateway API v1.4.1.
+# Note compat Cilium : si upgrade Cilium (canary itharius d'abord),
+# bumper le tag ci-dessous selon la matrice (1.19 → v1.4.1, 1.18 → v1.3.0).
+resources:
+  - https://github.com/kubernetes-sigs/gateway-api/config/crd/standard?ref=v1.4.1
