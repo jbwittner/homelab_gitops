@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gw-test
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: HEAD
+    path: bleu-kalecgos/app/test-nginx
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gw-test
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
