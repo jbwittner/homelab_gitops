@@ -1,0 +1,32 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shared-gw
+  namespace: gateway
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: https-public
+      protocol: HTTPS
+      port: 443
+      hostname: "*.wittner.tech"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: wildcard-public-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https-internal
+      protocol: HTTPS
+      port: 443
+      hostname: "*.lan.wittner.tech"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: wildcard-lan-tls
+      allowedRoutes:
+        namespaces:
+          from: All
