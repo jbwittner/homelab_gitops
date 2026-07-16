@@ -33,7 +33,7 @@ spec:
     - name: https-internal-kalecgos
       protocol: HTTPS
       port: 443
-      hostname: "*.kalecgos.lan.wittnerlab.tech"
+      hostname: "*.kalecgos.lan.wittner.tech"
       tls:
         mode: Terminate
         certificateRefs:
