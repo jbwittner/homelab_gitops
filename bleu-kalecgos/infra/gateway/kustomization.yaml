@@ -3,5 +3,4 @@ kind: Kustomization
 namespace: gateway
 
 resources:
-  - namespace.yaml
   - gateway.yaml
