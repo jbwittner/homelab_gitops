@@ -7,3 +7,5 @@ kind: Kustomization
 # bumper le tag ci-dessous selon la matrice (1.19 → v1.4.1, 1.18 → v1.3.0).
 resources:
   - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
+  - namespace.yaml
+  - gateway.yaml
