@@ -3,7 +3,9 @@
     "allow": [
       "Bash(rtk grep *)",
       "Bash(kubectl kustomize *)",
-      "Bash(kustomize build *)"
+      "Bash(kustomize build *)",
+      "Bash(rtk read *)",
+      "Bash(rtk ls *)"
     ]
   }
 }
