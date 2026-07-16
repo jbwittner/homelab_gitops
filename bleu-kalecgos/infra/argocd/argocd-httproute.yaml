@@ -14,7 +14,7 @@ spec:
       namespace: gateway
       sectionName: https-internal-kalecgos
   hostnames:
-    - argocd.kalecgos.lan.wittnerlab.tech
+    - argocd.kalecgos.lan.wittner.tech
   rules:
     # match explicite (default CRD = PathPrefix /) pour éviter le diff permanent.
     - matches:
