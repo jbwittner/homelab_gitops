@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: HEAD
-    path: bleu-kalecgos/infra/gateway-api-crds
+    path: bleu-kalecgos/infra/gateway-api
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
