@@ -5,15 +5,28 @@ metadata:
   namespace: argocd
 spec:
   # Attache au Gateway partagé (ns gateway), listener interne dédié kalecgos.
+  # group/kind explicites : sinon le CRD Gateway API les injecte en defaults côté live
+  # et ArgoCD (sans ServerSideDiff) voit un OutOfSync permanent.
   parentRefs:
-    - name: shared-gw
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: shared-gw
       namespace: gateway
       sectionName: https-internal-kalecgos
   hostnames:
     - argocd.kalecgos.lan.wittnerlab.tech
   rules:
-    # TLS terminé au Gateway → backend en HTTP clair. argocd-server tourne en
-    # server.insecure=true (cf. argocd-cmd-params-cm.yaml) → sert HTTP sur le port 80.
-    - backendRefs:
-        - name: argocd-server
+    # match explicite (default CRD = PathPrefix /) pour éviter le diff permanent.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      # TLS terminé au Gateway → backend en HTTP clair. argocd-server tourne en
+      # server.insecure=true (cf. argocd-cmd-params-cm.yaml) → sert HTTP sur le port 80.
+      # group/kind/weight explicites : mêmes defaults CRD que ci-dessus.
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: argocd-server
           port: 80
+          weight: 1
