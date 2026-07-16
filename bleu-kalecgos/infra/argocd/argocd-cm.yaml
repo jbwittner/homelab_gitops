@@ -4,5 +4,8 @@ metadata:
   name: argocd-cm
   namespace: argocd
 data:
+  # URL externe (TLS terminé au Gateway). Sans ça, argocd-server dérive le schéma
+  # de la requête backend (HTTP clair, server.insecure=true) → logout/redirect en http.
+  url: https://argocd.kalecgos.lan.wittner.tech
   # Enables application status badge feature
   statusbadge.enabled: "true"
