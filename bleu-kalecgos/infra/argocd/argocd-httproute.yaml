@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd-server
+  namespace: argocd
+spec:
+  # Attache au Gateway partagé (ns gateway), listener interne dédié kalecgos.
+  parentRefs:
+    - name: shared-gw
+      namespace: gateway
+      sectionName: https-internal-kalecgos
+  hostnames:
+    - argocd.kalecgos.lan.wittnerlab.tech
+  rules:
+    # TLS terminé au Gateway → backend en HTTP clair. argocd-server tourne en
+    # server.insecure=true (cf. argocd-cmd-params-cm.yaml) → sert HTTP sur le port 80.
+    - backendRefs:
+        - name: argocd-server
+          port: 80

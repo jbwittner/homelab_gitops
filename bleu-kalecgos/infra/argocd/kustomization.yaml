@@ -11,6 +11,7 @@ namespace: argocd
 resources:
   - namespace.yaml
   - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.5/manifests/install.yaml
+  - argocd-httproute.yaml
 patches:
   - path: argocd-cmd-params-cm.yaml
     target:
