@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"       # après les CRDs (-10), avant les consommateurs de certs
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: tls
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Contrôleur cert-manager (Jetstack). CRDs posées par la chart (crds.enabled).
+  # Émettra les certs Let's Encrypt via DNS-01 Cloudflare (ClusterIssuer + Certificate
+  # dans l'app cert-manager-config, wave -4). Token Cloudflare = SealedSecret.
+  sources:
+    - repoURL: https://charts.jetstack.io
+      chart: cert-manager
+      targetRevision: v1.21.0
+      helm:
+        releaseName: cert-manager
+        valueFiles:
+          - $values/bleu-kalecgos/infra/cert-manager/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

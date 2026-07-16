@@ -16,6 +16,24 @@
 Si un état a été créé impérativement en dépannage (ex. secret self-signed temporaire), il doit être
 **remplacé par son équivalent GitOps** (SealedSecret) puis supprimé du cluster.
 
+## Charts Helm — values dans un fichier
+
+Les values d'une Application Helm ne vont **jamais inline** (`helm.values: |`). Toujours dans un
+fichier **`helm-values.yaml`** à côté de l'app, référencé via le pattern multi-source `$values` :
+
+```yaml
+sources:
+  - repoURL: <chart-repo>
+    chart: <name>
+    targetRevision: <ver>
+    helm:
+      valueFiles:
+        - $values/bleu-kalecgos/infra/<name>/helm-values.yaml
+  - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    ref: values
+```
+
 ## Structure
 
 - `bleu-kalecgos/` — cluster (app-of-apps). Tier 1 `cluster.yaml` → `*.bootstrap.yaml` → `*.app.yaml`.

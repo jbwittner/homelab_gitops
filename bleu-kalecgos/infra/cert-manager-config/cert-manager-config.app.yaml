@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"       # après cert-manager (-5) : CRDs Issuer/Certificate présentes
+  labels:
+    app.kubernetes.io/name: cert-manager-config
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: tls
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # ClusterIssuer Let's Encrypt (DNS-01 Cloudflare) + Certificates wildcard + SealedSecret token.
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: bleu-kalecgos/infra/cert-manager-config
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

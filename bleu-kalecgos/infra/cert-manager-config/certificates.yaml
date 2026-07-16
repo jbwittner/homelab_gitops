@@ -1,0 +1,40 @@
+# Certificates wildcard. cert-manager remplit les Secret TLS DANS ns gateway (le Gateway les consomme).
+# DNS-01 → pas besoin d'exposition publique, marche pour hostnames internes.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-public-tls
+  namespace: gateway
+spec:
+  secretName: wildcard-public-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.wittner.tech"
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-lan-tls
+  namespace: gateway
+spec:
+  secretName: wildcard-lan-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.lan.wittner.tech"
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-kalecgos-lan-tls
+  namespace: gateway
+spec:
+  secretName: wildcard-kalecgos-lan-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.kalecgos.lan.wittner.tech"
