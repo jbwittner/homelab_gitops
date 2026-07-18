@@ -5,7 +5,8 @@
       "Bash(kubectl kustomize *)",
       "Bash(kustomize build *)",
       "Bash(rtk read *)",
-      "Bash(rtk ls *)"
+      "Bash(rtk ls *)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }
