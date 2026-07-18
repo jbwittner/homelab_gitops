@@ -5,8 +5,7 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-10"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
 spec:
   project: default
   source:

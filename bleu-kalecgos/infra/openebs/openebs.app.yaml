@@ -7,8 +7,7 @@ metadata:
     app.kubernetes.io/name: openebs-lvm
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: storage
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
 spec:
   project: default
   # OpenEBS via le chart PARAPLUIE `openebs` (chemin recommandé upstream), dont on n'active QUE le

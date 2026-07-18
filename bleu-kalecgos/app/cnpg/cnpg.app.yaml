@@ -3,8 +3,7 @@ kind: Application
 metadata:
   name: cnpg-app
   namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
 spec:
   project: default
   sources:
