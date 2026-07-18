@@ -8,7 +8,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
     # [K8s, commenté] Décommenter pour faire de CETTE SC la SC PAR DÉFAUT du cluster : tout PVC
     # sans `storageClassName` l'utiliserait alors automatiquement. Laissé off = choix explicite requis.
-    # storageclass.kubernetes.io/is-default-class: "true"
+    storageclass.kubernetes.io/is-default-class: "true"
 
 # Le driver CSI qui provisionne les volumes. Doit matcher le provisioner déployé par le chart
 # OpenEBS LVM. C'est lui qui reçoit les `parameters` ci-dessous.
