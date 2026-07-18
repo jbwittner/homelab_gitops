@@ -1,22 +1,60 @@
-# StorageClass thin — provisionnée en DERNIER (wave 1), une fois le VG créé et le driver Healthy.
-#
-# thinProvision "yes" : le driver crée automatiquement un thin-pool dans `lvmvg` à la 1re demande,
-# puis y taille des thin-LV → sur-allocation possible (surveiller le remplissage réel du pool).
-# WaitForFirstConsumer : le PV n'est créé qu'une fois le pod schedulé → indispensable pour du
-# stockage local (le volume atterrit sur le bon nœud). Mono-nœud aujourd'hui, correct demain.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: openebs-lvm-thin
   annotations:
+    # [ArgoCD, pas K8s] Ordre de déploiement : la SC est posée en DERNIER (après le Job VG en
+    # wave 0), une fois le VG créé et le driver Healthy. N'influence pas le comportement du volume.
     argocd.argoproj.io/sync-wave: "1"
-    # Pour en faire la SC par défaut du cluster, décommenter :
+    # [K8s, commenté] Décommenter pour faire de CETTE SC la SC PAR DÉFAUT du cluster : tout PVC
+    # sans `storageClassName` l'utiliserait alors automatiquement. Laissé off = choix explicite requis.
     # storageclass.kubernetes.io/is-default-class: "true"
+
+# Le driver CSI qui provisionne les volumes. Doit matcher le provisioner déployé par le chart
+# OpenEBS LVM. C'est lui qui reçoit les `parameters` ci-dessous.
 provisioner: local.csi.openebs.io
+
+# --- parameters : passés TELS QUELS au driver OpenEBS (spécifiques LVM) ---
 parameters:
+  # Backend de stockage visé par le driver. Pour LocalPV-LVM, toujours "lvm".
   storage: "lvm"
+
+  # Nom EXACT du Volume Group dans lequel tailler les LV (celui créé par le vg-bootstrap-job).
+  # Alternative non utilisée ici : `vgpattern: "lvmvg.*"` (regex de sélection). Si les deux sont
+  # fournis, `volgroup` gagne.
   volgroup: "lvmvg"
-#  thinProvision: "yes"
-#allowVolumeExpansion: true
-#reclaimPolicy: Delete
-#volumeBindingMode: WaitForFirstConsumer
+
+  # THIN vs THICK — le vrai choix fonctionnel.
+  #   absent / "no" (défaut) = THICK : chaque PV réserve toute sa taille dans le VG immédiatement.
+  #                                    Capacité garantie, zéro surallocation, échoue si VG plein.
+  #   "yes"                  = THIN  : les LV sont taillés dans un thin-pool (créé auto dans le VG
+  #                                    au 1er volume). Espace consommé à l'écriture réelle → permet
+  #                                    la SURALLOCATION (somme des PVC > taille VG) + snapshots
+  #                                    quasi gratuits. Contrepartie : si le pool se remplit RÉELLEMENT,
+  #                                    les écritures échouent → surveiller `lvs` (colonne %Data).
+  thinProvision: "no"
+
+  # Autres parameters disponibles (non utilisés) :
+  #   fsType: "xfs"     # système de fichiers formaté sur le volume (défaut "ext4"; aussi ext2/3, btrfs)
+  #   shared: "yes"     # autorise plusieurs pods du MÊME node à monter le volume (défaut "no")
+
+# --- champs standard Kubernetes (comportement du volume, indépendants d'OpenEBS) ---
+
+# Permet d'agrandir un PVC à chaud (éditer le PVC → augmenter `storage`) sans le recréer.
+#   défaut absent = false (non extensible). lvm-localpv gère l'extension en ligne.
+allowVolumeExpansion: true
+
+# Que devient le LV quand le PVC est supprimé.
+#   "Delete" (= défaut K8s, explicité ici) : le LV est détruit, l'espace rendu au VG.
+#   "Retain" : le LV/PV est conservé pour récupération manuelle (pas de perte accidentelle).
+reclaimPolicy: Delete
+
+# QUAND le volume est provisionné / lié.
+#   "Immediate" (défaut)            : PV créé dès la création du PVC, sur un node choisi par le
+#                                     driver → le pod est ensuite COLLÉ à ce node. Risqué en multi-node.
+#   "WaitForFirstConsumer" (ici)    : binding différé jusqu'à ce qu'un pod utilise le PVC ; le volume
+#                                     est alors créé SUR LE NODE choisi par le scheduler (affinités,
+#                                     ressources, taints respectées). Indispensable pour du stockage
+#                                     node-local. Effet visible : un PVC SEUL reste `Pending` tant
+#                                     qu'aucun pod ne le consomme — c'est voulu, pas un bug.
+volumeBindingMode: WaitForFirstConsumer
