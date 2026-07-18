@@ -46,7 +46,7 @@ status: draft
 | 8. PodSecurity | Sans le label `privileged` sur `openebs`, le DaemonSet `lvm-node` + le Job VG (privileged) sont rejetés par l'admission `baseline` |
 
 > [!note] Rebuild à froid vs première construction
-> Une fois toutes les Applications dans `homelab-gitops`, les étapes 5→9 convergent **toutes seules** après le `kubectl apply -f cluster.yaml` de la phase 4, dans l'ordre des sync-waves : `gateway-api-crds` (-10) → `sealed-secrets` (-8) → `cert-manager` (-5) → `cert-manager-config` (-4) → `argocd` (-1) → openebs. En rebuild, ce runbook devient une **checklist de vérification** + trois gestes manuels irréductibles : l'apply -k ArgoCD, la restauration de la clé sealed-secrets, et le restart one-shot de `cilium-operator`. La phase autosignée (5) n'a de sens qu'à la **première construction**, avant que LE ne soit dans le repo.
+> Une fois toutes les Applications dans `homelab-gitops`, les étapes 5→9 convergent **toutes seules** après le `kubectl apply -f cluster.yaml` de la phase 4, dans l'ordre des sync-waves : `gateway-api` (-10) → `sealed-secrets` (-8) → `cert-manager` (-5) → `cert-manager-config` (-4) → `argocd` (-1) → openebs. En rebuild, ce runbook devient une **checklist de vérification** + trois gestes manuels irréductibles : l'apply -k ArgoCD, la restauration de la clé sealed-secrets, et le restart one-shot de `cilium-operator`. La phase autosignée (5) n'a de sens qu'à la **première construction**, avant que LE ne soit dans le repo.
 
 ---
 
@@ -163,19 +163,19 @@ Valeurs clés (mono-nœud) : `kubeProxyReplacement=true`, `k8sServiceHost=localh
 > `forwardKubeDNSToHost: true` (dans le talconfig) **ne doit pas** cohabiter avec `bpf.masquerade=true` côté Cilium → CoreDNS casse. Laisser `bpf.masquerade` désactivé.
 
 > [!important] Version pinée : `1.19.5`
-> SemVer **sans `v`** (chart = release). Le `--version` du helm install ci-dessous et le `targetRevision` de l'Application ArgoCD doivent rester **strictement identiques** (source unique : `values.yaml`). Toute dérive entre les deux = comportement imprévisible.
+> SemVer **sans `v`** (chart = release). Le `--version` du helm install ci-dessous et le `targetRevision` de l'Application ArgoCD doivent rester **strictement identiques** (source unique : `helm-values.yaml`). Toute dérive entre les deux = comportement imprévisible.
 
 > [!warning] Saut de mineure 1.18 → 1.19
 > Le socle tournait en 1.18.0. Relire les *1.19 Upgrade Notes* et vérifier la compat des valeurs `kubeProxyReplacement` / KubePrism avant/après. Rappel discipline : les upgrades Cilium se canaryent normalement sur `itharius` d'abord — ici pas de canary (itharius pas encore monté), choix assumé.
 
 ```bash
 helm install cilium cilium/cilium --version 1.19.5 -n kube-system \
-  -f bleu-kalecgos/infra/cilium/values.yaml
+  -f bleu-kalecgos/infra/cilium/helm-values.yaml
 cilium status --wait
 ```
 
 > [!note] Reprise en main par ArgoCD
-> Ce `helm install` est le seul geste Helm du bootstrap. Une fois ArgoCD monté (phase 4), l'Application `cilium` (multi-source : chart 1.19.5 + `$values` + `manifests/` ip-pool/l2-policy) adopte le release — le `targetRevision` et le `values.yaml` étant identiques, elle passe `Synced` sans rien changer.
+> Ce `helm install` est le seul geste Helm du bootstrap. Une fois ArgoCD monté (phase 4), l'Application `cilium` (multi-source : chart 1.19.5 + `$values` + `manifests/` ip-pool/l2-policy) adopte le release — le `targetRevision` et le `helm-values.yaml` étant identiques, elle passe `Synced` sans rien changer.
 
 ---
 
@@ -262,11 +262,17 @@ kubectl apply -f bleu-kalecgos/cluster.yaml
 
 ### Les briques (toutes GitOps, découvertes par le tier-1)
 
-**1. `gateway-api-crds`** (wave **-10**) — `infra/gateway-api/` : kustomize remote épinglé `standard-install.yaml` **v1.4.1** (matrice : Cilium 1.19 → GwAPI v1.4.1) + `namespace.yaml` (ns `gateway`) + `gateway.yaml` (`shared-gw`, 3 listeners : `https-public` `*.wittner.tech`, `https-internal` `*.lan.wittner.tech`, `https-internal-kalecgos` `*.kalecgos.lan.wittner.tech`). `ServerSideApply=true` obligatoire (CRDs trop grosses). La `GatewayClass cilium` est **auto-créée par le contrôleur Cilium** — ne pas la déclarer (une GatewayClass déclarée à la main reste `Pending`, non réconciliée).
+**1. `gateway-api`** (wave **-10**) — `infra/gateway-api/manifests/` : kustomize remote épinglé `standard-install.yaml` **v1.4.1** (matrice : Cilium 1.19 → GwAPI v1.4.1) + `namespace.yaml` (ns `gateway`) + `gateway.yaml` (`shared-gw`, 3 listeners : `https-public` `*.wittner.tech`, `https-internal` `*.lan.wittner.tech`, `https-internal-kalecgos` `*.kalecgos.lan.wittner.tech`). `ServerSideApply=true` obligatoire (CRDs trop grosses). La `GatewayClass cilium` est **auto-créée par le contrôleur Cilium** — ne pas la déclarer (une GatewayClass déclarée à la main reste `Pending`, non réconciliée).
 
 **2. cert-manager** (wave **-5**) — `infra/cert-manager/` : chart Jetstack v1.21.0, `crds.enabled: true`.
 
-**3. cert-manager-config** (wave **-4**) — `infra/cert-manager-config/` : à ce stade (avant sealed-secrets/LE), un `ClusterIssuer selfsigned` + les 3 `Certificate` wildcard pointés dessus :
+**3. cert-manager-config** (wave **-4**) — `infra/cert-manager-config/manifests/` : à ce stade (avant sealed-secrets/LE), un `ClusterIssuer selfsigned` + les 3 `Certificate` wildcard pointés dessus.
+
+> [!note] Première construction uniquement
+> Le repo est aujourd'hui à l'état final de la phase 7 (Let's Encrypt) : `clusterissuer-selfsigned.yaml`
+> n'existe plus dans `cert-manager-config/manifests/`, seul `clusterissuer.yaml` (`letsencrypt-prod`) est présent.
+> En **rebuild**, sauter cette étape autosignée et aller directement à l'état Let's Encrypt (phases 6-7).
+> Le manifeste ci-dessous n'est utile que pour une première construction sans LE :
 
 ```yaml
 # clusterissuer-selfsigned.yaml — temporaire, retiré en phase 7
@@ -355,10 +361,10 @@ kubectl create secret generic cloudflare-api-token \
   --from-literal=api-token='<TOKEN>' \
   --dry-run=client -o yaml \
 | kubeseal --cert pub-cert.pem --format yaml \
-> bleu-kalecgos/infra/cert-manager-config/cloudflare-api-token.sealed.yaml
+> bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.sealed.yaml
 ```
 
-Committer **uniquement** le `.sealed.yaml` (le référencer dans le `kustomization.yaml` de `cert-manager-config`).
+Committer **uniquement** le `.sealed.yaml` (le référencer dans le `kustomization.yaml` de `cert-manager-config/manifests/`).
 
 ### 2. ClusterIssuer + flip des Certificates (commit)
 
@@ -414,7 +420,7 @@ metadata:
 
 ## Phase 9 — Driver OpenEBS LVM
 
-Via ArgoCD (chemin `bleu-kalecgos/infra/openebs-lvm/`) :
+Via ArgoCD (chemin `bleu-kalecgos/infra/openebs/` — chart parapluie `openebs` 4.5.1, moteur lvm-localpv 1.9.1 seul activé) :
 - Application driver (chart `lvm-localpv`, driver v1.9.1) → namespace `openebs`, `CreateNamespace=false` (le namespace est déjà créé + labellisé par `manifests/namespace.yaml`).
 - Manifests : `namespace.yaml` (wave -1) + Job VG (wave 0, ressource normale) + `StorageClass` thin (wave 1).
 

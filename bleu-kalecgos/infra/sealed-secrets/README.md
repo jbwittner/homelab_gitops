@@ -1,12 +1,15 @@
 # Sealed Secrets — bleu-kalecgos
 
 Contrôleur [Bitnami sealed-secrets](https://github.com/bitnami/sealed-secrets) déployé via Helm
-(`sealed-secrets.app.yaml`, wave 0). Ce dossier ne contient **aucun Secret en clair** : tout secret
-du cluster est un `SealedSecret` chiffré, committé dans Git, déchiffré par le contrôleur.
+(`sealed-secrets.app.yaml`, wave **-8** — très tôt : CRD + contrôleur avant tout SealedSecret).
+Ce dossier ne contient **aucun Secret en clair** : tout secret du cluster est un `SealedSecret`
+chiffré, committé dans Git, déchiffré par le contrôleur.
 
 - **Namespace contrôleur** : `sealed-secrets`
 - **Nom contrôleur** : `sealed-secrets`
 - **Chart** : `sealed-secrets` 2.19.1 (app v0.38.4)
+- **Archétype** : (d) Helm single-source sans values — le jour où une value est customisée,
+  migrer vers l'archétype (a) (`helm-values.yaml` + `$values` multi-source, cf. README racine).
 
 ## Règle GitOps
 
@@ -35,7 +38,7 @@ kubectl create secret tls wildcard-kalecgos-lan-tls \
   --cert=tls.crt --key=tls.key \
   --namespace=gateway --dry-run=client -o yaml \
 | kubeseal --cert pub-cert.pem --format yaml \
-> ../gateway/wildcard-kalecgos-lan-tls.sealed.yaml
+> <dossier-du-composant>/manifests/wildcard-kalecgos-lan-tls.sealed.yaml
 ```
 
 ## Backup / restauration de la clé

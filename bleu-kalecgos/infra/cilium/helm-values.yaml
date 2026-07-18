@@ -34,6 +34,6 @@ l2announcements:
 k8sClientRateLimit:
   qps: 10
   burst: 20
-# Gateway API — contrôleur Cilium (CRDs v1.4.1 posées via Application gateway-api-crds)
+# Gateway API — contrôleur Cilium (CRDs v1.4.1 posées via Application gateway-api)
 gatewayAPI:
   enabled: true
