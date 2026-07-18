@@ -1,16 +1,23 @@
-# cert-manager-config — bleu-kalecgos
+# cert-manager-config
 
-`ClusterIssuer` Let's Encrypt (DNS-01 Cloudflare) + `Certificate` wildcard. cert-manager remplit les
-Secret TLS `wildcard-*-tls` dans le namespace `gateway` (consommés par le `Gateway` Cilium `shared-gw`).
+## Rôle
 
-- **Issuer** : `letsencrypt-prod` (ACME prod, DNS-01).
-- **Certificats** : `*.wittner.tech`, `*.lan.wittner.tech`, `*.kalecgos.lan.wittner.tech`.
-- **Secret token** : `cloudflare-api-token` (ns `cert-manager`, clé `api-token`) — **SealedSecret**, jamais en clair.
+`ClusterIssuer` Let's Encrypt (DNS-01 Cloudflare) + `Certificate` wildcard. cert-manager remplit
+les Secret TLS `wildcard-*-tls` dans le namespace `gateway` (consommés par `shared-gw`,
+cf. [doc/reseau.md](../../../doc/reseau.md)).
+
+## Fichiers
+
+- `cert-manager-config.app.yaml` — Application (archétype (c), path → `manifests/`)
+- `manifests/` — ClusterIssuer `letsencrypt-prod`, Certificates wildcard
+  (`*.wittner.tech`, `*.lan.wittner.tech`, `*.kalecgos.lan.wittner.tech`),
+  SealedSecret `cloudflare-api-token` (ns `cert-manager`, clé `api-token`)
 
 ## Ajouter le token API Cloudflare (SealedSecret)
 
-> Règle GitOps : aucun secret en clair au cluster ni dans Git. Le token est chiffré par `kubeseal`
-> contre le contrôleur sealed-secrets ; seul le `SealedSecret` chiffré est committé.
+> Règle GitOps : aucun secret en clair au cluster ni dans Git
+> ([doc/regles-gitops.md](../../../doc/regles-gitops.md)). Le token est chiffré par `kubeseal` ;
+> seul le `SealedSecret` est committé.
 
 ### Pré-requis
 
@@ -45,7 +52,7 @@ kubeseal \
   --controller-name=sealed-secrets \
   --controller-namespace=sealed-secrets \
   --format yaml \
-  < bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml \
+  < /tmp/cloudflare-api-token.secret.yaml \
   > bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.sealed.yaml
 ```
 

@@ -1,36 +1,20 @@
-# test-nginx — bleu-kalecgos
+# test-nginx
 
 ## Rôle
 
 Composant **jetable de smoke-test** : valide bout à bout la stack après bootstrap/upgrade.
-Aucune donnée persistée volontairement — supprimable/reconstructible à tout moment.
-
-Trois tests dans le namespace `test-nginx` :
-- **nginx** (Deployment + Service) — cible pour tester une exposition HTTPRoute ;
-- **lvm-test** (PVC `openebs-lvm-thin` + pod busybox) — valide le provisionnement LVM ;
-- **cluster-example** (`Cluster` CNPG 1 instance) — valide l'opérateur CNPG + stockage.
-
-## Source & versions
-
-| Quoi | Valeur |
-|---|---|
-| Manifestes | locaux (`manifests/`) |
-| Namespace | `test-nginx` (porté par `manifests/namespace.yaml`) |
-| Archétype | (c) kustomize seul |
+Aucune donnée persistée — supprimable/reconstructible à tout moment. Trois tests (ns
+`test-nginx`) : **nginx** (exposition), **lvm-test** (PVC `openebs-lvm-thin`),
+**cluster-example** (`Cluster` CNPG).
 
 ## Fichiers
 
-- `test-nginx.app.yaml` — Application (path → `manifests/`)
+- `test-nginx.app.yaml` — Application (archétype (c), path → `manifests/`)
 - `manifests/kustomization.yaml` — force `namespace: test-nginx` sur toutes les ressources
 - `manifests/namespace.yaml`, `manifests/test-nginx.yaml`, `manifests/test-pvc.yaml`,
   `manifests/pgsql-test.yaml`
 
-## Dépendances & sync-wave
-
-Wave 0. Dépend de : `openebs` (PVC), `cnpg` (CRD Cluster), `gateway-api`/`cilium` si on ajoute
-une HTTPRoute de test.
-
-## Opérations courantes
+## Opérations
 
 - **Vérifier** : `kubectl -n test-nginx get pods,pvc,clusters.postgresql.cnpg.io` —
   tout `Running`/`Bound`/`Cluster in healthy state`.

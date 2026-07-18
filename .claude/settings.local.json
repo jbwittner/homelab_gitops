@@ -7,7 +7,14 @@
       "Bash(rtk read *)",
       "Bash(rtk ls *)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(rtk find *)"
+      "Bash(rtk find *)",
+      "Bash(git mv *)",
+      "Bash(rtk git *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(rtk kubectl *)",
+      "Bash(rtk wc *)"
     ]
   }
 }

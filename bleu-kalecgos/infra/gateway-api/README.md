@@ -1,41 +1,30 @@
-# gateway-api — bleu-kalecgos
+# gateway-api
 
 ## Rôle
 
 CRDs **Gateway API** (install upstream standard épinglé) + le `Gateway` partagé **`shared-gw`**
-du cluster. Toute exposition de service passe par un `HTTPRoute` rattaché à `shared-gw`.
-
-## Source & versions
-
-| Quoi | Valeur |
-|---|---|
-| Manifest upstream | `standard-install.yaml` v1.4.1 — kubernetes-sigs/gateway-api |
-| Compat | Cilium 1.19 → v1.4.1 (1.18 → v1.3.0) — bumper avec Cilium |
-| Namespace | `gateway` (porté par `manifests/namespace.yaml`) |
-| Archétype | (c) kustomize seul |
+du cluster. Toute exposition passe par un `HTTPRoute` rattaché à `shared-gw`
+(cf. [doc/reseau.md](../../../doc/reseau.md)).
 
 ## Fichiers
 
-- `gateway-api.app.yaml` — Application (path → `manifests/`)
-- `manifests/kustomization.yaml` — install upstream épinglé + namespace + gateway
+- `gateway-api.app.yaml` — Application (archétype (c), path → `manifests/`)
+- `manifests/kustomization.yaml` — install upstream **épinglé ici** + matrice de compat Cilium
 - `manifests/namespace.yaml` — ns `gateway`
-- `manifests/gateway.yaml` — `shared-gw`, classe `cilium`, 3 listeners HTTPS :443 :
-  `https-public` (`*.wittner.tech`), `https-internal` (`*.lan.wittner.tech`),
-  `https-internal-kalecgos` (`*.kalecgos.lan.wittner.tech`) — TLS `Terminate`,
+- `manifests/gateway.yaml` — `shared-gw`, classe `cilium`, listeners HTTPS :443
+  (`https-public`, `https-internal`, `https-internal-kalecgos`), TLS `Terminate`,
   secrets `wildcard-*-tls`
 
-## Dépendances & sync-wave
+## Contraintes
 
-Wave **-10** (le plus tôt : CRDs requises par toute HTTPRoute, dont celle d'ArgoCD).
-Dépend de : Cilium (la `GatewayClass cilium` est **auto-créée par le contrôleur** — ne pas la
-déclarer). Requis par : cert-manager-config (secrets TLS dans ns `gateway`), toute app exposée.
-`ServerSideApply=true` obligatoire (CRDs trop grosses).
+- Dépend de Cilium : la `GatewayClass cilium` est **auto-créée par le contrôleur** — ne pas la
+  déclarer.
+- `ServerSideApply=true` obligatoire (CRDs trop grosses).
+- Version des CRDs couplée à la version de Cilium — bumper ensemble selon la matrice dans
+  `manifests/kustomization.yaml`.
 
-## Opérations courantes
+## Opérations
 
-- **Exposer un service** : créer un `HTTPRoute` avec `parentRefs` → `shared-gw` (ns `gateway`)
-  + `sectionName` du listener adapté ; `group/kind/weight` **explicites** dans le backendRef
-  (sinon OutOfSync permanent — defaults CRD injectés côté live).
-- **Vérifier** : `kubectl -n gateway get gateway shared-gw` → `PROGRAMMED=True`,
-  adresse LB `192.168.1.80`.
+- **Exposer un service** : `HTTPRoute` → `shared-gw`, cf. [doc/reseau.md](../../../doc/reseau.md).
+- **Vérifier** : `kubectl -n gateway get gateway shared-gw` → `PROGRAMMED=True` + adresse LB.
 - **Upgrade** : bumper le tag dans `manifests/kustomization.yaml` selon la matrice Cilium.

@@ -1,20 +1,15 @@
-# Sealed Secrets — bleu-kalecgos
+# sealed-secrets
 
-Contrôleur [Bitnami sealed-secrets](https://github.com/bitnami/sealed-secrets) déployé via Helm
-(`sealed-secrets.app.yaml`, wave **-8** — très tôt : CRD + contrôleur avant tout SealedSecret).
-Ce dossier ne contient **aucun Secret en clair** : tout secret du cluster est un `SealedSecret`
-chiffré, committé dans Git, déchiffré par le contrôleur.
+## Rôle
 
-- **Namespace contrôleur** : `sealed-secrets`
-- **Nom contrôleur** : `sealed-secrets`
-- **Chart** : `sealed-secrets` 2.19.1 (app v0.38.4)
-- **Archétype** : (d) Helm single-source sans values — le jour où une value est customisée,
-  migrer vers l'archétype (a) (`helm-values.yaml` + `$values` multi-source, cf. README racine).
+Contrôleur [Bitnami sealed-secrets](https://github.com/bitnami/sealed-secrets) : déchiffre dans
+le cluster les `SealedSecret` committés dans Git. Seul canal autorisé pour les secrets —
+règle : [doc/regles-gitops.md](../../../doc/regles-gitops.md).
 
-## Règle GitOps
+## Fichiers
 
-> Aucune donnée (Secret, ConfigMap sensible, cert TLS) ne doit être poussée au cluster hors GitOps.
-> Pas de `kubectl create secret` impératif. Tout passe par un `SealedSecret` dans Git.
+- `sealed-secrets.app.yaml` — Application (archétype (d) : Helm sans values).
+  Contrôleur + namespace : `sealed-secrets`.
 
 ## Sceller un Secret
 
