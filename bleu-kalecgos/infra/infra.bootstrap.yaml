@@ -3,6 +3,10 @@ kind: Application
 metadata:
   name: bleu-kalecgos-infra
   namespace: argocd
+  labels:
+    app.kubernetes.io/name: bleu-kalecgos-infra
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: app-of-apps
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:

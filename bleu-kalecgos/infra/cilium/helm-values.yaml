@@ -1,4 +1,4 @@
-# values.yaml — source unique Cilium pour bleu-kalecgos
+# helm-values.yaml — source unique Cilium pour bleu-kalecgos
 ipam:
   mode: kubernetes
 kubeProxyReplacement: true

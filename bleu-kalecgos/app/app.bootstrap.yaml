@@ -3,10 +3,14 @@ kind: Application
 metadata:
   name: bleu-kalecgos-app
   namespace: argocd
+  labels:
+    app.kubernetes.io/name: bleu-kalecgos-app
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: app-of-apps
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  # App-of-apps de la partie APP de bleu-kalecgos : découvre tous les composants infra
+  # App-of-apps de la partie APP de bleu-kalecgos : découvre tous les composants app
   # (recurse + include '*.app.yaml' → matche app/<name>/<name>.app.yaml, PAS ce fichier
   # *.bootstrap.yaml qui a un suffixe différent).
   project: default

@@ -16,8 +16,12 @@ spec:
       chart: cilium
       targetRevision: 1.19.5
       helm:
+        # ⚠️ releaseName DOIT rester `cilium` : la release a été adoptée depuis le
+        # `helm install cilium` du bootstrap (Phase 3 du runbook). Le changer renommerait
+        # toutes les ressources Cilium et détruirait le CNI.
+        releaseName: cilium
         valueFiles:
-          - $values/bleu-kalecgos/infra/cilium/values.yaml
+          - $values/bleu-kalecgos/infra/cilium/helm-values.yaml
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values

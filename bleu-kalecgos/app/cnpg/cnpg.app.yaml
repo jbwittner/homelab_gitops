@@ -13,7 +13,7 @@ spec:
       targetRevision: 0.29.0
       helm:
         valueFiles:
-          - $values/bleu-kalecgos/app/cnpg/values.yaml
+          - $values/bleu-kalecgos/app/cnpg/helm-values.yaml
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
@@ -25,5 +25,5 @@ spec:
       selfHeal: true
       prune: true
     syncOptions:
-      - ServerSideApply=true
       - CreateNamespace=true
+      - ServerSideApply=true

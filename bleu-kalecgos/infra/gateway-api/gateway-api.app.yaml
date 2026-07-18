@@ -11,14 +11,14 @@ spec:
   project: default
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
-    targetRevision: HEAD
+    targetRevision: main
     path: bleu-kalecgos/infra/gateway-api
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
   syncPolicy:
     automated:
-      prune: true
       selfHeal: true
+      prune: true
     syncOptions:
       - ServerSideApply=true

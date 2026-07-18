@@ -5,6 +5,10 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-1"        # avant tout le reste
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: gitops
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
