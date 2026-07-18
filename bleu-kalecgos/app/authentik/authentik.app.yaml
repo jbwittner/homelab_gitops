@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: auth
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.goauthentik.io
+      chart: authentik
+      targetRevision: 2026.5.5
+      helm:
+        releaseName: authentik
+        valueFiles:
+          - $values/bleu-kalecgos/app/authentik/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    # Ressources annexes : namespace, Cluster CNPG, SealedSecret, HTTPRoute.
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: bleu-kalecgos/app/authentik/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: authentik
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
