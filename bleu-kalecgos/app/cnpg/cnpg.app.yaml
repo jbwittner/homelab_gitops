@@ -7,7 +7,8 @@ metadata:
     app.kubernetes.io/name: cnpg
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: database
-  # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   sources:

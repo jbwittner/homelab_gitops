@@ -9,7 +9,8 @@ metadata:
     app.kubernetes.io/name: gateway-api
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: network
-  # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:

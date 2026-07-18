@@ -7,7 +7,8 @@ metadata:
     app.kubernetes.io/name: test-nginx
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: test
-  # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
