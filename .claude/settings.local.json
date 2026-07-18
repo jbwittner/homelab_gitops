@@ -14,7 +14,12 @@
       "Bash(git push *)",
       "Bash(git add *)",
       "Bash(rtk kubectl *)",
-      "Bash(rtk wc *)"
+      "Bash(rtk wc *)",
+      "Bash(kubectl -n gateway get gateway shared-gw -o wide)",
+      "Bash(kubectl -n gateway get certificate)",
+      "Bash(git check-ignore *)",
+      "Bash(kubectl -n kube-system get cm cilium-config -o jsonpath='{.data.enable-gateway-api}')",
+      "Bash(kubectl -n argocd get httproute argocd-server -o jsonpath='{.status.parents[0].conditions[?\\(@.type==\"Accepted\"\\)].status}')"
     ]
   }
 }
