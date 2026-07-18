@@ -17,7 +17,7 @@ spec:
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
-    path: bleu-kalecgos/infra/cert-manager-config
+    path: bleu-kalecgos/infra/cert-manager-config/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager

@@ -45,8 +45,8 @@ kubeseal \
   --controller-name=sealed-secrets \
   --controller-namespace=sealed-secrets \
   --format yaml \
-  < bleu-kalecgos/infra/cert-manager-config/cloudflare-api-token.secret.yaml \
-  > bleu-kalecgos/infra/cert-manager-config/cloudflare-api-token.sealed.yaml
+  < bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml \
+  > bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.sealed.yaml
 ```
 
 **3.** Supprimer le fichier en clair :
@@ -64,9 +64,9 @@ Le fichier produit (`cloudflare-api-token.sealed.yaml`) :
 Ajouter le fichier aux resources kustomize, committer, pousser :
 
 ```bash
-# kustomization.yaml — décommenter / ajouter :
+# manifests/kustomization.yaml — décommenter / ajouter :
 #   - cloudflare-api-token.sealed.yaml
-git add bleu-kalecgos/infra/cert-manager-config/cloudflare-api-token.sealed.yaml
+git add bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.sealed.yaml
 git commit -m "feat(cert-manager): add sealed Cloudflare API token"
 git push
 ```

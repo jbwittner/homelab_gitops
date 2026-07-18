@@ -182,12 +182,12 @@ cilium status --wait
 ## Phase 4 — ArgoCD (kustomize épinglé) + app-of-apps
 
 > [!important] Pas de Helm ici
-> ArgoCD s'installe via le **dossier auto-contenu** `bleu-kalecgos/infra/argocd/` : kustomize avec install upstream **épinglé** (`raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.5/manifests/install.yaml`) + `namespace.yaml` + patchs `argocd-cmd-params-cm` (`server.insecure: "true"`) / `argocd-cm` + la HTTPRoute UI. Ce **même dossier** sert à l'apply manuel du bootstrap ET au self-management (`argocd.app.yaml`, wave -1, `path: bleu-kalecgos/infra/argocd`) → convergence garantie.
+> ArgoCD s'installe via le **dossier auto-contenu** `bleu-kalecgos/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (`raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.5/manifests/install.yaml`) + `namespace.yaml` + patchs `argocd-cmd-params-cm` (`server.insecure: "true"`) / `argocd-cm` + la HTTPRoute UI. Ce **même dossier** sert à l'apply manuel du bootstrap ET au self-management (`argocd.app.yaml`, wave -1, `path: bleu-kalecgos/infra/argocd/manifests`) → convergence garantie.
 
 ### 1. Installer ArgoCD (impératif, une fois — le seul geste manuel du GitOps)
 
 ```bash
-kubectl apply -k bleu-kalecgos/infra/argocd --server-side --force-conflicts
+kubectl apply -k bleu-kalecgos/infra/argocd/manifests --server-side --force-conflicts
 ```
 
 > [!warning] `--server-side --force-conflicts` obligatoire
