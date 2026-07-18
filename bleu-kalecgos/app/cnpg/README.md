@@ -1,0 +1,1 @@
+https://github.com/cloudnative-pg/charts/tree/main/charts/cloudnative-pg

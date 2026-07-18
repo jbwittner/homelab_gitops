@@ -1,8 +1,1 @@
-
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-# Ordre déclaratif via sync-waves de ressource (pas via l'ordre de cette liste) :
-#   namespace (-1) → Job VG (0) → StorageClass (1).
-resources:
-  - https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.0.yaml
+replicaCount: 1
