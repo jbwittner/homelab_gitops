@@ -20,7 +20,14 @@
       "Bash(git check-ignore *)",
       "Bash(kubectl -n kube-system get cm cilium-config -o jsonpath='{.data.enable-gateway-api}')",
       "Bash(kubectl -n argocd get httproute argocd-server -o jsonpath='{.status.parents[0].conditions[?\\(@.type==\"Accepted\"\\)].status}')",
-      "Bash(rtk helm *)"
+      "Bash(rtk helm *)",
+      "Bash(kubectl -n gateway get gateway shared-gw)",
+      "Bash(kubectl -n authentik get pods,svc,cluster)",
+      "Bash(kubectl -n authentik get httproute authentik-server -o jsonpath='{.status.parents[*].conditions[*]}')",
+      "Bash(rtk curl *)",
+      "Bash(dig +short authentik.wittner.tech)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(rtk proxy *)"
     ]
   }
 }
