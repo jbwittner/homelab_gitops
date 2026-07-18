@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cnpg-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"       # après cert-manager (-5) : CRDs Issuer/Certificate présentes
+  labels:
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # ClusterIssuer Let's Encrypt (DNS-01 Cloudflare) + Certificates wildcard + SealedSecret token.
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: bleu-kalecgos/app/cnpg
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
