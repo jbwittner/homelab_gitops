@@ -7,4 +7,4 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - storageclass.yaml
-#  - vg-bootstrap-job.yaml
+  - vg-bootstrap-job.yaml
