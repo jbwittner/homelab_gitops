@@ -33,9 +33,9 @@ spec:
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
-    # - repoURL: https://github.com/jbwittner/homelab_gitops.git
-    #   targetRevision: main
-    #   path: bleu-kalecgos/infra/openebs/manifests
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: bleu-kalecgos/infra/openebs/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: openebs
