@@ -1,17 +1,21 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: gateway-api-crds
+  name: gateway-api
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-10"
+  labels:
+    app.kubernetes.io/name: gateway-api
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: network
   # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
 spec:
   project: default
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
-    path: bleu-kalecgos/infra/gateway-api
+    path: bleu-kalecgos/infra/gateway-api/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system

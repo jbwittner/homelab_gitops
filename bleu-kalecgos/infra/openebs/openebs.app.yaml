@@ -1,10 +1,10 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: openebs-lvm
+  name: openebs
   namespace: argocd
   labels:
-    app.kubernetes.io/name: openebs-lvm
+    app.kubernetes.io/name: openebs
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: storage
   # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)

@@ -1,21 +1,25 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: gw-test
+  name: test-nginx
   namespace: argocd
+  labels:
+    app.kubernetes.io/name: test-nginx
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: test
   # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
 spec:
   project: default
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
-    path: bleu-kalecgos/app/test-nginx
+    path: bleu-kalecgos/app/test-nginx/manifests
   destination:
     server: https://kubernetes.default.svc
-    namespace: gw-test
+    namespace: test-nginx
   syncPolicy:
     automated:
       selfHeal: true
       prune: true
     syncOptions:
-      - CreateNamespace=true
+      - ServerSideApply=true

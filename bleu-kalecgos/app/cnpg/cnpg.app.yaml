@@ -1,8 +1,12 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cnpg-app
+  name: cnpg
   namespace: argocd
+  labels:
+    app.kubernetes.io/name: cnpg
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: database
   # finalizer retiré temporairement — renommage d'Application en cours (prune non-cascadant)
 spec:
   project: default
@@ -11,6 +15,7 @@ spec:
       chart: cloudnative-pg
       targetRevision: 0.29.0
       helm:
+        releaseName: cnpg
         valueFiles:
           - $values/bleu-kalecgos/app/cnpg/helm-values.yaml
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
