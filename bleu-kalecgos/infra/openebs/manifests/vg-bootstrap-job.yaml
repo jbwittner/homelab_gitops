@@ -1,31 +1,35 @@
 # Bootstrap du Volume Group `lvmvg` sur la partition brute `r-lvmpv`.
 #
-# Pourquoi un Job et pas le driver : LocalPV-LVM ne provisionne PAS le VG, il l'exige préexistant.
-# Talos n'a pas de lvm2 userspace sur l'hôte → on crée PV+VG depuis un conteneur privilégié qui
-# embarque lvm2 (MÊME image que le node-plugin : versions lvm2/device-mapper strictement alignées,
-# cf. note quickstart « all nodes must run the same LVM2 & dm-snapshot »).
+# Pourquoi un Job : LocalPV-LVM ne provisionne PAS le VG, il l'exige préexistant. Talos n'a pas de
+# lvm2 userspace sur l'hôte → on crée PV+VG depuis un conteneur privilégié qui embarque lvm2 (MÊME
+# image que le node-plugin : versions lvm2/device-mapper alignées).
 #
-# Ordonnancement (sync-waves de ressource, tranchés par le runbook) :
-#   namespace privileged (-1) → CE Job (0, ressource NORMALE, pas un hook) → StorageClass (1).
-#   Ressource normale à la wave 0 → s'exécute forcément APRÈS le namespace labellisé (-1), donc
-#   admis par PSA. Un PreSync hook, lui, tournerait AVANT la pose du label → rejet baseline (le bug).
-#   ArgoCD attend que le Job soit Healthy (= Complete) avant de passer la StorageClass en wave 1.
+# Pourquoi un HOOK `Sync` (et pas une ressource normale) : un Job a des champs immuables
+# (spec.selector auto-généré, spec.template). Une ressource normale finit toujours par déclencher un
+# apply/replace qui échoue sur ces champs. Un hook `Sync` avec `hook-delete-policy: BeforeHookCreation`
+# est RECRÉÉ à neuf à chaque sync (jamais mis à jour) → plus de conflit d'immuabilité, et le script
+# est repris automatiquement s'il change.
 #
-# État réel sur disque, hors GitOps réconciliable (analogue à l'exception AdGuard) : le VG vit dans
-# les métadonnées LVM du device, pas dans Git. Le Job est IDEMPOTENT (skip si PV/VG déjà là) → un
-# re-sync ou un selfHeal ne casse rien. Spec de Job immuable → `Replace=true` pour qu'ArgoCD
-# recrée le Job au lieu d'échouer à le patcher si le script change un jour.
+# Pourquoi `Sync` et pas `PreSync` : un PreSync tournerait AVANT la pose du label `privileged` sur le
+# namespace (wave -1) → rejet PSA baseline. Un hook `Sync` est ordonné AVEC les ressources normales
+# par sync-wave dans la phase Sync :
+#     namespace privileged (-1) → CE hook (0) → StorageClass (1).
+# ArgoCD attend que le hook soit Complete avant de passer la StorageClass en wave 1.
+#
+# État réel sur disque, hors GitOps (analogue AdGuard). Script IDEMPOTENT (skip si PV/VG déjà là) →
+# recréation à chaque sync sans danger. `BeforeHookCreation` garde le dernier run inspectable
+# (kubectl -n openebs logs job/lvmvg-bootstrap) jusqu'au sync suivant.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: lvmvg-bootstrap
   namespace: openebs
   annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     argocd.argoproj.io/sync-wave: "0"
-    argocd.argoproj.io/sync-options: Replace=true
 spec:
   backoffLimit: 4
-  ttlSecondsAfterFinished: null   # NE PAS auto-supprimer : ArgoCD doit voir le Job Complete (sinon flap OutOfSync)
   template:
     metadata:
       labels:
@@ -33,8 +37,8 @@ spec:
         app.kubernetes.io/component: vg-bootstrap
     spec:
       restartPolicy: OnFailure
-      # Pas de tolérations : le node-plugin (DaemonSet, tolerations vides) tourne déjà sur le
-      # control-plane mono-nœud → le nœud est schedulable, le Job aussi.
+      # Pas de tolérations : le node-plugin (DaemonSet) tourne déjà sur le control-plane mono-nœud
+      # → le nœud est schedulable, le Job aussi.
       containers:
         - name: vg-bootstrap
           image: docker.io/openebs/lvm-driver:1.9.1
