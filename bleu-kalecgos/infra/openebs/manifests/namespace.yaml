@@ -1,0 +1,14 @@
+
+# Namespace du driver, labellisé `privileged` AVANT tout pod du driver (sync-wave -1).
+# Talos applique PodSecurity `baseline` cluster-wide (seul kube-system exempté). Le DaemonSet
+# `lvm-node` et le Job de bootstrap du VG tournent en `privileged` (accès /dev, device-mapper) →
+# sans ce label ils sont rejetés par l'admission `baseline`. Label PSA natif, chirurgical,
+# versionné, visible sur l'objet Namespace — pas de patch machineconfig Talos.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openebs
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

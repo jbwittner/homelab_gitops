@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openebs-lvm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: openebs-lvm
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: storage
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # OpenEBS via le chart PARAPLUIE `openebs` (chemin recommandé upstream), dont on n'active QUE le
+  # moteur LVM (LocalPV-LVM). Le parapluie 4.5.1 embarque lvm-localpv 1.9.1 comme sous-chart.
+  # Pattern multi-source calqué sur cilium : chart Helm + `$values` (helm-values.yaml) + `manifests/`.
+  #   - helm-values.yaml : coupe tous les autres moteurs (zfs/hostpath/mayastor/rawfile) + loki/alloy
+  #     + preUpgradeHook ; ne garde que LVM. Values LVM re-nichées sous `lvm-localpv:`.
+  #   - L'image `openebs/lvm-driver` embarque lvm2 → commandes LVM DANS le conteneur (node-plugin
+  #     monte /dev de l'hôte, privileged) : aucun lvm2 userspace requis côté Talos immuable.
+  #   - `manifests/` porte l'ordonnancement irréductible via sync-waves de RESSOURCE :
+  #       namespace (privileged, -1) → Job bootstrap VG (0) → StorageClass thin (1).
+  #   - Pas de CreateNamespace : le namespace est créé ET labellisé `privileged` par
+  #     manifests/namespace.yaml (sinon le DaemonSet + le Job privileged sont rejetés par PSA baseline).
+  sources:
+    - repoURL: https://openebs.github.io/openebs
+      chart: openebs
+      targetRevision: 4.5.1
+      helm:
+        releaseName: openebs
+        valueFiles:
+          - $values/bleu-kalecgos/infra/openebs/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    # - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    #   targetRevision: main
+    #   path: bleu-kalecgos/infra/openebs/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openebs
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true       # CRDs LVMVolume/LVMSnapshot + VolumeSnapshot (annotations volumineuses)

@@ -1,0 +1,44 @@
+# helm-values — chart PARAPLUIE openebs 4.5.1 (on n'active QUE le moteur LVM)
+#
+# Le parapluie active PAR DÉFAUT : lvm, zfs, hostpath, mayastor, loki, alloy, preUpgradeHook.
+# On coupe tout sauf LVM → socle minimal, une seule raison d'être pour ce composant.
+
+# --- Sélection des moteurs : LVM seul ---
+engines:
+  local:
+    lvm:
+      enabled: true          # notre moteur
+    zfs:
+      enabled: false
+    hostpath:
+      enabled: false         # sinon crée les SC par défaut openebs-hostpath/-device
+    rawfile:
+      enabled: false
+  replicated:
+    mayastor:
+      enabled: false         # lourd (io-engine DaemonSet, etcd, CRDs) — hors périmètre
+
+# --- Observabilité empaquetée dans le parapluie : hors socle ---
+loki:
+  enabled: false
+alloy:
+  enabled: false
+
+# --- Hook Helm pre-upgrade (→ PreSync ArgoCD à chaque sync) : logique surtout Mayastor ---
+# Coupé : mayastor off + targetRevision épinglé → pas de garde-fou d'upgrade utile ici, et ça
+# évite un Job PreSync récurrent. À réactiver si un jour on veut la validation de bump du parapluie.
+preUpgradeHook:
+  enabled: false
+
+# --- Overrides du sous-chart LVM (values re-nichées sous `lvm-localpv:`) ---
+lvm-localpv:
+  # Télémétrie anonyme (Google Analytics) — coupée.
+  analytics:
+    enabled: false
+  # Mono-nœud.
+  lvmController:
+    replicas: 1
+  # kubeletDir : défaut sous-chart = /var/lib/kubelet/ == défaut Talos → AUCUN override.
+  # crds : NE PAS toucher `lvm-localpv.crds`. Les CRDs LVM sont posées par le sous-chart lvm ;
+  #        les CRDs CSI VolumeSnapshot sont déléguées au sous-chart top-level `openebs-crds`
+  #        (défaut lvm-localpv.crds.csi.volumeSnapshots.enabled=false pour éviter le doublon).

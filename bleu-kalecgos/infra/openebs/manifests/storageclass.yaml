@@ -1,0 +1,22 @@
+# StorageClass thin — provisionnée en DERNIER (wave 1), une fois le VG créé et le driver Healthy.
+#
+# thinProvision "yes" : le driver crée automatiquement un thin-pool dans `lvmvg` à la 1re demande,
+# puis y taille des thin-LV → sur-allocation possible (surveiller le remplissage réel du pool).
+# WaitForFirstConsumer : le PV n'est créé qu'une fois le pod schedulé → indispensable pour du
+# stockage local (le volume atterrit sur le bon nœud). Mono-nœud aujourd'hui, correct demain.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-lvm-thin
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    # Pour en faire la SC par défaut du cluster, décommenter :
+    # storageclass.kubernetes.io/is-default-class: "true"
+provisioner: local.csi.openebs.io
+parameters:
+  storage: "lvm"
+  volgroup: "lvmvg"
+  thinProvision: "yes"
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
