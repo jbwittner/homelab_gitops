@@ -13,7 +13,8 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - kind: Secret
+          - group: ""
+            kind: Secret
             name: wildcard-public-tls
       allowedRoutes:
         namespaces:
@@ -25,7 +26,8 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - kind: Secret
+          - group: ""
+            kind: Secret
             name: wildcard-lan-tls
       allowedRoutes:
         namespaces:
@@ -37,7 +39,8 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - kind: Secret
+          - group: ""
+            kind: Secret
             name: wildcard-kalecgos-lan-tls
       allowedRoutes:
         namespaces:
