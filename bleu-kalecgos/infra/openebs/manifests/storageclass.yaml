@@ -16,7 +16,3 @@ provisioner: local.csi.openebs.io
 parameters:
   storage: "lvm"
   volgroup: "lvmvg"
-  thinProvision: "yes"
-allowVolumeExpansion: true
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
