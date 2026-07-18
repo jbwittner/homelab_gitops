@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lvm-test
+  namespace: default
+spec:
+  storageClassName: openebs-lvm-thin
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lvm-test
+  namespace: default
+spec:
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sh", "-c", "echo ok > /data/test && sleep 3600"]
+      volumeMounts:
+        - { name: vol, mountPath: /data }
+  volumes:
+    - name: vol
+      persistentVolumeClaim:
+        claimName: lvm-test
