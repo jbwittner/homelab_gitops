@@ -9,3 +9,17 @@ data:
   url: https://argocd.kalecgos.lan.wittner.tech
   # Enables application status badge feature
   statusbadge.enabled: "true"
+  # SSO OIDC via authentik. clientSecret référence la SealedSecret argocd-oidc
+  # (clé client-secret), pas argocd-secret managé par Argo. Le provider/application
+  # côté authentik est géré en Terraform (autre repo) — contrat : clientID=argocd,
+  # issuer + scopes ci-dessous doivent matcher.
+  oidc.config: |
+    name: Authentik
+    issuer: https://authentik.wittner.tech/application/o/argocd/
+    clientID: argocd
+    clientSecret: $argocd-oidc:client-secret
+    requestedScopes:
+      - openid
+      - profile
+      - email
+      - groups

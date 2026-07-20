@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+data:
+  # Défaut : lecture seule. Le groupe authentik "ArgoCD Admins" (claim groups)
+  # est mappé sur role:admin. Compte local admin conservé en break-glass.
+  policy.default: role:readonly
+  scopes: '[groups]'
+  policy.csv: |
+    g, ArgoCD Admins, role:admin
