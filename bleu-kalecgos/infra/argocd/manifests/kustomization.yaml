@@ -12,7 +12,7 @@ resources:
   - namespace.yaml
   - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.5/manifests/install.yaml
   - argocd-httproute.yaml
-  - argocd-oidc.sealed.yaml — à ajouter APRÈS scellement du client-secret (cf. README §Opérations).
+  - argocd-oidc.sealed.yaml 
   # Référencer un fichier inexistant casse `kustomize build` → app self-managed en erreur.
 patches:
   - path: argocd-cmd-params-cm.yaml
