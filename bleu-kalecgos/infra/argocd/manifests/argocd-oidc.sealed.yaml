@@ -11,4 +11,8 @@ spec:
     metadata:
       name: argocd-oidc
       namespace: argocd
+      labels:
+        # OBLIGATOIRE : sans ce label, ArgoCD ignore le secret référencé par
+        # $argocd-oidc:client-secret → client_secret vide → invalid_client.
+        app.kubernetes.io/part-of: argocd
     type: Opaque
