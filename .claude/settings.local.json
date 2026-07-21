@@ -27,7 +27,9 @@
       "Bash(rtk curl *)",
       "Bash(dig +short authentik.wittner.tech)",
       "Bash(echo \"exit=$?\")",
-      "Bash(rtk proxy *)"
+      "Bash(rtk proxy *)",
+      "Bash(helm template *)",
+      "Read(//tmp/**)"
     ]
   }
 }

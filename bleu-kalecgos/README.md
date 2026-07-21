@@ -17,4 +17,5 @@ Cluster actif — Talos mono-nœud `vert-eranikus`, piloté par ArgoCD en app-of
 
 - [authentik](app/authentik/README.md) — Identity Provider SSO (OIDC, SAML, LDAP)
 - [cnpg](app/cnpg/README.md) — opérateur CloudNativePG
+- [kube-prometheus-stack](app/kube-prometheus-stack/README.md) — observabilité (Prometheus/Alertmanager/Grafana), Grafana en SSO authentik
 - [test-nginx](app/test-nginx/README.md) — smoke-tests jetables

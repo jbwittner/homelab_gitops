@@ -1,0 +1,67 @@
+# helm-values — kube-prometheus-stack (Prometheus + Alertmanager + Grafana + operator + exporters)
+
+# --- Grafana : SSO Authentik (OIDC) + login local conservé ---
+grafana:
+  # client-secret OIDC injecté en env → Grafana surcharge automatiquement
+  # [auth.generic_oauth] client_secret. Jamais écrit en clair dans grafana.ini.
+  envValueFrom:
+    GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+      secretKeyRef:
+        name: grafana-oidc
+        key: client-secret
+  # Compte admin local (break-glass) depuis SealedSecret. Le formulaire login reste
+  # actif : on ne met JAMAIS disable_login_form: true.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  grafana.ini:
+    server:
+      root_url: https://grafana.kalecgos.lan.wittner.tech
+    auth.generic_oauth:
+      enabled: true
+      name: Authentik
+      client_id: grafana
+      scopes: "openid profile email groups"
+      auth_url: https://authentik.wittner.tech/application/o/authorize/
+      token_url: https://authentik.wittner.tech/application/o/token/
+      api_url: https://authentik.wittner.tech/application/o/userinfo/
+      # Mapping groupe authentik → rôle Grafana via le claim `groups` (défaut Viewer).
+      role_attribute_path: "contains(groups[*], 'Grafana Admins') && 'Admin' || contains(groups[*], 'Grafana Viewers') && 'Viewer' || 'Viewer'"
+      role_attribute_strict: false
+  persistence:
+    enabled: true
+    size: 5Gi            # StorageClass par défaut du cluster = openebs-lvm-thin
+
+# --- Prometheus : rétention + PVC (nœud unique Talos, dimensionnement raisonnable) ---
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 20Gi
+
+# --- Alertmanager : PVC ---
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 2Gi
+
+# --- Talos mono-nœud : composants control-plane non scrapables par défaut (bind
+#     addresses / accès restreints) → désactivés pour éviter des targets "down"
+#     permanentes. À réactiver avec les endpoints Talos adéquats si besoin.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
