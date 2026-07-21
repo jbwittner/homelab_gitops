@@ -6,13 +6,11 @@ metadata:
   namespace: argocd
 spec:
   encryptedData:
-    client-secret: AgBkA6EQlM/f3J4AAUiOZPibPzv2+CMl9tk3cwXgehdIP+qxUhdDaL4hNz9qSKTNO/+e+BJgOSc7xrHXL/c3PIsPGT2BDTIi/FN+E/vvZVAUkCuqMefktWTXhkFuy7cyudO4Fw7rIauvQiyJkWLjiWUumw7tZeaDScRkzCYyYpRGuGccjKqgjVZvwjF+04I2QbwGTrx2mcvr78ql+I+U1A6Qy8v/luFtIRtaavPvra9GG73P5lf1R0tJwKwH3AxSC4w3kRXcZSzB/ZO9bPpUtiKN+mxAoueCuvO6RJMEoSco5aCvnWaRbf8zETw0iJ+lzGemD76LNmDo0/Yss9X4qREoheRScouqcItAHwuvsqTJlzpmceNBNQPE1EEhEynqmq9tIuwmu8BF2f+gr2tkvRZypSHBe/ZS9sCpvFJMCUExXa6CfwSR9ezNQBCQnv55wGw04VtiqSHAv4FUORy9Xx1UhcM7eialvrE+I7dthQQI0qrk9GxqTqtEyJ+ISQQHkgCF01CzBn2UjpITM0L+t9ACobGsq1URjzUI+4GbJxiZOqgjQBj/lLA2iW7Ssen8zZT5f0PGTxmIVrXmYMT5YStAtuvCSIBd09IziJpa4DNFIS65odiCr57rmJ0z88SSpcU/PvmuEgA+FoQ/vCJo0Kv8PcANvPp8RadEfoAijOAbwqKnPTOgo/1YgaE9D3WPgZ2rrrLFGF+WmBpbLp46Vrn2/5Jsx5kH18DR09fGa4n3dg7wTLc2U9HtFsEvxYuUDDo=
+    client-secret: AgAus2itVrqAwESdjP/IXoh5AEi3gHahbgKv+9C0mwvk2KbOkNg4rnWnFvUSWGFT0IfC9gVJ+Bnk0ywiDJFYRWRDKFo+IFyYkoKKxWOue2nQ78FNLoNmXQ+mBoYZ/SrBrFCVLwSOyRB3EcpXgi7ghVqqt9jKO9z3T+4jcx95tzst8JZKIfqNgwQKF+ofHd9fJwNpuflKk0DaiUVA+6MNs9Iq8TQr+A/vmLbPAD1Iw+pcN0+c+JpSr5Z5++YgwuXWEa+jf9aE91uAkaqZ7E3vy0/5ai0IhxMG1/6UUGhCyoMudCnxQ1q/FUCD+dRiO2C71T4/0N+t9+zFoM05T4SY7LSYQauG0CTLSHoN0ubD24MLT1126Ur3XpnQbQC7XxBLeaDDRIPUajHDE7tsUj2HJziu5PMhYZBsL6vT4CNFsHtwC5IYrr9UI+e5wtMjtA3lVyOEhMsMjqq5KQODD2EbOplxR1A2GWRjcpYaZg2fzkn8vHLn8lmOb+lH6bijTZd5f3CckvUXkBi6RLTcDGj3bdF10luM66tbxAA6YsFU0/fmtxwYw1f8f1YYqZrLY9THWcNy39MwiQuIpRkeKn9VoJdrQQuCmrfsZkJCtRhZN4IemYXlz7ozYfYE0Wb72qGkznifz34xA6T+u1qE7MAkphSYHyaAWkdnmLFzLjA+P1IIycrEKmMsiKbOyJ24oaqciPMJxQsEhfJUyHeQizFW87bLiweIpniPOH0shB+pLFoEhAIG6VEvm8/tWzZdw3j9G3k=
   template:
     metadata:
+      labels:
+        app.kubernetes.io/part-of: argocd
       name: argocd-oidc
       namespace: argocd
-      labels:
-        # OBLIGATOIRE : sans ce label, ArgoCD ignore le secret référencé par
-        # $argocd-oidc:client-secret → client_secret vide → invalid_client.
-        app.kubernetes.io/part-of: argocd
     type: Opaque
