@@ -8,3 +8,5 @@ resources:
   - namespace.yaml
   - storageclass.yaml
   - vg-bootstrap-job.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml

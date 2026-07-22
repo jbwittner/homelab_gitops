@@ -1,0 +1,64 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: openebs-lvm-alerts
+  namespace: openebs
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: openebs-lvm.rules
+      rules:
+        - alert: OpenEBSLvmVgSpaceWarning
+          expr: (1 - lvm_vg_free_size_bytes / lvm_vg_total_size_bytes) * 100 > 85
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "VG {{ $labels.name }} rempli à {{ $value | printf \"%.1f\" }}%"
+            description: "Le VolumeGroup {{ $labels.name }} dépasse 85% d'occupation."
+
+        - alert: OpenEBSLvmVgSpaceCritical
+          expr: (1 - lvm_vg_free_size_bytes / lvm_vg_total_size_bytes) * 100 > 95
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "VG {{ $labels.name }} critique : {{ $value | printf \"%.1f\" }}%"
+            description: "Plus aucune marge pour provisionner de nouveaux PVC."
+
+        - alert: OpenEBSLvmVgMissingPv
+          expr: lvm_vg_missing_pv_count > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "VG {{ $labels.name }} : PV manquant"
+            description: "{{ $value }} PV absent(s) — volumes potentiellement inaccessibles."
+
+        - alert: OpenEBSLvmVgMetadataLow
+          expr: (1 - lvm_vg_mda_free_size_bytes / lvm_vg_mda_total_size_bytes) * 100 > 80
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Métadonnées VG {{ $labels.name }} à {{ $value | printf \"%.1f\" }}%"
+            description: "Zone de métadonnées LVM en voie de saturation — risque de blocage des opérations LVM."
+
+        - alert: OpenEBSLvmVolumeUnhealthy
+          expr: lvm_lv_health_status > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "LV {{ $labels.name }} en état dégradé"
+            description: "Statut santé non nominal sur {{ $labels.dm_path }} (VG {{ $labels.vg }})."
+
+        - alert: OpenEBSLvmExporterDown
+          expr: up{job="openebs-lvm-localpv-node-service"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Exporter OpenEBS LVM injoignable sur {{ $labels.instance }}"
+            description: "Plus de métriques LVM — la supervision du stockage est aveugle."
