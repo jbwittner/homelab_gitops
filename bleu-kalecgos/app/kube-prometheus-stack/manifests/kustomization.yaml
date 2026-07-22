@@ -6,3 +6,4 @@ resources:
   - grafana-httproute.yaml
   - grafana-oidc.sealed.yaml
   - grafana-admin.sealed.yaml
+  - dashboards-system.yaml
