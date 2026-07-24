@@ -2,8 +2,11 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
   "ignorePaths": [
-      "archive/**",
-      "docs/**",
-      "examples/**"
-  ]
+    "archive/**",
+    "docs/**",
+    "examples/**"
+  ],
+  "argocd": {
+    "managerFilePatterns": ["/\\.app\\.yaml$/"]
+  }
 }
