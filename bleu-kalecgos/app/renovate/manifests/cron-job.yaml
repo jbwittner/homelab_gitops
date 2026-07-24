@@ -1,10 +1,13 @@
-
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: renovate
 spec:
-  schedule: "0 1 * * 6" #At 01:00 on Saturday
+  schedule: "0 1 * * 6"
+  timeZone: "Europe/Paris"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 300
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
@@ -12,12 +15,9 @@ spec:
         spec:
           containers:
             - name: renovate
-              # Update this to the latest available and then enable Renovate on
-              # the manifest
               image: renovate/renovate:43.272.0
               args:
                 - jbwittner/homelab_gitops
-              # Environment Variables
               env:
                 - name: LOG_LEVEL
                   value: info
@@ -28,4 +28,10 @@ spec:
               envFrom:
                 - secretRef:
                     name: renovate-env
+              resources:
+                requests:
+                  memory: 512Mi
+                  cpu: 100m
+                limits:
+                  memory: 1Gi
           restartPolicy: Never
