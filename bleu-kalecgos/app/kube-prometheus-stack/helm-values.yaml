@@ -2,6 +2,10 @@
 
 # --- Grafana : SSO Authentik (OIDC) + login local conservé ---
 grafana:
+  # PVC RWO node-local (openebs-lvm-thin) → Recreate force l'arrêt de l'ancien pod
+  # avant le nouveau, sinon double-mount RWO au rollout ("device already mounted").
+  deploymentStrategy:
+    type: Recreate
   # client-secret OIDC injecté en env → Grafana surcharge automatiquement
   # [auth.generic_oauth] client_secret. Jamais écrit en clair dans grafana.ini.
   envValueFrom:
