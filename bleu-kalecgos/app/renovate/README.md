@@ -39,6 +39,31 @@ rm bleu-kalecgos/app/renovate/manifests/renovate.secret.yaml
 
 Rotation : régénérer le PAT côté GitHub, re-renseigner le template, re-sceller (étape 2).
 
+### Droits du token
+
+Doc source : [Renovate — platform/github](https://docs.renovatebot.com/modules/platform/github/).
+Le token actuel est un **fine-grained PAT** (`github_pat_…`).
+
+**Fine-grained PAT** — permissions à cocher :
+
+| Permission        | Niveau         | Scope                  |
+| ----------------- | -------------- | ---------------------- |
+| Metadata          | Read-only      | Repository (implicite) |
+| Contents          | Read and write | Repository             |
+| Commit statuses   | Read and write | Repository             |
+| Issues            | Read and write | Repository             |
+| Pull requests     | Read and write | Repository             |
+| Workflows         | Read and write | Repository             |
+| Dependabot alerts | Read-only      | Repository             |
+| Members           | Read-only      | Organization (si org)  |
+
+**Classic PAT** (alternative) : scope `repo` + `workflow` (ce dernier requis pour bumper les
+fichiers GitHub Actions).
+
+**GitHub App** (self-hosted, cf. [doc](https://docs.renovatebot.com/modules/platform/github/#running-as-a-github-app)) :
+Checks, Commit statuses, Contents, Issues, Pull requests, Workflows en `read+write` ;
+Administration, Dependabot alerts, Members, Metadata en `read`.
+
 ### Cibles & configuration
 
 Dépôts scannés = `args` du conteneur (`RENOVATE_AUTODISCOVER: "false"` → liste explicite).
