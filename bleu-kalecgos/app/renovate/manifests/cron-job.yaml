@@ -4,7 +4,7 @@ kind: CronJob
 metadata:
   name: renovate
 spec:
-  schedule: '@hourly'
+  schedule: "0 1 * * 6" #At 01:00 on Saturday
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
