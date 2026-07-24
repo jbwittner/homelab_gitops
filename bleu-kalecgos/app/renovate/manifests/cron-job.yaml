@@ -16,7 +16,7 @@ spec:
               # the manifest
               image: renovate/renovate:43.272.0
               args:
-                - user/repo
+                - jbwittner/homelab_gitops
               # Environment Variables
               env:
                 - name: LOG_LEVEL
