@@ -30,7 +30,8 @@
       "Bash(rtk proxy *)",
       "Bash(helm template *)",
       "Read(//tmp/**)",
-      "WebFetch(domain:docs.renovatebot.com)"
+      "WebFetch(domain:docs.renovatebot.com)",
+      "Bash(rtk rg *)"
     ]
   }
 }

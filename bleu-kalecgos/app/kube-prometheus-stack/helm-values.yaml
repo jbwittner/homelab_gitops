@@ -31,7 +31,7 @@ grafana:
       token_url: https://authentik.wittner.tech/application/o/token/
       api_url: https://authentik.wittner.tech/application/o/userinfo/
       # Mapping groupe authentik → rôle Grafana via le claim `groups` (défaut Viewer).
-      role_attribute_path: "contains(groups[*], 'Grafana Admins') && 'Admin' || contains(groups[*], 'Grafana Viewers') && 'Viewer' || 'Viewer'"
+      role_attribute_path: "contains(groups[*], 'app-grafana-admin') && 'Admin' || contains(groups[*], 'app-grafana-viewer') && 'Viewer' || 'Viewer'"
       role_attribute_strict: false
   persistence:
     enabled: true
