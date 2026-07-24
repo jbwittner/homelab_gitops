@@ -1,0 +1,10 @@
+# Namespace labellisé `privileged` AVANT tout pod (sync-wave -1). Talos applique PodSecurity
+# `baseline` cluster-wide (seul kube-system exempté). Le DaemonSet node-exporter tourne en
+# `privileged` (hostNetwork, hostPID, hostPath /proc /sys /root, hostPort 9100) → sans ce
+# label il est rejeté par l'admission `baseline`. Label PSA natif, versionné, sur le Namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: renovate
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
