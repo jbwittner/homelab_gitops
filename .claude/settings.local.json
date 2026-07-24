@@ -29,7 +29,8 @@
       "Bash(echo \"exit=$?\")",
       "Bash(rtk proxy *)",
       "Bash(helm template *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "WebFetch(domain:docs.renovatebot.com)"
     ]
   }
 }
