@@ -14,7 +14,7 @@ spec:
   sources:
     - repoURL: https://helm.cilium.io/
       chart: cilium
-      targetRevision: 1.19.5
+      targetRevision: 1.19.6
       helm:
         # ⚠️ releaseName DOIT rester `cilium` : la release a été adoptée depuis le
         # `helm install cilium` du bootstrap (Phase 3 du runbook). Le changer renommerait
