@@ -8,5 +8,15 @@
   ],
   "argocd": {
     "managerFilePatterns": ["/\\.app\\.yaml$/"]
-  }
+  },
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["pin", "patch", "minor"],
+      "automerge": true
+    },
+    {
+      "matchPackageNames": ["renovate/renovate"],
+      "automerge": true
+    }
+  ]
 }
