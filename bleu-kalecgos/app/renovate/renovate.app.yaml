@@ -22,7 +22,3 @@ spec:
     automated:
       selfHeal: true
       prune: true
-    syncOptions:
-      # ServerSideApply OBLIGATOIRE : les CRDs du stack (prometheus-operator) sont trop
-      # grosses pour un apply client-side (même contrainte que documentée pour ArgoCD).
-      - ServerSideApply=true
