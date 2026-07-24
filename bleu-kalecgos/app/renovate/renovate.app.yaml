@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: renovate
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: renovate
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: automation
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: bleu-kalecgos/app/renovate/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: renovate
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      # ServerSideApply OBLIGATOIRE : les CRDs du stack (prometheus-operator) sont trop
+      # grosses pour un apply client-side (même contrainte que documentée pour ArgoCD).
+      - ServerSideApply=true
