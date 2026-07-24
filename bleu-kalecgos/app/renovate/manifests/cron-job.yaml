@@ -21,6 +21,10 @@ spec:
               env:
                 - name: LOG_LEVEL
                   value: info
+                - name: RENOVATE_PLATFORM
+                  value: github
+                - name: RENOVATE_AUTODISCOVER
+                  value: "false"
               envFrom:
                 - secretRef:
                     name: renovate-env

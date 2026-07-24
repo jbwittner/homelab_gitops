@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: renovate-env
+  namespace: renovate
+spec:
+  encryptedData:
+    RENOVATE_GITHUB_COM_TOKEN: AgCPdkUH3oohELijVp4yU6aTmfBUv6IiCMGaANlLkxPvI/9nPByPmLUHqZkMH93gw/9Fjw054/O4yVykAMcz8M5NgeucXaBeorF2c5cdWTcS/8ycQMP3A9hiEAJd3RCHqIPWvCsop8MaLjwLmEQ6QohjKV3p5ZsRkKjtmIlfoxGAWBfTv+z9xZG5scFX1dycTihqhUqlfGODZKjS4/d/4RGIOs4SIgy8yP873qMZQ/l/ryCDoEuhWpn/CFwat+TKAlW3BULmsmYvJ245l/zM5U3Oyd2xFOxDJoS+M3JlpGHBUiFkiOL/Gy13rsW+TlnwNwUR0nEWX4ywsmV8VBQz2WbATTqQBHS+xN+hHsDlHBtZLlOYeRwUkvqzBOVQN7TgRbPC6fAaAS0bcKIfe6RUZxiGqVZI3kuy/2zaIpjKZ1Qs7uSeJkZ80o495qUY96JubFji4ENWtfzm2m84/GW6srf20op5XnBJXyKUPjchJUu0kJni6jPNrhj9cZ9XqsNnYNS2g4LSmJ9B4iqJKlHxzLwPMf88RaoePy8+u0iQStX+6jic/9DhZ6n2It3v7PJR7/hfFuq3qn2oT4FA4o7hFTJd+Sya49waEdhic3xONranArByYy5BOzN4VJuUKKKq231fdPt0ZzepVj58+Lyoq6Em2onQxotAlx9xY/ogNkEpK45e6GyV4wIwF9lgBD/1CAxsHKGvSAnd8IthDgJpYY4rjhe49V+jaTLK9Kb0ekAhH+p7ng1Ls43fmtWax0TQ8X/pvoGKHl15AWP3473yJC82n7QUYKyikSAoMgWWVQhpIiwJ0mMoTFZWGMPJD6o=
+  template:
+    metadata:
+      name: renovate-env
+      namespace: renovate
+    type: Opaque
