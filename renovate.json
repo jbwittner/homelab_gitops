@@ -9,6 +9,9 @@
   "argocd": {
     "managerFilePatterns": ["/\\.app\\.yaml$/"]
   },
+  "kubernetes": {
+    "managerFilePatterns": ["/manifests/.+\\.yaml$/"]
+  },
   "packageRules": [
     {
       "matchUpdateTypes": ["pin", "patch", "minor"],
