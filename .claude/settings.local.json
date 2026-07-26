@@ -31,7 +31,10 @@
       "Bash(helm template *)",
       "Read(//tmp/**)",
       "WebFetch(domain:docs.renovatebot.com)",
-      "Bash(rtk rg *)"
+      "Bash(rtk rg *)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh auth *)",
+      "Bash(gh pr *)"
     ]
   }
 }

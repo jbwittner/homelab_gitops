@@ -25,6 +25,8 @@ spec:
                   value: github
                 - name: RENOVATE_AUTODISCOVER
                   value: "false"
+                - name: RENOVATE_GIT_AUTHOR
+                  value: "jbwittner <jeanbaptiste.wittner@outlook.com>"
               envFrom:
                 - secretRef:
                     name: renovate-env
