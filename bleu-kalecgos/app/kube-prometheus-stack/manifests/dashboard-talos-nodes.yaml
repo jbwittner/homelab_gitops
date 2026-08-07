@@ -1,4 +1,4 @@
-# bleu-kalecgos/infra/monitoring/dashboard-system.yaml
+# bleu-kalecgos/app/kube-prometheus-stack/manifests/dashboard-talos-nodes.yaml
 # Dashboard Grafana « Système — nœuds Talos »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack
 # via le label grafana_dashboard: "1".
@@ -6,15 +6,19 @@
 # Sources de métriques :
 #   - node-exporter        : CPU, mémoire, filesystems, réseau, hwmon
 #   - openebs-lvm exporter : VolumeGroups LVM (ServiceMonitor openebs)
+#
+# Les requêtes hwmon ne présument aucune topologie matérielle : nombre de NVMe/SSD
+# variable selon le nœud, chips coretemp multiples, capteurs multiples par disque
+# (composite + capteurs internes). Tout est agrégé/étiqueté par chip et par capteur.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-dashboard-talos-system
+  name: grafana-dashboard-talos-nodes
   namespace: monitoring
   labels:
     grafana_dashboard: "1"
 data:
-  talos-system.json: |
+  talos-nodes.json: |
     {
       "annotations": {
         "list": [
@@ -32,7 +36,7 @@ data:
           }
         ]
       },
-      "description": "Vue système complète des nœuds Talos — CPU, mémoire, disque, réseau, thermique.",
+      "description": "Vue système complète des nœuds Talos — CPU, mémoire, disque, réseau, thermique. Aucune topologie matérielle codée en dur : disques et capteurs sont découverts dynamiquement.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
@@ -354,13 +358,13 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=\"platform_coretemp_0\"})",
+              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"platform_coretemp.*\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Temp. CPU",
+          "title": "Temp. CPU (max)",
           "type": "stat"
         },
         {
@@ -441,7 +445,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Temp. NVMe",
+          "title": "Temp. NVMe (max, tous disques)",
           "type": "stat"
         },
         {
@@ -1883,7 +1887,7 @@ data:
               },
               "editorMode": "code",
               "expr": "(1 - node_filesystem_avail_bytes{instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"} / node_filesystem_size_bytes{instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}) * 100",
-              "legendFormat": "{{mountpoint}}",
+              "legendFormat": "{{instance}} · {{mountpoint}}",
               "range": true,
               "refId": "A"
             }
@@ -2043,7 +2047,7 @@ data:
               },
               "editorMode": "code",
               "expr": "(1 - node_filesystem_files_free{instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"} / node_filesystem_files{instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}) * 100",
-              "legendFormat": "{{mountpoint}}",
+              "legendFormat": "{{instance}} · {{mountpoint}}",
               "range": true,
               "refId": "A"
             }
@@ -2140,7 +2144,7 @@ data:
               },
               "editorMode": "code",
               "expr": "node_filesystem_avail_bytes{instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}",
-              "legendFormat": "{{mountpoint}}",
+              "legendFormat": "{{instance}} · {{mountpoint}}",
               "range": true,
               "refId": "A"
             }
@@ -2153,7 +2157,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Couche LVM (exporter OpenEBS). Le PV nvme0n1p5 n'a pas de filesystem : invisible pour node-exporter. La pente indique le rythme de provisionnement des PVC.",
+          "description": "Couche LVM (exporter OpenEBS). Les PV LVM n'ont pas de filesystem : invisibles pour node-exporter, quel que soit le disque qui les porte. La pente indique le rythme de provisionnement des PVC.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2355,7 +2359,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(node_disk_reads_completed_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
-              "legendFormat": "{{device}} — lecture",
+              "legendFormat": "{{instance}} · {{device}} — lecture",
               "range": true,
               "refId": "A"
             },
@@ -2366,7 +2370,7 @@ data:
               },
               "editorMode": "code",
               "expr": "-rate(node_disk_writes_completed_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
-              "legendFormat": "{{device}} — écriture",
+              "legendFormat": "{{instance}} · {{device}} — écriture",
               "range": true,
               "refId": "B"
             }
@@ -2459,7 +2463,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(node_disk_read_bytes_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
-              "legendFormat": "{{device}} — lecture",
+              "legendFormat": "{{instance}} · {{device}} — lecture",
               "range": true,
               "refId": "A"
             },
@@ -2470,7 +2474,7 @@ data:
               },
               "editorMode": "code",
               "expr": "-rate(node_disk_written_bytes_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
-              "legendFormat": "{{device}} — écriture",
+              "legendFormat": "{{instance}} · {{device}} — écriture",
               "range": true,
               "refId": "B"
             }
@@ -2564,7 +2568,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(node_disk_read_time_seconds_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]) / clamp_min(rate(node_disk_reads_completed_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]), 1)",
-              "legendFormat": "{{device}} — lecture",
+              "legendFormat": "{{instance}} · {{device}} — lecture",
               "range": true,
               "refId": "A"
             },
@@ -2575,7 +2579,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(node_disk_write_time_seconds_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]) / clamp_min(rate(node_disk_writes_completed_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]), 1)",
-              "legendFormat": "{{device}} — écriture",
+              "legendFormat": "{{instance}} · {{device}} — écriture",
               "range": true,
               "refId": "B"
             }
@@ -2670,7 +2674,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(node_disk_io_time_seconds_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]) * 100",
-              "legendFormat": "{{device}} — occupation",
+              "legendFormat": "{{instance}} · {{device}} — occupation",
               "range": true,
               "refId": "A"
             },
@@ -2681,7 +2685,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(node_disk_io_time_weighted_seconds_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
-              "legendFormat": "{{device}} — file d'attente",
+              "legendFormat": "{{instance}} · {{device}} — file d'attente",
               "range": true,
               "refId": "B"
             }
@@ -2893,7 +2897,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(node_network_receive_bytes_total{instance=~\"$instance\",device!~\"lo|veth.*|cilium.*|lxc.*|docker.*|cni.*\"}[$__rate_interval]) * 8",
-              "legendFormat": "{{device}} — entrant",
+              "legendFormat": "{{instance}} · {{device}} — entrant",
               "range": true,
               "refId": "A"
             },
@@ -2904,7 +2908,7 @@ data:
               },
               "editorMode": "code",
               "expr": "-rate(node_network_transmit_bytes_total{instance=~\"$instance\",device!~\"lo|veth.*|cilium.*|lxc.*|docker.*|cni.*\"}[$__rate_interval]) * 8",
-              "legendFormat": "{{device}} — sortant",
+              "legendFormat": "{{instance}} · {{device}} — sortant",
               "range": true,
               "refId": "B"
             }
@@ -3044,7 +3048,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "CPU : throttling vers 90-100°C. NVMe : throttling vers 70-80°C.",
+          "description": "CPU : throttling vers 90-100°C. NVMe : throttling vers 70-80°C. Une série par chip et par capteur — le nombre de disques et de capteurs varie d'un nœud à l'autre.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3127,8 +3131,8 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=\"platform_coretemp_0\",sensor=\"temp1\"}",
-              "legendFormat": "CPU — package",
+              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"platform_coretemp.*\",sensor=\"temp1\"}",
+              "legendFormat": "{{instance}} · CPU {{chip}} — package",
               "range": true,
               "refId": "A"
             },
@@ -3138,8 +3142,8 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=\"platform_coretemp_0\",sensor!=\"temp1\"})",
-              "legendFormat": "CPU — cœur le plus chaud",
+              "expr": "max by (instance, chip) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"platform_coretemp.*\",sensor!=\"temp1\"})",
+              "legendFormat": "{{instance}} · CPU {{chip}} — cœur le plus chaud",
               "range": true,
               "refId": "B"
             },
@@ -3149,8 +3153,8 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}",
-              "legendFormat": "NVMe",
+              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · NVMe {{disque}} ({{sensor}})",
               "range": true,
               "refId": "C"
             },
@@ -3161,7 +3165,7 @@ data:
               },
               "editorMode": "code",
               "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"thermal.*\"}",
-              "legendFormat": "Zone thermique",
+              "legendFormat": "{{instance}} · {{chip}} ({{sensor}})",
               "range": true,
               "refId": "D"
             }
@@ -3254,14 +3258,459 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=\"platform_coretemp_0\",sensor!=\"temp1\"}",
-              "legendFormat": "{{sensor}}",
+              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"platform_coretemp.*\",sensor!=\"temp1\"}",
+              "legendFormat": "{{instance}} · {{chip}}/{{sensor}}",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Températures par cœur",
           "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 76
+          },
+          "id": 41,
+          "panels": [],
+          "title": "Thermique NVMe — par disque",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Un disque = un chip hwmon (nvme_nvme0, nvme_nvme1, …). Le nombre de disques varie d'un nœud à l'autre : aucune liste n'est codée en dur. temp1 est généralement le capteur composite (celui qui déclenche le throttling), les autres sont des capteurs internes.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 8,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "dashed"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "celsius",
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 77
+          },
+          "id": 42,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean",
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · {{disque}} ({{sensor}})",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Températures NVMe — tous capteurs",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Capteur le plus chaud de chaque disque, un disque par barre. Se remplit tout seul quand un SSD est ajouté ou retiré.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 35
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 60
+                  },
+                  {
+                    "color": "orange",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 77
+          },
+          "id": 43,
+          "options": {
+            "displayMode": "gradient",
+            "maxVizHeight": 300,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "sizing": "auto",
+            "valueMode": "color"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · {{disque}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Temp. max par disque NVMe",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Nombre de disques NVMe exposant des capteurs hwmon, par nœud. Sert de contrôle : si un SSD disparaît du compte, il a été démonté ou n'est plus détecté.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 0,
+            "y": 85
+          },
+          "id": 44,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "count by (instance) (count by (instance, chip) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}))",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Disques NVMe détectés",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Écart entre le disque le plus chaud et le plus froid du nœud. Un écart important signale un SSD mal ventilé ou sans dissipateur.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 15
+                  },
+                  {
+                    "color": "orange",
+                    "value": 25
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 6,
+            "y": 85
+          },
+          "id": 45,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}) - min by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"})",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Écart thermique entre NVMe",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Chaque capteur hwmon disponible, tous chips confondus. Table de référence pour savoir ce que le nœud expose réellement.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "decimals": 1,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 12,
+            "x": 12,
+            "y": 85
+          },
+          "id": 46,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Value"
+              }
+            ]
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Inventaire des capteurs hwmon",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "container": true,
+                  "endpoint": true,
+                  "job": true,
+                  "namespace": true,
+                  "pod": true,
+                  "service": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "Value": "°C",
+                  "chip": "Chip",
+                  "instance": "Nœud",
+                  "sensor": "Capteur"
+                }
+              }
+            }
+          ],
+          "type": "table"
         }
       ],
       "refresh": "30s",
@@ -3340,10 +3789,10 @@ data:
             "current": {
               "selected": true,
               "text": [
-                "nvme0n1"
+                "All"
               ],
               "value": [
-                "nvme0n1"
+                "$__all"
               ]
             },
             "datasource": {
@@ -3351,6 +3800,7 @@ data:
               "uid": "${DS_PROMETHEUS}"
             },
             "definition": "label_values(node_disk_io_time_seconds_total{instance=~\"$instance\"}, device)",
+            "description": "Découvert dynamiquement : tous les disques physiques du nœud, quel que soit leur nombre. Les partitions sont exclues du filtre.",
             "hide": 0,
             "includeAll": true,
             "label": "Disque",
@@ -3363,7 +3813,7 @@ data:
               "refId": "device"
             },
             "refresh": 2,
-            "regex": "/^(nvme|sd|vd|hd|dm-).*/",
+            "regex": "/^(nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+)$/",
             "skipUrlSync": false,
             "sort": 1,
             "type": "query"
@@ -3401,7 +3851,7 @@ data:
       "timepicker": {},
       "timezone": "browser",
       "title": "Système — nœuds Talos",
-      "uid": "talos-system",
+      "uid": "talos-nodes",
       "version": 1,
       "weekStart": ""
     }
