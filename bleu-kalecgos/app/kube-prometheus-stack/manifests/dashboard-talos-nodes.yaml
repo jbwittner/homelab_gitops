@@ -2191,7 +2191,7 @@ data:
           },
           "id": 30,
           "panels": [],
-          "title": "Disque — performance",
+          "title": "Stockage — performance",
           "type": "row"
         },
         {
@@ -2730,7 +2730,7 @@ data:
           },
           "id": 36,
           "panels": [],
-          "title": "Réseau & thermique",
+          "title": "Réseau",
           "type": "row"
         },
         {
@@ -2965,6 +2965,118 @@ data:
           "type": "timeseries"
         },
         {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 147
+          },
+          "id": 41,
+          "panels": [],
+          "title": "Thermique — CPU & système",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Alarme remontée par le matériel lui-même, pas par un seuil du dashboard : 0 = aucun capteur au-delà de son seuil critique. Toute valeur non nulle signifie que le firmware a déjà déclenché son throttling. Doit rester plat à zéro.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 24,
+            "x": 0,
+            "y": 148
+          },
+          "id": 47,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (instance, chip) (node_hwmon_temp_crit_alarm_celsius{instance=~\"$instance\"})",
+              "legendFormat": "{{instance}} · {{chip}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Alarmes thermiques matérielles (crit_alarm)",
+          "type": "timeseries"
+        },
+        {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -3026,7 +3138,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 147
+            "y": 157
           },
           "id": 39,
           "options": {
@@ -3088,7 +3200,7 @@ data:
               "refId": "D"
             }
           ],
-          "title": "Températures",
+          "title": "Températures — toutes sources",
           "type": "timeseries"
         },
         {
@@ -3153,7 +3265,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 156
+            "y": 166
           },
           "id": 40,
           "options": {
@@ -3182,8 +3294,175 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Températures par cœur",
+          "title": "Températures CPU par cœur",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Chaque capteur hwmon disponible, tous chips confondus, avec ses seuils constructeur sur la même ligne. Table de référence pour savoir ce que le nœud expose réellement. Une cellule de seuil vide n'est pas un défaut : seul le capteur composite (temp1) des NVMe porte un WCTEMP/CCTEMP, les capteurs internes n'en déclarent aucun.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "decimals": 1,
+              "mappings": [],
+              "noValue": "—",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "°C"
+                },
+                "properties": [
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "basic",
+                      "type": "gauge",
+                      "valueDisplayMode": "text"
+                    }
+                  },
+                  {
+                    "id": "max",
+                    "value": 110
+                  },
+                  {
+                    "id": "min",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 24,
+            "x": 0,
+            "y": 175
+          },
+          "id": 46,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": false,
+                "displayName": "Chip"
+              }
+            ]
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_celsius{instance=~\"$instance\"})",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_max_celsius{instance=~\"$instance\"})",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_crit_celsius{instance=~\"$instance\"})",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "C"
+            }
+          ],
+          "title": "Inventaire des capteurs hwmon",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {}
+              }
+            },
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {},
+                "indexByName": {
+                  "Value #A": 3,
+                  "Value #B": 4,
+                  "Value #C": 5,
+                  "chip": 1,
+                  "instance": 0,
+                  "sensor": 2
+                },
+                "renameByName": {
+                  "Value #A": "°C",
+                  "Value #B": "Seuil warning",
+                  "Value #C": "Seuil critique",
+                  "chip": "Chip",
+                  "instance": "Nœud",
+                  "sensor": "Capteur"
+                }
+              }
+            }
+          ],
+          "type": "table"
         },
         {
           "collapsed": false,
@@ -3191,12 +3470,234 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 165
+            "y": 186
           },
-          "id": 41,
+          "id": 48,
           "panels": [],
-          "title": "Thermique NVMe — par disque",
+          "title": "Thermique — NVMe",
           "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Composite Temperature (temp1) rapportée au seuil WCTEMP annoncé par le disque. Une barre par disque. Comparable entre modèles hétérogènes, contrairement aux °C bruts : un SSD peut annoncer 79 °C de seuil et un autre 99 °C. Seul le composite est retenu ici — c'est le seul capteur auquel WCTEMP/CCTEMP s'appliquent, donc le seul dont le ratio ait un sens. 100 % = seuil warning atteint, throttling imminent.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 70
+                  },
+                  {
+                    "color": "orange",
+                    "value": 85
+                  },
+                  {
+                    "color": "red",
+                    "value": 95
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 187
+          },
+          "id": 43,
+          "options": {
+            "displayMode": "gradient",
+            "maxVizHeight": 300,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "sizing": "auto",
+            "valueMode": "color"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} * 100, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · {{disque}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Composite NVMe (% du seuil constructeur)",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Nombre de disques NVMe exposant des capteurs hwmon, par nœud. Sert de contrôle : si un SSD disparaît du compte, il a été démonté ou n'est plus détecté.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 12,
+            "y": 187
+          },
+          "id": 44,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "count by (instance) (count by (instance, chip) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}))",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Disques NVMe détectés",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Écart entre le composite du disque le plus chaud et celui du plus froid du nœud. Comparaison entre disques : seul temp1 est retenu, sinon l'écart mesurerait la différence entre deux capteurs d'un même disque au lieu d'une différence entre disques. Un écart important signale un SSD mal ventilé ou sans dissipateur.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 15
+                  },
+                  {
+                    "color": "orange",
+                    "value": 25
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 18,
+            "y": 187
+          },
+          "id": 45,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}) - min by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"})",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Écart thermique entre NVMe",
+          "type": "stat"
         },
         {
           "datasource": {
@@ -3369,7 +3870,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 166
+            "y": 195
           },
           "id": 42,
           "options": {
@@ -3431,495 +3932,7 @@ data:
               "refId": "C"
             }
           ],
-          "title": "Températures NVMe — tous capteurs + seuils constructeur",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Composite Temperature (temp1) rapportée au seuil WCTEMP annoncé par le disque. Une barre par disque. Comparable entre modèles hétérogènes, contrairement aux °C bruts : un SSD peut annoncer 79 °C de seuil et un autre 99 °C. Seul le composite est retenu ici — c'est le seul capteur auquel WCTEMP/CCTEMP s'appliquent, donc le seul dont le ratio ait un sens. 100 % = seuil warning atteint, throttling imminent.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "decimals": 1,
-              "mappings": [],
-              "max": 100,
-              "min": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 70
-                  },
-                  {
-                    "color": "orange",
-                    "value": 85
-                  },
-                  {
-                    "color": "red",
-                    "value": 95
-                  }
-                ]
-              },
-              "unit": "percent"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 175
-          },
-          "id": 43,
-          "options": {
-            "displayMode": "gradient",
-            "maxVizHeight": 300,
-            "minVizHeight": 16,
-            "minVizWidth": 8,
-            "namePlacement": "auto",
-            "orientation": "horizontal",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showUnfilled": true,
-            "sizing": "auto",
-            "valueMode": "color"
-          },
-          "pluginVersion": "10.4.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} * 100, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
-              "legendFormat": "{{instance}} · {{disque}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Composite NVMe (% du seuil constructeur)",
-          "type": "bargauge"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Nombre de disques NVMe exposant des capteurs hwmon, par nœud. Sert de contrôle : si un SSD disparaît du compte, il a été démonté ou n'est plus détecté.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "decimals": 0,
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 6,
-            "x": 12,
-            "y": 175
-          },
-          "id": 44,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "pluginVersion": "10.4.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "count by (instance) (count by (instance, chip) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}))",
-              "legendFormat": "{{instance}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Disques NVMe détectés",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Écart entre le composite du disque le plus chaud et celui du plus froid du nœud. Comparaison entre disques : seul temp1 est retenu, sinon l'écart mesurerait la différence entre deux capteurs d'un même disque au lieu d'une différence entre disques. Un écart important signale un SSD mal ventilé ou sans dissipateur.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "decimals": 1,
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 15
-                  },
-                  {
-                    "color": "orange",
-                    "value": 25
-                  }
-                ]
-              },
-              "unit": "celsius"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 6,
-            "x": 18,
-            "y": 175
-          },
-          "id": 45,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "pluginVersion": "10.4.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}) - min by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"})",
-              "legendFormat": "{{instance}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Écart thermique entre NVMe",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Chaque capteur hwmon disponible, tous chips confondus, avec ses seuils constructeur sur la même ligne. Table de référence pour savoir ce que le nœud expose réellement. Une cellule de seuil vide n'est pas un défaut : seul le capteur composite (temp1) des NVMe porte un WCTEMP/CCTEMP, les capteurs internes n'en déclarent aucun.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "inspect": false
-              },
-              "decimals": 1,
-              "mappings": [],
-              "noValue": "—",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "celsius"
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "°C"
-                },
-                "properties": [
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "mode": "basic",
-                      "type": "gauge",
-                      "valueDisplayMode": "text"
-                    }
-                  },
-                  {
-                    "id": "max",
-                    "value": 110
-                  },
-                  {
-                    "id": "min",
-                    "value": 0
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 11,
-            "w": 24,
-            "x": 0,
-            "y": 183
-          },
-          "id": 46,
-          "options": {
-            "cellHeight": "sm",
-            "footer": {
-              "countRows": false,
-              "fields": "",
-              "reducer": [
-                "sum"
-              ],
-              "show": false
-            },
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": false,
-                "displayName": "Chip"
-              }
-            ]
-          },
-          "pluginVersion": "10.4.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_celsius{instance=~\"$instance\"})",
-              "format": "table",
-              "instant": true,
-              "legendFormat": "",
-              "range": false,
-              "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_max_celsius{instance=~\"$instance\"})",
-              "format": "table",
-              "instant": true,
-              "legendFormat": "",
-              "range": false,
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_crit_celsius{instance=~\"$instance\"})",
-              "format": "table",
-              "instant": true,
-              "legendFormat": "",
-              "range": false,
-              "refId": "C"
-            }
-          ],
-          "title": "Inventaire des capteurs hwmon (valeur, seuils)",
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true
-                },
-                "indexByName": {},
-                "renameByName": {}
-              }
-            },
-            {
-              "id": "merge",
-              "options": {}
-            },
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {},
-                "indexByName": {
-                  "Value #A": 3,
-                  "Value #B": 4,
-                  "Value #C": 5,
-                  "chip": 1,
-                  "instance": 0,
-                  "sensor": 2
-                },
-                "renameByName": {
-                  "Value #A": "°C",
-                  "Value #B": "Seuil warning",
-                  "Value #C": "Seuil critique",
-                  "chip": "Chip",
-                  "instance": "Nœud",
-                  "sensor": "Capteur"
-                }
-              }
-            }
-          ],
-          "type": "table"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "Alarme remontée par le matériel lui-même, pas par un seuil du dashboard : 0 = aucun capteur au-delà de son seuil critique. Toute valeur non nulle signifie que le firmware a déjà déclenché son throttling. Doit rester plat à zéro.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 30,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "stepAfter",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              },
-              "unit": "short",
-              "min": 0,
-              "decimals": 0
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 24,
-            "x": 0,
-            "y": 194
-          },
-          "id": 47,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "right",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "pluginVersion": "10.4.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (instance, chip) (node_hwmon_temp_crit_alarm_celsius{instance=~\"$instance\"})",
-              "legendFormat": "{{instance}} · {{chip}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Alarmes thermiques matérielles (crit_alarm)",
+          "title": "Températures NVMe — capteurs & seuils",
           "type": "timeseries"
         }
       ],
