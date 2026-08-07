@@ -383,28 +383,24 @@ data:
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "blue",
+                    "color": "green",
                     "value": null
                   },
                   {
-                    "color": "green",
-                    "value": 35
-                  },
-                  {
                     "color": "yellow",
-                    "value": 60
-                  },
-                  {
-                    "color": "orange",
                     "value": 70
                   },
                   {
+                    "color": "orange",
+                    "value": 85
+                  },
+                  {
                     "color": "red",
-                    "value": 80
+                    "value": 95
                   }
                 ]
               },
-              "unit": "celsius"
+              "unit": "percent"
             },
             "overrides": []
           },
@@ -439,13 +435,13 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"})",
+              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}) * 100",
               "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Temp. NVMe (max, tous disques)",
+          "title": "NVMe — pire % seuil",
           "type": "stat"
         },
         {
@@ -3048,7 +3044,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "CPU : throttling vers 90-100°C. NVMe : throttling vers 70-80°C. Une série par chip et par capteur — le nombre de disques et de capteurs varie d'un nœud à l'autre.",
+          "description": "Vue thermique haut niveau. Côté NVMe, seule la Composite Temperature (temp1) est tracée — c'est elle qui pilote le throttling. Les capteurs internes secondaires sont dans la ligne « Thermique NVMe — par disque ». Les seuils réels varient par disque : voir cette même ligne.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3153,8 +3149,8 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
-              "legendFormat": "{{instance}} · NVMe {{disque}} ({{sensor}})",
+              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · NVMe {{disque}} — composite",
               "range": true,
               "refId": "C"
             },
@@ -3285,7 +3281,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Un disque = un chip hwmon (nvme_nvme0, nvme_nvme1, …). Le nombre de disques varie d'un nœud à l'autre : aucune liste n'est codée en dur. temp1 est généralement le capteur composite (celui qui déclenche le throttling), les autres sont des capteurs internes.",
+          "description": "Un disque = un chip hwmon (nvme_nvme0, nvme_nvme1, …), découvert dynamiquement. Hiérarchie de lecture : trait épais plein = Composite Temperature (temp1), le capteur de référence auquel WCTEMP/CCTEMP s'appliquent et qui déclenche le throttling. Pointillés fins = capteurs internes secondaires (NAND, contrôleur), informatifs, sans seuil déclaré — ne pas les comparer aux lignes de seuil. Tirets orange/rouge = WCTEMP/CCTEMP propres à chaque disque, très variables d'un modèle à l'autre, d'où l'absence de seuil fixe ici.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3320,7 +3316,7 @@ data:
                   "mode": "none"
                 },
                 "thresholdsStyle": {
-                  "mode": "dashed"
+                  "mode": "off"
                 }
               },
               "mappings": [],
@@ -3330,21 +3326,122 @@ data:
                   {
                     "color": "green",
                     "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 70
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
                   }
                 ]
               },
               "unit": "celsius",
               "decimals": 1
             },
-            "overrides": []
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*— composite$"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 3
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 12
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*— capteur temp.*"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 1
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        2,
+                        4
+                      ],
+                      "fill": "dot"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*seuil warning.*"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        10,
+                        10
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 1
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*seuil critique.*"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        4,
+                        6
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 1
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
           },
           "gridPos": {
             "h": 8,
@@ -3376,13 +3473,46 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
-              "legendFormat": "{{instance}} · {{disque}} ({{sensor}})",
+              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · {{disque}} — composite",
               "range": true,
               "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor!=\"temp1\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · {{disque}} — capteur {{sensor}}",
+              "range": true,
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · {{disque}} — seuil warning",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_crit_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · {{disque}} — seuil critique",
+              "range": true,
+              "refId": "C"
             }
           ],
-          "title": "Températures NVMe — tous capteurs",
+          "title": "Températures NVMe — tous capteurs + seuils constructeur",
           "type": "timeseries"
         },
         {
@@ -3390,7 +3520,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Capteur le plus chaud de chaque disque, un disque par barre. Se remplit tout seul quand un SSD est ajouté ou retiré.",
+          "description": "Composite Temperature (temp1) rapportée au seuil WCTEMP annoncé par le disque. Une barre par disque. Comparable entre modèles hétérogènes, contrairement aux °C bruts : un SSD peut annoncer 79 °C de seuil et un autre 99 °C. Seul le composite est retenu ici — c'est le seul capteur auquel WCTEMP/CCTEMP s'appliquent, donc le seul dont le ratio ait un sens. 100 % = seuil warning atteint, throttling imminent.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3404,28 +3534,24 @@ data:
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "blue",
+                    "color": "green",
                     "value": null
                   },
                   {
-                    "color": "green",
-                    "value": 35
-                  },
-                  {
                     "color": "yellow",
-                    "value": 60
-                  },
-                  {
-                    "color": "orange",
                     "value": 70
                   },
                   {
+                    "color": "orange",
+                    "value": 85
+                  },
+                  {
                     "color": "red",
-                    "value": 80
+                    "value": 95
                   }
                 ]
               },
-              "unit": "celsius"
+              "unit": "percent"
             },
             "overrides": []
           },
@@ -3462,13 +3588,13 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} * 100, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
               "legendFormat": "{{instance}} · {{disque}}",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "Temp. max par disque NVMe",
+          "title": "Composite NVMe (% du seuil constructeur)",
           "type": "bargauge"
         },
         {
@@ -3542,7 +3668,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Écart entre le disque le plus chaud et le plus froid du nœud. Un écart important signale un SSD mal ventilé ou sans dissipateur.",
+          "description": "Écart entre le composite du disque le plus chaud et celui du plus froid du nœud. Comparaison entre disques : seul temp1 est retenu, sinon l'écart mesurerait la différence entre deux capteurs d'un même disque au lieu d'une différence entre disques. Un écart important signale un SSD mal ventilé ou sans dissipateur.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3602,7 +3728,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}) - min by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\"})",
+              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}) - min by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"})",
               "legendFormat": "{{instance}}",
               "range": true,
               "refId": "A"
@@ -3683,10 +3809,40 @@ data:
               "legendFormat": "",
               "range": false,
               "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "node_hwmon_temp_max_celsius{instance=~\"$instance\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "node_hwmon_temp_crit_celsius{instance=~\"$instance\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "C"
             }
           ],
-          "title": "Inventaire des capteurs hwmon",
+          "title": "Inventaire des capteurs hwmon (valeur, seuils)",
           "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
             {
               "id": "organize",
               "options": {
@@ -3702,7 +3858,9 @@ data:
                 },
                 "indexByName": {},
                 "renameByName": {
-                  "Value": "°C",
+                  "Value #A": "°C",
+                  "Value #B": "Seuil warning",
+                  "Value #C": "Seuil critique",
                   "chip": "Chip",
                   "instance": "Nœud",
                   "sensor": "Capteur"
@@ -3711,6 +3869,107 @@ data:
             }
           ],
           "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Alarme remontée par le matériel lui-même, pas par un seuil du dashboard : 0 = aucun capteur au-delà de son seuil critique. Toute valeur non nulle signifie que le firmware a déjà déclenché son throttling. Doit rester plat à zéro.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 12,
+            "x": 0,
+            "y": 90
+          },
+          "id": 47,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (instance, chip) (node_hwmon_temp_crit_alarm_celsius{instance=~\"$instance\"})",
+              "legendFormat": "{{instance}} · {{chip}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Alarmes thermiques matérielles (crit_alarm)",
+          "type": "timeseries"
         }
       ],
       "refresh": "30s",
