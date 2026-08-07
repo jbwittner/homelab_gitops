@@ -135,7 +135,9 @@ rm bleu-kalecgos/infra/argocd/manifests/argocd-notifications.secret.yaml
 
 **Où les voir** : une annotation Grafana ne s'affiche **nulle part** par défaut — il faut qu'un
 dashboard la requête par tag. La couche « Déploiements ArgoCD » (tags `argocd` + `deployed`) est
-déclarée dans `dashboard-talos-nodes.json`
+déclarée dans `dashboard-talos-nodes.json`, et les 3 tags (`deployed` / `degraded` /
+`sync-failed`) dans le dashboard « GitOps — ArgoCD » — qui porte aussi le suivi des
+Applications et le scrape des composants
 ([kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)) ; à recopier dans tout
 nouveau dashboard qui doit porter les marqueurs de déploiement. Liste brute :
 Grafana → Dashboards → *Annotations*, ou `GET /api/annotations?tags=argocd`.

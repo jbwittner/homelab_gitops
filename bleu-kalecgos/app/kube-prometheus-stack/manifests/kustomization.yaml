@@ -7,3 +7,5 @@ resources:
   - grafana-oidc.sealed.yaml
   - grafana-admin.sealed.yaml
   - dashboard-talos-nodes.yaml
+  - dashboard-argocd.yaml
+  - servicemonitors-argocd.yaml

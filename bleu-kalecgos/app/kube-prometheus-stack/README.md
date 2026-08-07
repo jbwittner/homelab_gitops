@@ -23,7 +23,13 @@ Alertmanager restent internes (non exposés).
 - `manifests/dashboard-talos-nodes.yaml` — dashboard « Système — nœuds Talos » (sidecar,
   label `grafana_dashboard: "1"`) ; porte la couche d'annotations « Déploiements ArgoCD »
   (tags `argocd` + `deployed`, cf. [argocd](../../infra/argocd/README.md)).
-- `manifests/kustomization.yaml` — assemblage (les 2 SealedSecrets sont commentés jusqu'au scellage).
+- `manifests/dashboard-argocd.yaml` — dashboard « GitOps — ArgoCD » (sidecar, même label) :
+  état sync/santé des Applications, synchronisations, réconciliation du contrôleur,
+  repo-server Git, notifications, santé des composants. Variables Projet/Application,
+  3 couches d'annotations (`deployed` / `degraded` / `sync-failed`).
+- `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD (cf. §Opérations).
+- `manifests/kustomization.yaml` — assemblage (garder une ressource `*.sealed.yaml` commentée
+  tant qu'elle n'est pas scellée : un fichier référencé mais absent casse `kustomize build`).
 
 ## Opérations
 
@@ -57,6 +63,20 @@ rm bleu-kalecgos/app/kube-prometheus-stack/manifests/grafana-{oidc,admin}.secret
 
 Rotation : régénérer côté Terraform (OIDC) / `openssl` (admin), re-renseigner le template,
 re-sceller (étape 2).
+
+### Scrape d'ArgoCD
+
+L'install upstream d'ArgoCD ne fournit aucun ServiceMonitor : ils sont déclarés ici
+(`servicemonitors-argocd.yaml`, ns `monitoring`, scrape cross-namespace vers `argocd`) et
+non dans `infra/argocd/manifests` — ce dossier sert aussi à l'apply manuel du bootstrap, qui
+tourne avant l'existence de la CRD `ServiceMonitor`. Le panneau « Cibles de scrape » du
+dashboard ArgoCD est le premier endroit à regarder si les graphes sont vides :
+
+```bash
+kubectl -n monitoring get servicemonitor          # les 5 SM argocd-*
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+# puis Status → Targets, ou : curl -s 'localhost:9090/api/v1/query?query=up{job=~"argocd-.*"}'
+```
 
 ### Accès Prometheus / Alertmanager (non exposés)
 
