@@ -20,6 +20,9 @@ Alertmanager restent internes (non exposés).
 - `manifests/grafana-httproute.yaml` — HTTPRoute Grafana → `shared-gw`.
 - `manifests/grafana-oidc.sealed.yaml` — SealedSecret `client-secret` OIDC (**à créer**, cf. Opérations).
 - `manifests/grafana-admin.sealed.yaml` — SealedSecret admin local break-glass (**à créer**).
+- `manifests/dashboard-talos-nodes.yaml` — dashboard « Système — nœuds Talos » (sidecar,
+  label `grafana_dashboard: "1"`) ; porte la couche d'annotations « Déploiements ArgoCD »
+  (tags `argocd` + `deployed`, cf. [argocd](../../infra/argocd/README.md)).
 - `manifests/kustomization.yaml` — assemblage (les 2 SealedSecrets sont commentés jusqu'au scellage).
 
 ## Opérations

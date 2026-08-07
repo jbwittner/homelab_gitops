@@ -133,8 +133,21 @@ rm bleu-kalecgos/infra/argocd/manifests/argocd-notifications.secret.yaml
 #    commit + push.
 ```
 
-Debug : `kubectl logs -n argocd deploy/argocd-notifications-controller`. Vérifier la prise en
-compte d'un trigger sur une app :
+**Où les voir** : une annotation Grafana ne s'affiche **nulle part** par défaut — il faut qu'un
+dashboard la requête par tag. La couche « Déploiements ArgoCD » (tags `argocd` + `deployed`) est
+déclarée dans `dashboard-talos-nodes.json`
+([kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)) ; à recopier dans tout
+nouveau dashboard qui doit porter les marqueurs de déploiement. Liste brute :
+Grafana → Dashboards → *Annotations*, ou `GET /api/annotations?tags=argocd`.
+
+> [!warning] Multi-source et `oncePer`
+> `syncResult.revision` est **vide** sur les Applications multi-source (archétypes (a)/(b),
+> les révisions vivent dans `syncResult.revisions`). Le `oncePer` du catalogue upstream s'appuie
+> dessus : clé de dédup constante → **une seule annotation à vie** pour ces apps. D'où le
+> `oncePer` sur le couple `[revision, revisions]` et le `with/else` dans le template.
+
+Debug : `kubectl logs -n argocd deploy/argocd-notifications-controller`. `TRIGGERED` puis
+`already sent` = normal (dédup `oncePer`). Vérifier la prise en compte d'un trigger sur une app :
 `kubectl -n argocd get app <name> -o jsonpath='{.metadata.annotations}'` (le contrôleur y écrit
 son état `notified.notifications.argoproj.io`).
 

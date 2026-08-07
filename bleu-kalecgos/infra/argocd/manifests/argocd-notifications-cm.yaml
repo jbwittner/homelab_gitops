@@ -17,9 +17,12 @@ data:
 
   # Templates — le service grafana n'a pas de champ dédié : seul le `message`
   # générique est utilisé, il devient le texte de l'annotation.
+  # `syncResult.revision` est VIDE sur les apps multi-source (archétypes (a)/(b)) :
+  # les révisions y vivent dans la liste `syncResult.revisions` (chart + repo $values).
+  # D'où le `with/else` — sinon « déployé — révision  » sur la moitié des apps.
   template.app-deployed: |
     message: |
-      {{.app.metadata.name}} déployé — révision {{.app.status.operationState.syncResult.revision}}
+      {{.app.metadata.name}} déployé — révision {{with .app.status.operationState.syncResult.revisions}}{{range $i, $r := .}}{{if $i}} + {{end}}{{$r}}{{end}}{{else}}{{.app.status.operationState.syncResult.revision}}{{end}}
   template.app-health-degraded: |
     message: |
       {{.app.metadata.name}} dégradé — health {{.app.status.health.status}}
@@ -28,9 +31,16 @@ data:
       {{.app.metadata.name}} — sync en échec : {{.app.status.operationState.message}}
 
   # Triggers (catalogue upstream). `oncePer` évite une annotation par resync.
+  #
+  # ⚠️ `oncePer` du catalogue (`syncResult.revision` seul) est CASSÉ en multi-source :
+  # la valeur est vide, donc la clé de dédup ne change jamais → une seule annotation
+  # à vie pour cert-manager, cnpg, openebs, kube-prometheus-stack… Le couple
+  # [revision, revisions] couvre les deux formes ; le résultat est passé à
+  # fmt.Sprintf("%v"), n'importe quel type est accepté. Les guillemets sont
+  # obligatoires : sans eux YAML lirait une séquence, pas la chaîne d'expression.
   trigger.on-deployed: |
-    - description: Application synced et healthy. Une fois par commit.
-      oncePer: app.status.operationState.syncResult.revision
+    - description: Application synced et healthy. Une fois par révision.
+      oncePer: "[app.status.operationState.syncResult.revision, app.status.operationState.syncResult.revisions]"
       send: [app-deployed]
       when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
   trigger.on-health-degraded: |
