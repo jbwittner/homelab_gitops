@@ -12,9 +12,15 @@
 #   - node_namespace_pod_container:container_memory_working_set_bytes           (usage mémoire)
 #   - cluster:namespace:pod_{cpu,memory}:active:kube_pod_container_resource_{requests,limits}
 #     (requests/limits des pods Pending|Running uniquement — les pods terminés sont exclus)
-#   - namespace_{cpu,memory}:kube_pod_container_resource_{requests,limits}:sum (agrégats ns)
 #
-# Les 4 dashboards « Ressources » partagent le tag `ressources` : le menu déroulant en haut
+# Requests, limits et ratios : un conteneur peut déclarer des requests SANS limite. Les totaux
+# de requests et de limits portent donc sur des ensembles de conteneurs différents, et
+# « requests > limits » est un état normal, pas un bug. Les ratios utilisation/requests et
+# utilisation/limits restreignent donc le numérateur aux conteneurs qui déclarent la ressource
+# (`and on (namespace, pod, container)`), sans quoi ils dépasseraient 100 % sans rien signifier.
+# Une tuile « Conteneurs sans limite » chiffre l'écart dans chaque rangée.
+#
+# Les 5 dashboards « Ressources » partagent le tag `ressources` : le menu déroulant en haut
 # à droite navigue de l'un à l'autre en conservant période et variables.
 apiVersion: v1
 kind: ConfigMap
@@ -124,7 +130,7 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
+            "w": 6,
             "x": 0,
             "y": 1
           },
@@ -189,8 +195,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 4,
+            "w": 6,
+            "x": 6,
             "y": 1
           },
           "id": 3,
@@ -254,8 +260,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 8,
+            "w": 6,
+            "x": 12,
             "y": 1
           },
           "id": 4,
@@ -283,7 +289,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(namespace_cpu:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"})",
+              "expr": "sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -319,8 +325,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 12,
+            "w": 6,
+            "x": 18,
             "y": 1
           },
           "id": 5,
@@ -348,7 +354,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(namespace_cpu:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"})",
+              "expr": "sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -388,9 +394,9 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 16,
-            "y": 1
+            "w": 8,
+            "x": 0,
+            "y": 5
           },
           "id": 6,
           "options": {
@@ -417,14 +423,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"})) / (sum(namespace_cpu:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}\n)))\n/\n(sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Utilisation / requests",
-          "type": "stat"
+          "type": "stat",
+          "description": "Conteneurs déclarant des requests uniquement."
         },
         {
           "datasource": {
@@ -461,9 +468,9 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 20,
-            "y": 1
+            "w": 8,
+            "x": 8,
+            "y": 5
           },
           "id": 7,
           "options": {
@@ -490,14 +497,85 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"})) / (sum(namespace_cpu:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}\n)))\n/\n(sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Utilisation / limits",
-          "type": "stat"
+          "type": "stat",
+          "description": "Conteneurs déclarant une limite uniquement."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 5
+          },
+          "id": 8,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "count((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"}\n  unless on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}\n)) or vector(0)",
+              "legendFormat": "",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Conteneurs sans limite",
+          "type": "stat",
+          "description": "Conteneurs qui consomment la ressource sans déclarer de limite. Ils comptent dans le total des requests mais pas dans celui des limits — d'où des totaux où requests > limits, sans anomalie."
         },
         {
           "datasource": {
@@ -561,9 +639,9 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 5
+            "y": 9
           },
-          "id": 8,
+          "id": 9,
           "options": {
             "legend": {
               "calcs": [],
@@ -770,9 +848,9 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 14
+            "y": 18
           },
-          "id": 9,
+          "id": 10,
           "options": {
             "legend": {
               "calcs": [],
@@ -804,7 +882,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(namespace_cpu:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"})",
+              "expr": "sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"})",
               "legendFormat": "Requests",
               "range": true,
               "refId": "B"
@@ -815,7 +893,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(namespace_cpu:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"})",
+              "expr": "sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"})",
               "legendFormat": "Limits",
               "range": true,
               "refId": "C"
@@ -859,9 +937,9 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 23
+            "y": 27
           },
-          "id": 10,
+          "id": 11,
           "options": {
             "displayMode": "gradient",
             "maxVizHeight": 300,
@@ -888,7 +966,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"})) / (sum by (namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum by (namespace) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}\n)))\n/\n(sum by (namespace) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}))",
               "legendFormat": "{{namespace}}",
               "range": true,
               "refId": "A"
@@ -937,9 +1015,9 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 31
+            "y": 35
           },
-          "id": 11,
+          "id": 12,
           "options": {
             "displayMode": "gradient",
             "maxVizHeight": 300,
@@ -966,14 +1044,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"})) / (sum by (namespace) (namespace_cpu:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum by (namespace) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}\n)))\n/\n(sum by (namespace) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}))",
               "legendFormat": "{{namespace}}",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "CPU — utilisation / limits par namespace",
-          "type": "bargauge"
+          "type": "bargauge",
+          "description": "Pas de barre = aucune limite déclarée sur ce namespace."
         },
         {
           "collapsed": false,
@@ -981,9 +1060,9 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 39
+            "y": 43
           },
-          "id": 12,
+          "id": 13,
           "panels": [],
           "title": "Mémoire",
           "type": "row"
@@ -1015,11 +1094,11 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
+            "w": 6,
             "x": 0,
-            "y": 40
+            "y": 44
           },
-          "id": 13,
+          "id": 14,
           "options": {
             "colorMode": "value",
             "graphMode": "area",
@@ -1080,11 +1159,11 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 4,
-            "y": 40
+            "w": 6,
+            "x": 6,
+            "y": 44
           },
-          "id": 14,
+          "id": 15,
           "options": {
             "colorMode": "value",
             "graphMode": "area",
@@ -1145,11 +1224,11 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 8,
-            "y": 40
+            "w": 6,
+            "x": 12,
+            "y": 44
           },
-          "id": 15,
+          "id": 16,
           "options": {
             "colorMode": "value",
             "graphMode": "area",
@@ -1174,7 +1253,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(namespace_memory:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"})",
+              "expr": "sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1210,11 +1289,11 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 12,
-            "y": 40
+            "w": 6,
+            "x": 18,
+            "y": 44
           },
-          "id": 16,
+          "id": 17,
           "options": {
             "colorMode": "value",
             "graphMode": "area",
@@ -1239,7 +1318,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(namespace_memory:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"})",
+              "expr": "sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1279,11 +1358,11 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 16,
-            "y": 40
+            "w": 8,
+            "x": 0,
+            "y": 48
           },
-          "id": 17,
+          "id": 18,
           "options": {
             "colorMode": "value",
             "graphMode": "area",
@@ -1308,14 +1387,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum(node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"})) / (sum(namespace_memory:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}\n)))\n/\n(sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Utilisation / requests",
-          "type": "stat"
+          "type": "stat",
+          "description": "Conteneurs déclarant des requests uniquement."
         },
         {
           "datasource": {
@@ -1352,11 +1432,11 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 4,
-            "x": 20,
-            "y": 40
+            "w": 8,
+            "x": 8,
+            "y": 48
           },
-          "id": 18,
+          "id": 19,
           "options": {
             "colorMode": "value",
             "graphMode": "area",
@@ -1381,14 +1461,85 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum(node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"})) / (sum(namespace_memory:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}\n)))\n/\n(sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Utilisation / limits",
-          "type": "stat"
+          "type": "stat",
+          "description": "Conteneurs déclarant une limite uniquement."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 48
+          },
+          "id": 20,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "count((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"}\n  unless on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}\n)) or vector(0)",
+              "legendFormat": "",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Conteneurs sans limite",
+          "type": "stat",
+          "description": "Conteneurs qui consomment la ressource sans déclarer de limite. Ils comptent dans le total des requests mais pas dans celui des limits — d'où des totaux où requests > limits, sans anomalie."
         },
         {
           "datasource": {
@@ -1452,9 +1603,9 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 44
+            "y": 52
           },
-          "id": 19,
+          "id": 21,
           "options": {
             "legend": {
               "calcs": [],
@@ -1661,9 +1812,9 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 53
+            "y": 61
           },
-          "id": 20,
+          "id": 22,
           "options": {
             "legend": {
               "calcs": [],
@@ -1695,7 +1846,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(namespace_memory:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"})",
+              "expr": "sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"})",
               "legendFormat": "Requests",
               "range": true,
               "refId": "B"
@@ -1706,7 +1857,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(namespace_memory:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"})",
+              "expr": "sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"})",
               "legendFormat": "Limits",
               "range": true,
               "refId": "C"
@@ -1750,9 +1901,9 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 62
+            "y": 70
           },
-          "id": 21,
+          "id": 23,
           "options": {
             "displayMode": "gradient",
             "maxVizHeight": 300,
@@ -1779,7 +1930,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (namespace) (node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"})) / (sum by (namespace) (namespace_memory:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum by (namespace) ((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}\n)))\n/\n(sum by (namespace) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}))",
               "legendFormat": "{{namespace}}",
               "range": true,
               "refId": "A"
@@ -1828,9 +1979,9 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 70
+            "y": 78
           },
-          "id": 22,
+          "id": 24,
           "options": {
             "displayMode": "gradient",
             "maxVizHeight": 300,
@@ -1857,14 +2008,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (namespace) (node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"})) / (sum by (namespace) (namespace_memory:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum by (namespace) ((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}\n)))\n/\n(sum by (namespace) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}))",
               "legendFormat": "{{namespace}}",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Mémoire — utilisation / limits par namespace",
-          "type": "bargauge"
+          "type": "bargauge",
+          "description": "Pas de barre = aucune limite déclarée sur ce namespace."
         },
         {
           "collapsed": false,
@@ -1872,9 +2024,9 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 78
+            "y": 86
           },
-          "id": 23,
+          "id": 25,
           "panels": [],
           "title": "Synthèse",
           "type": "row"
@@ -2243,9 +2395,9 @@ data:
             "h": 14,
             "w": 24,
             "x": 0,
-            "y": 79
+            "y": 87
           },
-          "id": 24,
+          "id": 26,
           "options": {
             "cellHeight": "sm",
             "footer": {
@@ -2298,7 +2450,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"})",
+              "expr": "sum by (namespace) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": false,
               "refId": "C",
@@ -2311,7 +2463,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"})) / (sum by (namespace) (namespace_cpu:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum by (namespace) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}\n)))\n/\n(sum by (namespace) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "D",
@@ -2324,7 +2476,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (namespace) (namespace_cpu:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"})",
+              "expr": "sum by (namespace) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": false,
               "refId": "E",
@@ -2337,7 +2489,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"})) / (sum by (namespace) (namespace_cpu:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum by (namespace) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}\n)))\n/\n(sum by (namespace) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "F",
@@ -2363,7 +2515,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (namespace) (namespace_memory:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"})",
+              "expr": "sum by (namespace) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": false,
               "refId": "H",
@@ -2376,7 +2528,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (namespace) (node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"})) / (sum by (namespace) (namespace_memory:kube_pod_container_resource_requests:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum by (namespace) ((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}\n)))\n/\n(sum by (namespace) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=~\"$namespace\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "I",
@@ -2389,7 +2541,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (namespace) (namespace_memory:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"})",
+              "expr": "sum by (namespace) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"})",
               "legendFormat": "",
               "range": false,
               "refId": "J",
@@ -2402,7 +2554,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (namespace) (node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"})) / (sum by (namespace) (namespace_memory:kube_pod_container_resource_limits:sum{namespace=~\"$namespace\"}))",
+              "expr": "(sum by (namespace) ((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=~\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}\n)))\n/\n(sum by (namespace) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=~\"$namespace\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "K",
@@ -2463,7 +2615,7 @@ data:
             }
           ],
           "type": "table",
-          "description": "Une cellule vide = métrique absente (aucune request/limit déclarée). Cliquer sur le namespace ouvre ses workloads."
+          "description": "Les colonnes req. et lim. sont des sommes brutes portant sur des ensembles différents de conteneurs : un conteneur sans limite compte dans req. et pas dans lim., si bien que req. > lim. est courant et normal. Les colonnes de ratio, elles, ne comparent que les conteneurs qui déclarent la ressource."
         }
       ],
       "refresh": "30s",

@@ -90,6 +90,17 @@ ratios) à quatre granularités, plus `volumes` sur l'axe stockage. Le menu dér
 droite (tag commun `ressources`) navigue entre eux **en conservant période et variables** ;
 les tables de synthèse sont cliquables vers le niveau suivant.
 
+Deux pièges de lecture, traités dans les requêtes et rappelés dans les descriptions des
+panneaux :
+
+- **requests > limits est normal.** Un conteneur peut déclarer des requests sans limite (les
+  static pods de `kube-system` sur Talos, par exemple). Les deux totaux portent donc sur des
+  ensembles de conteneurs différents. Les ratios, eux, ne comparent que les conteneurs qui
+  déclarent la ressource, et une tuile « Conteneurs sans limite » chiffre l'écart.
+- **Sur `workloads`, la variable Type vaut « All » par défaut** — sans quoi le total du
+  dashboard ne correspond pas à celui du namespace : restreindre à `deployment` masque les
+  static pods et les DaemonSets, c'est-à-dire l'essentiel de `kube-system`.
+
 Sur `volumes`, les deux vues du remplissage ne se remplacent pas : les `kubelet_volume_stats_*`
 disent ce que voit le filesystem de chaque PVC, la rangée thin pool dit combien il reste
 réellement dans le pool LVM. En provisionnement fin, c'est la seconde qui décide du moment où
