@@ -33,6 +33,8 @@ Alertmanager restent internes (non exposés).
   `ressources` (cf. §Opérations).
 - `manifests/dashboard-ressources-volumes.yaml` — même famille, axe stockage : remplissage et
   inodes par PVC, projection avant saturation, thin pool LVM, cycle de vie PVC/PV.
+- `manifests/dashboard-logs.yaml` — dashboard « Logs — applications » (datasource
+  [Loki](../loki/README.md)) : débit, erreurs, conteneurs les plus bavards, journal filtrable.
 - `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD (cf. §Opérations).
 - `manifests/kustomization.yaml` — assemblage (garder une ressource `*.sealed.yaml` commentée
   tant qu'elle n'est pas scellée : un fichier référencé mais absent casse `kustomize build`).
@@ -130,6 +132,18 @@ non côté composant [loki](../loki/README.md) : le câblage Grafana d'un compos
 comme les dashboards et ServiceMonitors ArgoCD. Les logs sont collectés par
 [alloy](../alloy/README.md). Vérification : Connections → Data sources → Loki → **Save & test**,
 puis Explore avec une requête du type `{namespace="argocd"}`.
+
+Le dashboard « Logs — applications » (`dashboard-logs.yaml`) filtre par namespace / pod /
+conteneur, plus une variable **Recherche** appliquée au contenu des lignes. Deux choses à savoir
+avant d'y toucher :
+
+- **Écrire les regex entre backticks**, jamais entre guillemets. Entre guillemets, LogQL applique
+  les échappements Go : `\b` devient un caractère backspace au lieu d'une limite de mot, et la
+  requête — parfaitement valide — ne remonte plus rien. Un panneau vide, aucune erreur.
+- Les panneaux « erreurs » sont une **heuristique textuelle** (`error|fatal|panic|exception|erreur`),
+  pas un niveau de log : une ligne « 0 errors reported » y est comptée. Loki ne connaîtra de
+  vrais niveaux que le jour où un `stage.json` sera ajouté côté alloy pour les applications qui
+  émettent du JSON structuré.
 
 ### Accès Prometheus / Alertmanager (non exposés)
 

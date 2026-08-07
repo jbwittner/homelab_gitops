@@ -13,4 +13,5 @@ resources:
   - dashboard-ressources-workloads.yaml
   - dashboard-ressources-pods.yaml
   - dashboard-ressources-volumes.yaml
+  - dashboard-logs.yaml
   - servicemonitors-argocd.yaml
