@@ -688,7 +688,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -782,7 +782,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -910,7 +910,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -1038,7 +1038,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -1154,7 +1154,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2070,7 +2070,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2164,7 +2164,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2282,7 +2282,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2386,7 +2386,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2491,7 +2491,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2597,7 +2597,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2703,7 +2703,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2820,7 +2820,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -2925,7 +2925,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -3070,7 +3070,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -3164,7 +3164,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -3291,7 +3291,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
@@ -3896,7 +3896,7 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "right",
+              "placement": "bottom",
               "showLegend": true
             },
             "tooltip": {
