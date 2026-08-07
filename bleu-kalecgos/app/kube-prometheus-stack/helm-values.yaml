@@ -58,6 +58,21 @@ alertmanager:
             requests:
               storage: 2Gi
 
+# --- node-exporter : `instance` = nom du nœud au lieu de l'IP:port du pod.
+#     Par défaut la ServiceMonitor du chart n'applique aucun relabeling, donc toutes
+#     les séries node-* sortent avec instance="192.168.1.11:9100". Corrigé ici plutôt
+#     que dans chaque dashboard : une jointure node_uname_info par requête serait à
+#     refaire partout, et les dashboards fournis par le chart resteraient en IP.
+#     Note : les séries déjà stockées gardent l'ancien label jusqu'à expiration de la
+#     rétention (15j) — un trou apparaît sur les graphes à cheval sur le changement.
+prometheus-node-exporter:
+  prometheus:
+    monitor:
+      relabelings:
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: instance
+
 # --- Talos mono-nœud : composants control-plane non scrapables par défaut (bind
 #     addresses / accès restreints) → désactivés pour éviter des targets "down"
 #     permanentes. À réactiver avec les endpoints Talos adéquats si besoin.

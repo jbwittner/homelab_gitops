@@ -34,7 +34,8 @@
       "Bash(rtk rg *)",
       "WebFetch(domain:github.com)",
       "Bash(gh auth *)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(kubectl get *)"
     ]
   }
 }

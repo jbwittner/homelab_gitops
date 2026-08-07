@@ -1465,7 +1465,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(1 - lvm_vg_free_size_bytes{name=~\"$vg\"} / lvm_vg_total_size_bytes{name=~\"$vg\"}) * 100",
+              "expr": "(1 - sum(lvm_vg_free_size_bytes) / sum(lvm_vg_total_size_bytes)) * 100",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1530,7 +1530,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "lvm_vg_free_size_bytes{name=~\"$vg\"}",
+              "expr": "sum(lvm_vg_free_size_bytes)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1595,7 +1595,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "lvm_vg_total_size_bytes{name=~\"$vg\"}",
+              "expr": "sum(lvm_vg_total_size_bytes)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1660,14 +1660,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "lvm_vg_lv_count{name=~\"$vg\"}",
+              "expr": "sum(lvm_vg_lv_count)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "Volumes (LV)",
-          "type": "stat"
+          "type": "stat",
+          "description": "Nombre total de logical volumes provisionnes, tous VolumeGroups confondus."
         },
         {
           "datasource": {
@@ -1737,7 +1738,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(1 - lvm_vg_mda_free_size_bytes{name=~\"$vg\"} / lvm_vg_mda_total_size_bytes{name=~\"$vg\"}) * 100",
+              "expr": "(1 - sum(lvm_vg_mda_free_size_bytes) / sum(lvm_vg_mda_total_size_bytes)) * 100",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1802,14 +1803,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "lvm_vg_pv_count{name=~\"$vg\"}",
+              "expr": "sum(lvm_vg_pv_count)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "PV dans le VG",
-          "type": "stat"
+          "title": "PV (tous VG)",
+          "type": "stat",
+          "description": "Nombre total de physical volumes, tous VolumeGroups confondus."
         },
         {
           "datasource": {
@@ -1962,7 +1964,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(1 - lvm_vg_free_size_bytes{name=~\"$vg\"} / lvm_vg_total_size_bytes{name=~\"$vg\"}) * 100",
+              "expr": "(1 - lvm_vg_free_size_bytes / lvm_vg_total_size_bytes) * 100",
               "legendFormat": "{{name}} @ {{instance}}",
               "range": true,
               "refId": "A"
@@ -2236,7 +2238,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "lvm_vg_free_size_bytes{name=~\"$vg\"}",
+              "expr": "lvm_vg_free_size_bytes",
               "legendFormat": "{{name}} — libre",
               "range": true,
               "refId": "A"
@@ -2247,7 +2249,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "lvm_vg_total_size_bytes{name=~\"$vg\"}",
+              "expr": "lvm_vg_total_size_bytes",
               "legendFormat": "{{name}} — capacité",
               "range": true,
               "refId": "B"
@@ -2354,7 +2356,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "rate(node_disk_reads_completed_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
+              "expr": "rate(node_disk_reads_completed_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval])",
               "legendFormat": "{{instance}} · {{device}} — lecture",
               "range": true,
               "refId": "A"
@@ -2365,7 +2367,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "-rate(node_disk_writes_completed_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
+              "expr": "-rate(node_disk_writes_completed_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval])",
               "legendFormat": "{{instance}} · {{device}} — écriture",
               "range": true,
               "refId": "B"
@@ -2458,7 +2460,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "rate(node_disk_read_bytes_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
+              "expr": "rate(node_disk_read_bytes_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval])",
               "legendFormat": "{{instance}} · {{device}} — lecture",
               "range": true,
               "refId": "A"
@@ -2469,7 +2471,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "-rate(node_disk_written_bytes_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
+              "expr": "-rate(node_disk_written_bytes_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval])",
               "legendFormat": "{{instance}} · {{device}} — écriture",
               "range": true,
               "refId": "B"
@@ -2563,7 +2565,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "rate(node_disk_read_time_seconds_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]) / clamp_min(rate(node_disk_reads_completed_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]), 1)",
+              "expr": "rate(node_disk_read_time_seconds_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval]) / clamp_min(rate(node_disk_reads_completed_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval]), 1)",
               "legendFormat": "{{instance}} · {{device}} — lecture",
               "range": true,
               "refId": "A"
@@ -2574,7 +2576,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "rate(node_disk_write_time_seconds_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]) / clamp_min(rate(node_disk_writes_completed_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]), 1)",
+              "expr": "rate(node_disk_write_time_seconds_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval]) / clamp_min(rate(node_disk_writes_completed_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval]), 1)",
               "legendFormat": "{{instance}} · {{device}} — écriture",
               "range": true,
               "refId": "B"
@@ -2669,7 +2671,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "rate(node_disk_io_time_seconds_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval]) * 100",
+              "expr": "rate(node_disk_io_time_seconds_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval]) * 100",
               "legendFormat": "{{instance}} · {{device}} — occupation",
               "range": true,
               "refId": "A"
@@ -2680,7 +2682,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "rate(node_disk_io_time_weighted_seconds_total{instance=~\"$instance\",device=~\"$device\"}[$__rate_interval])",
+              "expr": "rate(node_disk_io_time_weighted_seconds_total{instance=~\"$instance\",device=~\"nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+\"}[$__rate_interval])",
               "legendFormat": "{{instance}} · {{device}} — file d'attente",
               "range": true,
               "refId": "B"
@@ -3742,7 +3744,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Chaque capteur hwmon disponible, tous chips confondus. Table de référence pour savoir ce que le nœud expose réellement.",
+          "description": "Chaque capteur hwmon disponible, tous chips confondus, avec ses seuils constructeur sur la même ligne. Table de référence pour savoir ce que le nœud expose réellement. Une cellule de seuil vide n'est pas un défaut : seul le capteur composite (temp1) des NVMe porte un WCTEMP/CCTEMP, les capteurs internes n'en déclarent aucun.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3757,6 +3759,7 @@ data:
               },
               "decimals": 1,
               "mappings": [],
+              "noValue": "—",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -3768,7 +3771,32 @@ data:
               },
               "unit": "celsius"
             },
-            "overrides": []
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "°C"
+                },
+                "properties": [
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "basic",
+                      "type": "gauge",
+                      "valueDisplayMode": "text"
+                    }
+                  },
+                  {
+                    "id": "max",
+                    "value": 110
+                  },
+                  {
+                    "id": "min",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
           },
           "gridPos": {
             "h": 10,
@@ -3790,8 +3818,8 @@ data:
             "showHeader": true,
             "sortBy": [
               {
-                "desc": true,
-                "displayName": "Value"
+                "desc": false,
+                "displayName": "Chip"
               }
             ]
           },
@@ -3803,7 +3831,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\"}",
+              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_celsius{instance=~\"$instance\"})",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -3816,7 +3844,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "node_hwmon_temp_max_celsius{instance=~\"$instance\"}",
+              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_max_celsius{instance=~\"$instance\"})",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -3829,7 +3857,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "node_hwmon_temp_crit_celsius{instance=~\"$instance\"}",
+              "expr": "max by (instance, chip, sensor) (node_hwmon_temp_crit_celsius{instance=~\"$instance\"})",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -3840,23 +3868,31 @@ data:
           "title": "Inventaire des capteurs hwmon (valeur, seuils)",
           "transformations": [
             {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {}
+              }
+            },
+            {
               "id": "merge",
               "options": {}
             },
             {
               "id": "organize",
               "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true,
-                  "container": true,
-                  "endpoint": true,
-                  "job": true,
-                  "namespace": true,
-                  "pod": true,
-                  "service": true
+                "excludeByName": {},
+                "indexByName": {
+                  "Value #A": 3,
+                  "Value #B": 4,
+                  "Value #C": 5,
+                  "chip": 1,
+                  "instance": 0,
+                  "sensor": 2
                 },
-                "indexByName": {},
                 "renameByName": {
                   "Value #A": "°C",
                   "Value #B": "Seuil warning",
@@ -4037,63 +4073,6 @@ data:
               "qryType": 1,
               "query": "label_values(node_uname_info, nodename)",
               "refId": "node"
-            },
-            "refresh": 2,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "type": "query"
-          },
-          {
-            "current": {
-              "selected": true,
-              "text": [
-                "All"
-              ],
-              "value": [
-                "$__all"
-              ]
-            },
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${DS_PROMETHEUS}"
-            },
-            "definition": "label_values(node_disk_io_time_seconds_total{instance=~\"$instance\"}, device)",
-            "description": "Découvert dynamiquement : tous les disques physiques du nœud, quel que soit leur nombre. Les partitions sont exclues du filtre.",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Disque",
-            "multi": true,
-            "name": "device",
-            "options": [],
-            "query": {
-              "qryType": 1,
-              "query": "label_values(node_disk_io_time_seconds_total{instance=~\"$instance\"}, device)",
-              "refId": "device"
-            },
-            "refresh": 2,
-            "regex": "/^(nvme\\d+n\\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-\\d+)$/",
-            "skipUrlSync": false,
-            "sort": 1,
-            "type": "query"
-          },
-          {
-            "current": {},
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${DS_PROMETHEUS}"
-            },
-            "definition": "label_values(lvm_vg_total_size_bytes, name)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "VolumeGroup",
-            "multi": true,
-            "name": "vg",
-            "options": [],
-            "query": {
-              "qryType": 1,
-              "query": "label_values(lvm_vg_total_size_bytes, name)",
-              "refId": "vg"
             },
             "refresh": 2,
             "regex": "",
