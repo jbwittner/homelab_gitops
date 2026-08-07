@@ -8,4 +8,8 @@ resources:
   - grafana-admin.sealed.yaml
   - dashboard-talos-nodes.yaml
   - dashboard-argocd.yaml
+  - dashboard-ressources-cluster.yaml
+  - dashboard-ressources-namespaces.yaml
+  - dashboard-ressources-workloads.yaml
+  - dashboard-ressources-pods.yaml
   - servicemonitors-argocd.yaml

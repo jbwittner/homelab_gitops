@@ -27,6 +27,9 @@ Alertmanager restent internes (non exposés).
   état sync/santé des Applications, synchronisations, réconciliation du contrôleur,
   repo-server Git, notifications, santé des composants. Variables Projet/Application,
   3 couches d'annotations (`deployed` / `degraded` / `sync-failed`).
+- `manifests/dashboard-ressources-{cluster,namespaces,workloads,pods}.yaml` — chaîne « Ressources »
+  (CPU/mémoire : utilisation, requests, limits) à 4 niveaux de granularité, reliés par le tag
+  `ressources` (cf. §Opérations).
 - `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD (cf. §Opérations).
 - `manifests/kustomization.yaml` — assemblage (garder une ressource `*.sealed.yaml` commentée
   tant qu'elle n'est pas scellée : un fichier référencé mais absent casse `kustomize build`).
@@ -77,6 +80,21 @@ kubectl -n monitoring get servicemonitor          # les 5 SM argocd-*
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
 # puis Status → Targets, ou : curl -s 'localhost:9090/api/v1/query?query=up{job=~"argocd-.*"}'
 ```
+
+### Chaîne de dashboards « Ressources »
+
+`cluster → namespaces → workloads → pods` : mêmes indicateurs (utilisation, requests, limits,
+ratios) à quatre granularités. Le menu déroulant en haut à droite (tag commun `ressources`)
+navigue entre eux **en conservant période et variables** ; les tables de synthèse sont
+cliquables vers le niveau suivant.
+
+Les requêtes s'appuient sur les **recording rules du chart** (`defaultRules`, actives par
+défaut) : `node_namespace_pod_container:*`, `cluster:namespace:pod_*:active:*`,
+`namespace_{cpu,memory}:*` et `namespace_workload_pod:kube_pod_owner:relabel`. Les désactiver
+dans `helm-values.yaml` viderait ces dashboards.
+
+À noter : le chart livre aussi ses propres dashboards « Kubernetes / Compute Resources »
+(anglais, générés par kubernetes-mixin), qui couvrent un terrain proche.
 
 ### Accès Prometheus / Alertmanager (non exposés)
 
