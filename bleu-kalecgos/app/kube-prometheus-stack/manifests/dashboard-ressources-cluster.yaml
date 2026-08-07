@@ -2421,7 +2421,7 @@ data:
           "type": "timeseries"
         }
       ],
-      "refresh": "1m",
+      "refresh": "30s",
       "schemaVersion": 39,
       "tags": [
         "ressources",
@@ -2448,7 +2448,7 @@ data:
         ]
       },
       "time": {
-        "from": "now-6h",
+        "from": "now-1h",
         "to": "now"
       },
       "timepicker": {},

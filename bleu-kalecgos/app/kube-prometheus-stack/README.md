@@ -30,6 +30,8 @@ Alertmanager restent internes (non exposés).
 - `manifests/dashboard-ressources-{cluster,namespaces,workloads,pods}.yaml` — chaîne « Ressources »
   (CPU/mémoire : utilisation, requests, limits) à 4 niveaux de granularité, reliés par le tag
   `ressources` (cf. §Opérations).
+- `manifests/dashboard-ressources-volumes.yaml` — même famille, axe stockage : remplissage et
+  inodes par PVC, projection avant saturation, thin pool LVM, cycle de vie PVC/PV.
 - `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD (cf. §Opérations).
 - `manifests/kustomization.yaml` — assemblage (garder une ressource `*.sealed.yaml` commentée
   tant qu'elle n'est pas scellée : un fichier référencé mais absent casse `kustomize build`).
@@ -84,9 +86,14 @@ kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:909
 ### Chaîne de dashboards « Ressources »
 
 `cluster → namespaces → workloads → pods` : mêmes indicateurs (utilisation, requests, limits,
-ratios) à quatre granularités. Le menu déroulant en haut à droite (tag commun `ressources`)
-navigue entre eux **en conservant période et variables** ; les tables de synthèse sont
-cliquables vers le niveau suivant.
+ratios) à quatre granularités, plus `volumes` sur l'axe stockage. Le menu déroulant en haut à
+droite (tag commun `ressources`) navigue entre eux **en conservant période et variables** ;
+les tables de synthèse sont cliquables vers le niveau suivant.
+
+Sur `volumes`, les deux vues du remplissage ne se remplacent pas : les `kubelet_volume_stats_*`
+disent ce que voit le filesystem de chaque PVC, la rangée thin pool dit combien il reste
+réellement dans le pool LVM. En provisionnement fin, c'est la seconde qui décide du moment où
+les écritures échouent — et elle sature avant que les PVC ne paraissent pleins.
 
 Les requêtes s'appuient sur les **recording rules du chart** (`defaultRules`, actives par
 défaut) : `node_namespace_pod_container:*`, `cluster:namespace:pod_*:active:*`,
