@@ -96,6 +96,14 @@ dans `helm-values.yaml` viderait ces dashboards.
 À noter : le chart livre aussi ses propres dashboards « Kubernetes / Compute Resources »
 (anglais, générés par kubernetes-mixin), qui couvrent un terrain proche.
 
+### Dossier Grafana « Wittnerlab »
+
+Les 6 dashboards maison portent l'annotation `grafana_folder: Wittnerlab` et atterrissent dans
+un dossier dédié, listé **avant** les dashboards racine du chart. Le câblage est dans
+`helm-values.yaml` (`sidecar.dashboards.folderAnnotation` + `provider.foldersFromFilesStructure`,
+inséparables). Tout nouveau dashboard doit porter l'annotation, sinon il retombe à la racine
+avec la trentaine de dashboards du chart.
+
 ### Accès Prometheus / Alertmanager (non exposés)
 
 ```bash
