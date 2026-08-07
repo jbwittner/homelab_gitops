@@ -35,7 +35,8 @@
       "WebFetch(domain:github.com)",
       "Bash(gh auth *)",
       "Bash(gh pr *)",
-      "Bash(kubectl get *)"
+      "Bash(kubectl get *)",
+      "Bash(python3 -)"
     ]
   }
 }
