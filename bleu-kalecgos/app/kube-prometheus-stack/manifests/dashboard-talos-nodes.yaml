@@ -94,7 +94,7 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 3,
+            "w": 4,
             "x": 0,
             "y": 1
           },
@@ -171,8 +171,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 3,
-            "x": 3,
+            "w": 4,
+            "x": 4,
             "y": 1
           },
           "id": 3,
@@ -248,8 +248,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 3,
-            "x": 6,
+            "w": 4,
+            "x": 8,
             "y": 1
           },
           "id": 4,
@@ -330,7 +330,7 @@ data:
           "gridPos": {
             "h": 4,
             "w": 3,
-            "x": 9,
+            "x": 12,
             "y": 1
           },
           "id": 5,
@@ -407,7 +407,7 @@ data:
           "gridPos": {
             "h": 4,
             "w": 3,
-            "x": 12,
+            "x": 15,
             "y": 1
           },
           "id": 6,
@@ -484,7 +484,7 @@ data:
           "gridPos": {
             "h": 4,
             "w": 3,
-            "x": 15,
+            "x": 18,
             "y": 1
           },
           "id": 7,
@@ -519,71 +519,6 @@ data:
             }
           ],
           "title": "Load (norm. / cœurs)",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "decimals": 0,
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "s"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 3,
-            "x": 18,
-            "y": 1
-          },
-          "id": 8,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "pluginVersion": "10.4.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "time() - node_boot_time_seconds{instance=~\"$instance\"}",
-              "legendFormat": "",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Uptime",
           "type": "stat"
         },
         {
@@ -1846,8 +1781,8 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 9,
-            "w": 24,
+            "h": 8,
+            "w": 8,
             "x": 0,
             "y": 56
           },
@@ -1926,10 +1861,10 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 9,
-            "w": 24,
-            "x": 0,
-            "y": 65
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 56
           },
           "id": 26,
           "options": {
@@ -2006,10 +1941,10 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 9,
-            "w": 24,
-            "x": 0,
-            "y": 74
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 56
           },
           "id": 27,
           "options": {
@@ -2109,7 +2044,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 83
+            "y": 64
           },
           "id": 28,
           "options": {
@@ -2203,7 +2138,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 92
+            "y": 73
           },
           "id": 29,
           "options": {
@@ -2252,7 +2187,7 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 101
+            "y": 82
           },
           "id": 30,
           "panels": [],
@@ -2321,7 +2256,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 102
+            "y": 83
           },
           "id": 31,
           "options": {
@@ -2425,7 +2360,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 111
+            "y": 92
           },
           "id": 32,
           "options": {
@@ -2530,7 +2465,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 120
+            "y": 101
           },
           "id": 33,
           "options": {
@@ -2636,7 +2571,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 129
+            "y": 110
           },
           "id": 34,
           "options": {
@@ -2742,7 +2677,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 138
+            "y": 119
           },
           "id": 35,
           "options": {
@@ -2791,7 +2726,7 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 147
+            "y": 128
           },
           "id": 36,
           "panels": [],
@@ -2859,7 +2794,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 148
+            "y": 129
           },
           "id": 37,
           "options": {
@@ -2964,7 +2899,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 157
+            "y": 138
           },
           "id": 38,
           "options": {
@@ -3091,7 +3026,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 166
+            "y": 147
           },
           "id": 39,
           "options": {
@@ -3218,7 +3153,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 175
+            "y": 156
           },
           "id": 40,
           "options": {
@@ -3256,7 +3191,7 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 184
+            "y": 165
           },
           "id": 41,
           "panels": [],
@@ -3434,7 +3369,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 185
+            "y": 166
           },
           "id": 42,
           "options": {
@@ -3540,10 +3475,10 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 9,
-            "w": 24,
+            "h": 8,
+            "w": 12,
             "x": 0,
-            "y": 194
+            "y": 175
           },
           "id": 43,
           "options": {
@@ -3608,10 +3543,10 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 5,
+            "h": 8,
             "w": 6,
-            "x": 0,
-            "y": 203
+            "x": 12,
+            "y": 175
           },
           "id": 44,
           "options": {
@@ -3682,10 +3617,10 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 5,
+            "h": 8,
             "w": 6,
-            "x": 6,
-            "y": 203
+            "x": 18,
+            "y": 175
           },
           "id": 45,
           "options": {
@@ -3784,7 +3719,7 @@ data:
             "h": 11,
             "w": 24,
             "x": 0,
-            "y": 208
+            "y": 183
           },
           "id": 46,
           "options": {
@@ -3955,7 +3890,7 @@ data:
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 219
+            "y": 194
           },
           "id": 47,
           "options": {
