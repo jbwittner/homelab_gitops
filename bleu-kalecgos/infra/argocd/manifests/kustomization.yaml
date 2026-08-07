@@ -12,9 +12,14 @@ resources:
   - namespace.yaml
   - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.5/manifests/install.yaml
   - argocd-httproute.yaml
-  - argocd-oidc.sealed.yaml 
+  - argocd-oidc.sealed.yaml
+  - argocd-notifications.sealed.yaml
   # Référencer un fichier inexistant casse `kustomize build` → app self-managed en erreur.
 patches:
+  - path: argocd-notifications-secret-patch.yaml
+    target:
+      kind: Secret
+      name: argocd-notifications-secret
   - path: argocd-cmd-params-cm.yaml
     target:
       kind: ConfigMap
@@ -27,3 +32,7 @@ patches:
     target:
       kind: ConfigMap
       name: argocd-rbac-cm
+  - path: argocd-notifications-cm.yaml
+    target:
+      kind: ConfigMap
+      name: argocd-notifications-cm

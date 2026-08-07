@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  # Service Grafana : le notifications-controller pose une *annotation* Grafana
+  # (POST /api/annotations) à chaque événement souscrit. Appel in-cluster —
+  # inutile de repasser par shared-gw/TLS pour du trafic argocd → monitoring.
+  # `$grafana-api-key` est résolu dans le Secret `argocd-notifications-secret`
+  # (SealedSecret argocd-notifications.sealed.yaml) : le contrôleur ne lit QUE ce
+  # secret-là, d'où le nom imposé (contrairement à `$argocd-oidc:client-secret`
+  # dans argocd-cm, qui accepte n'importe quel secret).
+  service.grafana: |
+    apiUrl: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api
+    apiKey: $grafana-api-key
+
+  # Templates — le service grafana n'a pas de champ dédié : seul le `message`
+  # générique est utilisé, il devient le texte de l'annotation.
+  template.app-deployed: |
+    message: |
+      {{.app.metadata.name}} déployé — révision {{.app.status.operationState.syncResult.revision}}
+  template.app-health-degraded: |
+    message: |
+      {{.app.metadata.name}} dégradé — health {{.app.status.health.status}}
+  template.app-sync-failed: |
+    message: |
+      {{.app.metadata.name}} — sync en échec : {{.app.status.operationState.message}}
+
+  # Triggers (catalogue upstream). `oncePer` évite une annotation par resync.
+  trigger.on-deployed: |
+    - description: Application synced et healthy. Une fois par commit.
+      oncePer: app.status.operationState.syncResult.revision
+      send: [app-deployed]
+      when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+  trigger.on-health-degraded: |
+    - description: Application dégradée
+      send: [app-health-degraded]
+      when: app.status.health.status == 'Degraded'
+  trigger.on-sync-failed: |
+    - description: Sync en échec
+      send: [app-sync-failed]
+      when: app.status.operationState.phase in ['Error', 'Failed']
+
+  # Souscriptions globales : s'appliquent à TOUTES les Applications, pas besoin
+  # d'annoter chaque `.app.yaml`. Recipient grafana = liste de tags séparés par
+  # `|` — ce sont les tags de l'annotation, à réutiliser en filtre côté dashboard.
+  subscriptions: |
+    - recipients:
+        - grafana:argocd|deployed
+      triggers:
+        - on-deployed
+    - recipients:
+        - grafana:argocd|degraded
+      triggers:
+        - on-health-degraded
+    - recipients:
+        - grafana:argocd|sync-failed
+      triggers:
+        - on-sync-failed

@@ -36,7 +36,8 @@
       "Bash(gh auth *)",
       "Bash(gh pr *)",
       "Bash(kubectl get *)",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "WebFetch(domain:argo-cd.readthedocs.io)"
     ]
   }
 }

@@ -39,6 +39,11 @@ Procédure complète (Talos, Cilium, DR) : [doc/runbook-bootstrap-kalecgos.md](.
 - `manifests/argocd-rbac-cm.yaml` — patch RBAC : groupe authentik `ArgoCD Admins` → `role:admin`
 - `manifests/argocd-httproute.yaml` — UI via `shared-gw` (cf. [doc/reseau.md](../../../doc/reseau.md))
 - `manifests/argocd-oidc.sealed.yaml` — SealedSecret du `client-secret` OIDC (**à créer**, cf. §Opérations)
+- `manifests/argocd-notifications-cm.yaml` — patch notifications : service Grafana, templates,
+  triggers, souscriptions globales (cf. §Notifications)
+- `manifests/argocd-notifications-secret-patch.yaml` — patch du Secret vide upstream :
+  annotation d'adoption sealed-secrets (aucune donnée, cf. §Notifications)
+- `manifests/argocd-notifications.sealed.yaml` — SealedSecret du token Grafana (**à créer**)
 
 ## Self-management — garde-fous
 
@@ -92,4 +97,46 @@ rm bleu-kalecgos/infra/argocd/manifests/argocd-oidc.secret.yaml
 
 Rotation : régénérer le secret Terraform, re-coller dans `.secret.yaml`,
 re-sceller (étape 2), commit.
+
+## Notifications — annotations Grafana
+
+Le `argocd-notifications-controller` (livré par l'install upstream) pose une **annotation
+Grafana** à chaque déploiement / dégradation / échec de sync, sur **toutes** les Applications
+(souscriptions globales dans `argocd-notifications-cm`, aucune annotation par app à ajouter).
+Tags posés : `argocd` + `deployed` | `degraded` | `sync-failed` — à utiliser comme filtre
+d'annotation dans les dashboards Grafana.
+
+Contraintes du contrôleur : il ne lit **que** le Secret `argocd-notifications-secret` du ns
+`argocd` (nom imposé, pas de `$autre-secret:clé` comme dans `argocd-cm`). Comme l'upstream
+livre déjà ce Secret vide, il est patché avec `sealedsecrets.bitnami.com/managed: "true"` pour
+que le contrôleur sealed-secrets l'adopte et y injecte la clé.
+
+**Câblage du token** (le token Grafana ne se provisionne pas en GitOps — création manuelle
+côté Grafana, puis scellage) :
+
+```bash
+# 1. Grafana → Administration → Users and access → Service accounts
+#    Créer `argocd-notifications`, rôle Editor, puis « Add service account token »
+#    (le token glsa_… n'est affiché qu'une fois).
+
+# 2. Coller le token dans le template en clair (gitignoré) :
+#    bleu-kalecgos/infra/argocd/manifests/argocd-notifications.secret.yaml
+#    → clé grafana-api-key
+
+# 3. Sceller, puis supprimer le clair
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < bleu-kalecgos/infra/argocd/manifests/argocd-notifications.secret.yaml \
+  > bleu-kalecgos/infra/argocd/manifests/argocd-notifications.sealed.yaml
+rm bleu-kalecgos/infra/argocd/manifests/argocd-notifications.secret.yaml
+
+# 4. Décommenter `- argocd-notifications.sealed.yaml` dans manifests/kustomization.yaml,
+#    commit + push.
+```
+
+Debug : `kubectl logs -n argocd deploy/argocd-notifications-controller`. Vérifier la prise en
+compte d'un trigger sur une app :
+`kubectl -n argocd get app <name> -o jsonpath='{.metadata.annotations}'` (le contrôleur y écrit
+son état `notified.notifications.argoproj.io`).
+
+Rotation du token : régénérer côté Grafana, re-renseigner le template, re-sceller (étape 3).
 
