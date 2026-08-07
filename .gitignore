@@ -2,5 +2,6 @@ pub-cert.pem
 *.secret.yaml
 repo-secret.yaml
 *-backup.yaml
+*sealed-secrets-key*.yaml
 argocd-deploy-key
 argocd-deploy-key.pub

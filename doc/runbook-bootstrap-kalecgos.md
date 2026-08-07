@@ -57,7 +57,7 @@ status: draft
 - `talhelper --version` ≥ **v3.0.37** (support des documents autonomes `VolumeConfig`/`RawVolumeConfig` en patch multi-docs).
 - `talosctl`, `kubectl`, `helm`, `cilium` CLI présents. `kubectl` récent (kustomize intégré avec remote resources — l'install ArgoCD tire `raw.githubusercontent.com`).
 - `kubeseal` CLI présent (phase 6-7).
-- Backup de la **clé sealed-secrets** accessible hors cluster (coffre) — indispensable en rebuild, cf. phase 6.
+- Backup de la **clé sealed-secrets** accessible hors cluster (coffre) — indispensable en rebuild, cf. phase 6. Copie de travail actuelle : `sealed-secrets-key.yaml` à la racine du clone, **hors Git** (couvert par `.gitignore`). Le coffre reste la source de vérité : ce fichier disparaît avec le clone.
 - `talsecret.yaml` **neuf**, hors Git. Régénérer : `talhelper gensecret > talsecret.yaml`.
 - Clone local de `homelab-gitops` à jour (`https://github.com/jbwittner/homelab_gitops.git`, public → HTTPS anonyme, aucun credential).
 
@@ -330,15 +330,23 @@ Le header `server: envoy` confirme le proxy Cilium. Le `-k` est l'état **attend
 Application `sealed-secrets` (`infra/sealed-secrets/`) : chart Bitnami **2.19.1** (app v0.38.4), ns `sealed-secrets`, aucune values custom. Déployée par le tier-1, rien à lancer.
 
 > [!CAUTION]
-> **DR — la clé AVANT le contrôleur.** En **rebuild**, le contrôleur démarré à vide génère une clé **neuve** → tous les SealedSecrets du repo deviennent indéchiffrables (il faudrait tout resceller). Restaurer la clé **avant** son premier démarrage — ou immédiatement après, suivi d'un restart :
+> **DR — la clé AVANT le contrôleur. Geste OBLIGATOIRE en rebuild, facile à oublier.** Le contrôleur démarré à vide génère une clé **neuve** → tous les SealedSecrets du repo (token Cloudflare, Authentik, Grafana, OIDC ArgoCD) deviennent indéchiffrables et il faut TOUT resceller. Restaurer la clé **avant** son premier démarrage — ou immédiatement après, suivi d'un restart :
 > ```bash
-> kubectl apply -f keys-backup.yaml            # backup coffre, JAMAIS dans Git
+> kubectl apply -f sealed-secrets-key.yaml     # backup coffre, JAMAIS dans Git
 > kubectl rollout restart deployment/sealed-secrets -n sealed-secrets
 > ```
-> En **première construction** (pas de SealedSecret préexistant) : rien à restaurer, mais faire le backup TOUT DE SUITE :
+> `sealed-secrets-key.yaml` est la copie de travail à la racine du clone (`kind: List` d'un Secret `kubernetes.io/tls` porteur du label `sealedsecrets.bitnami.com/sealed-secrets-key: active`). Si elle manque, la récupérer depuis le coffre.
+>
+> **Vérifier que la clé restaurée est bien celle qui sert** — le contrôleur peut avoir généré une clé neuve avant l'apply, et c'est la **plus récente** qui scelle :
+> ```bash
+> kubectl get secrets -n sealed-secrets -l sealedsecrets.bitnami.com/sealed-secrets-key --sort-by=.metadata.creationTimestamp
+> ```
+> Plusieurs clés = normal (le contrôleur les garde toutes pour déchiffrer), mais si une clé neuve est plus récente que la restaurée, les prochains scellements utiliseront la neuve. Les SealedSecrets existants restent déchiffrables tant que l'ancienne clé est présente.
+>
+> En **première construction** (pas de SealedSecret préexistant) : rien à restaurer, mais faire le backup TOUT DE SUITE et le déposer au coffre :
 > ```bash
 > kubectl get secret -n sealed-secrets \
->   -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > keys-backup.yaml
+>   -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.yaml
 > ```
 
 ```bash
