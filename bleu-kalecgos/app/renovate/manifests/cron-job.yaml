@@ -15,7 +15,7 @@ spec:
         spec:
           containers:
             - name: renovate
-              image: renovate/renovate:43.281.1
+              image: renovate/renovate:43.288.0
               args:
                 - jbwittner/homelab_gitops
               env:
