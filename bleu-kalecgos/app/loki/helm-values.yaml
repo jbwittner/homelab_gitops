@@ -36,6 +36,10 @@ loki:
     # 15 j — aligné sur `prometheus.prometheusSpec.retention` du kube-prometheus-stack, pour que
     # métriques et logs couvrent la même fenêtre quand on corrèle un incident.
     retention_period: 360h
+    # NON surchargé, mais dont dépend le dashboard « Logs » : `discover_log_levels` (défaut
+    # true) fait poser par Loki une métadonnée structurée `detected_level` sur chaque ligne,
+    # déduite du champ `level` d'un JSON, du `level=` d'un logfmt ou des mots-clés d'une ligne
+    # libre. Le passer à false viderait les panneaux « niveau » sans autre symptôme.
 
   compactor:
     working_directory: /var/loki/compactor

@@ -8,10 +8,16 @@
 # sont indexés, tout le reste se filtre sur le CONTENU de la ligne (`|~`), d'où la variable
 # Recherche plutôt qu'une variable par champ.
 #
-# Les tuiles et graphes « erreurs » reposent sur une heuristique TEXTUELLE
-# (error|fatal|panic|exception|erreur) : Loki ne connaît pas de niveau de log tant que les
-# applications n'émettent pas de JSON structuré. À affiner par application le jour où un
-# `stage.json` + `stage.labels` est ajouté côté alloy.
+# Les niveaux viennent de `detected_level`, métadonnée structurée que Loki pose sur CHAQUE ligne
+# à l'ingestion (limits_config.discover_log_levels, activé par défaut — le passer à false vide
+# les panneaux « niveau »). Loki lit le champ `level` d'une ligne JSON (authentik), le `level=`
+# d'une ligne logfmt (ArgoCD), ou devine sur les mots-clés d'une ligne libre ; ce qu'il ne sait
+# pas classer devient `unknown`. Vérifié à l'exécution sur des lignes réelles des deux formats.
+# Note : `warning` est normalisé en `warn`.
+#
+# `detected_level` n'étant PAS un label indexé mais une métadonnée structurée, il se filtre
+# après le sélecteur (`| detected_level=~"…"`) et non dans `{}`, et il ne sort pas de l'API des
+# labels — d'où une variable `custom` plutôt qu'un `label_values()` pour le filtre Niveau.
 #
 # PIÈGE LogQL, vérifié à l'exécution : les regex sont écrites entre BACKTICKS (chaîne brute).
 # Entre guillemets, LogQL applique les échappements Go — `\b` y devient le caractère backspace
@@ -156,7 +162,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Lignes contenant error/fatal/panic/exception/erreur (insensible à la casse, pluriels inclus). Heuristique sur le TEXTE, pas un niveau de log : une ligne « 0 errors reported » est comptée comme une erreur, et un message d'échec qui n'emploie aucun de ces mots ne l'est pas. À lire comme une tendance, pas comme un décompte exact.",
+          "description": "Lignes de niveau error, critical ou fatal. Le niveau vient de `detected_level`, que Loki déduit de CHAQUE ligne à l'ingestion : il lit le champ `level` du JSON (authentik), le `level=` du logfmt (ArgoCD) ou les mots-clés d'une ligne libre. Aucune configuration par application, mais rien n'est garanti non plus : ce que Loki ne sait pas classer atterrit en `unknown`.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -216,7 +222,7 @@ data:
                 "uid": "${DS_LOKI}"
               },
               "editorMode": "code",
-              "expr": "sum(rate({namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"} |~ `(?i)\\b(error|fatal|panic|exception|erreur)` [$__auto]))",
+              "expr": "sum(rate({namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"} | detected_level=~`error|critical|fatal` [$__auto]))",
               "queryType": "range",
               "refId": "A",
               "range": true
@@ -377,6 +383,222 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
+          "description": "Répartition par niveau détecté par Loki. `unknown` = ligne que Loki n'a pas su classer ; une application dont TOUT le volume tombe en `unknown` est une candidate à des logs structurés (JSON ou logfmt), c'est le seul moyen d'obtenir des niveaux fiables.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "cps"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "critical"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "fatal"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "error"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "warn"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "info"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "blue",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "debug"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "purple",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "trace"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "text",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "unknown"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "text",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 6
+          },
+          "id": 7,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "loki",
+                "uid": "${DS_LOKI}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (detected_level) (rate({namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"}[$__auto]))",
+              "queryType": "range",
+              "refId": "A",
+              "range": true,
+              "legendFormat": "{{detected_level}}"
+            }
+          ],
+          "title": "Lignes/s par niveau",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
           "description": "Répartition du débit entre namespaces. Un décrochage brutal à zéro sur TOUTES les séries désigne le collecteur (alloy) ou Loki, pas les applications.",
           "fieldConfig": {
             "defaults": {
@@ -434,9 +656,9 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 6
+            "y": 14
           },
-          "id": 7,
+          "id": 8,
           "options": {
             "legend": {
               "calcs": [],
@@ -529,9 +751,9 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 14
+            "y": 22
           },
-          "id": 8,
+          "id": 9,
           "options": {
             "legend": {
               "calcs": [],
@@ -567,7 +789,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Même heuristique textuelle que la tuile « Erreurs/s ». À corréler avec la couche d'annotations « Déploiements ArgoCD » : un palier qui démarre pile sur une annotation désigne la synchronisation comme cause.",
+          "description": "Niveaux error, critical et fatal, par conteneur. À corréler avec la couche d'annotations « Déploiements ArgoCD » : un palier qui démarre pile sur une annotation désigne la synchronisation comme cause.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -624,9 +846,9 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 22
+            "y": 30
           },
-          "id": 9,
+          "id": 10,
           "options": {
             "legend": {
               "calcs": [],
@@ -647,7 +869,7 @@ data:
                 "uid": "${DS_LOKI}"
               },
               "editorMode": "code",
-              "expr": "sum by (namespace, pod, container) (rate({namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"} |~ `(?i)\\b(error|fatal|panic|exception|erreur)` [$__auto]))",
+              "expr": "sum by (namespace, pod, container) (rate({namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"} | detected_level=~`error|critical|fatal` [$__auto]))",
               "queryType": "range",
               "refId": "A",
               "range": true,
@@ -663,9 +885,9 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 30
+            "y": 38
           },
-          "id": 10,
+          "id": 11,
           "panels": [],
           "title": "Journal",
           "type": "row"
@@ -675,14 +897,14 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Lignes brutes correspondant à la sélection et au filtre Recherche (expression régulière, insensible à la casse — laisser vide pour tout voir). Cliquer une ligne déplie ses labels ; « Aller à Explore » depuis le menu du panneau ouvre la même requête pour l'affiner.",
+          "description": "Lignes brutes correspondant à la sélection, au filtre Niveau et au filtre Recherche (expression régulière, insensible à la casse — laisser vide pour tout voir). Le filtre Niveau n'agit QUE sur ce panneau : les graphes du dessus montrent toujours tous les niveaux, sinon la tuile « Erreurs/s » afficherait zéro dès qu'on sélectionne `info`. Cliquer une ligne déplie ses labels et, pour du JSON, ses champs.",
           "gridPos": {
             "h": 20,
             "w": 24,
             "x": 0,
-            "y": 31
+            "y": 39
           },
-          "id": 11,
+          "id": 12,
           "options": {
             "dedupStrategy": "none",
             "enableLogDetails": true,
@@ -701,7 +923,7 @@ data:
                 "uid": "${DS_LOKI}"
               },
               "editorMode": "code",
-              "expr": "{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"} |~ `(?i)$search`",
+              "expr": "{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"} | detected_level=~`$level` |~ `(?i)$search`",
               "queryType": "range",
               "refId": "A"
             }
@@ -810,6 +1032,28 @@ data:
             "skipUrlSync": false,
             "sort": 1,
             "type": "query"
+          },
+          {
+            "allValue": ".+",
+            "current": {
+              "selected": true,
+              "text": [
+                "All"
+              ],
+              "value": [
+                "$__all"
+              ]
+            },
+            "description": "Niveau détecté par Loki. Ne filtre que le panneau Logs.",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Niveau",
+            "multi": true,
+            "name": "level",
+            "options": [],
+            "query": "critical,error,warn,info,debug,unknown",
+            "skipUrlSync": false,
+            "type": "custom"
           },
           {
             "current": {

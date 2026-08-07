@@ -34,7 +34,8 @@ Alertmanager restent internes (non exposés).
 - `manifests/dashboard-ressources-volumes.yaml` — même famille, axe stockage : remplissage et
   inodes par PVC, projection avant saturation, thin pool LVM, cycle de vie PVC/PV.
 - `manifests/dashboard-logs.yaml` — dashboard « Logs — applications » (datasource
-  [Loki](../loki/README.md)) : débit, erreurs, conteneurs les plus bavards, journal filtrable.
+  [Loki](../loki/README.md)) : débit, niveaux, erreurs, conteneurs les plus bavards, journal
+  filtrable par niveau et par recherche texte.
 - `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD (cf. §Opérations).
 - `manifests/kustomization.yaml` — assemblage (garder une ressource `*.sealed.yaml` commentée
   tant qu'elle n'est pas scellée : un fichier référencé mais absent casse `kustomize build`).
@@ -134,16 +135,22 @@ comme les dashboards et ServiceMonitors ArgoCD. Les logs sont collectés par
 puis Explore avec une requête du type `{namespace="argocd"}`.
 
 Le dashboard « Logs — applications » (`dashboard-logs.yaml`) filtre par namespace / pod /
-conteneur, plus une variable **Recherche** appliquée au contenu des lignes. Deux choses à savoir
-avant d'y toucher :
+conteneur, plus une variable **Niveau** et une variable **Recherche** appliquée au contenu des
+lignes. Trois choses à savoir avant d'y toucher :
 
 - **Écrire les regex entre backticks**, jamais entre guillemets. Entre guillemets, LogQL applique
   les échappements Go : `\b` devient un caractère backspace au lieu d'une limite de mot, et la
   requête — parfaitement valide — ne remonte plus rien. Un panneau vide, aucune erreur.
-- Les panneaux « erreurs » sont une **heuristique textuelle** (`error|fatal|panic|exception|erreur`),
-  pas un niveau de log : une ligne « 0 errors reported » y est comptée. Loki ne connaîtra de
-  vrais niveaux que le jour où un `stage.json` sera ajouté côté alloy pour les applications qui
-  émettent du JSON structuré.
+- Les niveaux viennent de **`detected_level`**, posé par Loki à l'ingestion : il lit le champ
+  `level` d'une ligne JSON, le `level=` d'un logfmt, ou devine sur une ligne libre. Rien à
+  configurer par application, et `warning` est normalisé en `warn`. Ce que Loki ne sait pas
+  classer devient `unknown` — une application dont tout le volume est `unknown` gagnerait à
+  émettre des logs structurés. Dépend de `discover_log_levels` côté [loki](../loki/README.md).
+- `detected_level` est une **métadonnée structurée**, pas un label : elle se filtre après le
+  sélecteur (`| detected_level=~"…"`, jamais dans `{}`) et n'apparaît pas dans l'API des labels,
+  d'où une variable `custom` et non un `label_values()`.
+- Le filtre **Niveau n'agit que sur le panneau Logs**, volontairement : appliqué partout, il
+  ferait afficher zéro à la tuile « Erreurs/s » dès qu'on sélectionne `info`.
 
 ### Accès Prometheus / Alertmanager (non exposés)
 
