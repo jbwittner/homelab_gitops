@@ -1,0 +1,12 @@
+# Namespace créé AVANT les objets du chart (sync-wave -1). Pas de `CreateNamespace=true` :
+# le namespace est un manifeste versionné comme le reste.
+#
+# Pas de label PodSecurity `privileged` ici, contrairement à `alloy` ou `monitoring` : Loki ne
+# monte aucun hostPath et tourne en non-root (uid 10001 imposé par le chart) — le niveau
+# `baseline` appliqué cluster-wide par Talos suffit.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: loki
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

@@ -1,0 +1,43 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: monitoring
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Loki = moitié LOGS de l'observabilité (l'autre, métriques, est kube-prometheus-stack).
+  # Mode SingleBinary sur PVC filesystem : le cluster est mono-nœud, les modes SimpleScalable
+  # et Distributed du chart EXIGENT du stockage objet (S3/MinIO) — voir templates/validate.yaml.
+  # Pattern multi-source (archétype b) : chart + `$values` + `manifests/` (namespace seul).
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      targetRevision: 7.2.0
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $values/bleu-kalecgos/app/loki/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    # Ressource annexe : namespace (le chart ne le crée pas).
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: bleu-kalecgos/app/loki/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: loki
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      # Le ConfigMap de config Loki + le ConfigMap nginx de la gateway sont volumineux
+      # (annotation last-applied-configuration au-delà de la limite client-side).
+      - ServerSideApply=true

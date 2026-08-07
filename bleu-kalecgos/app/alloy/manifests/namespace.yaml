@@ -1,0 +1,12 @@
+# Namespace labellisé `privileged` AVANT tout pod (sync-wave -1). Talos applique PodSecurity
+# `baseline` cluster-wide (seul kube-system exempté). Le DaemonSet Alloy monte `/var/log` de
+# l'hôte en **hostPath** — volume interdit au niveau `baseline` → sans ce label le DaemonSet est
+# rejeté par l'admission. Même mécanique que pour `monitoring` (node-exporter) et `openebs`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: alloy
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

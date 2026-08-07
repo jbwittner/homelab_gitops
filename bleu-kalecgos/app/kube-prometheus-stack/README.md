@@ -14,8 +14,9 @@ Alertmanager restent internes (non exposés).
 - `kube-prometheus-stack.app.yaml` — Application ArgoCD multi-sources : chart Helm + values
   (`$values`) + `manifests/`. `ServerSideApply=true` (CRDs volumineuses).
 - `helm-values.yaml` — values : OIDC Grafana (`auth.generic_oauth`), mapping groupe→rôle,
-  admin local via `existingSecret`, PVCs (Prometheus/Alertmanager/Grafana), scrapes
-  control-plane désactivés (Talos mono-nœud).
+  admin local via `existingSecret`, PVCs (Prometheus/Alertmanager/Grafana), datasource
+  [Loki](../loki/README.md) (`additionalDataSources`), scrapes control-plane désactivés
+  (Talos mono-nœud).
 - `manifests/namespace.yaml` — namespace `monitoring`.
 - `manifests/grafana-httproute.yaml` — HTTPRoute Grafana → `shared-gw`.
 - `manifests/grafana-oidc.sealed.yaml` — SealedSecret `client-secret` OIDC (**à créer**, cf. Opérations).
@@ -121,6 +122,14 @@ un dossier dédié, listé **avant** les dashboards racine du chart. Le câblage
 `helm-values.yaml` (`sidecar.dashboards.folderAnnotation` + `provider.foldersFromFilesStructure`,
 inséparables). Tout nouveau dashboard doit porter l'annotation, sinon il retombe à la racine
 avec la trentaine de dashboards du chart.
+
+### Logs — datasource Loki
+
+La datasource `Loki` est déclarée dans `helm-values.yaml` (`grafana.additionalDataSources`), et
+non côté composant [loki](../loki/README.md) : le câblage Grafana d'un composant tiers vit ici,
+comme les dashboards et ServiceMonitors ArgoCD. Les logs sont collectés par
+[alloy](../alloy/README.md). Vérification : Connections → Data sources → Loki → **Save & test**,
+puis Explore avec une requête du type `{namespace="argocd"}`.
 
 ### Accès Prometheus / Alertmanager (non exposés)
 

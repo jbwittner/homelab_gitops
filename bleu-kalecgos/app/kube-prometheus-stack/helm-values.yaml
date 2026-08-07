@@ -49,6 +49,18 @@ grafana:
   persistence:
     enabled: true
     size: 5Gi            # StorageClass par défaut du cluster = openebs-lvm-thin
+  # Datasource des LOGS (Prometheus est câblé automatiquement par le chart). Déclarée ici et non
+  # dans le composant loki : même précédent que dashboard-argocd / servicemonitors-argocd, le
+  # câblage côté Grafana vit dans le composant qui porte Grafana.
+  # Pas de secret : Loki est en `auth_enabled: false` et n'est joignable qu'en intra-cluster.
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      access: proxy
+      url: http://loki-gateway.loki.svc.cluster.local
+      jsonData:
+        maxLines: 1000
 
 # --- Prometheus : rétention + PVC (nœud unique Talos, dimensionnement raisonnable) ---
 prometheus:

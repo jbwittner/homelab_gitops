@@ -1,0 +1,91 @@
+# helm-values — loki (stockage + requêtage des logs, consommé par Grafana)
+
+# SingleBinary : un seul StatefulSet qui porte tous les targets Loki (`all`). C'est le SEUL mode
+# compatible avec du stockage `filesystem` — le chart refuse de rendre (templates/validate.yaml)
+# si des replicas write/read/backend ou distribués sont demandés sans stockage objet.
+deploymentMode: SingleBinary
+
+loki:
+  # Mono-tenant : pas d'en-tête X-Scope-OrgID à propager depuis Grafana ni depuis Alloy.
+  auth_enabled: false
+
+  commonConfig:
+    # Défaut du chart = 3 (pensé pour un cluster multi-nœuds). Avec 1 seul ingester, un facteur
+    # de réplication > 1 laisse le ring en permanence sous son quorum → écritures refusées.
+    replication_factor: 1
+
+  storage:
+    # Défaut du chart = s3. `filesystem` range chunks et index sous le `path_prefix`
+    # (/var/loki), donc sur le PVC monté par le StatefulSet ci-dessous.
+    type: filesystem
+
+  # OBLIGATOIRE depuis Loki 3.x : le chart échoue au rendu sans schema_config explicite (il ne
+  # peut pas en deviner un, la date `from` étant propre à chaque installation). tsdb + v13 =
+  # combinaison courante pour toute installation neuve.
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  limits_config:
+    # 15 j — aligné sur `prometheus.prometheusSpec.retention` du kube-prometheus-stack, pour que
+    # métriques et logs couvrent la même fenêtre quand on corrèle un incident.
+    retention_period: 360h
+
+  compactor:
+    working_directory: /var/loki/compactor
+    # Sans ce flag, `retention_period` n'est qu'une limite de REQUÊTE : les chunks restent sur
+    # disque indéfiniment et le PVC finit par saturer. C'est le compactor qui supprime vraiment.
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: openebs-lvm-thin
+    # Défaut du chart = true avec whenScaled/whenDeleted à `Delete` : le PVC (donc TOUS les logs)
+    # serait supprimé si le StatefulSet passait à 0 replica ou disparaissait — trop dangereux
+    # sous un ArgoCD en `prune: true`. Ici la suppression du PVC reste un geste manuel explicite.
+    enableStatefulSetAutoDeletePVC: false
+
+# --- Composants du mode distribué : à 0, sinon le chart refuse de rendre (cf. validate.yaml,
+#     « Cannot run scalable targets without an object storage backend »).
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# --- Dépendances lourdes coupées (activées par défaut par le chart) ---
+chunksCache:
+  # memcached de cache des chunks : réclame ~9 Gi de RAM par défaut, hors sujet à cette échelle.
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  # Sonde qui injecte en continu des logs de test pour mesurer la latence bout-en-bout.
+  # Utile en prod multi-tenant, bruit inutile ici.
+  enabled: false
+test:
+  # `helm test` — dépend du canary ci-dessus (le chart échoue si test sans canary).
+  enabled: false
+minio:
+  enabled: false
+
+# --- Supervision par le prometheus-operator déjà en place ---
+monitoring:
+  serviceMonitor:
+    enabled: true
+    labels:
+      # OBLIGATOIRE : le Prometheus du chart ne sélectionne que les ServiceMonitors portant ce
+      # label (serviceMonitorSelectorNilUsesHelmValues). Même contrainte que pour openebs
+      # et les ServiceMonitors ArgoCD.
+      release: kube-prometheus-stack
