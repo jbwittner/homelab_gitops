@@ -3,14 +3,18 @@
 ## Rôle
 
 Automatisation des mises à jour de dépendances via [Renovate](https://docs.renovatebot.com/)
-en mode self-hosted. Un `CronJob` **hebdomadaire** lance le bot Renovate sur les dépôts GitHub ciblés
-et ouvre des PR de bump. Aucune exposition réseau (job batch, pas de service).
+en mode self-hosted. Un `CronJob` **quotidien** (chaque nuit) lance le bot Renovate sur les dépôts
+GitHub ciblés et ouvre des PR de bump. Aucune exposition réseau (job batch, pas de service).
+
+Le délai avant qu'un bump soit proposé ne vient **pas** de la cadence du cron mais de
+`minimumReleaseAge` (7 jours) dans le `renovate.json` racine : une release doit avoir 7 jours
+révolus avant qu'une branche/PR soit créée.
 
 ## Fichiers
 
 - `renovate.app.yaml` — Application ArgoCD (kustomize, `source.path` → `manifests/`).
   `ServerSideApply=true`.
-- `manifests/cron-job.yaml` — `CronJob` hebdomadaire, `concurrencyPolicy: Forbid`,
+- `manifests/cron-job.yaml` — `CronJob` quotidien, `concurrencyPolicy: Forbid`,
   `restartPolicy: Never`. Cible(s) de dépôt en `args`, config bot via `env` + `envFrom`
   (secret `renovate-env`).
 - `manifests/namespace.yaml` — namespace `renovate` (`sync-wave: -1`).

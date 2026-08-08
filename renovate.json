@@ -1,6 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "description": [
+    "Cooldown supply-chain : une release doit exister depuis 7 jours avant d'être proposée.",
+    "internalChecksFilter=strict est le défaut, mais explicité ici car load-bearing : les versions encore 'pending' sont filtrées AVANT création de branche/PR, donc rien n'est ni ouvert ni automergé avant J+7. Sans strict, ignoreTests=true ci-dessous rendrait le check renovate/stability-days vert d'office et l'automerge passerait immédiatement."
+  ],
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
   "ignorePaths": [
     "archive/**",
     "docs/**",

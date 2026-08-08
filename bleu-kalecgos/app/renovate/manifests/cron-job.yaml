@@ -3,7 +3,10 @@ kind: CronJob
 metadata:
   name: renovate
 spec:
-  schedule: "0 1 * * 6"
+  # Tous les soirs : le cooldown supply-chain est porté par minimumReleaseAge (7 jours)
+  # dans renovate.json, pas par la cadence du cron. Un run quotidien évite d'ajouter
+  # jusqu'à 7 jours d'attente par-dessus le cooldown.
+  schedule: "0 1 * * *"
   timeZone: "Europe/Paris"
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3
