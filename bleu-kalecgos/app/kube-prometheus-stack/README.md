@@ -116,7 +116,31 @@ défaut) : `node_namespace_pod_container:*`, `cluster:namespace:pod_*:active:*`,
 dans `helm-values.yaml` viderait ces dashboards.
 
 À noter : le chart livre aussi ses propres dashboards « Kubernetes / Compute Resources »
-(anglais, générés par kubernetes-mixin), qui couvrent un terrain proche.
+(anglais, générés par kubernetes-mixin), qui couvrent un terrain proche. **Les deux familles
+doivent afficher les mêmes chiffres** — si elles divergent, c'est un bug ici, et le suspect
+numéro un est la façon d'interroger les règles amont. Deux conventions du mixin sont donc
+reprises telles quelles :
+
+- **CPU : `:sum_rate5m`, jamais `:sum_irate`.** Les deux règles existent, mais `irate` ne
+  regarde que les deux derniers points. À un instant donné il affiche le pic de 30 s et non
+  la charge moyenne ; sur un graphe dont le pas dépasse l'intervalle de scrape, les pointes
+  sont sur-représentées au lieu d'être moyennées. Sur un nœud peu chargé, l'écart avec
+  `rate5m` atteint couramment un facteur 2 à 3.
+- **Mémoire : `max by (namespace, pod, container) (…{container!=""})`.** À la différence de
+  la règle CPU, `node_namespace_pod_container:container_memory_working_set_bytes` n'agrège
+  rien : elle conserve les labels `id`/`name` de cAdvisor. Après un redémarrage de conteneur,
+  l'ancienne série reste exportée environ 5 minutes — sans ce `max`, `sum` compte le
+  conteneur deux fois pendant ce laps de temps.
+
+Même logique pour les métriques cAdvisor interrogées directement (throttling, CPU par pod du
+dashboard ArgoCD) : toujours les qualifier par `job="kubelet", metrics_path="/metrics/cadvisor"`.
+`container_cpu_usage_seconds_total` est aussi exposé par `/metrics/resource` du kubelet ; ce
+endpoint n'est pas scrapé aujourd'hui (`kubelet.serviceMonitor.resource: false`, défaut du
+chart), mais l'activer doublerait silencieusement toute requête non qualifiée.
+
+Enfin, `increase()` et `rate()` prennent `$__rate_interval`, jamais `$__interval` : ce dernier
+vaut le pas du panneau et peut descendre sous l'intervalle de scrape, auquel cas la fenêtre ne
+contient pas deux points et le panneau reste vide sans lever d'erreur.
 
 ### Dossier Grafana « Wittnerlab »
 

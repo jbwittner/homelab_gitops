@@ -155,7 +155,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "count(kube_persistentvolumeclaim_info{namespace=~\"$namespace\"})",
+              "expr": "count(kube_persistentvolumeclaim_info{namespace=~\"$namespace\",persistentvolumeclaim=~\"$pvc\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -2313,15 +2313,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "count by (namespace, persistentvolumeclaim) (kube_persistentvolumeclaim_info{namespace=~\"$namespace\",persistentvolumeclaim=~\"$pvc\"})\nunless on (namespace, persistentvolumeclaim)\ncount by (namespace, persistentvolumeclaim) (kube_pod_spec_volumes_persistentvolumeclaims_info)",
-              "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}",
+              "expr": "count((\n  count by (namespace, persistentvolumeclaim) (kube_persistentvolumeclaim_info{namespace=~\"$namespace\",persistentvolumeclaim=~\"$pvc\"})\n  unless on (namespace, persistentvolumeclaim)\n  count by (namespace, persistentvolumeclaim) (kube_pod_spec_volumes_persistentvolumeclaims_info)\n)) or vector(0)",
+              "legendFormat": "",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "PVC sans pod",
           "type": "stat",
-          "description": "PVC qu'aucun pod ne monte : reliquat d'un composant supprimé, ou volume en attente de son premier consommateur. « No data » = aucun orphelin."
+          "description": "Nombre de PVC qu'aucun pod ne monte : reliquat d'un composant supprimé, ou volume en attente de son premier consommateur. 0 = aucun orphelin."
         },
         {
           "datasource": {

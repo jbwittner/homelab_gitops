@@ -7,7 +7,7 @@
 # Sources : cAdvisor (kubelet) + kube-state-metrics, via les **recording rules du chart**
 # (`defaultRules`, activées par défaut — ne pas les désactiver dans helm-values.yaml sans
 # réécrire ces requêtes) :
-#   - node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate  (usage CPU)
+#   - node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m  (usage CPU)
 #   - node_namespace_pod_container:container_memory_working_set_bytes           (usage mémoire)
 #   - cluster:namespace:pod_{cpu,memory}:active:kube_pod_container_resource_{requests,limits}
 #     (requests/limits des pods Pending|Running uniquement — les pods terminés sont exclus)
@@ -20,6 +20,17 @@
 # donc tout sélectionner ne double compte rien et ne peut pas casser la jointure group_left.
 # Restreindre à `deployment` masquerait les static pods et les DaemonSets — c'est-à-dire
 # l'essentiel de kube-system.
+#
+# Deux conventions reprises telles quelles des dashboards du chart (kubernetes-mixin), pour
+# que les chiffres coïncident avec les siens :
+#   - CPU : `:sum_rate5m` (moyenne sur 5 min), jamais `:sum_irate`. irate ne regarde que les
+#     deux derniers points : à un instant donné il montre le pic de 30 s, pas la charge
+#     moyenne, et sur un graphe échantillonné plus large que le scrape il sur-représente les
+#     pointes (facteur 2 à 3 courant sur un nœud peu chargé).
+#   - Mémoire : `max by (namespace, pod, container) (…{container!=""})`. La règle amont
+#     n'agrège pas — elle conserve les labels `id`/`name` de cAdvisor. Après un redémarrage
+#     de conteneur, l'ancienne série reste exportée ~5 min : sans ce `max`, `sum` compte le
+#     conteneur deux fois pendant ce laps de temps.
 #
 # Requests, limits et ratios : un conteneur peut déclarer des requests SANS limite. Les totaux
 # de requests et de limits portent donc sur des ensembles de conteneurs différents, et
@@ -232,7 +243,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
+              "expr": "sum (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -431,7 +442,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -505,7 +516,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -575,7 +586,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "count((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n  unless on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)) or vector(0)",
+              "expr": "count((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n  unless on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)) or vector(0)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -670,7 +681,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (workload) (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
+              "expr": "sum by (workload) (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
               "legendFormat": "{{workload}}",
               "range": true,
               "refId": "A"
@@ -879,7 +890,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
+              "expr": "sum (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
               "legendFormat": "Utilisation",
               "range": true,
               "refId": "A"
@@ -974,7 +985,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "{{workload}}",
               "range": true,
               "refId": "A"
@@ -1051,7 +1062,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "{{workload}}",
               "range": true,
               "refId": "A"
@@ -1194,7 +1205,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
+              "expr": "sum (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1393,7 +1404,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum (\n  (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum (\n  (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1467,7 +1478,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum (\n  (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum (\n  (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1537,7 +1548,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "count((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n  unless on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)) or vector(0)",
+              "expr": "count((\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n  unless on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)) or vector(0)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1632,7 +1643,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (workload) (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
+              "expr": "sum by (workload) (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
               "legendFormat": "{{workload}}",
               "range": true,
               "refId": "A"
@@ -1841,7 +1852,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
+              "expr": "sum (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
               "legendFormat": "Utilisation",
               "range": true,
               "refId": "A"
@@ -1936,7 +1947,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum by (workload) (\n  (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "{{workload}}",
               "range": true,
               "refId": "A"
@@ -2013,7 +2024,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum by (workload) (\n  (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "{{workload}}",
               "range": true,
               "refId": "A"
@@ -2441,7 +2452,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (workload) (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
+              "expr": "sum by (workload) (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
               "legendFormat": "",
               "range": false,
               "refId": "B",
@@ -2467,7 +2478,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "",
               "range": false,
               "refId": "D",
@@ -2493,7 +2504,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "",
               "range": false,
               "refId": "F",
@@ -2506,7 +2517,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (workload) (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
+              "expr": "sum by (workload) (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n)",
               "legendFormat": "",
               "range": false,
               "refId": "G",
@@ -2532,7 +2543,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum by (workload) (\n  (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "",
               "range": false,
               "refId": "I",
@@ -2558,7 +2569,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (workload) (\n  (\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
+              "expr": "(sum by (workload) (\n  (\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n)\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))\n/\n(sum by (workload) (\n  cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\"}\n* on (namespace, pod) group_left (workload)\n  namespace_workload_pod:kube_pod_owner:relabel{namespace=\"$namespace\",workload_type=~\"$type\",workload=~\"$workload\"}\n))",
               "legendFormat": "",
               "range": false,
               "refId": "K",

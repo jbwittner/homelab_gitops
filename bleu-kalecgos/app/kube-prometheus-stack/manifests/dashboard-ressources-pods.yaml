@@ -8,12 +8,23 @@
 # Sources : cAdvisor (kubelet) + kube-state-metrics, via les **recording rules du chart**
 # (`defaultRules`, activées par défaut — ne pas les désactiver dans helm-values.yaml sans
 # réécrire ces requêtes) :
-#   - node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate  (usage CPU)
+#   - node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m  (usage CPU)
 #   - node_namespace_pod_container:container_memory_working_set_bytes           (usage mémoire)
 #   - cluster:namespace:pod_{cpu,memory}:active:kube_pod_container_resource_{requests,limits}
 #     (requests/limits des pods Pending|Running uniquement — les pods terminés sont exclus)
 #   - container_cpu_cfs_{throttled_periods,periods}_total (cAdvisor, throttling)
 #   - kube_pod_container_status_{restarts_total,last_terminated_reason,waiting_reason}
+#
+# Deux conventions reprises telles quelles des dashboards du chart (kubernetes-mixin), pour
+# que les chiffres coïncident avec les siens :
+#   - CPU : `:sum_rate5m` (moyenne sur 5 min), jamais `:sum_irate`. irate ne regarde que les
+#     deux derniers points : à un instant donné il montre le pic de 30 s, pas la charge
+#     moyenne, et sur un graphe échantillonné plus large que le scrape il sur-représente les
+#     pointes (facteur 2 à 3 courant sur un nœud peu chargé).
+#   - Mémoire : `max by (namespace, pod, container) (…{container!=""})`. La règle amont
+#     n'agrège pas — elle conserve les labels `id`/`name` de cAdvisor. Après un redémarrage
+#     de conteneur, l'ancienne série reste exportée ~5 min : sans ce `max`, `sum` compte le
+#     conteneur deux fois pendant ce laps de temps.
 #
 # Requests, limits et ratios : un conteneur peut déclarer des requests SANS limite. Les totaux
 # de requests et de limits portent donc sur des ensembles de conteneurs différents, et
@@ -226,7 +237,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"})",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -425,7 +436,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -499,7 +510,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum(cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -569,7 +580,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "count((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"}\n  unless on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)) or vector(0)",
+              "expr": "count((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"}\n  unless on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)) or vector(0)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -664,7 +675,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum by (pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"})",
               "legendFormat": "{{pod}}",
               "range": true,
               "refId": "A"
@@ -873,7 +884,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"})",
               "legendFormat": "Utilisation",
               "range": true,
               "refId": "A"
@@ -968,7 +979,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "{{pod}}",
               "range": true,
               "refId": "A"
@@ -1045,7 +1056,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "{{pod}}",
               "range": true,
               "refId": "A"
@@ -1139,7 +1150,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (pod, container) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum by (pod, container) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"})",
               "legendFormat": "{{pod}} · {{container}}",
               "range": true,
               "refId": "A"
@@ -1282,7 +1293,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum(max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1481,7 +1492,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum((\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1555,7 +1566,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum((\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum(cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1625,7 +1636,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "count((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"}\n  unless on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)) or vector(0)",
+              "expr": "count((\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"})\n  unless on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)) or vector(0)",
               "legendFormat": "",
               "range": true,
               "refId": "A"
@@ -1720,7 +1731,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (pod) (node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum by (pod) (max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "{{pod}}",
               "range": true,
               "refId": "A"
@@ -1929,7 +1940,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum(max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "Utilisation",
               "range": true,
               "refId": "A"
@@ -2024,7 +2035,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum by (pod) ((\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "{{pod}}",
               "range": true,
               "refId": "A"
@@ -2101,7 +2112,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum by (pod) ((\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "{{pod}}",
               "range": true,
               "refId": "A"
@@ -2195,7 +2206,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum by (pod, container) (max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "{{pod}} · {{container}}",
               "range": true,
               "refId": "A"
@@ -2302,7 +2313,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{namespace=\"$namespace\",pod=~\"$pod\",container!=\"\"}[$__rate_interval]))\n/\nsum by (pod) (rate(container_cpu_cfs_periods_total{namespace=\"$namespace\",pod=~\"$pod\",container!=\"\"}[$__rate_interval]))",
+              "expr": "sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{job=\"kubelet\",metrics_path=\"/metrics/cadvisor\",namespace=\"$namespace\",pod=~\"$pod\",container!=\"\"}[$__rate_interval]))\n/\nsum by (pod) (rate(container_cpu_cfs_periods_total{job=\"kubelet\",metrics_path=\"/metrics/cadvisor\",namespace=\"$namespace\",pod=~\"$pod\",container!=\"\"}[$__rate_interval]))",
               "legendFormat": "{{pod}}",
               "range": true,
               "refId": "A"
@@ -2397,7 +2408,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$pod\"}[$__interval]))",
+              "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$pod\"}[$__rate_interval]))",
               "legendFormat": "{{pod}}",
               "range": true,
               "refId": "A"
@@ -2960,7 +2971,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum by (pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"})",
               "legendFormat": "",
               "range": false,
               "refId": "A",
@@ -2986,7 +2997,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "C",
@@ -3012,7 +3023,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "E",
@@ -3025,7 +3036,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (pod) (node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"})",
+              "expr": "sum by (pod) (max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "F",
@@ -3051,7 +3062,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum by (pod) ((\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "H",
@@ -3077,7 +3088,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(sum by (pod) ((\n  node_namespace_pod_container:container_memory_working_set_bytes{namespace=\"$namespace\",pod=~\"$pod\"}\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
+              "expr": "(sum by (pod) ((\n  max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"})\n  and on (namespace, pod, container) cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}\n)))\n/\n(sum by (pod) (cluster:namespace:pod_memory:active:kube_pod_container_resource_limits{namespace=\"$namespace\",pod=~\"$pod\"}))",
               "legendFormat": "",
               "range": false,
               "refId": "J",
