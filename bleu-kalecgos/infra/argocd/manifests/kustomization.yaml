@@ -10,7 +10,7 @@ namespace: argocd
 # Si les pods crash-loop après upgrade, bumper le tag vX.Y.Z ici.
 resources:
   - namespace.yaml
-  - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.5/manifests/install.yaml
+  - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.5.0/manifests/install.yaml
   - argocd-httproute.yaml
   - argocd-oidc.sealed.yaml
   - argocd-notifications.sealed.yaml
