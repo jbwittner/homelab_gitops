@@ -47,9 +47,12 @@ Checklist minimale (complétée par ce que disent les fichiers doc/) :
 6. **Values Helm** : jamais `helm.values: |` inline ni `valuesObject`. Si chart avec values →
    fichier `helm-values.yaml` référencé via `$values` multi-source (pattern exact dans
    doc/conventions.md).
-7. **Secrets** : aucun manifeste `kind: Secret` en clair dans le dossier. Seuls les
-   `kind: SealedSecret` sont admis. Signaler aussi tout fichier ressemblant à un secret en
-   clair (`stringData:`, tokens, clés privées).
+7. **Secrets** : aucun manifeste `kind: Secret` en clair **committé**. Seuls les
+   `kind: SealedSecret` (`<name>.sealed.yaml`) sont admis dans Git ; les templates en clair
+   suivent le motif gitignoré `<name>.secret.yaml`. Signaler tout fichier porteur d'un secret
+   en clair (`stringData:`, tokens, clés privées) qui ne correspond pas à ce motif, et tout
+   `*.sealed.yaml` référencé dans un `kustomization.yaml` mais absent du disque (casse
+   `kustomize build`).
 8. **Namespace** : pas de `syncOptions: CreateNamespace=true` si `manifests/namespace.yaml`
    existe (et inversement, un des deux doit couvrir le namespace).
 9. **Exposition** : tout `HTTPRoute` a `parentRefs` → `shared-gw` (ns `gateway`) +
@@ -57,10 +60,17 @@ Checklist minimale (complétée par ce que disent les fichiers doc/) :
 10. **README** : présent ; sections max Rôle/Fichiers/Contraintes/Opérations ; **aucune version
     épinglée** (numéros type `1.2.3`, `v1.2.3` référant à une version de chart/manifest —
     les versions vivent dans `.app.yaml`/`kustomization.yaml`).
-11. **Archétype** : la forme du composant correspond à un archétype (a)/(b)/(c)/(d) de
+11. **Commandes exécutables depuis la racine du repo** : toute commande d'un README doit
+    utiliser des chemins relatifs à la racine (`bleu-kalecgos/…`), jamais au dossier du README
+    (`manifests/…`, `./…`) ni supposer un `cd`.
+12. **Doc à jour** : les noms de fichiers, de secrets, de clés et de groupes cités dans le README
+    correspondent au contenu réel des manifestes (`kustomization.yaml`, `*.sealed.yaml`,
+    `helm-values.yaml`). Une doc qui décrit un état révolu (« à créer », « décommenter » alors
+    que la ressource est déjà câblée) est une violation.
+13. **Archétype** : la forme du composant correspond à un archétype (a)/(b)/(c)/(d) de
     doc/conventions.md ; signaler un archétype (d) avec `helm-values.yaml` présent
     (devrait migrer en (a)) ou toute forme hybride non répertoriée.
-12. **Index cluster** : le composant apparaît dans `<cluster>/README.md` avec un **lien valide
+14. **Index cluster** : le composant apparaît dans `<cluster>/README.md` avec un **lien valide
     vers son README** (ex. `[cilium](infra/cilium/README.md)`). Vérifier aussi l'inverse quand
     l'audit porte sur un arbre : aucune entrée de l'index ne pointe vers un composant supprimé.
     Le README racine doit lister le README du cluster.

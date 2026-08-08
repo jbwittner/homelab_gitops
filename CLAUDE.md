@@ -7,6 +7,13 @@ appliquée par **ArgoCD**. `kubectl` en écriture = bootstrap ArgoCD + debug rea
 d'autre. Secrets : jamais en clair, uniquement **SealedSecrets** (`kubeseal`). Une modif =
 éditer le manifeste, commit, push. Détail : [doc/regles-gitops.md](doc/regles-gitops.md).
 
+## Commandes — toujours depuis la racine du projet
+
+Toute commande écrite dans la doc (README, runbook, `doc/`) doit être exécutable **telle
+quelle depuis la racine du clone**, sans `cd` préalable : chemins relatifs à la racine
+(`bleu-kalecgos/infra/<name>/…`), jamais relatifs au dossier du README. Une commande qui
+suppose un `cd` est un bug de documentation.
+
 ## Conventions
 
 Règles complètes : [doc/conventions.md](doc/conventions.md). Points critiques :
@@ -16,12 +23,20 @@ Règles complètes : [doc/conventions.md](doc/conventions.md). Points critiques 
 - Values Helm **jamais inline** : fichier `helm-values.yaml` référencé via le pattern
   multi-source `$values` (exemple dans doc/conventions.md).
 - READMEs composants : minimaux, **aucune version épinglée** (source unique :
-  `targetRevision` du `.app.yaml`).
+  `targetRevision` du `.app.yaml`, ou le `kustomization.yaml` pour un install upstream).
+- Secrets : template en clair `<name>.secret.yaml` (**gitignoré**) → `kubeseal` →
+  `<name>.sealed.yaml` (committé, référencé dans le `kustomization.yaml`).
 
 ## Exposition réseau
 
 Cilium Gateway API, `Gateway` partagé `shared-gw`. Exposer = `HTTPRoute` → `shared-gw`.
 Détail : [doc/reseau.md](doc/reseau.md).
+
+## Bootstrap / disaster recovery
+
+[doc/runbook-bootstrap-kalecgos.md](doc/runbook-bootstrap-kalecgos.md) — part d'un cluster
+vierge **sans CNI**. Le seul élément non reconstructible depuis Git est la **clé privée
+sealed-secrets** : son backup (coffre) est un prérequis du runbook, pas une option.
 
 ## Skills projet
 

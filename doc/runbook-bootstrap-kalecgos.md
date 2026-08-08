@@ -1,239 +1,284 @@
 ---
-title: Bootstrap — bleu-kalecgos (vert-eranikus)
+title: Bootstrap / disaster recovery — bleu-kalecgos
 type: runbook
 cluster: bleu-kalecgos
-node: vert-eranikus
-ip: 192.168.1.11
-tags: [homelab, wittnerlab, talos, kubernetes, bootstrap, runbook, socle]
+tags: [homelab, wittnerlab, kubernetes, argocd, gitops, bootstrap, disaster-recovery, runbook]
 created: 2026-07-17
-modified: 2026-07-18
-status: draft
+modified: 2026-08-08
+status: stable
 ---
 
-# Bootstrap — `bleu-kalecgos`
+# Bootstrap / disaster recovery — `bleu-kalecgos`
 
 > [!NOTE]
-> **Objet** — Reconstruction complète du nœud socle `vert-eranikus` (Talos mono-nœud, control-plane) depuis un disque vierge jusqu'au stockage LVM opérationnel. Single-disk : un NVMe 512 GB partagé OS + LVM (EPHEMERAL 100 GiB, partition brute LVM ~370 GiB).
+> **Objet** — amener un cluster Kubernetes **vierge** à l'état complet décrit par ce repo :
+> tout le contenu de `bleu-kalecgos/` déployé et réconcilié par ArgoCD.
+
+> [!IMPORTANT]
+> **Toutes les commandes de ce runbook se lancent depuis la racine du clone**
+> (`homelab_gitops/`), sans `cd` intermédiaire. Tous les chemins sont relatifs à cette racine.
+> Règle valable pour toute la documentation du repo.
+
+## Point d'entrée — ce qu'on suppose déjà là
+
+Le provisionnement du nœud est **hors périmètre de ce repo**. Ce runbook démarre au moment où
+les quatre conditions ci-dessous sont réunies :
+
+| Condition | Pourquoi | Vérification |
+|---|---|---|
+| Un cluster Kubernetes **propre** (aucune charge, aucun composant applicatif) | Le repo est la seule source de vérité : un reliquat non géré finit en dérive ou en conflit d'adoption | `kubectl get ns` → uniquement les namespaces système |
+| **Aucun CNI installé** | Cilium est posé par ce runbook (étape 1) et doit être le seul CNI ; deux CNI = réseau cassé | `kubectl get pods -A` → CoreDNS en `Pending` (attendu, il attend le CNI) |
+| Un **kubeconfig** valide pointant sur ce cluster | Toutes les commandes en dépendent | `kubectl cluster-info` |
+| **kube-proxy absent** | Cilium tourne en `kubeProxyReplacement: true` | `kubectl -n kube-system get ds` → pas de `kube-proxy` |
+
+**Contraintes de nœud** attendues par certains composants, à satisfaire au provisionnement :
+
+| Attente | Composant concerné | Effet si absente |
+|---|---|---|
+| Un endpoint apiserver joignable en local sur `localhost:7445` | `cilium` (`k8sServiceHost`/`k8sServicePort` de `helm-values.yaml`) | Agent Cilium incapable de joindre l'apiserver sans kube-proxy |
+| `/sys/fs/cgroup` déjà monté par l'hôte (`cgroup.autoMount.enabled: false`) | `cilium` | Agent en `CrashLoopBackOff` |
+| Modules noyau `dm_mod`, `dm_thin_pool`, `dm_snapshot` chargés | `openebs` | `pvcreate`/`vgcreate` échouent dans le Job de bootstrap du VG |
+| Une **partition brute** étiquetée `r-lvmpv` (`/dev/disk/by-partlabel/r-lvmpv`) | `openebs` | Job VG en échec, pas de StorageClass, tous les PVC `Pending` |
+| PodSecurity `baseline` appliqué au cluster, `kube-system` exempté | `openebs`, `alloy` | Rien : les namespaces concernés sont labellisés `privileged` par leurs manifestes |
+| Une entrée DNS wildcard `*.kalecgos.lan.wittner.tech` → IP du LB (`192.168.1.80`) | exposition HTTP | Les URLs ne résolvent pas ; le cluster, lui, est sain |
+
+---
+
+## Prérequis outillage
+
+- `kubectl` récent (kustomize intégré, avec support des ressources distantes — l'install ArgoCD
+  tire `raw.githubusercontent.com`).
+- `helm` (un seul usage : l'install Cilium de l'étape 1).
+- `kubeseal` (scellement des secrets, étapes 3 et 8).
+- `argocd` CLI — optionnel, seulement pour le mot de passe admin (étape 2).
+- Clone de `homelab_gitops` à jour : `https://github.com/jbwittner/homelab_gitops.git`
+  (dépôt **public** → clone HTTPS anonyme, aucun credential Git côté cluster).
+
+```bash
+kubectl version --client
+helm version --short
+kubeseal --version
+git -C . rev-parse --abbrev-ref HEAD     # doit être `main` à jour
+```
+
+> [!NOTE]
+> **`grep` peut être aliasé sur `rg`** (ripgrep) : `rg` interprète `-E` comme `--encoding` et
+> ignore `-A` façon GNU grep. Les commandes de ce runbook utilisent `command grep` pour forcer
+> le vrai `grep`.
+
+---
+
+## Prérequis credentials — à réunir AVANT de commencer
+
+> [!CAUTION]
+> **Tout est reconstructible depuis Git, sauf les secrets.** Le repo ne contient que des
+> `SealedSecret` : ils sont indéchiffrables sans la **clé privée du contrôleur sealed-secrets**.
+> Repartir sans cette clé n'est pas un bootstrap, c'est un re-scellement complet de tous les
+> secrets du cluster (étape 8 en entier, avec tous les credentials amont à re-provisionner).
+
+### 1. La clé sealed-secrets (le credential critique)
+
+**Ce que c'est** : un `Secret` `kubernetes.io/tls` (`tls.crt` + `tls.key`) du namespace
+`sealed-secrets`, porteur du label `sealedsecrets.bitnami.com/sealed-secrets-key: active`. Le
+backup est un manifeste `kind: List` réapplicable tel quel.
+
+**Où le trouver**, dans l'ordre :
+
+1. **Le coffre** — source de vérité, hors cluster, hors Git. C'est la seule copie qui survit à
+   la perte du nœud **et** à la perte du poste.
+2. **`sealed-secrets-key.yaml` à la racine du clone** — copie de travail, couverte par
+   `.gitignore` (motif `*sealed-secrets-key*.yaml`). Elle disparaît avec le clone : ce n'est
+   **pas** un backup.
+3. **Le cluster encore en vie** — si le cluster n'est pas encore détruit, refaire le backup
+   maintenant, avant toute opération destructive :
+
+```bash
+kubectl get secret -n sealed-secrets \
+  -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.yaml
+```
+
+**Vérifier le fichier avant de commencer** (aucune donnée sensible affichée) :
+
+```bash
+command grep -c 'tls.key' sealed-secrets-key.yaml          # ≥ 1
+command grep -c 'sealed-secrets-key: active' sealed-secrets-key.yaml   # ≥ 1
+```
+
+Absence de sortie ou `0` → le fichier n'est pas une clé exploitable : aller chercher le coffre
+**avant** de continuer.
+
+### 2. Ce que cette clé protège
+
+Inventaire des `SealedSecret` du repo — tous deviennent illisibles si la clé est perdue :
+
+| SealedSecret | Namespace | Clé(s) | Composant | Source amont à re-provisionner |
+|---|---|---|---|---|
+| `cloudflare-api-token` | `cert-manager` | `api-token` | `cert-manager-config` | Token API Cloudflare (`Zone:DNS:Edit` + `Zone:Zone:Read`) |
+| `argocd-oidc` | `argocd` | `client-secret` | `argocd` | Provider OIDC authentik (Terraform, autre repo) |
+| `argocd-notifications-secret` | `argocd` | `grafana-api-key` | `argocd` | Service account token Grafana |
+| `grafana-oidc` | `monitoring` | `client-secret` | `kube-prometheus-stack` | Provider OIDC authentik (Terraform) |
+| `grafana-admin` | `monitoring` | `admin-user`, `admin-password` | `kube-prometheus-stack` | Généré localement (`openssl rand`) |
+| `authentik-secrets` | `authentik` | `secret-key` | `authentik` | Généré à la 1re install — **ne jamais changer ensuite** |
+| `renovate-env` | `renovate` | `RENOVATE_GITHUB_COM_TOKEN`, `RENOVATE_TOKEN` | `renovate` | PAT GitHub |
+
+Le premier de la liste est **bloquant pour le bootstrap** : sans lui, pas de DNS-01, donc pas de
+certificat, donc aucun listener TLS opérationnel sur `shared-gw`.
+
+### 3. Les autres credentials (première construction, ou re-scellement)
+
+À avoir sous la main **avant** l'étape 8 : token Cloudflare, outputs Terraform des providers
+OIDC authentik (ArgoCD + Grafana), PAT GitHub pour Renovate. Le token Grafana des notifications
+ArgoCD, lui, se crée après coup (Grafana doit tourner).
+
+> [!CAUTION]
+> **Secrets — règle générale.** Les templates en clair `*.secret.yaml` sont **gitignorés** et
+> ne doivent jamais quitter le poste ni survivre au scellement. Seuls les `*.sealed.yaml` sont
+> committés. Backup de la clé sealed-secrets : coffre uniquement, jamais dans Git.
+
+---
 
 ## Chaîne de dépendances (acyclique)
 
 > [!IMPORTANT]
-> **L'ordre n'est pas négociable.** Chaque étage dépend du précédent. La valeur de ce runbook, ce sont les dépendances, pas les commandes.
+> **L'ordre n'est pas négociable.** Chaque étage dépend du précédent. La valeur de ce runbook,
+> ce sont les dépendances — les commandes, elles, sont triviales.
 
 ```
-0. Disque vierge (reset / USB)
-1. Talos installé + partitionné (EPHEMERAL 100 + r-lvmpv 370)   ← layout au 1er provision
-2. bootstrap etcd
-3. Cilium (CNI = none → rien ne schedule sans lui)
-4. ArgoCD (kustomize épinglé, apply -k) + tier-1 app-of-apps
-5. Exposition ArgoCD : CRDs Gateway API → shared-gw → HTTPRoute
-   TLS autosigné (cert-manager, ClusterIssuer selfsigned)
-6. Sealed Secrets (clé restaurée AVANT le démarrage du contrôleur en DR)
-7. Let's Encrypt : token CF scellé → ClusterIssuer letsencrypt-prod → flip issuerRef
-8. PodSecurity : namespace openebs labellisé privileged   ← AVANT les pods du driver
-9. Driver OpenEBS LVM → StorageClass
+0. Cluster vierge, sans CNI, kubeconfig en main
+1. Cilium (CNI) — sans lui, RIEN ne schedule
+2. ArgoCD (kustomize épinglé, apply -k)          ← geste manuel n°1
+3. Clé sealed-secrets restaurée                  ← geste manuel n°2 (DR uniquement)
+4. Tier-1 app-of-apps (apply cluster.yaml)       ← geste manuel n°3
+     └─ déroule seul : gateway-api (-10) → sealed-secrets (-8) → cert-manager (-5)
+        → cert-manager-config (-4) → argocd (-1) → cilium/openebs/apps (0)
+5. Exposition : Gateway programmée + restart one-shot de cilium-operator + DNS
+6. TLS Let's Encrypt (DNS-01 Cloudflare) sur les 3 wildcards
+7. Stockage : namespace privileged → Job VG → StorageClass
+8. Secrets applicatifs & SSO (première construction uniquement)
 ```
 
 | Étape | Ce qui casse si tu la sautes |
 |---|---|
-| 1. Layout disque | EPHEMERAL remplit le disque → `r-lvmpv` en `failed`, pas de LVM |
-| 2. bootstrap | etcd absent → apiserver ne démarre pas |
-| 3. Cilium | CNI `none` → tous les pods restent `Pending`, y compris CoreDNS |
-| 4. ArgoCD | Pas de contrôleur GitOps → rien ne se réconcilie, tout le reste est mort-né |
-| 5. CRDs → Gateway | Sans les CRDs, `shared-gw` ne s'applique pas ; sans secret TLS, le listener reste `ResolvedRefs=False` ; sans restart `cilium-operator` (1re pose), la Gateway reste `Pending` |
-| 6. Clé sealed-secrets | Contrôleur démarré avec une clé NEUVE → tous les SealedSecrets du repo (token CF inclus) sont indéchiffrables ; il faut tout resceller |
-| 7. Token CF | Secret `cloudflare-api-token` absent/indéchiffrable → challenge DNS-01 bloqué, `Certificate` jamais `Ready` |
-| 8. PodSecurity | Sans le label `privileged` sur `openebs`, le DaemonSet `lvm-node` + le Job VG (privileged) sont rejetés par l'admission `baseline` |
+| 1. Cilium | Aucun CNI → tous les pods restent `Pending`, CoreDNS compris |
+| 2. ArgoCD | Pas de contrôleur GitOps → rien ne se réconcilie, tout le reste est mort-né |
+| 3. Clé sealed-secrets | Contrôleur démarré avec une clé **neuve** → tous les SealedSecrets du repo sont indéchiffrables, tout est à resceller |
+| 4. Tier-1 | Les Applications n'existent pas : ArgoCD tourne à vide |
+| 5. Exposition | Sans restart de `cilium-operator` à la 1re pose des CRDs, la Gateway reste `Pending` ; sans secret TLS, le listener reste `ResolvedRefs=False` |
+| 6. Token Cloudflare | DNS-01 bloqué, `Certificate` jamais `Ready`, aucun accès HTTPS valide |
+| 7. Label PSA sur `openebs` | DaemonSet `lvm-node` et Job VG (privileged) rejetés par l'admission `baseline` |
 
 > [!NOTE]
-> **Rebuild à froid vs première construction.** Une fois toutes les Applications dans `homelab-gitops`, les étapes 5→9 convergent **toutes seules** après le `kubectl apply -f cluster.yaml` de la phase 4, dans l'ordre des sync-waves : `gateway-api` (-10) → `sealed-secrets` (-8) → `cert-manager` (-5) → `cert-manager-config` (-4) → `argocd` (-1) → openebs. En rebuild, ce runbook devient une **checklist de vérification** + trois gestes manuels irréductibles : l'apply -k ArgoCD, la restauration de la clé sealed-secrets, et le restart one-shot de `cilium-operator`. La phase autosignée (5) n'a de sens qu'à la **première construction**, avant que LE ne soit dans le repo.
+> **Rebuild à froid vs première construction.** Toutes les Applications vivent déjà dans le repo :
+> après l'étape 4, les étapes 5 à 7 **convergent seules** dans l'ordre des sync-waves. En rebuild,
+> ce runbook est une **checklist de vérification** autour de trois gestes manuels irréductibles :
+> l'`apply -k` d'ArgoCD, la restauration de la clé sealed-secrets, et le restart one-shot de
+> `cilium-operator`. L'étape 8 (scellement des secrets) et la parenthèse autosignée de l'étape 6
+> ne concernent que la **première construction**.
 
 ---
 
-## Prérequis
+## Étape 1 — Cilium (CNI)
 
-À vérifier avant de commencer :
+> [!IMPORTANT]
+> **Sans CNI, rien ne schedule.** Le cluster est livré sans CNI : tous les pods, CoreDNS compris,
+> restent `Pending` jusqu'à ce que Cilium tourne.
 
-- `talhelper --version` ≥ **v3.0.37** (support des documents autonomes `VolumeConfig`/`RawVolumeConfig` en patch multi-docs).
-- `talosctl`, `kubectl`, `helm`, `cilium` CLI présents. `kubectl` récent (kustomize intégré avec remote resources — l'install ArgoCD tire `raw.githubusercontent.com`).
-- `kubeseal` CLI présent (phase 6-7).
-- Backup de la **clé sealed-secrets** accessible hors cluster (coffre) — indispensable en rebuild, cf. phase 6. Copie de travail actuelle : `sealed-secrets-key.yaml` à la racine du clone, **hors Git** (couvert par `.gitignore`). Le coffre reste la source de vérité : ce fichier disparaît avec le clone.
-- `talsecret.yaml` **neuf**, hors Git. Régénérer : `talhelper gensecret > talsecret.yaml`.
-- Clone local de `homelab-gitops` à jour (`https://github.com/jbwittner/homelab_gitops.git`, public → HTTPS anonyme, aucun credential).
-
-> [!NOTE]
-> **Conventions de commandes**
-> - **`talosctl`** : contexte non persistant ici → chaque commande porte le triplet `-n 192.168.1.11 -e 192.168.1.11 --talosconfig=./clusterconfig/talosconfig`. Raccourci optionnel : `export TALOSCONFIG=./clusterconfig/talosconfig` (puis seulement `-n`/`-e`), ou `talosctl config merge ./clusterconfig/talosconfig` pour tout mémoriser.
-> - **`grep` est aliasé sur `rg`** (ripgrep) : `rg` interprète `-E` comme `--encoding` et ignore `-A` façon GNU grep. Utiliser `command grep -E …` (le vrai grep) ou `rg` avec sa propre syntaxe.
-
-> [!CAUTION]
-> **Secrets.** La config machine générée contient les **clés racines du cluster** (CA k8s, CA etcd, `serviceAccount.key`, `secretboxEncryptionSecret`, tokens). Elle et le `talsecret.yaml` restent **hors Git** et hors espaces partagés. On-prem ne change rien à cette règle. Même règle pour le backup de la clé sealed-secrets (phase 6) : coffre, jamais en clair dans Git.
-
----
-
-## Phase 0 — Retour à un état vierge
-
-> [!WARNING]
-> **Destructif — détruit etcd et tout l'état du cluster.** N'exécuter que sur un cluster qu'on assume perdre. Tout est déclaratif (`homelab-gitops`), donc reconstructible — **sauf la clé sealed-secrets** (backup hors cluster obligatoire, cf. phase 6).
-
-**Deux chemins — lequel ?**
-
-- **A. Reset à distance (cas normal, celui-ci).** Le nœud tourne déjà sous Talos et répond à `talosctl` → on le reset **remote**, il reboote en maintenance depuis son propre disque. **Pas de clé USB, pas d'accès physique.**
-- **B. Boot USB (secours / matériel vierge).** Seulement si le nœud ne répond plus du tout, si le disque système est illisible, ou pour un **premier install sur une machine neuve**. Voir l'encadré en fin de phase.
-
-Pour une reconstruction d'un nœud Talos en marche → **chemin A**.
-
-### A. Reset à distance (par défaut)
-
-Depuis ton laptop, sans toucher à la machine. `--graceful=false` obligatoire : impossible de quitter etcd proprement en membre unique (mono-CP).
+La version du chart et les values ont une **source unique** dans le repo : `targetRevision` de
+`bleu-kalecgos/infra/cilium/cilium.app.yaml` et `bleu-kalecgos/infra/cilium/helm-values.yaml`.
+Ne jamais les retaper à la main — les lire :
 
 ```bash
-talosctl -n 192.168.1.11 -e 192.168.1.11 reset \
-  --talosconfig=./clusterconfig/talosconfig \
-  --graceful=false \
-  --reboot \
-  --system-labels-to-wipe STATE \
-  --system-labels-to-wipe EPHEMERAL
+helm repo add cilium https://helm.cilium.io/ && helm repo update cilium
+
+CILIUM_VERSION="$(command grep -A3 'chart: cilium' bleu-kalecgos/infra/cilium/cilium.app.yaml \
+  | command grep 'targetRevision:' | awk '{print $2}')"
+echo "Cilium ${CILIUM_VERSION}"     # doit correspondre au targetRevision de l'Application
+
+helm install cilium cilium/cilium --version "${CILIUM_VERSION}" -n kube-system \
+  -f bleu-kalecgos/infra/cilium/helm-values.yaml
 ```
 
-Wipe STATE (config) + EPHEMERAL (etcd/données). Les partitions EFI/BOOT restent → le nœud **reboote en mode maintenance depuis son propre disque** (pas de config, TLS absent). On enchaîne sur `apply-config --insecure` (phase 1).
-
-### B. Boot USB (secours / matériel vierge) — *pas nécessaire ici*
-
-> [!TIP]
-> **Quand seulement** : machine injoignable, disque système corrompu, ou bootstrap d'un serveur **neuf** sans Talos installé. On boote physiquement sur une **clé USB Talos** : elle démarre en maintenance car le disque n'est pas utilisé, ce qui permet de le wiper totalement (table GPT comprise, résidus de PV LVM inclus).
-
 > [!WARNING]
-> Ne PAS utiliser `--wipe-mode all` via `reset` sans USB sous la main : ça efface aussi l'install Talos du disque, et le nœud ne peut plus rebooter — il faudra alors une USB/ISO pour le relancer.
-
----
-
-## Phase 1 — Talos + layout disque
-
-> [!NOTE]
-> **Le layout s'applique au PREMIER provision.** Partant d'un disque vierge, EPHEMERAL@100 + `r-lvmpv`@370 se créent d'emblée — plus besoin du cycle wipe.
-
-Config clé (`talconfig.yaml`, patches nœud) :
-
-- `machine.kernel.modules` : `dm_mod`, `dm_thin_pool`, `dm_snapshot`.
-- `VolumeConfig EPHEMERAL` : `maxSize: 100GiB`.
-- `RawVolumeConfig lvmpv` : `maxSize: 370GiB` (100 + 370 = 470 ≤ ~475 GiB utiles → ordre-robuste).
-
-> [!WARNING]
-> **Piège d'ordre Talos.** `RawVolumeConfig` est provisionné AVANT `EPHEMERAL`. Si l'un n'est pas cappé, il mange tout le disque et l'autre échoue. Les **deux** sont cappés → chacun atteint sa borne quel que soit l'ordre.
-
-```bash
-talhelper genconfig
-# Sanity : les deux documents doivent être présents (command grep = vrai grep, pas rg)
-command grep -E 'VolumeConfig|RawVolumeConfig' clusterconfig/*.yaml
-
-# Appliquer en mode maintenance (TLS absent → --insecure)
-talhelper gencommand apply --extra-flags --insecure
-```
+> **Le `--version` et le `releaseName` sont load-bearing.** La release **doit** s'appeler
+> `cilium` : l'Application `cilium` (étape 4) *adopte* ce release. Un nom différent renommerait
+> toutes les ressources Cilium et détruirait le CNI. Une version différente du `targetRevision`
+> ferait diverger l'app dès le premier sync.
 
 **Vérification :**
 
 ```bash
-talosctl -n 192.168.1.11 -e 192.168.1.11 get discoveredvolumes --talosconfig=./clusterconfig/talosconfig   # EPHEMERAL ~100 + r-lvmpv ~370
-talosctl -n 192.168.1.11 -e 192.168.1.11 get volumestatus --talosconfig=./clusterconfig/talosconfig         # r-lvmpv PHASE = ready (pas failed)
-talosctl -n 192.168.1.11 -e 192.168.1.11 read /proc/modules --talosconfig=./clusterconfig/talosconfig | command grep dm_
-```
-
-Label confirmé de la partition brute : **`r-lvmpv`**.
-
----
-
-## Phase 2 — bootstrap etcd
-
-```bash
-talhelper gencommand bootstrap
-talosctl -n 192.168.1.11 -e 192.168.1.11 health --wait-timeout 10m --talosconfig=./clusterconfig/talosconfig
-```
-
-**Vérification :** `talosctl -n 192.168.1.11 -e 192.168.1.11 get members --talosconfig=./clusterconfig/talosconfig` → nœud présent, etcd `ready`.
-
-Récupérer le kubeconfig :
-
-```bash
-talosctl -n 192.168.1.11 -e 192.168.1.11 kubeconfig ./kubeconfig --talosconfig=./clusterconfig/talosconfig
-```
-
----
-
-## Phase 3 — Cilium (CNI)
-
-> [!IMPORTANT]
-> **Sans CNI, rien ne schedule.** `cniConfig.name: none` → tous les pods (dont CoreDNS) restent `Pending` jusqu'à Cilium.
-
-Valeurs clés (mono-nœud) : `kubeProxyReplacement=true`, `k8sServiceHost=localhost`, `k8sServicePort=7445` (KubePrism), `operator.replicas=1`, `cgroup.autoMount.enabled=false`, `cgroup.hostRoot=/sys/fs/cgroup`, L2 announcements + LB-IPAM (pool `.80–.84`).
-
-> [!CAUTION]
-> **Garde-fou CoreDNS.** `forwardKubeDNSToHost: true` (dans le talconfig) **ne doit pas** cohabiter avec `bpf.masquerade=true` côté Cilium → CoreDNS casse. Laisser `bpf.masquerade` désactivé.
-
-> [!IMPORTANT]
-> **Version pinée : `1.19.5`** — SemVer **sans `v`** (chart = release). Le `--version` du helm install ci-dessous et le `targetRevision` de l'Application ArgoCD doivent rester **strictement identiques** (source unique : `helm-values.yaml`). Toute dérive entre les deux = comportement imprévisible.
-
-> [!WARNING]
-> **Saut de mineure 1.18 → 1.19.** Le socle tournait en 1.18.0. Relire les *1.19 Upgrade Notes* et vérifier la compat des valeurs `kubeProxyReplacement` / KubePrism avant/après. Rappel discipline : les upgrades Cilium se canaryent normalement sur `itharius` d'abord — ici pas de canary (itharius pas encore monté), choix assumé.
-
-```bash
-helm install cilium cilium/cilium --version 1.19.5 -n kube-system \
-  -f bleu-kalecgos/infra/cilium/helm-values.yaml
-cilium status --wait
+kubectl -n kube-system get pods -l k8s-app=cilium
+kubectl -n kube-system rollout status ds/cilium
+kubectl -n kube-system get pods -l k8s-app=kube-dns      # CoreDNS passe Running
 ```
 
 > [!NOTE]
-> **Reprise en main par ArgoCD.** Ce `helm install` est le seul geste Helm du bootstrap. Une fois ArgoCD monté (phase 4), l'Application `cilium` (multi-source : chart 1.19.5 + `$values` + `manifests/` ip-pool/l2-policy) adopte le release — le `targetRevision` et le `helm-values.yaml` étant identiques, elle passe `Synced` sans rien changer.
+> **Reprise en main par ArgoCD.** Ce `helm install` est le **seul geste Helm** du bootstrap. Une
+> fois le tier-1 lancé (étape 4), l'Application `cilium` (chart + `$values` + `manifests/`
+> ip-pool/l2-policy) adopte le release et passe `Synced` sans rien changer.
 
 ---
 
-## Phase 4 — ArgoCD (kustomize épinglé) + app-of-apps
+## Étape 2 — ArgoCD
 
 > [!IMPORTANT]
-> **Pas de Helm ici.** ArgoCD s'installe via le **dossier auto-contenu** `bleu-kalecgos/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (`raw.githubusercontent.com/argoproj/argo-cd/refs/tags/<tag>/manifests/install.yaml` — le tag exact vit dans `kustomization.yaml`, source unique) + `namespace.yaml` + patchs `argocd-cmd-params-cm` (`server.insecure: "true"`) / `argocd-cm` + la HTTPRoute UI. Ce **même dossier** sert à l'apply manuel du bootstrap ET au self-management (`argocd.app.yaml`, wave -1, `path: bleu-kalecgos/infra/argocd/manifests`) → convergence garantie.
+> **Pas de Helm ici.** ArgoCD s'installe depuis le dossier auto-contenu
+> `bleu-kalecgos/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (le tag
+> exact vit dans `kustomization.yaml`, source unique) + namespace + patchs
+> (`argocd-cmd-params-cm`, `argocd-cm`, `argocd-rbac-cm`, `argocd-notifications-cm`) + la
+> HTTPRoute UI. Ce **même dossier** sert à l'apply manuel du bootstrap **et** au self-management
+> (`argocd.app.yaml`, wave -1, même `path`) → convergence garantie.
 
-### 1. Installer ArgoCD (impératif, une fois — le seul geste manuel du GitOps)
+### 2.1 Installer
 
 ```bash
 kubectl apply -k bleu-kalecgos/infra/argocd/manifests --server-side --force-conflicts
 ```
 
 > [!WARNING]
-> **`--server-side --force-conflicts` obligatoire.** Sans SSA : `metadata.annotations: Too long` sur les CRDs ApplicationSet. Et ça doit **matcher** le `ServerSideApply=true` de l'Application self-managed, sinon `OutOfSync` permanent.
+> **`--server-side --force-conflicts` obligatoire.** Sans SSA : `metadata.annotations: Too long`
+> sur les CRDs ApplicationSet. Et le mode doit **matcher** le `ServerSideApply=true` de
+> l'Application self-managed, sinon `OutOfSync` permanent.
 
 > [!NOTE]
-> **La HTTPRoute part en échec, c'est attendu.** `argocd-httproute.yaml` est dans le kustomize mais les CRDs Gateway API n'existent pas encore → la ressource échoue à s'appliquer à ce stade. Non bloquant : le reste du bundle s'installe, et la route convergera d'elle-même en phase 5. (Si l'apply -k refuse en bloc à cause du type inconnu : commenter temporairement la ligne dans `kustomization.yaml` pour le bootstrap, le self-management la reposera après la phase 5.)
+> **Deux échecs attendus à ce stade**, non bloquants :
+> - la **HTTPRoute** — les CRDs Gateway API n'existent pas encore ; elle convergera à l'étape 5 ;
+> - les **SealedSecrets** (`argocd-oidc`, `argocd-notifications`) — la CRD `SealedSecret` n'est
+>   posée qu'à l'étape 4 ; ils convergeront ensuite.
+>
+> Si l'`apply -k` refuse **en bloc** à cause d'un type inconnu : commenter temporairement les
+> lignes concernées dans `kustomization.yaml` pour le bootstrap, le self-management les reposera
+> après l'étape 5. Ne pas oublier de les décommenter et de pousser.
 
-### 2. Vérifier, récupérer l'admin, accéder en port-forward
+### 2.2 Vérifier et accéder à l'UI
 
 ```bash
-kubectl get pods -n argocd
+kubectl -n argocd get pods
 kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
 # Mot de passe admin initial (auto-généré à l'install)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d ; echo
 
-# UI au bootstrap (l'exposition Gateway n'arrive qu'en phase 5)
+# UI au bootstrap (l'exposition Gateway n'arrive qu'à l'étape 5)
 kubectl -n argocd port-forward svc/argocd-server 8080:443
-# → https://localhost:8080 (autosigné, accepter)
+# → https://localhost:8080 (certificat autosigné, accepter)
 ```
 
-**Set du mot de passe admin** (le port-forward doit tourner dans un autre terminal) :
+### 2.3 Fixer le mot de passe admin
+
+Le port-forward doit tourner dans un autre terminal.
 
 ```bash
-# Login CLI avec le mot de passe initial
 argocd login localhost:8080 --username admin --insecure \
   --password "$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
 
-# Définir le mot de passe définitif (prompt interactif : ancien puis nouveau)
-argocd account update-password
+argocd account update-password        # prompt interactif : ancien puis nouveau
 
-# Ménage : le secret initial ne sert plus (le hash actif vit dans argocd-secret)
-kubectl -n argocd delete secret argocd-initial-admin-secret
+kubectl -n argocd delete secret argocd-initial-admin-secret   # le hash actif vit dans argocd-secret
 ```
 
 > [!TIP]
-> **Variante sans CLI argocd** — patch direct du hash bcrypt dans `argocd-secret` (c'est là que vit le mot de passe actif, champ `admin.password`) :
+> **Variante sans CLI `argocd`** — patch direct du hash bcrypt dans `argocd-secret` :
 > ```bash
 > kubectl -n argocd patch secret argocd-secret -p \
 >   '{"stringData": {
@@ -243,241 +288,306 @@ kubectl -n argocd delete secret argocd-initial-admin-secret
 > ```
 
 > [!NOTE]
-> **Statut GitOps de ce geste.** Le mot de passe admin est le **deuxième geste impératif assumé** du bootstrap (avec l'apply -k) : `argocd-secret` n'est pas dans le kustomize et le self-management ne le réconcilie pas — le hash survit aux syncs. Cible long terme déjà actée : hash géré en **SealedSecret** dans `homelab-gitops` (après phase 6), puis compte `admin` local désactivé au profit de l'OIDC **Authentik** quand il sera déployé sur le socle.
-
-### 3. Lancer le tier-1 (déclenche toute la réconciliation)
-
-```bash
-kubectl apply -f bleu-kalecgos/cluster.yaml
-```
-
-`bleu-kalecgos-cluster` découvre les `*.bootstrap.yaml` (recurse) → `bleu-kalecgos-infra` et `bleu-kalecgos-app` découvrent chacun leurs `*.app.yaml` → toutes les Applications se créent et déroulent leurs sync-waves. L'Application `argocd` (wave -1) **adopte** la config posée à l'étape 1 → `Synced` sans rien changer → self-management acté.
-
-> [!CAUTION]
-> **Pièges « Argo manages Argo »**
-> - `prune: false` sur l'Application `argocd` (il se couperait les jambes) ; `selfHeal: true` OK.
-> - Repo-server/controller peuvent redémarrer une fois après le premier sync : normal, laisser se stabiliser.
-> - K8s 1.36 bleeding-edge : si crash-loop, bumper le tag Argo CD dans `kustomization.yaml`.
-
-**Vérification :** `kubectl get applications -n argocd` → `bleu-kalecgos-cluster`, `bleu-kalecgos-infra`, `bleu-kalecgos-app`, `argocd`, `cilium` au minimum. `cilium` doit être `Synced/Healthy` sans avoir rien modifié (adoption du helm install de phase 3).
+> **Statut GitOps de ce geste.** Le mot de passe admin est un geste impératif assumé :
+> `argocd-secret` n'est pas dans le kustomize, le self-management ne le réconcilie pas, le hash
+> survit aux syncs. Le compte local reste le **break-glass** quand l'OIDC authentik est en place
+> (étape 8) ; il n'est pas désactivé.
 
 ---
 
-## Phase 5 — Exposition ArgoCD (Gateway API, TLS autosigné)
-
-> [!NOTE]
-> **Objectif minimal** — sortir du port-forward : `https://argocd.kalecgos.lan.wittner.tech` servi par la `shared-gw` (IP `.80`, première du pool LB), certificat **autosigné** en attendant Let's Encrypt (phase 7). Tout est déjà des Applications du repo — cette phase est surtout de la vérification d'ordre.
-
-### Les briques (toutes GitOps, découvertes par le tier-1)
-
-**1. `gateway-api`** (wave **-10**) — `infra/gateway-api/manifests/` : kustomize remote épinglé `standard-install.yaml` **v1.4.1** (matrice : Cilium 1.19 → GwAPI v1.4.1) + `namespace.yaml` (ns `gateway`) + `gateway.yaml` (`shared-gw`, 3 listeners : `https-public` `*.wittner.tech`, `https-internal` `*.lan.wittner.tech`, `https-internal-kalecgos` `*.kalecgos.lan.wittner.tech`). `ServerSideApply=true` obligatoire (CRDs trop grosses). La `GatewayClass cilium` est **auto-créée par le contrôleur Cilium** — ne pas la déclarer (une GatewayClass déclarée à la main reste `Pending`, non réconciliée).
-
-**2. cert-manager** (wave **-5**) — `infra/cert-manager/` : chart Jetstack v1.21.0, `crds.enabled: true`.
-
-**3. cert-manager-config** (wave **-4**) — `infra/cert-manager-config/manifests/` : à ce stade (avant sealed-secrets/LE), un `ClusterIssuer selfsigned` + les 3 `Certificate` wildcard pointés dessus.
-
-> [!NOTE]
-> **Première construction uniquement.** Le repo est aujourd'hui à l'état final de la phase 7 (Let's Encrypt) : `clusterissuer-selfsigned.yaml` n'existe plus dans `cert-manager-config/manifests/`, seul `clusterissuer.yaml` (`letsencrypt-prod`) est présent. En **rebuild**, sauter cette étape autosignée et aller directement à l'état Let's Encrypt (phases 6-7). Le manifeste ci-dessous n'est utile que pour une première construction sans LE :
-
-```yaml
-# clusterissuer-selfsigned.yaml — temporaire, retiré en phase 7
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: selfsigned
-spec:
-  selfSigned: {}
-```
-
-Les 3 `Certificate` (`wildcard-public-tls`, `wildcard-lan-tls`, `wildcard-kalecgos-lan-tls`, **ns `gateway`** — là où la Gateway consomme les Secrets) avec `issuerRef: {name: selfsigned, kind: ClusterIssuer}`. Les **trois** secrets doivent exister, sinon les listeners correspondants restent `ResolvedRefs=False`.
-
-**4. HTTPRoute ArgoCD** — déjà dans `infra/argocd/` : `parentRefs → shared-gw / sectionName: https-internal-kalecgos`, hostname `argocd.kalecgos.lan.wittner.tech`, backend `argocd-server:80` (TLS terminé à la Gateway, server en `insecure`). Les `group/kind/weight` sont **explicites** dans le manifeste — sinon les defaults CRD injectés côté live créent un `OutOfSync` permanent.
-
-### Gestes manuels de cette phase
-
-```bash
-# a. Vérifier que le moteur Gateway est bien allumé côté Cilium (flag Helm + CRDs, les deux)
-kubectl -n kube-system get cm cilium-config -o jsonpath='{.data.enable-gateway-api}'   # → "true"
-
-# b. 1re pose des CRDs : le contrôleur Gateway de Cilium ne les voit qu'après restart
-#    de l'operator. Événement UNIQUE de bootstrap, pas une dérive GitOps.
-kubectl -n kube-system rollout restart deployment/cilium-operator
-```
-
-**c. DNS (AdGuard)** : rewrite wildcard `*.kalecgos.lan.wittner.tech → 192.168.1.80` (le VIP de `shared-gw`). Rappel : un wildcard ne couvre qu'**un** niveau — vaut pour le cert, le listener ET le rewrite.
-
-**Vérification bout en bout :**
-
-```bash
-kubectl -n gateway get gateway shared-gw        # PROGRAMMED=True, ADDRESS=192.168.1.80
-kubectl -n gateway get secrets | command grep wildcard   # les 3 secrets TLS présents
-kubectl -n argocd get httproute argocd-server   # Accepted
-curl -kI https://argocd.kalecgos.lan.wittner.tech   # 200/302, cert autosigné (-k requis)
-```
-
-Le header `server: envoy` confirme le proxy Cilium. Le `-k` est l'état **attendu** de cette phase.
-
-> [!WARNING]
-> **Rejouer la HTTPRoute si commentée en phase 4.** Si la ligne `argocd-httproute.yaml` avait été commentée pour l'apply bootstrap : la décommenter, push — le self-management la pose.
-
----
-
-## Phase 6 — Sealed Secrets
-
-> [!NOTE]
-> **Rôle dans la chaîne** — prérequis de Let's Encrypt : le token Cloudflare du DNS-01 est un **SealedSecret** dans Git (règle : aucun `kubectl create secret` impératif, aucune donnée en clair au cluster hors GitOps). Wave **-8** — le contrôleur précède tout SealedSecret consommé plus tard.
-
-Application `sealed-secrets` (`infra/sealed-secrets/`) : chart Bitnami **2.19.1** (app v0.38.4), ns `sealed-secrets`, aucune values custom. Déployée par le tier-1, rien à lancer.
+## Étape 3 — Restaurer la clé sealed-secrets
 
 > [!CAUTION]
-> **DR — la clé AVANT le contrôleur. Geste OBLIGATOIRE en rebuild, facile à oublier.** Le contrôleur démarré à vide génère une clé **neuve** → tous les SealedSecrets du repo (token Cloudflare, Authentik, Grafana, OIDC ArgoCD) deviennent indéchiffrables et il faut TOUT resceller. Restaurer la clé **avant** son premier démarrage — ou immédiatement après, suivi d'un restart :
-> ```bash
-> kubectl apply -f sealed-secrets-key.yaml     # backup coffre, JAMAIS dans Git
-> kubectl rollout restart deployment/sealed-secrets -n sealed-secrets
-> ```
-> `sealed-secrets-key.yaml` est la copie de travail à la racine du clone (`kind: List` d'un Secret `kubernetes.io/tls` porteur du label `sealedsecrets.bitnami.com/sealed-secrets-key: active`). Si elle manque, la récupérer depuis le coffre.
->
-> **Vérifier que la clé restaurée est bien celle qui sert** — le contrôleur peut avoir généré une clé neuve avant l'apply, et c'est la **plus récente** qui scelle :
-> ```bash
-> kubectl get secrets -n sealed-secrets -l sealedsecrets.bitnami.com/sealed-secrets-key --sort-by=.metadata.creationTimestamp
-> ```
-> Plusieurs clés = normal (le contrôleur les garde toutes pour déchiffrer), mais si une clé neuve est plus récente que la restaurée, les prochains scellements utiliseront la neuve. Les SealedSecrets existants restent déchiffrables tant que l'ancienne clé est présente.
->
-> En **première construction** (pas de SealedSecret préexistant) : rien à restaurer, mais faire le backup TOUT DE SUITE et le déposer au coffre :
+> **Geste OBLIGATOIRE en rebuild, et le plus facile à oublier.** Le contrôleur sealed-secrets
+> démarre à l'étape 4 (wave -8). S'il démarre **sans** la clé restaurée, il en génère une neuve
+> et tous les `SealedSecret` du repo deviennent indéchiffrables. Restaurer **avant** son premier
+> démarrage — ou immédiatement après, suivi d'un restart.
+
+Le namespace `sealed-secrets` est créé par l'Application (`CreateNamespace=true`), donc pas avant
+l'étape 4. Deux façons de gagner la course, au choix :
+
+**a. Devancer le contrôleur** — créer le namespace et poser la clé maintenant. Le namespace sera
+adopté par l'Application au sync suivant :
+
+```bash
+kubectl create namespace sealed-secrets --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f sealed-secrets-key.yaml
+```
+
+**b. Rattraper après coup** — lancer l'étape 4, puis dès que le namespace existe :
+
+```bash
+kubectl apply -f sealed-secrets-key.yaml
+kubectl rollout restart deployment/sealed-secrets -n sealed-secrets
+```
+
+**Vérifier que la clé restaurée est bien celle qui sert.** Le contrôleur conserve *toutes* les
+clés pour déchiffrer, mais scelle avec la **plus récente** :
+
+```bash
+kubectl get secrets -n sealed-secrets \
+  -l sealedsecrets.bitnami.com/sealed-secrets-key --sort-by=.metadata.creationTimestamp
+```
+
+Plusieurs clés = normal. Si une clé **neuve** est plus récente que la restaurée, les prochains
+scellements utiliseront la neuve (les SealedSecrets existants, eux, restent déchiffrables). Pour
+revenir à un état propre : supprimer la clé neuve, puis `rollout restart`.
+
+> [!NOTE]
+> **Première construction** (aucun SealedSecret préexistant) : rien à restaurer — mais faire le
+> backup **tout de suite** après l'étape 4 et le déposer au coffre :
 > ```bash
 > kubectl get secret -n sealed-secrets \
 >   -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.yaml
 > ```
 
+---
+
+## Étape 4 — Tier-1 app-of-apps
+
 ```bash
-# Cert public pour sceller côté laptop (une fois)
+kubectl apply -f bleu-kalecgos/cluster.yaml
+```
+
+`bleu-kalecgos-cluster` découvre les `*.bootstrap.yaml` (recurse) → `bleu-kalecgos-infra` et
+`bleu-kalecgos-app` découvrent chacun leurs `*.app.yaml` → toutes les Applications se créent et
+déroulent leurs sync-waves. L'Application `argocd` (wave -1) **adopte** la config posée à
+l'étape 2 → `Synced` sans rien changer → self-management acté.
+
+> [!CAUTION]
+> **Pièges « Argo manages Argo »**
+> - `prune: false` sur l'Application `argocd` — il se couperait les jambes. `selfHeal: true` OK.
+> - Repo-server et application-controller peuvent redémarrer une fois après le premier sync :
+>   normal, laisser se stabiliser.
+> - Crash-loop après un upgrade de Kubernetes → bumper le tag Argo CD dans
+>   `bleu-kalecgos/infra/argocd/manifests/kustomization.yaml`.
+
+**Vérification :**
+
+```bash
+kubectl get applications -n argocd
+```
+
+Attendu au minimum : `bleu-kalecgos-cluster`, `bleu-kalecgos-infra`, `bleu-kalecgos-app`,
+`argocd`, `cilium`, `gateway-api`, `sealed-secrets`, `cert-manager`, `cert-manager-config`,
+`openebs`, plus les apps. `cilium` doit passer `Synced/Healthy` **sans rien modifier** (adoption
+du `helm install` de l'étape 1).
+
+---
+
+## Étape 5 — Exposition (Gateway API)
+
+Tout est déjà déclaratif : `gateway-api` (wave -10) pose les CRDs upstream épinglées, le
+namespace `gateway` et le Gateway partagé `shared-gw` (3 listeners HTTPS :443 —
+`https-public` `*.wittner.tech`, `https-internal` `*.lan.wittner.tech`,
+`https-internal-kalecgos` `*.kalecgos.lan.wittner.tech`). Cf. [reseau.md](reseau.md).
+
+> [!NOTE]
+> La `GatewayClass cilium` est **auto-créée par le contrôleur Cilium** — ne pas la déclarer :
+> une GatewayClass posée à la main reste `Pending`, Cilium ne réconcilie pas ce qu'il ne possède
+> pas.
+
+### Les deux gestes de cette étape
+
+```bash
+# a. Le moteur Gateway est-il allumé côté Cilium (flag Helm ET CRDs présentes) ?
+kubectl -n kube-system get cm cilium-config -o jsonpath='{.data.enable-gateway-api}'   # → "true"
+
+# b. 1re pose des CRDs : le contrôleur Gateway de Cilium ne les voit qu'après un restart de
+#    l'operator. Événement UNIQUE de bootstrap, pas une dérive GitOps.
+kubectl -n kube-system rollout restart deployment/cilium-operator
+```
+
+**c. DNS** — le résolveur du réseau doit renvoyer le wildcard vers l'IP du LB
+(`192.168.1.80`, première du pool `192.168.1.80-84` annoncé en L2 par Cilium). Rappel : un
+wildcard ne couvre qu'**un** niveau — la règle vaut pour le certificat, le listener et
+l'enregistrement DNS.
+
+**Vérification :**
+
+```bash
+kubectl -n gateway get gateway shared-gw        # PROGRAMMED=True, ADDRESS=192.168.1.80
+kubectl -n argocd get httproute argocd-server   # Accepted
+```
+
+---
+
+## Étape 6 — TLS Let's Encrypt (DNS-01 Cloudflare)
+
+`cert-manager` (wave -5) pose le moteur ; `cert-manager-config` (wave -4) pose le
+`ClusterIssuer letsencrypt-prod`, les 3 `Certificate` wildcard (namespace **`gateway`**, là où
+la Gateway consomme les Secrets) et le SealedSecret `cloudflare-api-token`.
+
+Rien à lancer : si la clé sealed-secrets est la bonne (étape 3), le token se déchiffre, le
+challenge DNS-01 passe, les 3 secrets `wildcard-*-tls` se remplissent et les listeners passent
+`ResolvedRefs=True`.
+
+**Vérification :**
+
+```bash
+kubectl -n cert-manager get secret cloudflare-api-token     # déchiffré par sealed-secrets
+kubectl -n gateway get certificate                          # les 3 en READY=True
+kubectl -n cert-manager get challenges                      # vide une fois émis
+kubectl -n gateway get secrets | command grep wildcard      # les 3 secrets TLS présents
+curl -I https://argocd.kalecgos.lan.wittner.tech            # SANS -k → chaîne LE valide
+```
+
+Le header `server: envoy` confirme le proxy Cilium.
+
+> [!WARNING]
+> **Résolveurs du self-check DNS-01.** cert-manager vérifie la propagation du TXT
+> `_acme-challenge` via le DNS **du cluster**. Si celui-ci remonte vers un upstream qui renvoie
+> NXDOMAIN sur ce nom (déjà observé avec Quad9), le challenge reste `Pending` indéfiniment.
+> Remède : épingler les résolveurs récursifs dans
+> `bleu-kalecgos/infra/cert-manager/helm-values.yaml` —
+> ```yaml
+> extraArgs:
+>   - --dns01-recursive-nameservers=1.1.1.1:53
+>   - --dns01-recursive-nameservers-only
+> ```
+> **État actuel du repo : non épinglé** (l'émission fonctionne sans). C'est le remède documenté,
+> pas l'état déployé. Après un run avorté, nettoyer les **TXT `_acme-challenge` orphelins** chez
+> Cloudflare avant de réessayer — sinon 400.
+
+> [!NOTE]
+> **Première construction seulement — la parenthèse autosignée.** Si le token Cloudflare n'est
+> pas encore scellé, aucun certificat ne peut être émis et les listeners restent
+> `ResolvedRefs=False`. Pour sortir du port-forward en attendant, ajouter temporairement un
+> `ClusterIssuer selfsigned` dans `bleu-kalecgos/infra/cert-manager-config/manifests/` et pointer
+> les 3 `Certificate` dessus :
+> ```yaml
+> apiVersion: cert-manager.io/v1
+> kind: ClusterIssuer
+> metadata:
+>   name: selfsigned
+> spec:
+>   selfSigned: {}
+> ```
+> Les **trois** secrets doivent exister, sinon les listeners correspondants restent
+> `ResolvedRefs=False`. `curl -kI` est alors l'état attendu. La bascule vers Let's Encrypt =
+> sceller le token (étape 8), repointer les `issuerRef` sur `letsencrypt-prod`, supprimer
+> l'issuer autosigné (le prune ArgoCD fait le ménage). Le repo est aujourd'hui à l'état final :
+> ce fichier n'existe pas.
+
+---
+
+## Étape 7 — Stockage (OpenEBS LVM)
+
+L'Application `openebs` déploie le moteur LocalPV-LVM et, dans `manifests/`, l'ordonnancement
+irréductible par sync-waves de **ressource** :
+
+```
+namespace `openebs` labellisé PSA privileged (-1)
+  → hook Sync `lvmvg-bootstrap` (0) : pvcreate + vgcreate `lvmvg` sur /dev/disk/by-partlabel/r-lvmpv
+    → StorageClass `openebs-lvm-thin` (1)
+```
+
+Rien à lancer à la main. Le label PSA `privileged` sur le namespace est ce qui autorise le
+DaemonSet node-plugin et le Job (tous deux `privileged`) sous une admission `baseline` : c'est un
+mécanisme natif, chirurgical et versionné, préféré à toute modification de la configuration
+d'admission du cluster.
+
+> [!NOTE]
+> **Bootstrap du VG.** LocalPV-LVM ne provisionne **pas** le Volume Group, il l'exige préexistant.
+> Le VG est donc créé par un conteneur privilégié qui embarque `lvm2` (la même image que le
+> node-plugin), à partir de la partition brute `r-lvmpv`. C'est le seul état réel sur disque, non
+> réconciliable par GitOps — le script est **idempotent** (skip si PV/VG déjà présents).
+
+**Vérification :**
+
+```bash
+kubectl get ns openebs --show-labels            # pod-security.kubernetes.io/enforce=privileged
+kubectl -n openebs get pods                     # controller + node plugin Running
+kubectl -n openebs logs job/lvmvg-bootstrap     # pvcreate/vgcreate ou « déjà présent — skip »
+kubectl get sc openebs-lvm-thin
+```
+
+**Smoke test** — le composant [`test-nginx`](../bleu-kalecgos/app/test-nginx/README.md) le fait
+déjà (PVC + pod + Cluster CNPG) :
+
+```bash
+kubectl -n test-nginx get pods,pvc,clusters.postgresql.cnpg.io
+```
+
+---
+
+## Étape 8 — Secrets applicatifs et SSO (première construction)
+
+En **rebuild avec la bonne clé**, cette étape est déjà faite : les `*.sealed.yaml` du repo se
+déchiffrent seuls. Elle ne sert qu'à une première construction ou à un re-scellement complet.
+
+**Le cert public du contrôleur, une fois** (`pub-cert.pem` est gitignoré) :
+
+```bash
 kubeseal --fetch-cert \
   --controller-name=sealed-secrets \
   --controller-namespace=sealed-secrets \
   > pub-cert.pem
 ```
 
-**Vérification :** `kubectl -n sealed-secrets get pods` → contrôleur `Running` ; `kubectl get sealedsecrets -A` répond (CRD posée).
+**Boucle de scellement, identique pour tous les secrets** — renseigner le template en clair
+(`*.secret.yaml`, gitignoré), sceller, supprimer le clair, committer le `*.sealed.yaml` :
+
+```bash
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < <chemin>/<name>.secret.yaml \
+  > <chemin>/<name>.sealed.yaml
+rm <chemin>/<name>.secret.yaml
+```
+
+Ordre conseillé, et README à suivre pour chacun :
+
+| Ordre | Secret | Chemin du template | Détail |
+|---|---|---|---|
+| 1 | Token Cloudflare | `bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml` | [cert-manager-config](../bleu-kalecgos/infra/cert-manager-config/README.md) |
+| 2 | Admin Grafana (break-glass) | `bleu-kalecgos/app/kube-prometheus-stack/manifests/grafana-admin.secret.yaml` | [kube-prometheus-stack](../bleu-kalecgos/app/kube-prometheus-stack/README.md) |
+| 3 | `AUTHENTIK_SECRET_KEY` | (généré, cf. README) | [authentik](../bleu-kalecgos/app/authentik/README.md) |
+| 4 | OIDC ArgoCD | `bleu-kalecgos/infra/argocd/manifests/argocd-oidc.secret.yaml` | [argocd](../bleu-kalecgos/infra/argocd/README.md) |
+| 5 | OIDC Grafana | `bleu-kalecgos/app/kube-prometheus-stack/manifests/grafana-oidc.secret.yaml` | [kube-prometheus-stack](../bleu-kalecgos/app/kube-prometheus-stack/README.md) |
+| 6 | Token notifications Grafana | `bleu-kalecgos/infra/argocd/manifests/argocd-notifications.secret.yaml` | [argocd](../bleu-kalecgos/infra/argocd/README.md) |
+| 7 | PAT GitHub Renovate | `bleu-kalecgos/app/renovate/manifests/renovate.secret.yaml` | [renovate](../bleu-kalecgos/app/renovate/README.md) |
+
+Les 3, 4 et 5 dépendent d'authentik : il doit tourner et ses providers OIDC être créés
+(Terraform, autre repo) avant de pouvoir sceller les client-secrets. Le 6 dépend de Grafana
+(service account token créé dans l'UI).
+
+**Et immédiatement après : sauvegarder la clé au coffre** (cf. étape 3) — à partir de maintenant,
+elle est le seul élément non reconstructible du cluster.
 
 ---
 
-## Phase 7 — Let's Encrypt (DNS-01 Cloudflare)
-
-> [!NOTE]
-> **La bascule** — remplacer l'autosigné par LE : sceller le token Cloudflare → committer le `ClusterIssuer letsencrypt-prod` → **flipper les `issuerRef`** des 3 Certificates → retirer l'issuer `selfsigned`. Tout en Git, ArgoCD déroule.
-
-### 1. Sceller le token Cloudflare
-
-Token API : `Zone:DNS:Edit` + `Zone:Zone:Read` sur `wittner.tech`.
+## Vérification finale
 
 ```bash
-kubectl create secret generic cloudflare-api-token \
-  --namespace=cert-manager \
-  --from-literal=api-token='<TOKEN>' \
-  --dry-run=client -o yaml \
-| kubeseal --cert pub-cert.pem --format yaml \
-> bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.sealed.yaml
-```
-
-Committer **uniquement** le `.sealed.yaml` (le référencer dans le `kustomization.yaml` de `cert-manager-config/manifests/`).
-
-### 2. ClusterIssuer + flip des Certificates (commit)
-
-- `clusterissuer.yaml` : `letsencrypt-prod`, ACME prod, solver `dns01.cloudflare` → `apiTokenSecretRef: {name: cloudflare-api-token, key: api-token}` (le SealedSecret, ns `cert-manager`).
-- `certificates.yaml` : les 3 `issuerRef` passent de `selfsigned` à `letsencrypt-prod`. Le changement de spec déclenche la ré-émission — cert-manager écrase les secrets autosignés dans ns `gateway`.
-- Supprimer `clusterissuer-selfsigned.yaml` (prune ArgoCD fait le ménage).
-
-> [!WARNING]
-> **Leçon Traefik transposée : résolveurs du DNS-01.** Sur le Level 0, Quad9 retournait NXDOMAIN pour `_acme-challenge` alors que Cloudflare le voyait → seul `1.1.1.1` fiabilise. Le self-check de propagation de cert-manager passe par le DNS **du cluster** (CoreDNS → AdGuard → mix d'upstreams dont Quad9). Si un challenge reste `Pending` sur ce symptôme, épingler les résolveurs récursifs dans `helm-values.yaml` de cert-manager :
-> ```yaml
-> extraArgs:
->   - --dns01-recursive-nameservers=1.1.1.1:53
->   - --dns01-recursive-nameservers-only
-> ```
-> État actuel du repo : **non épinglé** (l'émission a fonctionné sans sur ce socle) — c'est le remède documenté, pas l'état déployé. Et en cas de run avorté : nettoyer les **TXT `_acme-challenge` orphelins** chez Cloudflare avant de réessayer (sinon 400).
-
-**Vérification :**
-
-```bash
-kubectl -n gateway get certificate      # les 3 en READY=True
-kubectl -n cert-manager get challenges  # vide une fois émis
-curl -I https://argocd.kalecgos.lan.wittner.tech   # SANS -k → chaîne LE valide
-```
-
-DNS-01 → aucune exposition publique requise, marche pour les hostnames internes du split-horizon (`*.lan` jamais publié chez Cloudflare, seul le TXT de challenge y transite).
-
----
-
-## Phase 8 — PodSecurity (label sur `openebs`)
-
-> [!NOTE]
-> **100 % déclaratif — aucun patch Talos.** Talos applique PodSecurity `baseline` cluster-wide, seul `kube-system` exempté. Plutôt que de modifier le machineconfig, on labellise le namespace `openebs` en `privileged` — mécanisme PSA natif, chirurgical, versionné, visible sur l'objet Namespace.
-
-Rien à lancer à la main ici : le label est porté par le manifeste explicite `manifests/namespace.yaml` (sync-wave `-1`), déployé via ArgoCD **en même temps que le driver** (phase 9). L'ordre est garanti par les sync-waves : namespace labellisé (`-1`) → Job VG (`0`) → StorageClass (`1`).
-
-```yaml
-# manifests/namespace.yaml (extrait)
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: openebs
-  labels:
-    pod-security.kubernetes.io/enforce: privileged
-  annotations:
-    argocd.argoproj.io/sync-wave: "-1"
-```
-
-> [!WARNING]
-> **Pourquoi le label et pas un hook.** Le Job VG et le DaemonSet `lvm-node` tournent en `privileged`. Sous `baseline`, ils sont rejetés tant que le namespace n'est pas labellisé. Le Job est une **ressource normale à sync-wave 0** (plus un hook PreSync) → il s'exécute forcément après le namespace labellisé (`-1`). C'est ce qui élimine la course.
-
-**Vérification :** `kubectl get ns openebs --show-labels` → `pod-security.kubernetes.io/enforce=privileged` présent.
-
----
-
-## Phase 9 — Driver OpenEBS LVM
-
-Via ArgoCD (chemin `bleu-kalecgos/infra/openebs/` — chart parapluie `openebs` 4.5.1, moteur lvm-localpv 1.9.1 seul activé) :
-
-- Application driver (chart `lvm-localpv`, driver v1.9.1) → namespace `openebs`, `CreateNamespace=false` (le namespace est déjà créé + labellisé par `manifests/namespace.yaml`).
-- Manifests : `namespace.yaml` (wave -1) + Job VG (wave 0, ressource normale) + `StorageClass` thin (wave 1).
-
-> [!NOTE]
-> **Bootstrap du VG.** Talos n'a pas de lvm2 userspace → le VG se crée depuis un conteneur privilégié qui `pvcreate` la partition brute `/dev/disk/by-partlabel/r-lvmpv`. État réel sur le disque, hors GitOps réconciliable (analogue à l'exception AdGuard).
-
-```bash
-# Le Job VG fait : pvcreate r-lvmpv → vgcreate lvmvg → driver up
-kubectl -n openebs get pods            # controller + node plugin Running
+kubectl get applications -n argocd                       # toutes Synced/Healthy
+kubectl get nodes                                        # Ready
+kubectl -n gateway get gateway shared-gw                 # PROGRAMMED=True
+kubectl -n gateway get certificate                       # 3× READY=True
 kubectl get sc openebs-lvm-thin
+kubectl -n test-nginx get pods,pvc,clusters.postgresql.cnpg.io
+curl -I https://argocd.kalecgos.lan.wittner.tech
+curl -I https://grafana.kalecgos.lan.wittner.tech
 ```
-
-**Smoke test :** PVC 1Gi sur `openebs-lvm-thin` + pod busybox → PVC `Bound`, LV créé dans `lvmvg`.
-
----
-
-## Extension future (sans reprovision)
-
-> [!TIP]
-> **Ajout d'un 2e disque plus tard** — migration/extension LVM à chaud, aucun rebuild :
-> ```bash
-> pvcreate /dev/disk/by-id/<nouveau>
-> vgextend lvmvg /dev/disk/by-id/<nouveau>   # extension
-> # ou migration : pvmove <ancienne-part> → vgreduce lvmvg <ancienne-part>
-> ```
-> Rappel isolation : un VG étalé sur 2 disques = 1 seul domaine de panne. Pour une vraie isolation, créer un **VG distinct** par disque.
 
 ---
 
 ## Pièges rencontrés (mémo)
 
-- **`apply-config` sans reboot n'a aucun effet sur la taille d'EPHEMERAL** : Talos ne dimensionne qu'au 1er provision. Il faut wiper.
-- **xfs ne se réduit jamais** : impossible de rétrécir EPHEMERAL en place, seul le wipe libère l'espace.
-- **talhelper < v3.0.37** ignore silencieusement les documents autonomes.
-- **RFC6902** ne marche pas sur configs multi-docs → strategic-merge uniquement.
-- **`--graceful` sur mono-CP** bloque (etcd leave impossible) → `--graceful=false`.
-- **Résolution DNS de `vert-ysera`** ne passe pas par AdGuard → faux « cert non servi » côté Traefik (artefact de résolution locale, pas un vrai souci TLS).
-- **Apply non-SSA après un apply SSA** (ou l'inverse) sur ArgoCD → `OutOfSync` permanent ; l'apply manuel et l'Application self-managed doivent être **tous deux** server-side.
-- **GatewayClass déclarée à la main** → `ACCEPTED: Unknown / Pending` : Cilium ne réconcilie pas une GatewayClass qu'il ne possède pas. La laisser auto-créer.
-- **CRDs Gateway API posées après Cilium** → contrôleur Gateway aveugle tant que `cilium-operator` n'a pas redémarré (one-shot de bootstrap).
-- **Defaults CRD Gateway API** (`group`, `kind`, `weight`, `matches`) injectés côté live → `OutOfSync` permanent si non explicités dans les manifestes HTTPRoute.
-- **Contrôleur sealed-secrets démarré avant restauration de la clé** → nouvelle clé, SealedSecrets du repo indéchiffrables.
-- **Quad9 comme résolveur des self-checks DNS-01** → NXDOMAIN sur `_acme-challenge` ; épingler `1.1.1.1` (`--dns01-recursive-nameservers`). TXT orphelins d'un run avorté = 400 Cloudflare.
+- **Apply non-SSA après un apply SSA** (ou l'inverse) sur ArgoCD → `OutOfSync` permanent :
+  l'apply manuel et l'Application self-managed doivent être **tous deux** server-side.
+- **`GatewayClass` déclarée à la main** → `ACCEPTED: Unknown / Pending`. Cilium ne réconcilie pas
+  une GatewayClass qu'il ne possède pas ; la laisser s'auto-créer.
+- **CRDs Gateway API posées après Cilium** → contrôleur Gateway aveugle tant que
+  `cilium-operator` n'a pas redémarré (one-shot de bootstrap).
+- **Defaults CRD Gateway API** (`group`, `kind`, `weight`, `matches`) injectés côté live →
+  `OutOfSync` permanent s'ils ne sont pas explicités dans les HTTPRoute.
+- **Contrôleur sealed-secrets démarré avant restauration de la clé** → clé neuve, SealedSecrets
+  du repo indéchiffrables. C'est l'erreur la plus coûteuse du runbook.
+- **Fichier référencé mais absent dans un `kustomization.yaml`** (typiquement un `*.sealed.yaml`
+  pas encore scellé) → `kustomize build` échoue, l'Application entière part en erreur.
+- **`bpf.masquerade=true` côté Cilium** ne cohabite pas avec un forward du DNS cluster vers
+  l'hôte : CoreDNS casse. Laisser `bpf.masquerade` désactivé.
+- **Quad9 comme résolveur des self-checks DNS-01** → NXDOMAIN sur `_acme-challenge` ; épingler
+  `1.1.1.1`. TXT orphelins d'un run avorté = 400 Cloudflare.
+- **PVC seul en `Pending`** → normal : `WaitForFirstConsumer`, le volume n'est taillé que quand un
+  pod consomme le PVC.

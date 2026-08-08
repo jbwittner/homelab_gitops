@@ -1,10 +1,13 @@
 # homelab_gitops
 
-Dépôt GitOps du homelab. Un cluster actif : **bleu-kalecgos** (Talos mono-nœud `vert-eranikus`),
+Dépôt GitOps du homelab. Un cluster actif : **bleu-kalecgos** (mono-nœud `vert-eranikus`),
 piloté intégralement par **ArgoCD** en app-of-apps.
 
 > **Règle non négociable** : aucune donnée n'est poussée au cluster hors GitOps —
 > [doc/regles-gitops.md](doc/regles-gitops.md).
+
+> **Commandes** : toute commande de cette documentation se lance **depuis la racine du clone**,
+> telle quelle, sans `cd` préalable.
 
 ## Structure
 
@@ -12,6 +15,7 @@ piloté intégralement par **ArgoCD** en app-of-apps.
 homelab_gitops/
 ├── bleu-kalecgos/    # cluster actif (app-of-apps) — infra/ + app/
 ├── doc/              # règles, conventions, runbook
+├── renovate.json     # politique de mise à jour des dépendances (cooldown 7 j, automerge)
 ├── .claude/skills/   # skills projet
 └── archive/          # anciens clusters, hors périmètre actif
 ```
@@ -22,13 +26,22 @@ homelab_gitops/
 
 ## Documentation
 
-- [doc/regles-gitops.md](doc/regles-gitops.md) — règles GitOps (kubectl, secrets, SealedSecrets)
-- [doc/conventions.md](doc/conventions.md) — layout des composants, naming, archétypes, sync-waves, pattern helm-values
-- [doc/reseau.md](doc/reseau.md) — exposition réseau (Gateway API, `shared-gw`, TLS)
-- [doc/runbook-bootstrap-kalecgos.md](doc/runbook-bootstrap-kalecgos.md) — bootstrap / disaster recovery complet
+- [doc/regles-gitops.md](doc/regles-gitops.md) — règles GitOps (kubectl, secrets, gestes
+  impératifs assumés)
+- [doc/conventions.md](doc/conventions.md) — layout des composants, naming, archétypes,
+  sync-waves, pattern `helm-values`, convention des secrets
+- [doc/reseau.md](doc/reseau.md) — exposition réseau (Gateway API, `shared-gw`, listeners, TLS)
+- [doc/runbook-bootstrap-kalecgos.md](doc/runbook-bootstrap-kalecgos.md) — bootstrap / disaster
+  recovery complet, depuis un cluster vierge sans CNI
 - [.claude/skills/README.md](.claude/skills/README.md) — skills projet (dont vérification des règles)
 
 ## Bootstrap / disaster recovery
 
-Procédure complète dans le [runbook](doc/runbook-bootstrap-kalecgos.md). Tout converge par
-sync-waves après le bootstrap d'ArgoCD ([bleu-kalecgos/infra/argocd/README.md](bleu-kalecgos/infra/argocd/README.md)).
+Le [runbook](doc/runbook-bootstrap-kalecgos.md) part d'un **cluster Kubernetes vierge, sans CNI**
+et va jusqu'à la stack complète. Trois gestes manuels seulement (Cilium, `apply -k` d'ArgoCD,
+restauration de la clé sealed-secrets) ; tout le reste converge par sync-waves.
+
+> [!CAUTION]
+> Le seul élément **non reconstructible** depuis ce dépôt est la **clé privée sealed-secrets**.
+> Sans son backup (coffre, hors cluster, hors Git), tous les `SealedSecret` committés sont morts
+> et il faut re-provisionner chaque credential amont. C'est un prérequis du runbook.

@@ -2,93 +2,71 @@
 
 ## Rôle
 
-`ClusterIssuer` Let's Encrypt (DNS-01 Cloudflare) + `Certificate` wildcard. cert-manager remplit
-les Secret TLS `wildcard-*-tls` dans le namespace `gateway` (consommés par `shared-gw`,
-cf. [doc/reseau.md](../../../doc/reseau.md)).
+Les objets métier de cert-manager : `ClusterIssuer` Let's Encrypt (DNS-01 Cloudflare) et les
+`Certificate` wildcard. cert-manager remplit les Secret TLS `wildcard-*-tls` dans le namespace
+`gateway`, là où `shared-gw` les consomme (cf. [doc/reseau.md](../../../doc/reseau.md)).
 
 ## Fichiers
 
-- `cert-manager-config.app.yaml` — Application (archétype (c), path → `manifests/`)
-- `manifests/` — ClusterIssuer `letsencrypt-prod`, Certificates wildcard
-  (`*.wittner.tech`, `*.lan.wittner.tech`, `*.kalecgos.lan.wittner.tech`),
-  SealedSecret `cloudflare-api-token` (ns `cert-manager`, clé `api-token`)
+- `cert-manager-config.app.yaml` — Application (archétype (c), path → `manifests/`), wave -4
+- `manifests/clusterissuer.yaml` — `letsencrypt-prod`, ACME production, solver
+  `dns01.cloudflare` → `apiTokenSecretRef` sur le SealedSecret
+- `manifests/certificates.yaml` — les 3 `Certificate` wildcard (`*.wittner.tech`,
+  `*.lan.wittner.tech`, `*.kalecgos.lan.wittner.tech`), **ns `gateway`**
+- `manifests/cloudflare-api-token.sealed.yaml` — SealedSecret `cloudflare-api-token`
+  (ns `cert-manager`, clé `api-token`)
+- `manifests/cloudflare-api-token.secret.yaml` — template en clair, **gitignoré**
 
-## Ajouter le token API Cloudflare (SealedSecret)
+## Contraintes
+
+- Chaque manifeste porte son propre namespace (ClusterIssuer cluster-scoped, Certificates dans
+  `gateway`, SealedSecret dans `cert-manager`) → **pas** de `namespace:` global dans le
+  `kustomization.yaml`.
+- Les **trois** secrets TLS doivent exister, sinon les listeners correspondants de `shared-gw`
+  restent `ResolvedRefs=False`.
+- Le nom/namespace du SealedSecret doit matcher l'`apiTokenSecretRef` du ClusterIssuer.
+
+## Opérations
+
+### Sceller le token API Cloudflare
 
 > Règle GitOps : aucun secret en clair au cluster ni dans Git
-> ([doc/regles-gitops.md](../../../doc/regles-gitops.md)). Le token est chiffré par `kubeseal` ;
-> seul le `SealedSecret` est committé.
+> ([doc/regles-gitops.md](../../../doc/regles-gitops.md)).
 
-### Pré-requis
+**Pré-requis** :
 
-1. **Token API Cloudflare** avec les permissions :
-   - `Zone : DNS : Edit`
-   - `Zone : Zone : Read`
-   - scope : la zone `wittner.tech` (ou toutes les zones).
-   Créer sur https://dash.cloudflare.com/profile/api-tokens.
-2. Contrôleur **sealed-secrets** en marche (`kubectl get deploy -n sealed-secrets`).
-3. `kubeseal` installé (`brew install kubeseal`).
+1. Un **token API Cloudflare** avec `Zone : DNS : Edit` + `Zone : Zone : Read` sur la zone
+   `wittner.tech` — https://dash.cloudflare.com/profile/api-tokens.
+2. Contrôleur sealed-secrets en marche : `kubectl get deploy -n sealed-secrets`.
+3. `kubeseal` installé.
 
-### Sceller
-
-**1.** Créer le Secret en clair — fichier temporaire local `/tmp/cloudflare-api-token.secret.yaml`
-(⚠️ **NE JAMAIS committer** ce fichier). Copier-coller, remplacer `<CLOUDFLARE_API_TOKEN>` :
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloudflare-api-token
-  namespace: cert-manager
-type: Opaque
-stringData:
-  api-token: <CLOUDFLARE_API_TOKEN>
-```
-
-**2.** Sceller — **depuis la racine du projet** :
+Commandes **depuis la racine du repo** :
 
 ```bash
-kubeseal \
-  --controller-name=sealed-secrets \
-  --controller-namespace=sealed-secrets \
-  --format yaml \
-  < /tmp/cloudflare-api-token.secret.yaml \
+# 1. Renseigner la clé `api-token` du template en clair (gitignoré) :
+#    bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml
+
+# 2. Sceller
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml \
   > bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.sealed.yaml
+
+# 3. Supprimer le clair, puis commit + push
+rm bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml
 ```
 
-**3.** Supprimer le fichier en clair :
+ArgoCD sync → le contrôleur déchiffre `cloudflare-api-token` → cert-manager résout le DNS-01 →
+Let's Encrypt émet les wildcards → les `wildcard-*-tls` se remplissent → `shared-gw` passe
+`Programmed`.
 
-```bash
-rm /tmp/cloudflare-api-token.secret.yaml
-```
-
-Le fichier produit (`cloudflare-api-token.sealed.yaml`) :
-- `metadata.name: cloudflare-api-token`, `namespace: cert-manager` → matche `apiTokenSecretRef` du ClusterIssuer.
-- `spec.encryptedData.api-token` chiffré → déchiffré par le contrôleur en Secret natif.
-
-### Activer
-
-Ajouter le fichier aux resources kustomize, committer, pousser :
-
-```bash
-# manifests/kustomization.yaml — décommenter / ajouter :
-#   - cloudflare-api-token.sealed.yaml
-git add bleu-kalecgos/infra/cert-manager-config/manifests/cloudflare-api-token.sealed.yaml
-git commit -m "feat(cert-manager): add sealed Cloudflare API token"
-git push
-```
-
-ArgoCD sync → controller déchiffre `cloudflare-api-token` → cert-manager résout le DNS-01 →
-Let's Encrypt émet les wildcards → `wildcard-*-tls` remplis → `shared-gw` passe `Programmed`.
+**Rotation** : régénérer le token côté Cloudflare, refaire les 3 étapes. L'ancien Secret est
+écrasé au sync suivant.
 
 ### Vérifier
 
 ```bash
-kubectl get sealedsecret,secret -n cert-manager | grep cloudflare-api-token
-kubectl get certificate -n gateway
-kubectl describe certificate wildcard-kalecgos-lan-tls -n gateway   # events DNS-01 / issuance
+kubectl -n cert-manager get sealedsecret,secret | command grep cloudflare-api-token
+kubectl -n gateway get certificate
+kubectl -n gateway describe certificate wildcard-kalecgos-lan-tls   # events DNS-01 / issuance
 kubectl get clusterissuer letsencrypt-prod -o wide
 ```
-
-> **Rotation** : régénérer le token côté Cloudflare, re-sceller (même commande), commit/push.
-> L'ancien Secret est écrasé au prochain sync.

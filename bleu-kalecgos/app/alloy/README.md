@@ -3,19 +3,29 @@
 ## Rôle
 
 **Grafana Alloy** en DaemonSet : lit les fichiers de logs des conteneurs sur le nœud
-(`/var/log/pods`, montés en hostPath), les étiquette avec les métadonnées Kubernetes et les pousse
+(`/var/log/pods`, monté en hostPath), les étiquette avec les métadonnées Kubernetes et les pousse
 vers [loki](../loki/README.md). Successeur de Promtail (EOL). Ne collecte **que les logs des
-pods** : les logs système de Talos (kernel, systemd) demanderaient une modification de la
-machineconfig, hors périmètre GitOps de ce repo.
+pods** : les journaux système du nœud (kernel, systemd) relèvent de la configuration machine,
+hors périmètre GitOps de ce repo.
 
 ## Fichiers
 
-- `alloy.app.yaml` — Application ArgoCD multi-sources : chart Helm + values (`$values`) +
-  `manifests/`.
+- `alloy.app.yaml` — Application (archétype (b) : chart + `$values` + `manifests/`)
 - `helm-values.yaml` — DaemonSet, montage `/var/log`, exécution en root, ServiceMonitor, et la
-  configuration Alloy elle-même (`discovery.kubernetes` → `loki.source.file` → `loki.write`).
-- `manifests/namespace.yaml` — namespace `alloy` labellisé **`privileged`** (hostPath).
-- `manifests/kustomization.yaml` — assemblage.
+  configuration Alloy elle-même (`discovery.kubernetes` → `loki.source.file` →
+  `loki.process` → `loki.write`)
+- `manifests/namespace.yaml` — ns `alloy` labellisé **PSA `privileged`** (hostPath)
+- `manifests/kustomization.yaml` — assemblage
+
+## Contraintes
+
+- Le namespace **doit** rester labellisé `privileged` : sans lui, le hostPath `/var/log` est
+  refusé par l'admission `baseline`.
+- Le ServiceMonitor porte le label `release: kube-prometheus-stack` — sans lui, le Prometheus du
+  stack ne le sélectionne pas et les métriques du collecteur ne sont pas scrapées.
+- `stage.cri {}` dans `loki.process` est load-bearing : sans lui, chaque ligne stockée commence
+  par les métadonnées du format CRI et l'horodatage est celui de la lecture, pas celui de
+  l'application.
 
 ## Opérations
 
@@ -30,7 +40,7 @@ filtrer sur le **contenu** de la ligne dans la requête plutôt que d'en faire u
 
 ```bash
 kubectl -n alloy get ds
-kubectl -n alloy logs ds/alloy | grep -i error
+kubectl -n alloy logs ds/alloy | command grep -i error
 kubectl -n alloy port-forward ds/alloy 12345:12345   # UI Alloy : graphe des composants,
                                                      # cibles découvertes, dernières erreurs
 ```

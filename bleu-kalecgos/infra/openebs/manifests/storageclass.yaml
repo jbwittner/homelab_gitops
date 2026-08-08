@@ -6,8 +6,9 @@ metadata:
     # [ArgoCD, pas K8s] Ordre de déploiement : la SC est posée en DERNIER (après le Job VG en
     # wave 0), une fois le VG créé et le driver Healthy. N'influence pas le comportement du volume.
     argocd.argoproj.io/sync-wave: "1"
-    # [K8s, commenté] Décommenter pour faire de CETTE SC la SC PAR DÉFAUT du cluster : tout PVC
-    # sans `storageClassName` l'utiliserait alors automatiquement. Laissé off = choix explicite requis.
+    # [K8s] ACTIF : cette SC est la SC PAR DÉFAUT du cluster — tout PVC sans `storageClassName`
+    # l'utilise automatiquement. La retirer obligerait chaque PVC à nommer sa classe (et laisserait
+    # en Pending ceux qui ne le font pas, dont les PVC générés par certains charts).
     storageclass.kubernetes.io/is-default-class: "true"
 
 # Le driver CSI qui provisionne les volumes. Doit matcher le provisioner déployé par le chart
