@@ -12,14 +12,33 @@
   "kubernetes": {
     "managerFilePatterns": ["/manifests/.+\\.yaml$/"]
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Manifestes upstream épinglés par URL dans les kustomization.yaml (le manager kustomize ne voit que les URLs git avec ?ref=)",
+      "managerFilePatterns": ["/(^|/)kustomization\\.ya?ml$/"],
+      "matchStrings": [
+        "https://raw\\.githubusercontent\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/refs/tags/(?<currentValue>[^/\\s]+)/",
+        "https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/releases/download/(?<currentValue>[^/\\s]+)/"
+      ],
+      "datasourceTemplate": "github-releases"
+    }
+  ],
   "packageRules": [
     {
       "matchUpdateTypes": ["pin", "patch", "minor"],
-      "automerge": true
+      "automerge": true,
+      "ignoreTests": true
     },
     {
       "matchPackageNames": ["renovate/renovate"],
-      "automerge": true
+      "automerge": true,
+      "ignoreTests": true
+    },
+    {
+      "description": "Argo CD est self-managed : merge manuel obligatoire, quel que soit le type d'update",
+      "matchPackageNames": ["argoproj/argo-cd"],
+      "automerge": false
     }
   ]
 }
