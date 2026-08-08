@@ -2,12 +2,14 @@
 
 ## Architecture
 
-Cilium implémente **Gateway API**. Un `Gateway` partagé unique : **`shared-gw`**
-(ns `gateway`, classe `cilium`), défini dans
-[`bleu-kalecgos/infra/gateway-api/manifests/gateway.yaml`](../bleu-kalecgos/infra/gateway-api/manifests/gateway.yaml).
+Cilium implémente **Gateway API**. Chaque cluster a son `Gateway` partagé unique : **`shared-gw`**
+(ns `gateway`, classe `cilium`), défini dans `<cluster>/infra/gateway-api/manifests/gateway.yaml`
+— modèle :
+[`bleu-kalecgos`](../bleu-kalecgos/infra/gateway-api/manifests/gateway.yaml).
 
-- **LB** : IP `192.168.1.80` allouée par `CiliumLoadBalancerIPPool` (pool `192.168.1.80-84`)
-  et annoncée en **L2** — manifestes dans `bleu-kalecgos/infra/cilium/manifests/`.
+- **LB** : **une IP par cluster**, allouée par le `CiliumLoadBalancerIPPool` propre au cluster
+  et annoncée en **L2** — manifestes dans `<cluster>/infra/cilium/manifests/`. Les plages des
+  clusters sont **disjointes** ; valeurs dans [les fiches cluster](clusters/).
 - **TLS terminé au Gateway** : secrets `wildcard-*-tls` (ns `gateway`), émis par cert-manager
   (Let's Encrypt DNS-01 Cloudflare), référencés en `Terminate` par les listeners. Les backends
   sont joints en HTTP clair.
@@ -19,13 +21,19 @@ Cilium implémente **Gateway API**. Un `Gateway` partagé unique : **`shared-gw`
 |---|---|---|---|
 | `https-public` | `*.wittner.tech` | `wildcard-public-tls` | services exposés publiquement |
 | `https-internal` | `*.lan.wittner.tech` | `wildcard-lan-tls` | services internes, tous clusters |
-| `https-internal-kalecgos` | `*.kalecgos.lan.wittner.tech` | `wildcard-kalecgos-lan-tls` | services internes propres à ce cluster |
+| `https-internal-<cluster>` | `*.<cluster>.lan.wittner.tech` | `wildcard-<cluster>-lan-tls` | services internes propres à un cluster |
+
+Les deux premiers sont identiques d'un cluster à l'autre ; le troisième est propre au cluster —
+son `sectionName` et son wildcard exacts sont dans [sa fiche](clusters/) (ex. kalecgos :
+`https-internal-kalecgos` / `*.kalecgos.lan.wittner.tech`).
 
 ⚠️ Un wildcard ne couvre qu'**un** niveau. La règle vaut pour le certificat, le listener **et**
 l'enregistrement DNS : `a.kalecgos.lan.wittner.tech` est couvert, `a.b.kalecgos.lan.wittner.tech`
 ne l'est pas.
 
 ## Exposé aujourd'hui
+
+`bleu-kalecgos` est le seul cluster qui expose quoi que ce soit.
 
 | Hostname | Listener | Composant |
 |---|---|---|
@@ -38,8 +46,9 @@ authentification, jointe uniquement en intra-cluster).
 
 ## DNS
 
-Le résolveur du réseau doit renvoyer les wildcards internes vers l'IP du LB
-(`*.kalecgos.lan.wittner.tech → 192.168.1.80`). Les zones `*.lan` ne sont jamais publiées chez
+Le résolveur du réseau doit renvoyer le wildcard interne de chaque cluster vers l'IP du LB **de
+ce cluster** (kalecgos : `*.kalecgos.lan.wittner.tech → 192.168.1.80` ; cf.
+[les fiches](clusters/)). Les zones `*.lan` ne sont jamais publiées chez
 Cloudflare : seul le TXT `_acme-challenge` du DNS-01 y transite, ce qui suffit à émettre un
 certificat Let's Encrypt pour un nom qui n'est pas joignable depuis Internet.
 

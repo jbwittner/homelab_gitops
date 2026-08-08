@@ -11,14 +11,14 @@ d'autre. Secrets : jamais en clair, uniquement **SealedSecrets** (`kubeseal`). U
 
 Toute commande écrite dans la doc (README, runbook, `doc/`) doit être exécutable **telle
 quelle depuis la racine du clone**, sans `cd` préalable : chemins relatifs à la racine
-(`bleu-kalecgos/infra/<name>/…`), jamais relatifs au dossier du README. Une commande qui
+(`<cluster>/infra/<name>/…`), jamais relatifs au dossier du README. Une commande qui
 suppose un `cd` est un bug de documentation.
 
 ## Conventions
 
 Règles complètes : [doc/conventions.md](doc/conventions.md). Points critiques :
 
-- Composant = `bleu-kalecgos/{infra,app}/<name>/<name>.app.yaml` — suffixe **exact**
+- Composant = `<cluster>/{infra,app}/<name>/<name>.app.yaml` — suffixe **exact**
   `.app.yaml` requis (glob de découverte), `metadata.name` = dossier = préfixe fichier.
 - Values Helm **jamais inline** : fichier `helm-values.yaml` référencé via le pattern
   multi-source `$values` (exemple dans doc/conventions.md).
@@ -34,9 +34,12 @@ Détail : [doc/reseau.md](doc/reseau.md).
 
 ## Bootstrap / disaster recovery
 
-[doc/runbook-bootstrap-kalecgos.md](doc/runbook-bootstrap-kalecgos.md) — part d'un cluster
-vierge **sans CNI**. Le seul élément non reconstructible depuis Git est la **clé privée
-sealed-secrets** : son backup (coffre) est un prérequis du runbook, pas une option.
+[doc/runbook-bootstrap.md](doc/runbook-bootstrap.md) — procédure **générique** (tous clusters,
+paramétrée par `export CLUSTER=…`), part d'un cluster vierge **sans CNI**. Les valeurs propres à
+un cluster (nœud, pool L2, wildcard DNS, disque, inventaire des SealedSecrets) vivent dans sa
+fiche : [doc/clusters/](doc/clusters/) — y ajouter un fichier pour tout nouveau cluster. Le seul
+élément non reconstructible depuis Git est la **clé privée sealed-secrets**, une par cluster :
+son backup (coffre) est un prérequis du runbook, pas une option.
 
 ## Skills projet
 

@@ -3,9 +3,10 @@
 ## Rôle
 
 CNI du cluster, implémentation **Gateway API** et LoadBalancer L2. Remplace kube-proxy
-(`kubeProxyReplacement: true`). Fournit la `GatewayClass cilium` consommée par
-[`gateway-api`](../gateway-api/README.md). Sans lui, aucun pod ne schedule — c'est le premier
-composant du [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
+(`kubeProxyReplacement: true`). Fournit la `GatewayClass cilium` que consommera `gateway-api`
+(composant pas encore déployé sur ce cluster). Sans lui, aucun pod ne schedule — c'est le premier
+composant du [runbook](../../../doc/runbook-bootstrap.md)
+(cf. [fiche cluster](../../../doc/clusters/bleu-arcanogos.md)).
 
 ## Fichiers
 
@@ -14,8 +15,9 @@ composant du [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
 - `helm-values.yaml` — source unique des values : `kubeProxyReplacement`, `l2announcements`,
   `gatewayAPI`, `k8sServiceHost`/`k8sServicePort` (endpoint apiserver local du nœud),
   `cgroup.autoMount: false` (le cgroup est monté par l'hôte)
-- `manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool` `192.168.1.80-84`
-  (cf. [doc/reseau.md](../../../doc/reseau.md))
+- `manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool` `192.168.1.85-89`, plage disjointe de
+  celle des autres clusters (cf. [doc/reseau.md](../../../doc/reseau.md) et la
+  [fiche cluster](../../../doc/clusters/bleu-arcanogos.md))
 - `manifests/l2-policy.yaml` — `CiliumL2AnnouncementPolicy`, annonce L2 des IP de LB
 
 ## Contraintes
@@ -27,7 +29,7 @@ composant du [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
 >   l'Application, sinon l'app diverge dès le premier sync.
 > - **Compat Gateway API** : la version des CRDs posées par `gateway-api` est couplée à la
 >   version de Cilium — vérifier la table de compatibilité upstream **avant** tout bump, des deux
->   côtés (cf. `../gateway-api/manifests/kustomization.yaml`).
+>   côtés. Le composant `gateway-api` n'est pas encore déployé sur ce cluster.
 > - `bpf.masquerade` reste **désactivé** : activé, il casse CoreDNS quand le DNS du cluster est
 >   forwardé vers l'hôte.
 > - `ignoreDifferences` sur le ConfigMap `cilium-config` (le contrôleur y écrit).
@@ -44,7 +46,7 @@ composant du [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
   ```
 - **Gateway API non réconciliée** : vérifier `enable-gateway-api` dans le ConfigMap
   `cilium-config`, puis restart one-shot de `cilium-operator` — geste de bootstrap documenté à
-  l'étape 5 du [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
+  l'étape 5 du [runbook](../../../doc/runbook-bootstrap.md).
   ```bash
   kubectl -n kube-system get cm cilium-config -o jsonpath='{.data.enable-gateway-api}'
   kubectl -n kube-system rollout restart deployment/cilium-operator

@@ -14,7 +14,7 @@
 
 `kubectl` en écriture est réservé à **deux cas**, rien d'autre :
 
-1. **Bootstrap initial** — cf. [runbook](runbook-bootstrap-kalecgos.md) et
+1. **Bootstrap initial** — cf. [runbook](runbook-bootstrap.md) et
    [`bleu-kalecgos/infra/argocd/README.md`](../bleu-kalecgos/infra/argocd/README.md).
 2. **Debug read-only** — `get`, `describe`, `logs`, `diff`.
 
@@ -26,7 +26,7 @@ Ils sont au nombre de quatre, tous documentés dans le runbook. Aucun autre n'es
 |---|---|---|
 | `helm install cilium …` | bootstrap, une fois | Sans CNI, ArgoCD ne peut pas démarrer. La release est ensuite **adoptée** par l'Application `cilium`. |
 | `kubectl apply -k …/argocd/manifests --server-side` | bootstrap, une fois | Il faut ArgoCD pour faire du GitOps. Même dossier que l'Application self-managed → convergence immédiate. |
-| `kubectl apply -f sealed-secrets-key.yaml` | DR | La clé privée ne peut pas vivre dans Git, par définition. |
+| `kubectl apply -f sealed-secrets-key-<cluster>.yaml` | DR | La clé privée ne peut pas vivre dans Git, par définition. |
 | Mot de passe admin ArgoCD | bootstrap | `argocd-secret` n'est pas dans le kustomize ; le hash survit aux syncs. |
 
 Le restart one-shot de `cilium-operator` (1re pose des CRDs Gateway API) est un **événement de
@@ -48,7 +48,8 @@ bootstrap**, pas une écriture d'état : il ne crée ni ne modifie aucune ressou
 > **La clé privée du contrôleur est le seul état non reconstructible du cluster.** Tout le reste
 > se redéploie depuis Git ; sans elle, chaque `SealedSecret` du repo est un fichier mort et il
 > faut re-provisionner tous les credentials amont. Backup au coffre, hors cluster et hors Git —
-> prérequis du [runbook](runbook-bootstrap-kalecgos.md).
+> prérequis du [runbook](runbook-bootstrap.md). Une clé **par cluster** : le backup est nommé
+> `sealed-secrets-key-<cluster>.yaml`.
 
 ## Commandes de la documentation
 

@@ -3,7 +3,7 @@
 ## Chaîne de découverte (app-of-apps)
 
 ```
-bleu-kalecgos/cluster.yaml            # TIER 1 — glob *.bootstrap.yaml
+<cluster>/cluster.yaml                # TIER 1 — glob *.bootstrap.yaml
 ├── infra/infra.bootstrap.yaml        # TIER 2 — glob infra/**/*.app.yaml
 └── app/app.bootstrap.yaml            # TIER 2 — glob app/**/*.app.yaml
 ```
@@ -46,7 +46,7 @@ sources:
     helm:
       releaseName: <name>
       valueFiles:
-        - $values/bleu-kalecgos/infra/<name>/helm-values.yaml
+        - $values/<cluster>/infra/<name>/helm-values.yaml
   - repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
     ref: values
@@ -96,7 +96,7 @@ tant qu'un secret n'est pas scellé, garder sa ligne **commentée** dans le `kus
 ## Commandes de la documentation
 
 Toute commande d'un README doit être exécutable **depuis la racine du repo**, telle quelle :
-chemins complets depuis la racine (`bleu-kalecgos/app/<name>/manifests/…`), jamais relatifs au
+chemins complets depuis la racine (`<cluster>/app/<name>/manifests/…`), jamais relatifs au
 dossier du README.
 
 ## Règle README composant
@@ -115,3 +115,8 @@ upstream). Un README ne doit jamais devoir être mis à jour lors d'un upgrade.
   README** (`[<name>](infra/<name>/README.md)` ou `app/…`) — un composant ajouté/supprimé =
   index mis à jour dans le même commit.
 - `README.md` racine liste les READMEs des clusters.
+- `doc/clusters/<cluster>.md` — **fiche cluster** : les valeurs que le
+  [runbook générique](runbook-bootstrap.md) paramètre (nœud, pool L2, wildcard DNS, disque,
+  inventaire des SealedSecrets). Un nouveau cluster = une fiche, dans le même commit. La fiche
+  porte les **valeurs**, jamais la procédure ; l'index des composants reste dans
+  `<cluster>/README.md`.

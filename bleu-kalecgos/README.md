@@ -3,8 +3,9 @@
 Cluster actif — mono-nœud `vert-eranikus`, piloté par ArgoCD en app-of-apps
 (`cluster.yaml` → `*.bootstrap.yaml` → `*.app.yaml`, cf. [doc/conventions.md](../doc/conventions.md)).
 
-Reconstruire le cluster à partir de zéro :
-[doc/runbook-bootstrap-kalecgos.md](../doc/runbook-bootstrap-kalecgos.md).
+Reconstruire le cluster à partir de zéro : [doc/runbook-bootstrap.md](../doc/runbook-bootstrap.md)
+(procédure générique) + [doc/clusters/bleu-kalecgos.md](../doc/clusters/bleu-kalecgos.md)
+(valeurs de ce cluster : réseau, disque, secrets).
 
 ## Infra
 

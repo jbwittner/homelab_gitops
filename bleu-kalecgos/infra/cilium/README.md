@@ -5,7 +5,7 @@
 CNI du cluster, implémentation **Gateway API** et LoadBalancer L2. Remplace kube-proxy
 (`kubeProxyReplacement: true`). Fournit la `GatewayClass cilium` consommée par
 [`gateway-api`](../gateway-api/README.md). Sans lui, aucun pod ne schedule — c'est le premier
-composant du [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
+composant du [runbook](../../../doc/runbook-bootstrap.md).
 
 ## Fichiers
 
@@ -44,7 +44,7 @@ composant du [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
   ```
 - **Gateway API non réconciliée** : vérifier `enable-gateway-api` dans le ConfigMap
   `cilium-config`, puis restart one-shot de `cilium-operator` — geste de bootstrap documenté à
-  l'étape 5 du [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
+  l'étape 5 du [runbook](../../../doc/runbook-bootstrap.md).
   ```bash
   kubectl -n kube-system get cm cilium-config -o jsonpath='{.data.enable-gateway-api}'
   kubectl -n kube-system rollout restart deployment/cilium-operator

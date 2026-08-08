@@ -9,7 +9,7 @@ il sert à la fois à l'apply manuel du bootstrap et à l'Application self-manag
 ## TL;DR — bootstrap
 
 Commandes à lancer **depuis la racine du repo**. Procédure complète (prérequis, CNI, clé
-sealed-secrets, DR) : [doc/runbook-bootstrap-kalecgos.md](../../../doc/runbook-bootstrap-kalecgos.md).
+sealed-secrets, DR) : [doc/runbook-bootstrap.md](../../../doc/runbook-bootstrap.md).
 
 ```bash
 # 1. Installer Argo (server-side OBLIGATOIRE — CRDs trop grosses sinon).

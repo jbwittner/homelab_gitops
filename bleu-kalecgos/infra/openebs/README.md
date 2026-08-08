@@ -27,7 +27,7 @@ sans `storageClassName` explicite atterrit dessus.
 - **Le VG n'est pas provisionné par le driver** : LocalPV-LVM l'exige préexistant. C'est le rôle
   du hook, seul état réel sur disque non réconciliable par GitOps.
 - **La partition brute `r-lvmpv` doit exister sur le nœud** (prérequis de provisionnement, cf.
-  [runbook](../../../doc/runbook-bootstrap-kalecgos.md)) — sinon le Job échoue et aucun PVC ne
+  [runbook](../../../doc/runbook-bootstrap.md)) — sinon le Job échoue et aucun PVC ne
   peut être satisfait.
 - **Ordre irréductible**, porté par des sync-waves de **ressource** : namespace `privileged`
   (-1) → hook VG (0) → StorageClass (1). Le hook est en `Sync` et non `PreSync` : un `PreSync`

@@ -19,7 +19,7 @@ précède tout SealedSecret consommé plus tard.
 > qui démarre sans clé restaurée en génère une **neuve** : tous les `SealedSecret` du repo
 > deviennent indéchiffrables et chaque credential amont est à re-provisionner. En reconstruction,
 > la clé se restaure **avant** le premier démarrage du contrôleur — étape 3 du
-> [runbook](../../../doc/runbook-bootstrap-kalecgos.md).
+> [runbook](../../../doc/runbook-bootstrap.md).
 
 ## Opérations
 
