@@ -190,7 +190,7 @@ cilium status --wait
 ## Phase 4 — ArgoCD (kustomize épinglé) + app-of-apps
 
 > [!IMPORTANT]
-> **Pas de Helm ici.** ArgoCD s'installe via le **dossier auto-contenu** `bleu-kalecgos/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (`raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.4.5/manifests/install.yaml`) + `namespace.yaml` + patchs `argocd-cmd-params-cm` (`server.insecure: "true"`) / `argocd-cm` + la HTTPRoute UI. Ce **même dossier** sert à l'apply manuel du bootstrap ET au self-management (`argocd.app.yaml`, wave -1, `path: bleu-kalecgos/infra/argocd/manifests`) → convergence garantie.
+> **Pas de Helm ici.** ArgoCD s'installe via le **dossier auto-contenu** `bleu-kalecgos/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (`raw.githubusercontent.com/argoproj/argo-cd/refs/tags/<tag>/manifests/install.yaml` — le tag exact vit dans `kustomization.yaml`, source unique) + `namespace.yaml` + patchs `argocd-cmd-params-cm` (`server.insecure: "true"`) / `argocd-cm` + la HTTPRoute UI. Ce **même dossier** sert à l'apply manuel du bootstrap ET au self-management (`argocd.app.yaml`, wave -1, `path: bleu-kalecgos/infra/argocd/manifests`) → convergence garantie.
 
 ### 1. Installer ArgoCD (impératif, une fois — le seul geste manuel du GitOps)
 
@@ -257,7 +257,7 @@ kubectl apply -f bleu-kalecgos/cluster.yaml
 > **Pièges « Argo manages Argo »**
 > - `prune: false` sur l'Application `argocd` (il se couperait les jambes) ; `selfHeal: true` OK.
 > - Repo-server/controller peuvent redémarrer une fois après le premier sync : normal, laisser se stabiliser.
-> - K8s 1.36 bleeding-edge : si crash-loop, bumper le tag `v3.4.x` dans `kustomization.yaml`.
+> - K8s 1.36 bleeding-edge : si crash-loop, bumper le tag Argo CD dans `kustomization.yaml`.
 
 **Vérification :** `kubectl get applications -n argocd` → `bleu-kalecgos-cluster`, `bleu-kalecgos-infra`, `bleu-kalecgos-app`, `argocd`, `cilium` au minimum. `cilium` doit être `Synced/Healthy` sans avoir rien modifié (adoption du helm install de phase 3).
 
