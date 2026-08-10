@@ -7,8 +7,10 @@ metadata:
     app.kubernetes.io/name: bleu-arcanagos
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: app-of-apps
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  # ⚠️ MIGRATION EN COURS vers l'arbre unique `cluster/` : le finalizer
+  # `resources-finalizer.argocd.argoproj.io` est retiré temporairement pour que la suppression
+  # de cette Application ne détruise pas en cascade les Applications qu'elle a créées.
+  # Ce fichier disparaît au commit suivant.
 spec:
   project: default
   # App-of-apps TIER 1 du cluster bleu-arcanagos, appliqué sur le HUB (kubectl apply de bootstrap).

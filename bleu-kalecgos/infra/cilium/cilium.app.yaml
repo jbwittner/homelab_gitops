@@ -7,8 +7,10 @@ metadata:
     app.kubernetes.io/name: cilium
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: cni
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  # ⚠️ MIGRATION EN COURS : cette Application est la seule feuille qui change de nom
+  # (`cilium` → `bleu-kalecgos-cilium`, généré par l'ApplicationSet `cluster/infra/cilium`).
+  # Le finalizer est retiré pour que sa suppression n'emporte PAS le CNI en cascade ; la
+  # nouvelle Application adoptera les ressources Cilium vivantes.
 spec:
   project: default
   sources:

@@ -7,8 +7,8 @@ metadata:
     app.kubernetes.io/name: bleu-kalecgos-infra
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: app-of-apps
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  # ⚠️ MIGRATION EN COURS vers l'arbre unique `cluster/` : finalizer retiré temporairement pour
+  # que la suppression de cette Application ne détruise pas en cascade ses composants.
 spec:
   # App-of-apps de la partie INFRA de bleu-kalecgos : découvre tous les composants infra
   # (recurse + include '*.app.yaml' → matche infra/<name>/<name>.app.yaml, PAS ce fichier

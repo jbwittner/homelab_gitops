@@ -7,8 +7,8 @@ metadata:
     app.kubernetes.io/name: bleu-arcanagos-app
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: app-of-apps
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  # ⚠️ MIGRATION EN COURS vers l'arbre unique `cluster/` : finalizer retiré temporairement pour
+  # que la suppression de cette Application ne détruise pas en cascade ses composants.
 spec:
   # App-of-apps de la partie APP de bleu-arcanagos : découvre tous les composants app
   # (recurse + include '*.app.yaml' → matche app/<name>/<name>.app.yaml, PAS ce fichier
