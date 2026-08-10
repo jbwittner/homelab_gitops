@@ -2,30 +2,41 @@
 
 ## Architecture
 
-Cilium implémente **Gateway API**. Chaque cluster a son `Gateway` partagé unique : **`shared-gw`**
-(ns `gateway`, classe `cilium`), défini dans `<cluster>/infra/gateway-api/manifests/gateway.yaml`
-— modèle :
-[`bleu-kalecgos`](../bleu-kalecgos/infra/gateway-api/manifests/gateway.yaml).
+Cilium implémente **Gateway API**. Le `Gateway` partagé unique est **`shared-gw`** (ns `gateway`,
+classe `cilium`), défini dans
+[`cluster/infra/gateway-api/manifests/gateway.yaml`](../cluster/infra/gateway-api/manifests/gateway.yaml).
+Exposer un service = un `HTTPRoute` qui s'y attache.
 
-- **LB** : **une IP par cluster**, allouée par le `CiliumLoadBalancerIPPool` propre au cluster
-  et annoncée en **L2** — manifestes dans `<cluster>/infra/cilium/manifests/`. Les plages des
+- **LB** : **une IP par cluster**, allouée par le `CiliumLoadBalancerIPPool` propre au cluster et
+  annoncée en **L2** — manifestes dans `cluster/infra/cilium/<cluster>/manifests/`. Les plages des
   clusters sont **disjointes** ; valeurs dans [les fiches cluster](clusters/).
 - **TLS terminé au Gateway** : secrets `wildcard-*-tls` (ns `gateway`), émis par cert-manager
   (Let's Encrypt DNS-01 Cloudflare), référencés en `Terminate` par les listeners. Les backends
   sont joints en HTTP clair.
 - La `GatewayClass cilium` est **auto-créée par le contrôleur Cilium** — ne pas la déclarer.
 
+> [!IMPORTANT]
+> **`gateway-api` est aujourd'hui un composant mono-cluster** : c'est une `Application`
+> (`destination.name: bleu-kalecgos`), donc `shared-gw` n'existe que sur le hub. Exposer un
+> service depuis un second cluster suppose d'abord de **migrer `gateway-api` en `ApplicationSet`**
+> (cf. [conventions.md](conventions.md)) : un `<cluster>/manifests/` par cluster, avec son propre
+> `Gateway` et ses listeners. Tant que ce n'est pas fait, un `HTTPRoute` posé sur un spoke ne
+> trouve aucun parent.
+
 ## Listeners (HTTPS :443)
+
+Les trois listeners actuels de `shared-gw`, tous en `allowedRoutes.namespaces.from: All` :
 
 | `sectionName` | Hostname | Secret TLS | Usage |
 |---|---|---|---|
 | `https-public` | `*.wittner.tech` | `wildcard-public-tls` | services exposés publiquement |
-| `https-internal` | `*.lan.wittner.tech` | `wildcard-lan-tls` | services internes, tous clusters |
-| `https-internal-<cluster>` | `*.<cluster>.lan.wittner.tech` | `wildcard-<cluster>-lan-tls` | services internes propres à un cluster |
+| `https-internal` | `*.lan.wittner.tech` | `wildcard-lan-tls` | services internes, non spécifiques à un cluster |
+| `https-internal-kalecgos` | `*.kalecgos.lan.wittner.tech` | `wildcard-kalecgos-lan-tls` | services internes propres à `bleu-kalecgos` |
 
-Les deux premiers sont identiques d'un cluster à l'autre ; le troisième est propre au cluster —
-son `sectionName` et son wildcard exacts sont dans [sa fiche](clusters/) (ex. kalecgos :
-`https-internal-kalecgos` / `*.kalecgos.lan.wittner.tech`).
+Le troisième suit le motif `https-internal-<cluster>` / `*.<cluster>.lan.wittner.tech` : un
+cluster qui expose ses propres services ajoute son listener, son `Certificate` (dans
+[`cert-manager-config`](../cluster/infra/cert-manager-config/README.md)) et son entrée DNS. Les
+valeurs exactes de chaque cluster sont dans [sa fiche](clusters/).
 
 ⚠️ Un wildcard ne couvre qu'**un** niveau. La règle vaut pour le certificat, le listener **et**
 l'enregistrement DNS : `a.kalecgos.lan.wittner.tech` est couvert, `a.b.kalecgos.lan.wittner.tech`
@@ -37,9 +48,9 @@ ne l'est pas.
 
 | Hostname | Listener | Composant |
 |---|---|---|
-| `argocd.kalecgos.lan.wittner.tech` | `https-internal-kalecgos` | [argocd](../bleu-kalecgos/infra/argocd/README.md) |
-| `grafana.kalecgos.lan.wittner.tech` | `https-internal-kalecgos` | [kube-prometheus-stack](../bleu-kalecgos/app/kube-prometheus-stack/README.md) |
-| `authentik.wittner.tech` | `https-public` | [authentik](../bleu-kalecgos/app/authentik/README.md) |
+| `argocd.kalecgos.lan.wittner.tech` | `https-internal-kalecgos` | [argocd](../cluster/infra/argocd/README.md) |
+| `grafana.kalecgos.lan.wittner.tech` | `https-internal-kalecgos` | [kube-prometheus-stack](../cluster/app/kube-prometheus-stack/README.md) |
+| `authentik.wittner.tech` | `https-public` | [authentik](../cluster/app/authentik/README.md) |
 
 Non exposés volontairement : Prometheus, Alertmanager (port-forward), Loki (API sans
 authentification, jointe uniquement en intra-cluster).
@@ -62,7 +73,7 @@ Créer un `HTTPRoute` dans le `manifests/` du composant :
 - backend en **HTTP clair** (le TLS est terminé au Gateway).
 
 Modèle de référence :
-[`argocd-httproute.yaml`](../bleu-kalecgos/infra/argocd/manifests/argocd-httproute.yaml).
+[`argocd-httproute.yaml`](../cluster/infra/argocd/manifests/argocd-httproute.yaml).
 
 ## Vérifier
 

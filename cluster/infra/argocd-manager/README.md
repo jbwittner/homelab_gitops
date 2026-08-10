@@ -15,8 +15,13 @@ cluster distant ne peut être réconciliée.
   Le hub n'a pas de dossier ici : il se gère via son propre ServiceAccount.
 - `<cluster>/manifests/serviceaccount.yaml` — le SA `kube-system/argocd-manager`
 - `<cluster>/manifests/clusterrolebinding.yaml` — binding vers `cluster-admin`
-- `manifests/argocd-manager-token.yaml` — Secret `kubernetes.io/service-account-token`
+- `<cluster>/manifests/argocd-manager-token.yaml` — Secret `kubernetes.io/service-account-token`
   **sans données** ; le token controller le remplit dans le cluster
+
+Pas de `common/` ici, contrairement à [`cilium`](../cilium/README.md) : chaque spoke porte
+l'intégralité de ses trois manifestes. Si un `common/` était introduit, il faudrait **l'exclure
+du generator** (`path: cluster/infra/argocd-manager/common`, `exclude: true`), sinon il
+produirait une Application `common-argocd-manager` vers un cluster inexistant.
 
 ## Contraintes
 

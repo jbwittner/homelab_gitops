@@ -3,15 +3,15 @@ title: Bootstrap / disaster recovery — procédure générique
 type: runbook
 tags: [homelab, wittnerlab, kubernetes, argocd, gitops, bootstrap, disaster-recovery, runbook]
 created: 2026-07-17
-modified: 2026-08-09
+modified: 2026-08-10
 status: stable
 ---
 
 # Bootstrap / disaster recovery
 
 > [!NOTE]
-> **Objet** — amener un cluster Kubernetes **vierge** à l'état complet décrit par ce repo :
-> tout le contenu de `<cluster>/` déployé et réconcilié par ArgoCD.
+> **Objet** — amener un cluster Kubernetes **vierge** à l'état complet décrit par ce repo : tous
+> les composants de `cluster/` qui le désignent, déployés et réconciliés par ArgoCD.
 >
 > Cette procédure est **générique** : elle vaut pour tout cluster du repo. Les valeurs propres à
 > un cluster (IP, wildcard DNS, disque, inventaire des secrets) vivent dans sa
@@ -28,20 +28,26 @@ Les deux variables ci-dessous rendent chaque commande du runbook copiable telle 
 valeurs se lisent dans la fiche du cluster visé.
 
 ```bash
-export CLUSTER=bleu-kalecgos                        # dossier du cluster, à la racine du repo
+export CLUSTER=bleu-kalecgos                        # nom du cluster (= nom de ses sous-dossiers)
 export CLUSTER_DOMAIN=kalecgos.lan.wittner.tech     # wildcard interne du cluster
 ```
 
+⚠️ `${CLUSTER}` n'est **plus** un dossier de premier niveau : l'arbre de déploiement est unique
+(`cluster/`). La variable nomme le cluster — donc son Secret d'enregistrement
+(`cluster-${CLUSTER}`), le suffixe de son backup de clé, et ses sous-dossiers dans les composants
+multi-cluster (`cluster/infra/cilium/${CLUSTER}/`,
+`cluster/infra/argocd-manager/${CLUSTER}/`).
+
 | Cluster | Fiche | État |
 |---|---|---|
-| `bleu-kalecgos` | [clusters/bleu-kalecgos.md](clusters/bleu-kalecgos.md) | complet — les 8 étapes s'appliquent |
-| `bleu-arcanagos` | [clusters/bleu-arcanagos.md](clusters/bleu-arcanagos.md) | en construction — **spoke** : étapes 1, 2bis, 4 ; pas d'étapes 2, 3, 5 à 8 |
+| `bleu-kalecgos` | [clusters/bleu-kalecgos.md](clusters/bleu-kalecgos.md) | **hub**, complet — les 8 étapes s'appliquent |
+| `bleu-arcanagos` | [clusters/bleu-arcanagos.md](clusters/bleu-arcanagos.md) | **spoke**, en construction — étapes 1, 2bis, 4 ; pas d'étapes 2, 3, 5 à 8 |
 
 > [!NOTE]
 > **Cluster partiel.** Un cluster dont la fiche marque des composants absents s'arrête à l'étape
 > correspondante : pas d'`argocd/manifests/` → pas d'étape 2 ni au-delà ; pas de `gateway-api` →
-> pas d'étape 5 ; pas d'`openebs` → pas d'étape 7 ; aucun `SealedSecret` → étapes 3 et 8 sans
-> objet. La fiche fait foi.
+> pas d'étape 5 ; pas d'`openebs` → pas d'étape 7 ; aucun `SealedSecret` local → étapes 3 et 8
+> sans objet. La fiche fait foi.
 
 > [!IMPORTANT]
 > **Hub ou spoke ?** La fiche du cluster le dit. Un cluster **hub** héberge son ArgoCD et suit
@@ -69,11 +75,11 @@ cluster :
 
 | Attente | Composant concerné | Effet si absente |
 |---|---|---|
-| Un endpoint apiserver joignable en local sur le nœud | `cilium` (`k8sServiceHost`/`k8sServicePort` de `helm-values.yaml`) | Agent Cilium incapable de joindre l'apiserver sans kube-proxy |
+| Un endpoint apiserver joignable en local sur le nœud | `cilium` (`k8sServiceHost`/`k8sServicePort` de `common/helm-values.yaml`) | Agent Cilium incapable de joindre l'apiserver sans kube-proxy |
 | `/sys/fs/cgroup` déjà monté par l'hôte (`cgroup.autoMount.enabled: false`) | `cilium` | Agent en `CrashLoopBackOff` |
 | Modules noyau `dm_mod`, `dm_thin_pool`, `dm_snapshot` chargés | `openebs` | `pvcreate`/`vgcreate` échouent dans le Job de bootstrap du VG |
 | Une **partition brute** étiquetée (partlabel dans la fiche) | `openebs` | Job VG en échec, pas de StorageClass, tous les PVC `Pending` |
-| PodSecurity `baseline` appliqué au cluster, `kube-system` exempté | `openebs`, `alloy` | Rien : les namespaces concernés sont labellisés `privileged` par leurs manifestes |
+| PodSecurity `baseline` appliqué au cluster, `kube-system` exempté | `openebs`, `alloy`, `kube-prometheus-stack` | Rien : les namespaces concernés sont labellisés `privileged` par leurs manifestes |
 | Une entrée DNS wildcard `*.${CLUSTER_DOMAIN}` → IP du LB du cluster | exposition HTTP | Les URLs ne résolvent pas ; le cluster, lui, est sain |
 
 ---
@@ -116,9 +122,10 @@ git -C . rev-parse --abbrev-ref HEAD     # doit être `main` à jour
 `sealed-secrets`, porteur du label `sealedsecrets.bitnami.com/sealed-secrets-key: active`. Le
 backup est un manifeste `kind: List` réapplicable tel quel.
 
-**La clé est propre à un cluster** : un contrôleur par cluster, donc une clé par cluster.
+**La clé est propre à un cluster qui héberge le contrôleur** — donc, aujourd'hui, au seul hub.
 Nommer le backup en conséquence (`sealed-secrets-key-<cluster>.yaml`) — le motif `.gitignore`
-`*sealed-secrets-key*.yaml` les couvre tous.
+`*sealed-secrets-key*.yaml` les couvre tous. Un **spoke** n'a pas de clé à lui : ses secrets, y
+compris son Secret de cluster, sont scellés avec la clé du hub.
 
 **Où la trouver**, dans l'ordre :
 
@@ -148,7 +155,10 @@ Absence de sortie ou `0` → le fichier n'est pas une clé exploitable : aller c
 
 **L'inventaire des `SealedSecret` est propre au cluster** — il vit dans sa fiche
 ([`doc/clusters/`](clusters/)), avec pour chacun le namespace, les clés et la source amont à
-re-provisionner. Tous deviennent illisibles si la clé est perdue.
+re-provisionner. Tous deviennent illisibles si la clé est perdue, **y compris les Secrets de
+cluster des spokes** scellés côté hub : leur perte coupe le hub de ses clusters distants (le token
+se relit et se rescelle, cf.
+[`argocd-manager/README.md`](../cluster/infra/argocd-manager/README.md)).
 
 Un secret y est systématiquement **bloquant pour le bootstrap** : le **token du provider DNS**
 consommé par `cert-manager-config`. Sans lui, pas de DNS-01, donc pas de certificat, donc aucun
@@ -180,9 +190,10 @@ se créent après coup, une fois ce service en marche.
 2. ArgoCD (kustomize épinglé, apply -k)          ← geste manuel n°1   [hub]
 2bis. SA argocd-manager + Secret de cluster      ← geste manuel n°1'  [spoke]
 3. Clé sealed-secrets restaurée                  ← geste manuel n°2 (DR uniquement, hub)
-4. Tier-1 app-of-apps (apply cluster.yaml)       ← geste manuel n°3, TOUJOURS sur le hub
-     └─ déroule seul : gateway-api (-10) → sealed-secrets (-8) → cert-manager (-5)
-        → cert-manager-config (-4) → argocd (-1) → cilium/openebs/apps (0)
+4. Tier-1 app-of-apps (apply cluster/root.yaml)  ← geste manuel n°3, UNE FOIS, sur le hub
+     └─ déroule seul : argocd-manager (-20) → gateway-api (-10) → sealed-secrets (-8)
+        → cert-manager (-5) → cert-manager-config (-4) → argocd (-1)
+        → cilium/openebs/apps (0)
 5. Exposition : Gateway programmée + restart one-shot de cilium-operator + DNS
 6. TLS Let's Encrypt (DNS-01) sur les wildcards
 7. Stockage : namespace privileged → Job VG → StorageClass
@@ -193,6 +204,7 @@ se créent après coup, une fois ce service en marche.
 |---|---|
 | 1. Cilium | Aucun CNI → tous les pods restent `Pending`, CoreDNS compris |
 | 2. ArgoCD | Pas de contrôleur GitOps → rien ne se réconcilie, tout le reste est mort-né |
+| 2bis. `argocd-manager` + Secret de cluster | Le hub ne sait pas joindre le spoke : ses Applications tombent en `ComparisonError: cluster not found` |
 | 3. Clé sealed-secrets | Contrôleur démarré avec une clé **neuve** → tous les SealedSecrets du repo sont indéchiffrables, tout est à resceller |
 | 4. Tier-1 | Les Applications n'existent pas : ArgoCD tourne à vide |
 | 5. Exposition | Sans restart de `cilium-operator` à la 1re pose des CRDs, la Gateway reste `Pending` ; sans secret TLS, le listener reste `ResolvedRefs=False` |
@@ -215,26 +227,34 @@ se créent après coup, une fois ce service en marche.
 > **Sans CNI, rien ne schedule.** Le cluster est livré sans CNI : tous les pods, CoreDNS compris,
 > restent `Pending` jusqu'à ce que Cilium tourne.
 
-La version du chart et les values ont une **source unique** dans le repo : `targetRevision` de
-`${CLUSTER}/infra/cilium/cilium.app.yaml` et `${CLUSTER}/infra/cilium/helm-values.yaml`.
-Ne jamais les retaper à la main — les lire :
+Cilium est un composant **multi-cluster** : un `ApplicationSet`
+([`cluster/infra/cilium/cilium.appset.yaml`](../cluster/infra/cilium/cilium.appset.yaml)) avec la
+version du chart **commune à tous les clusters**, des values en deux couches
+(`common/helm-values.yaml`, puis l'éventuelle surcharge `${CLUSTER}/helm-values.yaml`) et un
+`${CLUSTER}/manifests/` par cluster. Version et values ont donc une **source unique** dans le
+repo : ne jamais les retaper à la main — les lire.
 
 ```bash
 helm repo add cilium https://helm.cilium.io/ && helm repo update cilium
 
-CILIUM_VERSION="$(command grep -A3 'chart: cilium' ${CLUSTER}/infra/cilium/cilium.app.yaml \
+CILIUM_VERSION="$(command grep -A3 'chart: cilium' cluster/infra/cilium/cilium.appset.yaml \
   | command grep 'targetRevision:' | awk '{print $2}')"
-echo "Cilium ${CILIUM_VERSION}"     # doit correspondre au targetRevision de l'Application
+echo "Cilium ${CILIUM_VERSION}"     # doit correspondre au targetRevision de l'ApplicationSet
 
-helm install cilium cilium/cilium --version "${CILIUM_VERSION}" -n kube-system \
-  -f ${CLUSTER}/infra/cilium/helm-values.yaml
+# Les values dans le MÊME ordre que l'appset : commun d'abord, surcharge du cluster ensuite
+# (cette seconde couche est facultative — aucun cluster ne diverge aujourd'hui).
+VALUES=(-f cluster/infra/cilium/common/helm-values.yaml)
+[ -f "cluster/infra/cilium/${CLUSTER}/helm-values.yaml" ] \
+  && VALUES+=(-f "cluster/infra/cilium/${CLUSTER}/helm-values.yaml")
+
+helm install cilium cilium/cilium --version "${CILIUM_VERSION}" -n kube-system "${VALUES[@]}"
 ```
 
 > [!WARNING]
-> **Le `--version` et le `releaseName` sont load-bearing.** La release **doit** s'appeler
-> `cilium` : l'Application `cilium` (étape 4) *adopte* ce release. Un nom différent renommerait
-> toutes les ressources Cilium et détruirait le CNI. Une version différente du `targetRevision`
-> ferait diverger l'app dès le premier sync.
+> **Le `--version`, le `releaseName` et l'ordre des values sont load-bearing.** La release
+> **doit** s'appeler `cilium` : l'Application `${CLUSTER}-cilium` (étape 4) *adopte* ce release. Un
+> nom différent renommerait toutes les ressources Cilium et détruirait le CNI. Une version — ou un
+> jeu de values — différent de celui de l'appset ferait diverger l'app dès le premier sync.
 
 **Vérification :**
 
@@ -246,25 +266,28 @@ kubectl -n kube-system get pods -l k8s-app=kube-dns      # CoreDNS passe Running
 
 > [!NOTE]
 > **Reprise en main par ArgoCD.** Ce `helm install` est le **seul geste Helm** du bootstrap. Une
-> fois le tier-1 lancé (étape 4), l'Application `cilium` (chart + `$values` + `manifests/`
-> ip-pool/l2-policy) adopte le release et passe `Synced` sans rien changer.
+> fois le tier-1 lancé (étape 4), l'Application `${CLUSTER}-cilium` (chart + `$values` +
+> `${CLUSTER}/manifests/` ip-pool/l2-policy) adopte le release et passe `Synced` sans rien changer.
 
 ---
 
 ## Étape 2 — ArgoCD
 
+> [!NOTE]
+> **Hub uniquement** — un spoke saute cette étape et fait l'**étape 2bis** à la place.
+
 > [!IMPORTANT]
 > **Pas de Helm ici.** ArgoCD s'installe depuis le dossier auto-contenu
-> `${CLUSTER}/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (le tag
+> `cluster/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (le tag
 > exact vit dans `kustomization.yaml`, source unique) + namespace + patchs
 > (`argocd-cmd-params-cm`, `argocd-cm`, `argocd-rbac-cm`, `argocd-notifications-cm`) + la
-> HTTPRoute UI. Ce **même dossier** sert à l'apply manuel du bootstrap **et** au self-management
-> (`argocd.app.yaml`, wave -1, même `path`) → convergence garantie.
+> HTTPRoute UI + les Secrets de cluster. Ce **même dossier** sert à l'apply manuel du bootstrap
+> **et** au self-management (`argocd.app.yaml`, wave -1, même `path`) → convergence garantie.
 
 ### 2.1 Installer
 
 ```bash
-kubectl apply -k ${CLUSTER}/infra/argocd/manifests --server-side --force-conflicts
+kubectl apply -k cluster/infra/argocd/manifests --server-side --force-conflicts
 ```
 
 > [!WARNING]
@@ -275,8 +298,10 @@ kubectl apply -k ${CLUSTER}/infra/argocd/manifests --server-side --force-conflic
 > [!NOTE]
 > **Deux échecs attendus à ce stade**, non bloquants :
 > - la **HTTPRoute** — les CRDs Gateway API n'existent pas encore ; elle convergera à l'étape 5 ;
-> - les **SealedSecrets** (`argocd-oidc`, `argocd-notifications`) — la CRD `SealedSecret` n'est
->   posée qu'à l'étape 4 ; ils convergeront ensuite.
+> - les **SealedSecrets** (`argocd-oidc`, `argocd-notifications`, `cluster-bleu-arcanagos`) — la
+>   CRD `SealedSecret` n'est posée qu'à l'étape 4 ; ils convergeront ensuite. Corollaire : les
+>   clusters **spokes** ne sont pas joignables avant que le contrôleur sealed-secrets ait
+>   déchiffré leur Secret de cluster.
 >
 > Si l'`apply -k` refuse **en bloc** à cause d'un type inconnu : commenter temporairement les
 > lignes concernées dans `kustomization.yaml` pour le bootstrap, le self-management les reposera
@@ -304,7 +329,7 @@ kubectl -n argocd port-forward svc/argocd-server 8080:443
 > repo désignent leur cluster par `name:`, cluster local compris — sans ce Secret, ArgoCD ne
 > connaît son propre cluster que sous l'entrée codée en dur `in-cluster`, et **chaque**
 > Application posée à l'étape 4 tombe en `ComparisonError: cluster not found`. Il vit dans
-> `${CLUSTER}/infra/argocd/manifests/` justement pour être posé par l'`apply -k` ci-dessus : ne
+> `cluster/infra/argocd/manifests/` justement pour être posé par l'`apply -k` ci-dessus : ne
 > pas l'en sortir. Symptôme inverse (apps `Unknown` en masse après coup) → vérifier d'abord ce
 > Secret.
 
@@ -345,22 +370,27 @@ kubectl -n argocd delete secret argocd-initial-admin-secret   # le hash actif vi
 > **Spoke uniquement** — remplace l'étape 2. Un cluster hub saute cette section.
 
 Le hub ne peut rien réconcilier sur un cluster qu'il ne sait pas joindre. L'identité vit dans le
-repo (`${CLUSTER}/infra/argocd-manager/`), le credential dérivé vit dans un `SealedSecret` du hub.
+repo (`cluster/infra/argocd-manager/${CLUSTER}/`), le credential dérivé vit dans un `SealedSecret`
+du hub (`cluster/infra/argocd/manifests/cluster-${CLUSTER}.sealed.yaml`).
 
 ```bash
 # a. sur le SPOKE — poser l'identité (geste de bootstrap, adopté ensuite par l'Application)
-kubectl apply -k ${CLUSTER}/infra/argocd-manager/manifests
+kubectl apply -k cluster/infra/argocd-manager/${CLUSTER}/manifests
 ```
 
 ```bash
-# b. sur le HUB — vérifier que le Secret de cluster est bien là avant d'aller plus loin
+# b. sur le HUB — vérifier que le Secret de cluster est bien déchiffré avant d'aller plus loin
 kubectl -n argocd get secret cluster-${CLUSTER}
 ```
 
-S'il n'existe pas, c'est une **première construction** : relever le token, le CA et l'URL de
-l'apiserver sur le spoke, sceller le Secret de cluster avec la clé **du hub**, committer. La
-procédure complète, avec le mapping exact des trois valeurs et leur encodage, est dans
-[`argocd-manager/README.md`](../bleu-arcanagos/infra/argocd-manager/README.md).
+S'il n'existe pas alors que le `*.sealed.yaml` est bien committé et référencé dans le
+`kustomization.yaml`, c'est le contrôleur sealed-secrets qui n'a pas (encore) pu le déchiffrer :
+revoir l'étape 3.
+
+S'il n'existe **pas du tout dans le repo**, c'est une **première construction** : relever le
+token, le CA et l'URL de l'apiserver sur le spoke, sceller le Secret de cluster avec la clé **du
+hub**, committer. La procédure complète, avec le mapping exact des trois valeurs et leur encodage,
+est dans [`argocd-manager/README.md`](../cluster/infra/argocd-manager/README.md).
 
 > [!WARNING]
 > `argocd cluster add` fait le même travail **impérativement** : le Secret n'existe alors que
@@ -372,12 +402,15 @@ procédure complète, avec le mapping exact des trois valeurs et leur encodage, 
 argocd cluster list                       # ${CLUSTER} présent, Successful
 ```
 
-Un cluster `Unknown` tant qu'aucune Application ne le vise est normal : le statut se réveille à
-l'étape 4.
+Un cluster `Unknown` tant qu'aucune Application ne le vise est normal : le statut se réveille dès
+que ses Applications existent (étape 4).
 
 ---
 
 ## Étape 3 — Restaurer la clé sealed-secrets
+
+> [!NOTE]
+> **Hub uniquement** — c'est lui qui héberge le contrôleur ; un spoke n'a pas de clé à lui.
 
 > [!CAUTION]
 > **Geste OBLIGATOIRE en rebuild, et le plus facile à oublier.** Le contrôleur sealed-secrets
@@ -427,18 +460,23 @@ revenir à un état propre : supprimer la clé neuve, puis `rollout restart`.
 
 ## Étape 4 — Tier-1 app-of-apps
 
-**Toujours sur le HUB** — y compris pour un spoke : le tier-1 et les tier-2 ne produisent que des
-objets `Application`, qui vivent là où tourne l'ArgoCD qui les lit. Seules les feuilles
-(`*.app.yaml`) portent une `destination` vers le cluster visé.
+**Toujours sur le HUB**, et **une seule fois pour tout le repo** :
 
 ```bash
-kubectl apply -f ${CLUSTER}/cluster.yaml
+kubectl apply -f cluster/root.yaml
 ```
 
-`${CLUSTER}-cluster` découvre les `*.bootstrap.yaml` (recurse) → `${CLUSTER}-infra` et
-`${CLUSTER}-app` découvrent chacun leurs `*.app.yaml` → toutes les Applications se créent et
-déroulent leurs sync-waves. L'Application `argocd` (wave -1) **adopte** la config posée à
-l'étape 2 → `Synced` sans rien changer → self-management acté.
+> [!IMPORTANT]
+> **Ce geste n'est pas par cluster.** L'arbre `cluster/` est commun : `root` découvre les deux
+> `*.bootstrap.yaml` (`infra`, `app`), qui découvrent chacun leurs `*.app.yaml` / `*.appset.yaml`,
+> tous clusters confondus. Ajouter un cluster au repo ne se termine donc **pas** par un apply :
+> une fois son Secret de cluster déchiffré (étapes 2bis/3) et ses sous-dossiers committés, les
+> `ApplicationSet` produisent ses Applications tout seuls. Si le hub est reconstruit, en revanche,
+> ce `apply -f` est bien à refaire — c'est le seul objet du repo que rien ne pose pour lui.
+
+Les Applications se créent et déroulent leurs sync-waves. L'Application `argocd` (wave -1)
+**adopte** la config posée à l'étape 2 → `Synced` sans rien changer → self-management acté.
+Les Applications `${CLUSTER}-cilium` adoptent le `helm install` de l'étape 1.
 
 > [!CAUTION]
 > **Pièges « Argo manages Argo »**
@@ -446,18 +484,33 @@ l'étape 2 → `Synced` sans rien changer → self-management acté.
 > - Repo-server et application-controller peuvent redémarrer une fois après le premier sync :
 >   normal, laisser se stabiliser.
 > - Crash-loop après un upgrade de Kubernetes → bumper le tag Argo CD dans
->   `${CLUSTER}/infra/argocd/manifests/kustomization.yaml`.
+>   `cluster/infra/argocd/manifests/kustomization.yaml`.
+> - Le contrôleur **ApplicationSet** est désormais load-bearing (`cilium`, `argocd-manager`) :
+>   s'il ne tourne pas, ces Applications n'existent tout simplement pas — et le CNI d'un cluster
+>   fraîchement bootstrappé n'est jamais adopté.
 
 **Vérification :**
 
 ```bash
 kubectl get applications -n argocd
+kubectl get applicationsets -n argocd
+kubectl -n argocd get app -l homelab.wittner.tech/cluster=${CLUSTER}   # les apps générées de ce cluster
 ```
 
-Attendu au minimum : `${CLUSTER}-cluster`, `${CLUSTER}-infra`, `${CLUSTER}-app`, plus la liste
-des composants de la fiche du cluster — **préfixés `${CLUSTER}-` sur un spoke**
-(`bleu-arcanagos-cilium`), non préfixés sur un hub (`cilium`). L'Application Cilium doit passer
-`Synced/Healthy` **sans rien modifier** (adoption du `helm install` de l'étape 1).
+Attendu, quel que soit le nombre de clusters :
+
+```
+tier 1        root
+tier 2        infra, app
+appsets       cilium, argocd-manager
+feuilles      <name>            pour un composant mono-cluster (argocd, openebs, loki…)
+              <cluster>-<name>  pour une Application générée (bleu-kalecgos-cilium,
+                                bleu-arcanagos-cilium, bleu-arcanagos-argocd-manager)
+```
+
+La liste exacte attendue par cluster est dans sa fiche ([`doc/clusters/`](clusters/)).
+L'Application Cilium du cluster doit passer `Synced/Healthy` **sans rien modifier** (adoption du
+`helm install` de l'étape 1).
 
 ---
 
@@ -469,7 +522,9 @@ listener propre au cluster) sont détaillés dans [reseau.md](reseau.md) et dans
 cluster.
 
 > [!NOTE]
-> La `GatewayClass cilium` est **auto-créée par le contrôleur Cilium** — ne pas la déclarer :
+> `gateway-api` est aujourd'hui une `Application` **mono-cluster** (le hub) : cette étape ne
+> concerne aucun spoke tant que le composant n'a pas migré en `ApplicationSet`. La
+> `GatewayClass cilium` est **auto-créée par le contrôleur Cilium** — ne pas la déclarer :
 > une GatewayClass posée à la main reste `Pending`, Cilium ne réconcilie pas ce qu'il ne possède
 > pas.
 
@@ -525,7 +580,7 @@ Le header `server: envoy` confirme le proxy Cilium.
 > `_acme-challenge` via le DNS **du cluster**. Si celui-ci remonte vers un upstream qui renvoie
 > NXDOMAIN sur ce nom (déjà observé avec Quad9), le challenge reste `Pending` indéfiniment.
 > Remède : épingler les résolveurs récursifs dans
-> `${CLUSTER}/infra/cert-manager/helm-values.yaml` —
+> `cluster/infra/cert-manager/helm-values.yaml` —
 > ```yaml
 > extraArgs:
 >   - --dns01-recursive-nameservers=1.1.1.1:53
@@ -539,7 +594,7 @@ Le header `server: envoy` confirme le proxy Cilium.
 > **Première construction seulement — la parenthèse autosignée.** Si le token du provider DNS
 > n'est pas encore scellé, aucun certificat ne peut être émis et les listeners restent
 > `ResolvedRefs=False`. Pour sortir du port-forward en attendant, ajouter temporairement un
-> `ClusterIssuer selfsigned` dans `${CLUSTER}/infra/cert-manager-config/manifests/` et pointer
+> `ClusterIssuer selfsigned` dans `cluster/infra/cert-manager-config/manifests/` et pointer
 > les `Certificate` dessus :
 > ```yaml
 > apiVersion: cert-manager.io/v1
@@ -614,9 +669,9 @@ kubeseal --fetch-cert \
 
 ```bash
 kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-  < <chemin>/<name>.secret.yaml \
-  > <chemin>/<name>.sealed.yaml
-rm <chemin>/<name>.secret.yaml
+  < cluster/<partie>/<name>/manifests/<secret>.secret.yaml \
+  > cluster/<partie>/<name>/manifests/<secret>.sealed.yaml
+rm cluster/<partie>/<name>/manifests/<secret>.secret.yaml
 ```
 
 L'**ordre de scellement** et le chemin de chaque template sont dans la fiche du cluster
@@ -627,6 +682,9 @@ dépendances structurent cet ordre, quel que soit le cluster :
   soient créés (Terraform, autre repo) ;
 - les tokens de **service account** d'un service déployé ici (ex. notifications ArgoCD ←
   Grafana) exigent ce service en marche.
+
+⚠️ Le scellement se fait **toujours contre le contrôleur du hub** — c'est lui qui porte la clé,
+y compris pour les secrets d'un spoke (son Secret de cluster).
 
 **Et immédiatement après : sauvegarder la clé au coffre** (cf. étape 3) — à partir de maintenant,
 elle est le seul élément non reconstructible du cluster.
@@ -661,10 +719,14 @@ sa fiche : [`doc/clusters/`](clusters/).
   `OutOfSync` permanent s'ils ne sont pas explicités dans les HTTPRoute.
 - **Contrôleur sealed-secrets démarré avant restauration de la clé** → clé neuve, SealedSecrets
   du repo indéchiffrables. C'est l'erreur la plus coûteuse du runbook.
-- **Clé sealed-secrets d'un autre cluster** restaurée par erreur → même effet. Un cluster, une
+- **Clé sealed-secrets d'un autre cluster** restaurée par erreur → même effet. Un contrôleur, une
   clé : vérifier le suffixe du fichier de backup.
 - **Fichier référencé mais absent dans un `kustomization.yaml`** (typiquement un `*.sealed.yaml`
   pas encore scellé) → `kustomize build` échoue, l'Application entière part en erreur.
+- **Dossier `common/` non exclu du generator d'un `ApplicationSet`** → une Application
+  `common-<name>` vers un cluster « common » inexistant, en `ComparisonError` permanent.
+- **`destination.name` d'un composant de spoke laissé sur le hub** → les ressources atterrissent
+  sur le hub. Pour `cilium`, c'est une collision avec la release du hub, donc son CNI.
 - **`bpf.masquerade=true` côté Cilium** ne cohabite pas avec un forward du DNS cluster vers
   l'hôte : CoreDNS casse. Laisser `bpf.masquerade` désactivé.
 - **Quad9 comme résolveur des self-checks DNS-01** → NXDOMAIN sur `_acme-challenge` ; épingler

@@ -1,63 +1,136 @@
 # Conventions des composants
 
-## Chaîne de découverte (app-of-apps)
+## Un seul arbre pour tous les clusters
+
+Le repo ne contient **qu'un** arbre de déploiement, `cluster/`. Il n'y a plus un dossier par
+cluster : c'est **chaque composant** qui désigne sa ou ses cibles, via la `destination` de son
+`Application` ou via les sous-dossiers de son `ApplicationSet`.
 
 ```
-<cluster>/cluster.yaml                # TIER 1 — glob *.bootstrap.yaml
-├── infra/infra.bootstrap.yaml        # TIER 2 — glob infra/**/*.app.yaml
-└── app/app.bootstrap.yaml            # TIER 2 — glob app/**/*.app.yaml
+cluster/
+├── root.yaml                        # TIER 1 — glob '*.bootstrap.yaml' (recurse)
+├── infra/
+│   ├── infra.bootstrap.yaml         # TIER 2 — glob '{*.app.yaml,*.appset.yaml}' (recurse)
+│   └── <name>/…                     # composants d'infrastructure
+└── app/
+    ├── app.bootstrap.yaml           # TIER 2 — idem
+    └── <name>/…                     # composants applicatifs
 ```
 
-⚠️ Le suffixe **exact** `.app.yaml` est requis, sinon le composant n'est pas découvert. Les deux
-suffixes distincts (`.bootstrap.yaml` en tier 1, `.app.yaml` en tier 2) évitent l'auto-récursion.
+⚠️ Trois suffixes distincts, et c'est ce qui empêche l'auto-récursion :
 
-Cette chaîne est **identique pour tout cluster**, qu'il héberge son ArgoCD (hub) ou qu'il soit
-piloté à distance (spoke). Seule la `destination` change, et pas au même étage :
+| Fichier | Découvert par | Remarque |
+|---|---|---|
+| `cluster/root.yaml` | personne — **apply manuel**, une fois | S'il s'appelait `root.bootstrap.yaml` il matcherait son propre glob et se gérerait lui-même. |
+| `*.bootstrap.yaml` | `root` | Deux exemplaires : `infra` et `app`. |
+| `*.app.yaml` / `*.appset.yaml` | `infra` / `app` | Suffixe **exact** requis, sinon le composant n'est pas découvert. |
+
+Les trois étages du haut ne produisent que des objets `Application`/`ApplicationSet`, qui doivent
+vivre là où tourne l'ArgoCD qui les lit :
 
 | Étage | Produit | `destination` |
 |---|---|---|
-| tier 1 (`cluster.yaml`) et tier 2 (`*.bootstrap.yaml`) | des objets `Application` | **toujours le hub** — `name: bleu-kalecgos`, ns `argocd` |
-| tier 2 → feuilles (`*.app.yaml`) | les ressources réelles | le cluster visé — `name: <cluster>` |
+| tier 1 (`root.yaml`) et tier 2 (`*.bootstrap.yaml`) | des `Application`/`ApplicationSet` | **toujours le hub** — `name: bleu-kalecgos`, ns `argocd` |
+| feuilles (`*.app.yaml`, template d'un `*.appset.yaml`) | les ressources réelles | le cluster visé — `name: <cluster>` |
 
-Onboarder un cluster = un `<cluster>/cluster.yaml`, appliqué **sur le hub**.
+Onboarder un cluster **ne consiste plus** à ajouter un tier-1 : `root.yaml` est appliqué une fois
+pour tout le repo. Il faut (1) enregistrer le cluster côté hub (Secret de cluster, cf.
+[regles-gitops.md](regles-gitops.md)), puis (2) lui ajouter des composants — un sous-dossier dans
+un `ApplicationSet` existant, ou un nouveau composant dont la `destination` le désigne.
+
+## Mono-cluster ou multi-cluster : `Application` ou `ApplicationSet`
+
+C'est le **seul** critère de choix entre les deux formes :
+
+| | Forme | Fichier | Nom des Applications | Exemples |
+|---|---|---|---|---|
+| Déployé sur **un** cluster | `Application` | `<name>.app.yaml` | `<name>` (= dossier) | `argocd`, `openebs`, `loki`… |
+| Déployé sur **plusieurs** clusters | `ApplicationSet` | `<name>.appset.yaml` | `<cluster>-<name>` (template) | `cilium`, `argocd-manager` |
+
+Le **dossier** et le **nom de fichier** ne prennent jamais de préfixe de cluster : c'est
+`infra/cilium/cilium.appset.yaml`, qui produit `bleu-kalecgos-cilium` et `bleu-arcanagos-cilium`.
+
+⚠️ Le préfixe des Applications générées est **load-bearing** : toutes les Applications de tous les
+clusters cohabitent dans le namespace `argocd` du hub. Sans préfixe, deux clusters portant le même
+composant se disputeraient la même ressource, chacun avec son `prune`.
+
+Un composant mono-cluster qui doit s'étendre à un second cluster **migre en `ApplicationSet`** :
+renommer `<name>.app.yaml` en `<name>.appset.yaml`, déplacer ce qui est spécifique dans
+`<cluster>/`, ce qui est partagé dans `common/`. Attention, la migration **renomme** l'Application
+existante (`openebs` → `bleu-kalecgos-openebs`).
 
 ## Squelette d'un composant
 
+**Mono-cluster** (`Application`) :
+
 ```
 <name>/
-├── <name>.app.yaml       # Application ArgoCD — metadata.name == <name> == dossier
+├── <name>.app.yaml       # metadata.name == <name> == dossier
 ├── helm-values.yaml      # values Helm (si chart), référencées via $values (jamais inline)
-├── README.md             # rôle, fichiers, opérations — voir règle README ci-dessous
+├── README.md             # rôle, fichiers, contraintes, opérations — voir règle README ci-dessous
 └── manifests/            # manifestes K8s bruts + kustomization.yaml (si nécessaires)
 ```
 
+**Multi-cluster** (`ApplicationSet`) : un sous-dossier par cluster, découvert par un generator
+`git.directories`, plus un `common/` optionnel pour ce qui est identique partout.
+
+```
+<name>/
+├── <name>.appset.yaml    # generator git : path <name>/* (+ exclusion de common/)
+├── README.md
+├── common/               # facultatif — ce qui est identique entre clusters
+│   ├── helm-values.yaml
+│   └── manifests/        # base kustomize, jamais déployée seule
+└── <cluster>/            # un par cluster ciblé — le nom du dossier EST le nom du cluster
+    ├── helm-values.yaml  # facultatif : surcharge (ignoreMissingValueFiles)
+    └── manifests/        # kustomization.yaml → ../../common/manifests + ressources propres
+```
+
+⚠️ **`common/` doit être exclu du generator**, sinon il produit une Application `common-<name>`
+vers un cluster inexistant :
+
+```yaml
+directories:
+  - path: cluster/infra/<name>/*
+  - path: cluster/infra/<name>/common
+    exclude: true
+```
+
+Modèle complet : [`infra/cilium`](../cluster/infra/cilium/README.md) (chart + values en deux
+couches + base kustomize commune). [`infra/argocd-manager`](../cluster/infra/argocd-manager/README.md)
+est la variante sans `common/` — chaque cluster porte l'intégralité de ses manifestes.
+
 ## Règles sur l'Application
 
-- **Nom** : `metadata.name` = nom du dossier = préfixe du fichier `.app.yaml`.
-  **Exception — cluster spoke** : `metadata.name` = `<cluster>-<dossier>`
-  (ex. `bleu-arcanagos-cilium`). Les Applications de **tous** les clusters cohabitent dans le
-  namespace `argocd` du hub : sans préfixe, deux clusters portant un composant homonyme
-  (`cilium`…) se disputent la même ressource, chacun avec son `prune: true`. Le **dossier** et le
-  **nom de fichier**, eux, ne prennent pas le préfixe : `infra/cilium/cilium.app.yaml`.
+- **Nom** : `metadata.name` = nom du dossier = préfixe du fichier, préfixé `<cluster>-` pour les
+  Applications générées par un `ApplicationSet` (cf. ci-dessus).
 - **Labels obligatoires** : `app.kubernetes.io/name`, `app.kubernetes.io/part-of: homelab-gitops`,
-  `app.kubernetes.io/component`.
+  `app.kubernetes.io/component`. Une Application générée porte **en plus**
+  `homelab.wittner.tech/cluster: <cluster>` — c'est ce qui rend le namespace `argocd` du hub
+  lisible par cluster :
+  ```bash
+  kubectl -n argocd get app -l homelab.wittner.tech/cluster=bleu-arcanagos
+  ```
 - **`targetRevision: main`** sur toute source git de ce repo.
 - **`destination`** : **toujours `name: <cluster>`, jamais `server:`** — y compris pour le hub,
   qui se désigne `name: bleu-kalecgos` et non par l'URL interne. Le nom est celui porté par le
   Secret de cluster du namespace `argocd` **du hub** (`cluster-<cluster>`), y compris pour le
   cluster local : c'est
-  [`bleu-kalecgos/infra/argocd/manifests/cluster-bleu-kalecgos.yaml`](../bleu-kalecgos/infra/argocd/manifests/cluster-bleu-kalecgos.yaml)
+  [`cluster/infra/argocd/manifests/cluster-bleu-kalecgos.yaml`](../cluster/infra/argocd/manifests/cluster-bleu-kalecgos.yaml)
   qui remplace l'entrée `in-cluster` codée en dur d'ArgoCD. Une destination lue au nom du cluster
   se relit sans ambiguïté ; se tromper de nom déploie le composant **sur le mauvais cluster**.
 - **`releaseName` explicite** sur toute source Helm.
 - Pas de `CreateNamespace=true` quand `manifests/namespace.yaml` porte le namespace
-  (nécessaire dès que le ns doit être labellisé, ex. PSA `privileged` pour `openebs` et `alloy`).
+  (nécessaire dès que le ns doit être labellisé, ex. PSA `privileged` pour `openebs`, `alloy` et
+  `monitoring`). L'un des deux doit couvrir le namespace, jamais les deux.
 - `ServerSideApply=true` dès que le composant embarque des CRDs volumineuses (ArgoCD,
-  prometheus-operator, Gateway API, OpenEBS) ou de gros ConfigMaps (Loki).
+  prometheus-operator, Gateway API, OpenEBS, Cilium) ou de gros ConfigMaps (Loki).
+- **`preserveResourcesOnDeletion: true`** sur tout `ApplicationSet` dont la disparition d'un
+  dossier couperait le cluster (`cilium` : le CNI ; `argocd-manager` : le credential d'accès).
 
 ## Charts Helm — values dans un fichier
 
-Les values ne vont **jamais inline** (`helm.values: |`). Toujours dans un fichier
+Les values ne vont **jamais inline** (`helm.values: |`, `valuesObject:`). Toujours dans un fichier
 **`helm-values.yaml`** à côté de l'app, référencé via le pattern multi-source `$values` :
 
 ```yaml
@@ -68,10 +141,21 @@ sources:
     helm:
       releaseName: <name>
       valueFiles:
-        - $values/<cluster>/infra/<name>/helm-values.yaml
+        - $values/cluster/infra/<name>/helm-values.yaml
   - repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
     ref: values
+```
+
+Sur un `ApplicationSet` multi-cluster, les values se superposent en **deux couches**, l'ordre
+faisant foi (le second fichier écrase le premier) ; `ignoreMissingValueFiles` rend la surcharge
+facultative :
+
+```yaml
+valueFiles:
+  - '$values/cluster/infra/<name>/common/helm-values.yaml'
+  - '$values/{{.path.path}}/helm-values.yaml'
+ignoreMissingValueFiles: true
 ```
 
 La règle porte sur l'emplacement des **values Helm**, pas sur la configuration applicative :
@@ -83,27 +167,32 @@ dans `helm-values.yaml`.
 | Archétype | Forme | Composants |
 |---|---|---|
 | (a) | Helm + `$values` multi-source | `cert-manager`, `cnpg` |
-| (b) | (a) + 3ᵉ source `manifests/` | `cilium`, `openebs`, `alloy`, `authentik`, `loki`, `kube-prometheus-stack` |
-| (c) | kustomize seul (`source.path` → `manifests/`) | `argocd`, `cert-manager-config`, `gateway-api`, `renovate`, `test-nginx` |
+| (b) | (a) + 3ᵉ source `manifests/` | `openebs`, `alloy`, `authentik`, `loki`, `kube-prometheus-stack`, `cilium` (en appset, values en deux couches) |
+| (c) | kustomize seul (`source.path` → `manifests/`) | `argocd`, `cert-manager-config`, `gateway-api`, `renovate`, `test-nginx`, `argocd-manager` (en appset) |
 | (d) | Helm sans values (migre vers (a) dès qu'une value est customisée) | `sealed-secrets` |
 
 ## Sync-waves
 
 Deux niveaux distincts, à ne pas confondre :
 
-- **wave d'Application** (annotation sur le `.app.yaml`) — ordonne les composants entre eux ;
+- **wave d'Application** (annotation sur le `.app.yaml` / `.appset.yaml`) — ordonne les composants
+  entre eux ;
 - **wave de ressource** (annotation sur un manifeste de `manifests/`) — ordonne l'intérieur d'un
   composant, ex. `openebs` : namespace (-1) → hook VG (0) → StorageClass (1).
 
+⚠️ Sur un `ApplicationSet`, l'annotation de wave porte sur **l'ApplicationSet lui-même** (c'est
+lui que le tier-2 synchronise), pas sur les Applications générées — celles-ci sont créées ensuite
+par le contrôleur ApplicationSet et déroulent leurs propres waves de ressource.
+
 | Wave | Composant | Rôle |
 |---|---|---|
-| -20 | `argocd-manager` | identité d'un cluster **spoke** — credential d'accès du hub, avant tout le reste |
+| -20 | `argocd-manager` (appset) | identité des clusters **spokes** — credential d'accès du hub, avant tout le reste |
 | -10 | `gateway-api` | CRDs Gateway API + `shared-gw` |
 | -8 | `sealed-secrets` | contrôleur de déchiffrement des secrets |
 | -5 | `cert-manager` | émission TLS |
 | -4 | `cert-manager-config` | ClusterIssuer Let's Encrypt + wildcards |
 | -1 | `argocd` | self-management |
-| 0 (défaut, non annoté) | `cilium`, `openebs`, apps | reste de la stack |
+| 0 (défaut, non annoté) | `cilium`, `openebs`, tous les composants de `app/` | reste de la stack |
 
 ## Secrets d'un composant
 
@@ -116,30 +205,35 @@ Dans `manifests/` du composant qui consomme le secret :
 ⚠️ Un fichier référencé mais absent casse `kustomize build` et met toute l'Application en erreur :
 tant qu'un secret n'est pas scellé, garder sa ligne **commentée** dans le `kustomization.yaml`.
 
+Un `SealedSecret` est chiffré pour un couple **(nom, namespace)** et pour la clé d'**un** cluster :
+le déplacer, ou viser un autre cluster, impose de le resceller. Détail et exceptions (Secrets sans
+credential admis en clair) : [regles-gitops.md](regles-gitops.md).
+
 ## Commandes de la documentation
 
 Toute commande d'un README doit être exécutable **depuis la racine du repo**, telle quelle :
-chemins complets depuis la racine (`<cluster>/app/<name>/manifests/…`), jamais relatifs au
+chemins complets depuis la racine (`cluster/app/<name>/manifests/…`), jamais relatifs au
 dossier du README.
 
 ## Règle README composant
 
 Un README composant contient **au maximum** : `## Rôle` (2-3 lignes), `## Fichiers` (1 ligne
 par fichier notable), `## Contraintes` (ce qui casse si on y touche), `## Opérations` (debug +
-procédures propres au composant).
+procédures propres au composant). Un composant multi-cluster ajoute utilement une section
+« diverger sur un cluster » / « ajouter un cluster ».
 
 **Interdit : toute version épinglée** (chart, image, manifest upstream). La version vit à un
-seul endroit : `targetRevision` du `.app.yaml` (ou le `kustomization.yaml` pour un install
-upstream). Un README ne doit jamais devoir être mis à jour lors d'un upgrade.
+seul endroit : `targetRevision` du `.app.yaml`/`.appset.yaml` (ou le `kustomization.yaml` pour un
+install upstream). Un README ne doit jamais devoir être mis à jour lors d'un upgrade.
 
 ## READMEs d'index
 
-- `<cluster>/README.md` liste **tout composant déployé** (infra + app) avec un **lien vers son
-  README** (`[<name>](infra/<name>/README.md)` ou `app/…`) — un composant ajouté/supprimé =
-  index mis à jour dans le même commit.
-- `README.md` racine liste les READMEs des clusters.
+- [`README.md`](../README.md) **racine** — index unique des composants : tout composant déployé
+  (infra + app) y figure avec un **lien vers son README** et le ou les clusters visés. Un
+  composant ajouté/supprimé = index mis à jour dans le **même commit**. Il n'y a plus d'index par
+  cluster : l'arbre `cluster/` est commun.
 - `doc/clusters/<cluster>.md` — **fiche cluster** : les valeurs que le
   [runbook générique](runbook-bootstrap.md) paramètre (nœud, pool L2, wildcard DNS, disque,
-  inventaire des SealedSecrets). Un nouveau cluster = une fiche, dans le même commit. La fiche
-  porte les **valeurs**, jamais la procédure ; l'index des composants reste dans
-  `<cluster>/README.md`.
+  inventaire des SealedSecrets) et la liste des Applications attendues pour ce cluster. Un
+  nouveau cluster = une fiche, dans le même commit. La fiche porte les **valeurs**, jamais la
+  procédure.

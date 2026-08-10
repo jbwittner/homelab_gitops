@@ -49,12 +49,14 @@ namespace à l'autre le rend indéchiffrable, il faut le resceller.
 ### Backup / restauration de la clé
 
 ```bash
-# Backup — contient la clé privée : coffre, JAMAIS dans Git (motif .gitignore déjà en place)
+# Backup — contient la clé privée : coffre, JAMAIS dans Git (motif .gitignore déjà en place).
+# Le suffixe du nom de fichier est le cluster : une clé par contrôleur, et restaurer celle d'un
+# autre cluster rend tous les SealedSecret indéchiffrables.
 kubectl get secret -n sealed-secrets \
-  -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key.yaml
+  -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealed-secrets-key-bleu-kalecgos.yaml
 
 # Restauration (AVANT le démarrage du contrôleur), puis restart
-kubectl apply -f sealed-secrets-key.yaml
+kubectl apply -f sealed-secrets-key-bleu-kalecgos.yaml
 kubectl rollout restart deployment/sealed-secrets -n sealed-secrets
 
 # Quelle clé sert à sceller ? La PLUS RÉCENTE. Les autres restent utilisées au déchiffrement.

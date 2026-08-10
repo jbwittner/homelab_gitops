@@ -53,7 +53,7 @@ kubectl apply -f cluster/root.yaml
   rien à sceller (cf. §Nommage du cluster local)
 - `manifests/cluster-bleu-arcanagos.sealed.yaml` — SealedSecret du cluster **spoke**
   `bleu-arcanagos` (bearer token du SA `argocd-manager`, cf.
-  [cluster/infra/argocd-manager](../../../cluster/infra/argocd-manager/bleu-arcanagos/README.md))
+  [argocd-manager](../argocd-manager/README.md))
 
 ## Contraintes — self-management
 

@@ -54,7 +54,8 @@ l'ApplicationSet, `common/` en est explicitement exclu.
 
 ## Opérations
 
-- **Upgrade** : bumper `targetRevision` dans `cilium.app.yaml`, commit, push. Vérifier la matrice
+- **Upgrade** : bumper `targetRevision` dans `cilium.appset.yaml` (un seul point pour tous les
+  clusters), commit, push. Vérifier la matrice
   Gateway API d'abord, et relire les *Upgrade Notes* upstream sur un saut de mineure.
 - **Debug** :
   ```bash

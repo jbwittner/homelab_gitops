@@ -103,8 +103,9 @@ spec:
       interval: 30s
       scrapeTimeout: 10s
 ---
-# ApplicationSet-controller : aucun ApplicationSet dans ce repo (app-of-apps par glob),
-# scrapé uniquement pour la supervision de liveness du composant (`up`).
+# ApplicationSet-controller : load-bearing depuis que les composants multi-cluster (cilium,
+# argocd-manager) sont des ApplicationSet — s'il ne tourne pas, leurs Applications n'existent
+# pas. Métriques de génération (argocd_appset_*) + liveness du composant (`up`).
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
