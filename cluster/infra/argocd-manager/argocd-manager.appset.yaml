@@ -1,0 +1,69 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: argocd-manager
+  namespace: argocd
+  annotations:
+    # ⚠️ La sync-wave porte ici sur l'ApplicationSet lui-même, pas sur les Applications générées :
+    # ce sont les ApplicationSet que le tier-2 `infra` synchronise, les Applications étant créées
+    # ensuite par le contrôleur ApplicationSet. Cet ApplicationSet passe donc avant les autres
+    # composants d'infra — c'est le credential d'accès aux clusters distants.
+    argocd.argoproj.io/sync-wave: "-20"
+  labels:
+    app.kubernetes.io/name: argocd-manager
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: gitops
+spec:
+  # ServiceAccount `argocd-manager` + ClusterRoleBinding + token, à poser sur chaque cluster
+  # DISTANT (spoke) que le hub pilote. Le hub s'auto-gère via son propre ServiceAccount et n'a
+  # donc pas de dossier ici. Onboarder un spoke = créer `<cluster>/manifests/` à partir d'un
+  # existant, puis sceller le Secret de cluster côté `cluster/infra/argocd/manifests/`.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  syncPolicy:
+    # ⚠️ Load-bearing, pour la même raison que `prune: false` ci-dessous : la suppression en
+    # cascade détruirait le ServiceAccount dont ArgoCD se sert pour joindre le cluster.
+    preserveResourcesOnDeletion: true
+  generators:
+    - git:
+        repoURL: https://github.com/jbwittner/homelab_gitops.git
+        revision: main
+        directories:
+          - path: cluster/infra/argocd-manager/*
+  template:
+    metadata:
+      name: '{{.path.basename}}-argocd-manager'
+      labels:
+        app.kubernetes.io/name: argocd-manager
+        app.kubernetes.io/part-of: homelab-gitops
+        app.kubernetes.io/component: gitops
+      # ⚠️ PAS de `resources-finalizer.argocd.argoproj.io`, contrairement aux autres composants :
+      # la suppression en cascade détruirait le SA dont ArgoCD se sert pour joindre ce cluster,
+      # donc ArgoCD ne pourrait plus terminer la suppression — Application bloquée sur son
+      # finalizer, à débloquer à la main.
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/jbwittner/homelab_gitops.git
+        targetRevision: main
+        # MÊME dossier que l'apply manuel du bootstrap sur le spoke.
+        path: '{{.path.path}}/manifests'
+      destination:
+        name: '{{.path.basename}}'
+        namespace: kube-system
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: false      # ⚠️ prune désactivé — ArgoCD se couperait l'accès au cluster
+        syncOptions:
+          - RespectIgnoreDifferences=true
+      ignoreDifferences:
+        # Le token controller remplit `token`, `ca.crt` et `namespace` dans le cluster ; le
+        # manifeste committé n'a pas de `data`. Sans ça, l'Application est OutOfSync en permanence.
+        - group: ""
+          kind: Secret
+          name: argocd-manager-token
+          namespace: kube-system
+          jsonPointers:
+            - /data

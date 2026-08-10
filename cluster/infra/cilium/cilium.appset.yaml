@@ -1,0 +1,72 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cilium
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: cilium
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: cni
+spec:
+  # Cilium tourne sur TOUS les clusters, avec une conf propre à chacun (plage d'IP de LB
+  # notamment). Un sous-dossier par cluster ; le generator git les découvre et produit une
+  # Application `<cluster>-cilium` par dossier. Déployer Cilium sur un nouveau cluster =
+  # créer `cluster/infra/cilium/<cluster>/{helm-values.yaml,manifests/}`, rien d'autre.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  syncPolicy:
+    # ⚠️ Load-bearing. Retirer un dossier de cluster (ou supprimer cet ApplicationSet) supprime
+    # l'Application correspondante ; sans ce flag, elle emporterait le CNI du cluster en cascade.
+    preserveResourcesOnDeletion: true
+  generators:
+    - git:
+        repoURL: https://github.com/jbwittner/homelab_gitops.git
+        revision: main
+        # Un niveau de profondeur : ne matche que les dossiers de cluster, pas leurs `manifests/`.
+        directories:
+          - path: cluster/infra/cilium/*
+  template:
+    metadata:
+      name: '{{.path.basename}}-cilium'
+      labels:
+        app.kubernetes.io/name: cilium
+        app.kubernetes.io/part-of: homelab-gitops
+        app.kubernetes.io/component: cni
+    spec:
+      project: default
+      sources:
+        - repoURL: https://helm.cilium.io/
+          chart: cilium
+          # Version commune à tous les clusters — un seul point de bump (et un seul PR Renovate).
+          targetRevision: 1.20.0
+          helm:
+            # ⚠️ releaseName DOIT rester `cilium` : la release a été adoptée depuis le
+            # `helm install cilium` du bootstrap. Le changer renommerait toutes les ressources
+            # Cilium et détruirait le CNI.
+            releaseName: cilium
+            valueFiles:
+              - '$values/{{.path.path}}/helm-values.yaml'
+        - repoURL: https://github.com/jbwittner/homelab_gitops.git
+          targetRevision: main
+          ref: values
+        - repoURL: https://github.com/jbwittner/homelab_gitops.git
+          targetRevision: main
+          path: '{{.path.path}}/manifests'
+      destination:
+        # Le nom du dossier EST le nom du cluster, tel qu'enregistré côté hub.
+        name: '{{.path.basename}}'
+        namespace: kube-system
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - ServerSideApply=true
+      ignoreDifferences:
+        - group: ""
+          kind: ConfigMap
+          name: cilium-config
+          namespace: kube-system
+          jsonPointers:
+            - /data

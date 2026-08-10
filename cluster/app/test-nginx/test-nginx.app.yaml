@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: test-nginx
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: test-nginx
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: test
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/test-nginx/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: test-nginx
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

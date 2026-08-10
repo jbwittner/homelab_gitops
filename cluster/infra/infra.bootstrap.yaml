@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: infra
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: app-of-apps
+spec:
+  # App-of-apps de la partie INFRA : découvre tous les composants d'infrastructure, tous
+  # clusters confondus. Un composant mono-cluster est une `Application` (`<nom>.app.yaml`),
+  # un composant déployé sur plusieurs clusters est un `ApplicationSet` (`<nom>.appset.yaml`).
+  # Le glob ne matche PAS ce fichier, qui porte le suffixe distinct '*.bootstrap.yaml'.
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/infra
+    directory:
+      recurse: true
+      include: '{*.app.yaml,*.appset.yaml}'
+  destination:
+    name: bleu-kalecgos     # le HUB : ce tier ne produit que des Application/ApplicationSet
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

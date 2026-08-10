@@ -13,7 +13,7 @@
     "examples/**"
   ],
   "argocd": {
-    "managerFilePatterns": ["/\\.app\\.yaml$/"]
+    "managerFilePatterns": ["/\\.app\\.yaml$/", "/\\.appset\\.yaml$/"]
   },
   "kubernetes": {
     "managerFilePatterns": ["/manifests/.+\\.yaml$/"]

@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: renovate
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: renovate
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: automation
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/renovate/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: renovate
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

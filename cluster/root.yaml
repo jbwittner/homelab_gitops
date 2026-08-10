@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: root
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: app-of-apps
+spec:
+  project: default
+  # App-of-apps TIER 1 du repo — unique point d'entrée, appliqué à la main au bootstrap
+  # (`kubectl apply -f cluster/root.yaml` sur le hub). Il n'y a plus un tier-1 par cluster :
+  # l'arbre `cluster/` est commun, et c'est chaque composant qui désigne sa ou ses cibles.
+  #
+  # Découvre les deux bootstraps de partie (infra + app) via le glob '*.bootstrap.yaml' ;
+  # chacun découvre ensuite ses propres '*.app.yaml' / '*.appset.yaml'.
+  # ⚠️ Ce fichier s'appelle `root.yaml` et NON `root.bootstrap.yaml` : avec ce dernier nom il
+  # matcherait son propre glob et l'Application se gérerait elle-même.
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster
+    directory:
+      recurse: true
+      include: '*.bootstrap.yaml'
+  destination:
+    # Le HUB. Un tier-1/tier-2 ne produit que des objets `Application`/`ApplicationSet`, qui
+    # doivent vivre là où tourne l'ArgoCD qui les lit. Seules les feuilles portent la vraie cible.
+    name: bleu-kalecgos
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
