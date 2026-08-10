@@ -33,6 +33,10 @@ spec:
         app.kubernetes.io/name: cilium
         app.kubernetes.io/part-of: homelab-gitops
         app.kubernetes.io/component: cni
+      # Sûr uniquement grâce à `preserveResourcesOnDeletion` ci-dessus : le contrôleur
+      # ApplicationSet retire ce finalizer avant de supprimer une Application générée.
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
     spec:
       project: default
       sources:

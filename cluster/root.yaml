@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/name: root
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: app-of-apps
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   # App-of-apps TIER 1 du repo — unique point d'entrée, appliqué à la main au bootstrap

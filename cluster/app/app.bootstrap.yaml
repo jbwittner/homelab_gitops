@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/name: app
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: app-of-apps
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   # App-of-apps de la partie APP : découvre tous les composants applicatifs, tous clusters
   # confondus. Un composant mono-cluster est une `Application` (`<nom>.app.yaml`), un composant
