@@ -6,7 +6,7 @@ CNI du cluster, implémentation **Gateway API** et LoadBalancer L2. Remplace kub
 (`kubeProxyReplacement: true`). Fournit la `GatewayClass cilium` que consommera `gateway-api`
 (composant pas encore déployé sur ce cluster). Sans lui, aucun pod ne schedule — c'est le premier
 composant du [runbook](../../../doc/runbook-bootstrap.md)
-(cf. [fiche cluster](../../../doc/clusters/bleu-arcanogos.md)).
+(cf. [fiche cluster](../../../doc/clusters/bleu-arcanagos.md)).
 
 ## Fichiers
 
@@ -17,7 +17,7 @@ composant du [runbook](../../../doc/runbook-bootstrap.md)
   `cgroup.autoMount: false` (le cgroup est monté par l'hôte)
 - `manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool` `192.168.1.85-89`, plage disjointe de
   celle des autres clusters (cf. [doc/reseau.md](../../../doc/reseau.md) et la
-  [fiche cluster](../../../doc/clusters/bleu-arcanogos.md))
+  [fiche cluster](../../../doc/clusters/bleu-arcanagos.md))
 - `manifests/l2-policy.yaml` — `CiliumL2AnnouncementPolicy`, annonce L2 des IP de LB
 
 ## Contraintes
@@ -33,6 +33,10 @@ composant du [runbook](../../../doc/runbook-bootstrap.md)
 > - `bpf.masquerade` reste **désactivé** : activé, il casse CoreDNS quand le DNS du cluster est
 >   forwardé vers l'hôte.
 > - `ignoreDifferences` sur le ConfigMap `cilium-config` (le contrôleur y écrit).
+> - **`destination.name: bleu-arcanagos`** — ce cluster est un *spoke* piloté par l'ArgoCD du hub
+>   (cf. [fiche cluster](../../../doc/clusters/bleu-arcanagos.md)). Repasser sur
+>   `server: https://kubernetes.default.svc` déploierait Cilium **sur le hub**, en collision avec
+>   sa propre release `cilium` : son CNI.
 
 ## Opérations
 

@@ -35,7 +35,7 @@ export CLUSTER_DOMAIN=kalecgos.lan.wittner.tech     # wildcard interne du cluste
 | Cluster | Fiche | État |
 |---|---|---|
 | `bleu-kalecgos` | [clusters/bleu-kalecgos.md](clusters/bleu-kalecgos.md) | complet — les 8 étapes s'appliquent |
-| `bleu-arcanogos` | [clusters/bleu-arcanogos.md](clusters/bleu-arcanogos.md) | en construction — s'arrête à l'étape 1 |
+| `bleu-arcanagos` | [clusters/bleu-arcanagos.md](clusters/bleu-arcanagos.md) | en construction — s'arrête à l'étape 1 |
 
 > [!NOTE]
 > **Cluster partiel.** Un cluster dont la fiche marque des composants absents s'arrête à l'étape

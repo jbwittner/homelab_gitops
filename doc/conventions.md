@@ -27,6 +27,9 @@ suffixes distincts (`.bootstrap.yaml` en tier 1, `.app.yaml` en tier 2) évitent
 - **Labels obligatoires** : `app.kubernetes.io/name`, `app.kubernetes.io/part-of: homelab-gitops`,
   `app.kubernetes.io/component`.
 - **`targetRevision: main`** sur toute source git de ce repo.
+- **`destination`** : `server: https://kubernetes.default.svc` pour un cluster qui héberge son
+  propre ArgoCD ; `name: <cluster>` pour un cluster **spoke** piloté à distance par le hub — le
+  nom est celui du Secret de cluster côté hub. Se tromper déploie le composant **sur le hub**.
 - **`releaseName` explicite** sur toute source Helm.
 - Pas de `CreateNamespace=true` quand `manifests/namespace.yaml` porte le namespace
   (nécessaire dès que le ns doit être labellisé, ex. PSA `privileged` pour `openebs` et `alloy`).
@@ -75,6 +78,7 @@ Deux niveaux distincts, à ne pas confondre :
 
 | Wave | Composant | Rôle |
 |---|---|---|
+| -20 | `argocd-manager` | identité d'un cluster **spoke** — credential d'accès du hub, avant tout le reste |
 | -10 | `gateway-api` | CRDs Gateway API + `shared-gw` |
 | -8 | `sealed-secrets` | contrôleur de déchiffrement des secrets |
 | -5 | `cert-manager` | émission TLS |

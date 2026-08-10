@@ -44,6 +44,15 @@ bootstrap**, pas une écriture d'état : il ne crée ni ne modifie aucune ressou
     `kustomization.yaml`.
 - Procédure : [`bleu-kalecgos/infra/sealed-secrets/README.md`](../bleu-kalecgos/infra/sealed-secrets/README.md).
 
+> [!NOTE]
+> **Seule exception admise à « pas de `kind: Secret` dans Git » : un Secret sans données.** Un
+> Secret dont le manifeste ne porte ni `data:` ni `stringData:`, et qui n'est qu'une **coquille
+> remplie par un contrôleur du cluster**, ne contient par construction aucun secret. Cas unique
+> aujourd'hui : `argocd-manager-token`
+> ([`bleu-arcanagos/infra/argocd-manager`](../bleu-arcanagos/infra/argocd-manager/README.md)),
+> rempli par le token controller. Il exige un `ignoreDifferences` sur `/data`. Toute autre forme
+> de Secret committé reste interdite.
+
 > [!CAUTION]
 > **La clé privée du contrôleur est le seul état non reconstructible du cluster.** Tout le reste
 > se redéploie depuis Git ; sans elle, chaque `SealedSecret` du repo est un fichier mort et il

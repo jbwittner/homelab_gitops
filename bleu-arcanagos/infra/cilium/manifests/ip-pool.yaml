@@ -1,7 +1,7 @@
 apiVersion: cilium.io/v2
 kind: CiliumLoadBalancerIPPool
 metadata:
-  name: bleu-arcanogos-pool
+  name: bleu-arcanagos-pool
 spec:
   blocks:
     - start: "192.168.1.85"

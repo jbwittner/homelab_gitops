@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  # cluster-admin : l'ArgoCD du hub doit pouvoir poser n'importe quelle ressource de ce cluster
+  # (CRDs comprises). Réductible plus tard vers un ClusterRole maison, à condition de couvrir
+  # tous les groupes d'API des composants déployés ici.
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: argocd-manager
+    namespace: kube-system
