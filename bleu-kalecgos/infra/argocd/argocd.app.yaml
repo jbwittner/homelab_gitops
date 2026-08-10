@@ -18,7 +18,7 @@ spec:
     targetRevision: main
     path: bleu-kalecgos/infra/argocd/manifests     # MÊME dossier que l'apply manuel du bootstrap
   destination:
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: argocd
   syncPolicy:
     automated:

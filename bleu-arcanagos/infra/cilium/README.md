@@ -35,7 +35,7 @@ composant du [runbook](../../../doc/runbook-bootstrap.md)
 > - `ignoreDifferences` sur le ConfigMap `cilium-config` (le contrôleur y écrit).
 > - **`destination.name: bleu-arcanagos`** — ce cluster est un *spoke* piloté par l'ArgoCD du hub
 >   (cf. [fiche cluster](../../../doc/clusters/bleu-arcanagos.md)). Repasser sur
->   `server: https://kubernetes.default.svc` déploierait Cilium **sur le hub**, en collision avec
+>   `name: bleu-kalecgos` déploierait Cilium **sur le hub**, en collision avec
 >   sa propre release `cilium` : son CNI.
 
 ## Opérations

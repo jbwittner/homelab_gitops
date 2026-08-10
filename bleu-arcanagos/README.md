@@ -5,7 +5,7 @@ Cluster **en construction**, piloté en **spoke** : il n'a pas d'ArgoCD à lui, 
 `ServiceAccount` `argocd-manager`. Deux conséquences sur tout composant ajouté ici :
 
 - les `.app.yaml` feuilles ciblent `destination.name: bleu-arcanagos`, jamais
-  `https://kubernetes.default.svc` — qui déploierait **sur le hub** ;
+  `bleu-kalecgos` — qui déploierait **sur le hub** ;
 - leur `metadata.name` porte le préfixe du cluster (`bleu-arcanagos-cilium`) : toutes les
   Applications des deux clusters cohabitent dans le namespace `argocd` du hub.
 

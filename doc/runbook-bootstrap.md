@@ -288,6 +288,9 @@ kubectl apply -k ${CLUSTER}/infra/argocd/manifests --server-side --force-conflic
 kubectl -n argocd get pods
 kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
+# Le cluster local doit être enregistré SOUS SON NOM (Secret posé par l'apply -k ci-dessus)
+kubectl -n argocd get secret cluster-${CLUSTER}
+
 # Mot de passe admin initial (auto-généré à l'install)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d ; echo
 
@@ -295,6 +298,15 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 kubectl -n argocd port-forward svc/argocd-server 8080:443
 # → https://localhost:8080 (certificat autosigné, accepter)
 ```
+
+> [!IMPORTANT]
+> **Le Secret `cluster-${CLUSTER}` conditionne toute l'étape 4.** Toutes les `destination` du
+> repo désignent leur cluster par `name:`, cluster local compris — sans ce Secret, ArgoCD ne
+> connaît son propre cluster que sous l'entrée codée en dur `in-cluster`, et **chaque**
+> Application posée à l'étape 4 tombe en `ComparisonError: cluster not found`. Il vit dans
+> `${CLUSTER}/infra/argocd/manifests/` justement pour être posé par l'`apply -k` ci-dessus : ne
+> pas l'en sortir. Symptôme inverse (apps `Unknown` en masse après coup) → vérifier d'abord ce
+> Secret.
 
 ### 2.3 Fixer le mot de passe admin
 

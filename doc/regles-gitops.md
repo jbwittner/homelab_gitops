@@ -46,13 +46,21 @@ bootstrap**, pas une écriture d'état : il ne crée ni ne modifie aucune ressou
 - Procédure : [`bleu-kalecgos/infra/sealed-secrets/README.md`](../bleu-kalecgos/infra/sealed-secrets/README.md).
 
 > [!NOTE]
-> **Seule exception admise à « pas de `kind: Secret` dans Git » : un Secret sans données.** Un
-> Secret dont le manifeste ne porte ni `data:` ni `stringData:`, et qui n'est qu'une **coquille
-> remplie par un contrôleur du cluster**, ne contient par construction aucun secret. Cas unique
-> aujourd'hui : `argocd-manager-token`
-> ([`bleu-arcanagos/infra/argocd-manager`](../bleu-arcanagos/infra/argocd-manager/README.md)),
-> rempli par le token controller. Il exige un `ignoreDifferences` sur `/data`. Toute autre forme
-> de Secret committé reste interdite.
+> **Exceptions admises à « pas de `kind: Secret` dans Git » — un Secret dont le manifeste ne
+> porte aucun credential.** Deux formes, deux cas, et rien d'autre :
+> - **Coquille remplie par un contrôleur du cluster** : ni `data:` ni `stringData:` dans le
+>   manifeste. Cas unique : `argocd-manager-token`
+>   ([`bleu-arcanagos/infra/argocd-manager`](../bleu-arcanagos/infra/argocd-manager/README.md)),
+>   rempli par le token controller. Exige un `ignoreDifferences` sur `/data`.
+> - **Secret de cluster du cluster local** : `cluster-bleu-kalecgos`
+>   ([`bleu-kalecgos/infra/argocd/manifests/cluster-bleu-kalecgos.yaml`](../bleu-kalecgos/infra/argocd/manifests/cluster-bleu-kalecgos.yaml)),
+>   qui nomme le cluster hébergeant l'ArgoCD. Son `stringData` ne porte qu'un nom, l'URL interne
+>   `https://kubernetes.default.svc` et `{"tlsClientConfig":{"insecure":false}}` : sur cette
+>   adresse ArgoCD se connecte via son propre ServiceAccount et **ignore** toute identité qu'on y
+>   mettrait. Rien à sceller. Le Secret de cluster d'un **spoke**, lui, porte un bearer token :
+>   `SealedSecret` obligatoire (`cluster-bleu-arcanagos`).
+>
+> Toute autre forme de Secret committé reste interdite.
 
 > [!CAUTION]
 > **La clé privée du contrôleur est le seul état non reconstructible du cluster.** Tout le reste

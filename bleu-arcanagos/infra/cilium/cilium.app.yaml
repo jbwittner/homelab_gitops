@@ -32,7 +32,7 @@ spec:
       path: bleu-arcanagos/infra/cilium/manifests
   destination:
     # ⚠️ Cluster DISTANT (modèle hub-spoke : l'ArgoCD de bleu-kalecgos pilote ce cluster).
-    # Surtout pas `https://kubernetes.default.svc` : l'Application vit dans l'ArgoCD du hub, ce
+    # Surtout pas `bleu-kalecgos` (le hub) : l'Application vit dans l'ArgoCD du hub, ce
     # qui poserait Cilium sur le hub et entrerait en collision avec sa propre release `cilium`.
     # Le nom doit matcher le Secret de cluster côté hub (cf. infra/argocd-manager/README.md).
     name: bleu-arcanagos

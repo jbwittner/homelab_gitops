@@ -37,7 +37,7 @@ spec:
       targetRevision: main
       path: bleu-kalecgos/infra/openebs/manifests
   destination:
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: openebs
   syncPolicy:
     automated:

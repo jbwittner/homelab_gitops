@@ -18,7 +18,7 @@ spec:
     targetRevision: main
     path: bleu-kalecgos/infra/gateway-api/manifests
   destination:
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: kube-system
   syncPolicy:
     automated:

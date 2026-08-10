@@ -26,7 +26,7 @@ spec:
     # ⚠️ Le HUB, pas le spoke. Un tier-1/tier-2 ne produit que des objets `Application`, qui
     # doivent vivre là où tourne l'ArgoCD qui les lit — c'est-à-dire bleu-kalecgos. Seuls les
     # `.app.yaml` feuilles portent `destination.name: bleu-arcanagos`.
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: argocd
   syncPolicy:
     automated:

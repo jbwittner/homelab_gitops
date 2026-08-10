@@ -30,7 +30,7 @@ spec:
       targetRevision: main
       path: bleu-kalecgos/app/alloy/manifests
   destination:
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: alloy
   syncPolicy:
     automated:

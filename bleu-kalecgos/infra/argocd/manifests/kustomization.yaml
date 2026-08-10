@@ -14,6 +14,7 @@ resources:
   - argocd-httproute.yaml
   - argocd-oidc.sealed.yaml
   - argocd-notifications.sealed.yaml
+  - cluster-bleu-kalecgos.yaml
   - cluster-bleu-arcanagos.sealed.yaml
   # Référencer un fichier inexistant casse `kustomize build` → app self-managed en erreur.
 patches:

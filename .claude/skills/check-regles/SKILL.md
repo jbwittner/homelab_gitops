@@ -73,11 +73,12 @@ Checklist minimale (complétée par ce que disent les fichiers doc/) :
 13. **Archétype** : la forme du composant correspond à un archétype (a)/(b)/(c)/(d) de
     doc/conventions.md ; signaler un archétype (d) avec `helm-values.yaml` présent
     (devrait migrer en (a)) ou toute forme hybride non répertoriée.
-14. **Destination** (doc/conventions.md, « Chaîne de découverte ») : un `cluster.yaml` ou un
-    `*.bootstrap.yaml` cible **toujours** le hub (`server: https://kubernetes.default.svc`,
-    ns `argocd`) ; un `*.app.yaml` feuille cible le cluster visé — `name: <cluster>` sur un
-    spoke. Une feuille de spoke laissée sur `kubernetes.default.svc` déploie **sur le hub** :
-    violation critique.
+14. **Destination** (doc/conventions.md, « Chaîne de découverte ») : toute `destination` se
+    désigne par `name: <cluster>`, jamais par `server:` — un `cluster.yaml` ou un
+    `*.bootstrap.yaml` cible **toujours** le hub (`name: bleu-kalecgos`, ns `argocd`) ; un
+    `*.app.yaml` feuille cible le cluster visé (`name: bleu-arcanagos` sur un spoke). Une
+    feuille de spoke laissée sur le hub y déploie ses ressources : violation critique. Un
+    `server: https://kubernetes.default.svc` résiduel est une violation en soi.
 15. **Index cluster** : le composant apparaît dans `<cluster>/README.md` avec un **lien valide
     vers son README** (ex. `[cilium](infra/cilium/README.md)`). Vérifier aussi l'inverse quand
     l'audit porte sur un arbre : aucune entrée de l'index ne pointe vers un composant supprimé.

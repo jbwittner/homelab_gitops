@@ -27,7 +27,7 @@ spec:
       targetRevision: main
       path: bleu-kalecgos/app/authentik/manifests
   destination:
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: authentik
   syncPolicy:
     automated:

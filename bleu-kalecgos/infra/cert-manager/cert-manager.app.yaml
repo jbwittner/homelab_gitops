@@ -28,7 +28,7 @@ spec:
       targetRevision: main
       ref: values
   destination:
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: cert-manager
   syncPolicy:
     automated:

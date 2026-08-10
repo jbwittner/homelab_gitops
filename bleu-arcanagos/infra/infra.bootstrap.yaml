@@ -22,7 +22,7 @@ spec:
       recurse: true
       include: '*.app.yaml'
   destination:
-    server: https://kubernetes.default.svc     # le HUB : ce tier ne produit que des Application
+    name: bleu-kalecgos     # le HUB : ce tier ne produit que des Application
     namespace: argocd
   syncPolicy:
     automated:

@@ -22,7 +22,7 @@ spec:
       recurse: true
       include: '*.app.yaml'
   destination:
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: argocd
   syncPolicy:
     automated:

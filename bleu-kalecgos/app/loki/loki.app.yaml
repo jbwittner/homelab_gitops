@@ -31,7 +31,7 @@ spec:
       targetRevision: main
       path: bleu-kalecgos/app/loki/manifests
   destination:
-    server: https://kubernetes.default.svc
+    name: bleu-kalecgos
     namespace: loki
   syncPolicy:
     automated:

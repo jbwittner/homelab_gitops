@@ -42,14 +42,14 @@ Ce cluster n'a **pas d'ArgoCD à lui** : il est piloté à distance par celui de
 | Élément | Valeur |
 |---|---|
 | ArgoCD qui réconcilie | celui du hub `bleu-kalecgos`, namespace `argocd` |
-| `destination` des `.app.yaml` feuilles | `name: bleu-arcanagos` — **jamais** `server: https://kubernetes.default.svc` |
-| `destination` du tier-1 / des tier-2 | le hub (`kubernetes.default.svc`, ns `argocd`) : ils ne produisent que des `Application` |
+| `destination` des `.app.yaml` feuilles | `name: bleu-arcanagos` — **jamais** `name: bleu-kalecgos` |
+| `destination` du tier-1 / des tier-2 | le hub (`name: bleu-kalecgos`, ns `argocd`) : ils ne produisent que des `Application` |
 | `metadata.name` des Applications | préfixé `bleu-arcanagos-…` — namespace `argocd` partagé avec le hub |
 | Identité utilisée | `kube-system/argocd-manager` (`cluster-admin`), cf. [`infra/argocd-manager/README.md`](../../bleu-arcanagos/infra/argocd-manager/README.md) |
 | Secret d'enregistrement | `cluster-bleu-arcanagos` dans l'`argocd` du hub, scellé avec la clé **du hub** |
 
 > [!CAUTION]
-> Un `.app.yaml` de ce cluster laissé sur `server: https://kubernetes.default.svc` déploierait
+> Un `.app.yaml` de ce cluster laissé sur `name: bleu-kalecgos` déploierait
 > sur le **hub**. Pour `cilium`, cela signifie une collision avec la release `cilium` du hub,
 > donc son CNI. Vérifier la `destination` à chaque nouveau composant.
 

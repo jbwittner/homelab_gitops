@@ -48,6 +48,12 @@ kubectl apply -f bleu-kalecgos/cluster.yaml
   annotation d'adoption sealed-secrets, aucune donnée (cf. §Notifications)
 - `manifests/argocd-notifications.sealed.yaml` — SealedSecret `argocd-notifications-secret`,
   clé `grafana-api-key`
+- `manifests/cluster-bleu-kalecgos.yaml` — Secret de cluster qui **nomme le cluster local**
+  `bleu-kalecgos` (sans lui : entrée `in-cluster` codée en dur). Aucun credential dedans → clair,
+  rien à sceller (cf. §Nommage du cluster local)
+- `manifests/cluster-bleu-arcanagos.sealed.yaml` — SealedSecret du cluster **spoke**
+  `bleu-arcanagos` (bearer token du SA `argocd-manager`, cf.
+  [bleu-arcanagos/infra/argocd-manager](../../../bleu-arcanagos/infra/argocd-manager/README.md))
 
 ## Contraintes — self-management
 

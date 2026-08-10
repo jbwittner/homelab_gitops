@@ -16,8 +16,8 @@ piloté à distance (spoke). Seule la `destination` change, et pas au même éta
 
 | Étage | Produit | `destination` |
 |---|---|---|
-| tier 1 (`cluster.yaml`) et tier 2 (`*.bootstrap.yaml`) | des objets `Application` | **toujours le hub** — `server: https://kubernetes.default.svc`, ns `argocd` |
-| tier 2 → feuilles (`*.app.yaml`) | les ressources réelles | le cluster visé — `name: <cluster>` sur un spoke |
+| tier 1 (`cluster.yaml`) et tier 2 (`*.bootstrap.yaml`) | des objets `Application` | **toujours le hub** — `name: bleu-kalecgos`, ns `argocd` |
+| tier 2 → feuilles (`*.app.yaml`) | les ressources réelles | le cluster visé — `name: <cluster>` |
 
 Onboarder un cluster = un `<cluster>/cluster.yaml`, appliqué **sur le hub**.
 
@@ -42,9 +42,13 @@ Onboarder un cluster = un `<cluster>/cluster.yaml`, appliqué **sur le hub**.
 - **Labels obligatoires** : `app.kubernetes.io/name`, `app.kubernetes.io/part-of: homelab-gitops`,
   `app.kubernetes.io/component`.
 - **`targetRevision: main`** sur toute source git de ce repo.
-- **`destination`** : `server: https://kubernetes.default.svc` pour un cluster qui héberge son
-  propre ArgoCD ; `name: <cluster>` pour un cluster **spoke** piloté à distance par le hub — le
-  nom est celui du Secret de cluster côté hub. Se tromper déploie le composant **sur le hub**.
+- **`destination`** : **toujours `name: <cluster>`, jamais `server:`** — y compris pour le hub,
+  qui se désigne `name: bleu-kalecgos` et non par l'URL interne. Le nom est celui porté par le
+  Secret de cluster du namespace `argocd` **du hub** (`cluster-<cluster>`), y compris pour le
+  cluster local : c'est
+  [`bleu-kalecgos/infra/argocd/manifests/cluster-bleu-kalecgos.yaml`](../bleu-kalecgos/infra/argocd/manifests/cluster-bleu-kalecgos.yaml)
+  qui remplace l'entrée `in-cluster` codée en dur d'ArgoCD. Une destination lue au nom du cluster
+  se relit sans ambiguïté ; se tromper de nom déploie le composant **sur le mauvais cluster**.
 - **`releaseName` explicite** sur toute source Helm.
 - Pas de `CreateNamespace=true` quand `manifests/namespace.yaml` porte le namespace
   (nécessaire dès que le ns doit être labellisé, ex. PSA `privileged` pour `openebs` et `alloy`).
