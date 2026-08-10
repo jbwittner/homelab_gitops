@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bleu-arcanagos-app
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: bleu-arcanagos-app
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: app-of-apps
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # App-of-apps de la partie APP de bleu-arcanagos : découvre tous les composants app
+  # (recurse + include '*.app.yaml' → matche app/<name>/<name>.app.yaml, PAS ce fichier
+  # *.bootstrap.yaml qui a un suffixe différent).
+  # Aucun composant applicatif à ce jour : l'Application reste Synced/Healthy à vide, et
+  # accueillera le premier `app/<name>/` sans nouveau geste de bootstrap.
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: bleu-arcanagos/app
+    directory:
+      recurse: true
+      include: '*.app.yaml'
+  destination:
+    server: https://kubernetes.default.svc     # le HUB : ce tier ne produit que des Application
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

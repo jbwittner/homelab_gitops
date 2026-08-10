@@ -1,7 +1,9 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cilium
+  # Préfixe `<cluster>-` obligatoire sur un spoke : toutes les Applications des deux clusters
+  # cohabitent dans le namespace `argocd` du hub, et `cilium` y est déjà pris par bleu-kalecgos.
+  name: bleu-arcanagos-cilium
   namespace: argocd
   labels:
     app.kubernetes.io/name: cilium

@@ -1,7 +1,9 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: argocd-manager
+  # Préfixe `<cluster>-` obligatoire sur un spoke : toutes les Applications des deux clusters
+  # cohabitent dans le namespace `argocd` du hub (cf. doc/conventions.md).
+  name: bleu-arcanagos-argocd-manager
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-20"       # avant tout : c'est le credential d'accès au cluster

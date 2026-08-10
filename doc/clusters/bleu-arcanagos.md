@@ -14,20 +14,20 @@ Valeurs propres à ce cluster. La **procédure** de bootstrap / disaster recover
 vit dans [runbook-bootstrap.md](../runbook-bootstrap.md).
 
 > [!WARNING]
-> **Cluster en cours de construction.** Seuls `infra/cilium/` et `infra/argocd-manager/`
-> existent. Il manque, dans l'ordre où le runbook les exige :
+> **Cluster en cours de construction.** La chaîne app-of-apps est complète (`cluster.yaml`,
+> `infra/infra.bootstrap.yaml`, `app/app.bootstrap.yaml`) et deux composants existent
+> (`infra/argocd-manager/`, `infra/cilium/`). Il manque :
 >
-> - `bleu-arcanagos/cluster.yaml` (tier-1) et `infra/infra.bootstrap.yaml` (tier-2) → **aucun
->   manifeste de ce cluster n'est découvert par ArgoCD aujourd'hui** ;
-> - le `SealedSecret` de cluster côté hub (`cluster-bleu-arcanagos`) → le hub ne connaît pas
->   encore ce cluster, donc les `destination.name: bleu-arcanagos` ne résolvent pas ;
+> - le `SealedSecret` de cluster côté hub (`cluster-bleu-arcanagos`) → **le hub ne connaît pas
+>   encore ce cluster**, donc les `destination.name: bleu-arcanagos` ne résolvent pas et rien
+>   n'est réconcilié. C'est le prérequis de tout le reste ;
 > - `infra/gateway-api/`, `infra/cert-manager/`, `infra/cert-manager-config/` → pas d'étape 5 ni 6 ;
 > - `infra/sealed-secrets/` et tout `*.sealed.yaml` **local** → étapes 3 et 8 sans objet ;
 > - `infra/openebs/` → pas d'étape 7 ;
-> - `app/` et `app/app.bootstrap.yaml`.
+> - tout composant applicatif (`app/` ne contient que son bootstrap).
 >
-> **En l'état, le runbook s'arrête à l'étape 1.** Les lignes `— (non défini)` ci-dessous ne sont
-> pas des oublis de documentation : la valeur n'existe pas encore dans le repo.
+> Les lignes `— (non défini)` ci-dessous ne sont pas des oublis de documentation : la valeur
+> n'existe pas encore dans le repo.
 
 ```bash
 export CLUSTER=bleu-arcanagos
@@ -42,7 +42,9 @@ Ce cluster n'a **pas d'ArgoCD à lui** : il est piloté à distance par celui de
 | Élément | Valeur |
 |---|---|
 | ArgoCD qui réconcilie | celui du hub `bleu-kalecgos`, namespace `argocd` |
-| `destination` des `.app.yaml` | `name: bleu-arcanagos` — **jamais** `server: https://kubernetes.default.svc` |
+| `destination` des `.app.yaml` feuilles | `name: bleu-arcanagos` — **jamais** `server: https://kubernetes.default.svc` |
+| `destination` du tier-1 / des tier-2 | le hub (`kubernetes.default.svc`, ns `argocd`) : ils ne produisent que des `Application` |
+| `metadata.name` des Applications | préfixé `bleu-arcanagos-…` — namespace `argocd` partagé avec le hub |
 | Identité utilisée | `kube-system/argocd-manager` (`cluster-admin`), cf. [`infra/argocd-manager/README.md`](../../bleu-arcanagos/infra/argocd-manager/README.md) |
 | Secret d'enregistrement | `cluster-bleu-arcanagos` dans l'`argocd` du hub, scellé avec la clé **du hub** |
 

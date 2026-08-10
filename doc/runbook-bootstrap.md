@@ -35,13 +35,21 @@ export CLUSTER_DOMAIN=kalecgos.lan.wittner.tech     # wildcard interne du cluste
 | Cluster | Fiche | État |
 |---|---|---|
 | `bleu-kalecgos` | [clusters/bleu-kalecgos.md](clusters/bleu-kalecgos.md) | complet — les 8 étapes s'appliquent |
-| `bleu-arcanagos` | [clusters/bleu-arcanagos.md](clusters/bleu-arcanagos.md) | en construction — s'arrête à l'étape 1 |
+| `bleu-arcanagos` | [clusters/bleu-arcanagos.md](clusters/bleu-arcanagos.md) | en construction — **spoke** : étapes 1, 2bis, 4 ; pas d'étapes 2, 3, 5 à 8 |
 
 > [!NOTE]
 > **Cluster partiel.** Un cluster dont la fiche marque des composants absents s'arrête à l'étape
 > correspondante : pas d'`argocd/manifests/` → pas d'étape 2 ni au-delà ; pas de `gateway-api` →
 > pas d'étape 5 ; pas d'`openebs` → pas d'étape 7 ; aucun `SealedSecret` → étapes 3 et 8 sans
 > objet. La fiche fait foi.
+
+> [!IMPORTANT]
+> **Hub ou spoke ?** La fiche du cluster le dit. Un cluster **hub** héberge son ArgoCD et suit
+> les 8 étapes. Un cluster **spoke** est piloté par l'ArgoCD d'un hub déjà debout : il n'installe
+> **pas** ArgoCD (pas d'étape 2) ni de contrôleur sealed-secrets (pas d'étape 3), et remplace
+> l'étape 2 par l'**étape 2bis** ci-dessous. Les étapes 5 à 8 ne le concernent que s'il porte les
+> composants correspondants. Les gestes d'un spoke se répartissent entre **deux** kubeconfigs :
+> le sien et celui du hub — chaque commande précise lequel.
 
 ## Point d'entrée — ce qu'on suppose déjà là
 
@@ -169,9 +177,10 @@ se créent après coup, une fois ce service en marche.
 ```
 0. Cluster vierge, sans CNI, kubeconfig en main
 1. Cilium (CNI) — sans lui, RIEN ne schedule
-2. ArgoCD (kustomize épinglé, apply -k)          ← geste manuel n°1
-3. Clé sealed-secrets restaurée                  ← geste manuel n°2 (DR uniquement)
-4. Tier-1 app-of-apps (apply cluster.yaml)       ← geste manuel n°3
+2. ArgoCD (kustomize épinglé, apply -k)          ← geste manuel n°1   [hub]
+2bis. SA argocd-manager + Secret de cluster      ← geste manuel n°1'  [spoke]
+3. Clé sealed-secrets restaurée                  ← geste manuel n°2 (DR uniquement, hub)
+4. Tier-1 app-of-apps (apply cluster.yaml)       ← geste manuel n°3, TOUJOURS sur le hub
      └─ déroule seul : gateway-api (-10) → sealed-secrets (-8) → cert-manager (-5)
         → cert-manager-config (-4) → argocd (-1) → cilium/openebs/apps (0)
 5. Exposition : Gateway programmée + restart one-shot de cilium-operator + DNS
@@ -318,6 +327,44 @@ kubectl -n argocd delete secret argocd-initial-admin-secret   # le hash actif vi
 
 ---
 
+## Étape 2bis — Enregistrer un cluster spoke dans le hub
+
+> [!NOTE]
+> **Spoke uniquement** — remplace l'étape 2. Un cluster hub saute cette section.
+
+Le hub ne peut rien réconcilier sur un cluster qu'il ne sait pas joindre. L'identité vit dans le
+repo (`${CLUSTER}/infra/argocd-manager/`), le credential dérivé vit dans un `SealedSecret` du hub.
+
+```bash
+# a. sur le SPOKE — poser l'identité (geste de bootstrap, adopté ensuite par l'Application)
+kubectl apply -k ${CLUSTER}/infra/argocd-manager/manifests
+```
+
+```bash
+# b. sur le HUB — vérifier que le Secret de cluster est bien là avant d'aller plus loin
+kubectl -n argocd get secret cluster-${CLUSTER}
+```
+
+S'il n'existe pas, c'est une **première construction** : relever le token, le CA et l'URL de
+l'apiserver sur le spoke, sceller le Secret de cluster avec la clé **du hub**, committer. La
+procédure complète, avec le mapping exact des trois valeurs et leur encodage, est dans
+[`argocd-manager/README.md`](../bleu-arcanagos/infra/argocd-manager/README.md).
+
+> [!WARNING]
+> `argocd cluster add` fait le même travail **impérativement** : le Secret n'existe alors que
+> dans le cluster, il disparaît au premier rebuild du hub. Passer par le `SealedSecret`.
+
+**Vérification** — depuis le hub :
+
+```bash
+argocd cluster list                       # ${CLUSTER} présent, Successful
+```
+
+Un cluster `Unknown` tant qu'aucune Application ne le vise est normal : le statut se réveille à
+l'étape 4.
+
+---
+
 ## Étape 3 — Restaurer la clé sealed-secrets
 
 > [!CAUTION]
@@ -368,6 +415,10 @@ revenir à un état propre : supprimer la clé neuve, puis `rollout restart`.
 
 ## Étape 4 — Tier-1 app-of-apps
 
+**Toujours sur le HUB** — y compris pour un spoke : le tier-1 et les tier-2 ne produisent que des
+objets `Application`, qui vivent là où tourne l'ArgoCD qui les lit. Seules les feuilles
+(`*.app.yaml`) portent une `destination` vers le cluster visé.
+
 ```bash
 kubectl apply -f ${CLUSTER}/cluster.yaml
 ```
@@ -392,8 +443,9 @@ kubectl get applications -n argocd
 ```
 
 Attendu au minimum : `${CLUSTER}-cluster`, `${CLUSTER}-infra`, `${CLUSTER}-app`, plus la liste
-des composants de la fiche du cluster. `cilium` doit passer `Synced/Healthy` **sans rien
-modifier** (adoption du `helm install` de l'étape 1).
+des composants de la fiche du cluster — **préfixés `${CLUSTER}-` sur un spoke**
+(`bleu-arcanagos-cilium`), non préfixés sur un hub (`cilium`). L'Application Cilium doit passer
+`Synced/Healthy` **sans rien modifier** (adoption du `helm install` de l'étape 1).
 
 ---
 

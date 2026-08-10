@@ -20,12 +20,13 @@
 
 ### Les gestes impératifs assumés (et leur périmètre exact)
 
-Ils sont au nombre de quatre, tous documentés dans le runbook. Aucun autre n'est légitime :
+Ils sont au nombre de cinq, tous documentés dans le runbook. Aucun autre n'est légitime :
 
 | Geste | Quand | Pourquoi il ne peut pas être GitOps |
 |---|---|---|
 | `helm install cilium …` | bootstrap, une fois | Sans CNI, ArgoCD ne peut pas démarrer. La release est ensuite **adoptée** par l'Application `cilium`. |
 | `kubectl apply -k …/argocd/manifests --server-side` | bootstrap, une fois | Il faut ArgoCD pour faire du GitOps. Même dossier que l'Application self-managed → convergence immédiate. |
+| `kubectl apply -k <cluster>/infra/argocd-manager/manifests` | bootstrap d'un **spoke**, une fois | Le hub ne peut pas poser l'identité avec laquelle il joindra le cluster : sans elle, il ne le joint pas. Même dossier que l'Application → adoption immédiate. |
 | `kubectl apply -f sealed-secrets-key-<cluster>.yaml` | DR | La clé privée ne peut pas vivre dans Git, par définition. |
 | Mot de passe admin ArgoCD | bootstrap | `argocd-secret` n'est pas dans le kustomize ; le hash survit aux syncs. |
 

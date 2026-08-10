@@ -39,7 +39,10 @@ Checklist minimale (complétée par ce que disent les fichiers doc/) :
 1. **Découverte** : le fichier Application a le suffixe **exact** `.app.yaml`
    (piège : `.app.yml`, `-app.yaml`, `.application.yaml` → non découvert par le glob).
 2. **Naming** : `metadata.name` de l'Application = nom du dossier = préfixe du fichier
-   (`<name>/<name>.app.yaml`).
+   (`<name>/<name>.app.yaml`). Sur un cluster **spoke** (pas d'ArgoCD local, cf. la fiche du
+   cluster) : `metadata.name` = `<cluster>-<dossier>`, dossier et nom de fichier **sans**
+   préfixe. Signaler tout nom d'Application en collision avec celui d'un autre cluster du repo :
+   toutes les Applications partagent le namespace `argocd` du hub.
 3. **Labels obligatoires** sur l'Application : `app.kubernetes.io/name`,
    `app.kubernetes.io/part-of: homelab-gitops`, `app.kubernetes.io/component`.
 4. **Sources git de ce repo** : `targetRevision: main`.
@@ -70,7 +73,12 @@ Checklist minimale (complétée par ce que disent les fichiers doc/) :
 13. **Archétype** : la forme du composant correspond à un archétype (a)/(b)/(c)/(d) de
     doc/conventions.md ; signaler un archétype (d) avec `helm-values.yaml` présent
     (devrait migrer en (a)) ou toute forme hybride non répertoriée.
-14. **Index cluster** : le composant apparaît dans `<cluster>/README.md` avec un **lien valide
+14. **Destination** (doc/conventions.md, « Chaîne de découverte ») : un `cluster.yaml` ou un
+    `*.bootstrap.yaml` cible **toujours** le hub (`server: https://kubernetes.default.svc`,
+    ns `argocd`) ; un `*.app.yaml` feuille cible le cluster visé — `name: <cluster>` sur un
+    spoke. Une feuille de spoke laissée sur `kubernetes.default.svc` déploie **sur le hub** :
+    violation critique.
+15. **Index cluster** : le composant apparaît dans `<cluster>/README.md` avec un **lien valide
     vers son README** (ex. `[cilium](infra/cilium/README.md)`). Vérifier aussi l'inverse quand
     l'audit porte sur un arbre : aucune entrée de l'index ne pointe vers un composant supprimé.
     Le README racine doit lister le README du cluster.

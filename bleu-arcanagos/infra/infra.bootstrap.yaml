@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bleu-arcanagos-infra
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: bleu-arcanagos-infra
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: app-of-apps
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # App-of-apps de la partie INFRA de bleu-arcanagos : découvre tous les composants infra
+  # (recurse + include '*.app.yaml' → matche infra/<name>/<name>.app.yaml, PAS ce fichier
+  # *.bootstrap.yaml qui a un suffixe différent).
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: bleu-arcanagos/infra
+    directory:
+      recurse: true
+      include: '*.app.yaml'
+  destination:
+    server: https://kubernetes.default.svc     # le HUB : ce tier ne produit que des Application
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

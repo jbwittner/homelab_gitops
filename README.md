@@ -15,7 +15,7 @@ cluster en cours de construction, **bleu-arcanagos**. Chacun est piloté intégr
 ```
 homelab_gitops/
 ├── bleu-kalecgos/    # cluster actif (app-of-apps) — infra/ + app/
-├── bleu-arcanagos/   # cluster en construction (spoke du hub) — pas encore câblé à ArgoCD
+├── bleu-arcanagos/   # cluster en construction (spoke) — app-of-apps prête, hub pas encore branché
 ├── doc/              # règles, conventions, runbook
 │   └── clusters/     # une fiche par cluster (valeurs : réseau, disque, secrets)
 ├── renovate.json     # politique de mise à jour des dépendances (cooldown 7 j, automerge)
@@ -28,7 +28,8 @@ homelab_gitops/
 - [bleu-kalecgos](bleu-kalecgos/README.md) — cluster actif et **hub** ArgoCD (liste des
   composants déployés) — [fiche](doc/clusters/bleu-kalecgos.md)
 - [bleu-arcanagos](bleu-arcanagos/README.md) — en construction, **spoke** piloté par l'ArgoCD du
-  hub, pas encore découvert — [fiche](doc/clusters/bleu-arcanagos.md)
+  hub ; chaîne app-of-apps en place, reste à enregistrer le cluster dans le hub —
+  [fiche](doc/clusters/bleu-arcanagos.md)
 
 ## Documentation
 
@@ -47,9 +48,10 @@ homelab_gitops/
 
 Le [runbook](doc/runbook-bootstrap.md) part d'un **cluster Kubernetes vierge, sans CNI** et va
 jusqu'à la stack complète. Trois gestes manuels seulement (Cilium, `apply -k` d'ArgoCD,
-restauration de la clé sealed-secrets) ; tout le reste converge par sync-waves. La procédure est
-générique : le cluster visé se choisit via `export CLUSTER=…`, ses valeurs vivent dans
-[doc/clusters/](doc/clusters/).
+restauration de la clé sealed-secrets) ; tout le reste converge par sync-waves. Un cluster
+**spoke** en fait deux : Cilium, puis la pose du `ServiceAccount` `argocd-manager` — il
+n'installe pas d'ArgoCD, celui du hub le pilote. La procédure est générique : le cluster visé se
+choisit via `export CLUSTER=…`, ses valeurs vivent dans [doc/clusters/](doc/clusters/).
 
 > [!CAUTION]
 > Le seul élément **non reconstructible** depuis ce dépôt est la **clé privée sealed-secrets**.

@@ -11,6 +11,16 @@
 ⚠️ Le suffixe **exact** `.app.yaml` est requis, sinon le composant n'est pas découvert. Les deux
 suffixes distincts (`.bootstrap.yaml` en tier 1, `.app.yaml` en tier 2) évitent l'auto-récursion.
 
+Cette chaîne est **identique pour tout cluster**, qu'il héberge son ArgoCD (hub) ou qu'il soit
+piloté à distance (spoke). Seule la `destination` change, et pas au même étage :
+
+| Étage | Produit | `destination` |
+|---|---|---|
+| tier 1 (`cluster.yaml`) et tier 2 (`*.bootstrap.yaml`) | des objets `Application` | **toujours le hub** — `server: https://kubernetes.default.svc`, ns `argocd` |
+| tier 2 → feuilles (`*.app.yaml`) | les ressources réelles | le cluster visé — `name: <cluster>` sur un spoke |
+
+Onboarder un cluster = un `<cluster>/cluster.yaml`, appliqué **sur le hub**.
+
 ## Squelette d'un composant
 
 ```
@@ -24,6 +34,11 @@ suffixes distincts (`.bootstrap.yaml` en tier 1, `.app.yaml` en tier 2) évitent
 ## Règles sur l'Application
 
 - **Nom** : `metadata.name` = nom du dossier = préfixe du fichier `.app.yaml`.
+  **Exception — cluster spoke** : `metadata.name` = `<cluster>-<dossier>`
+  (ex. `bleu-arcanagos-cilium`). Les Applications de **tous** les clusters cohabitent dans le
+  namespace `argocd` du hub : sans préfixe, deux clusters portant un composant homonyme
+  (`cilium`…) se disputent la même ressource, chacun avec son `prune: true`. Le **dossier** et le
+  **nom de fichier**, eux, ne prennent pas le préfixe : `infra/cilium/cilium.app.yaml`.
 - **Labels obligatoires** : `app.kubernetes.io/name`, `app.kubernetes.io/part-of: homelab-gitops`,
   `app.kubernetes.io/component`.
 - **`targetRevision: main`** sur toute source git de ce repo.
