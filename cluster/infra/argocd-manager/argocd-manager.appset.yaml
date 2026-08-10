@@ -38,6 +38,7 @@ spec:
         app.kubernetes.io/name: argocd-manager
         app.kubernetes.io/part-of: homelab-gitops
         app.kubernetes.io/component: gitops
+        homelab.wittner.tech/cluster: '{{.path.basename}}'
       # ⚠️ PAS de `resources-finalizer.argocd.argoproj.io`, contrairement aux autres composants :
       # la suppression en cascade détruirait le SA dont ArgoCD se sert pour joindre ce cluster,
       # donc ArgoCD ne pourrait plus terminer la suppression — Application bloquée sur son

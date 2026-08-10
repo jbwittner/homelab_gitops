@@ -24,8 +24,10 @@ l'ApplicationSet, `common/` en est explicitement exclu.
 - `<cluster>/manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool`, la seule ressource réellement
   spécifique : une plage **disjointe** par cluster, `192.168.1.80-84` (bleu-kalecgos),
   `192.168.1.85-89` (bleu-arcanagos) (cf. [doc/reseau.md](../../../doc/reseau.md))
-- `<cluster>/manifests/kustomization.yaml` — assemble `../../common/manifests` + `ip-pool.yaml`
-  et applique le `namePrefix: <cluster>-`, qui donne leurs noms finaux aux deux ressources.
+- `<cluster>/manifests/kustomization.yaml` — assemble `../../common/manifests` + `ip-pool.yaml`,
+  applique le `namePrefix: <cluster>-` qui donne leurs noms finaux aux deux ressources, et pose
+  les labels communs plus `homelab.wittner.tech/cluster: <cluster>`. C'est le seul endroit où le
+  nom du cluster est écrit en dur — les manifestes eux-mêmes n'en savent rien.
 
 ## Diverger sur un cluster
 

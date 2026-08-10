@@ -37,6 +37,10 @@ spec:
         app.kubernetes.io/name: cilium
         app.kubernetes.io/part-of: homelab-gitops
         app.kubernetes.io/component: cni
+        # Toutes les Applications des deux clusters cohabitent dans le namespace `argocd` du
+        # hub : ce label les rend sélectionnables par cluster
+        # (`kubectl -n argocd get app -l homelab.wittner.tech/cluster=bleu-arcanagos`).
+        homelab.wittner.tech/cluster: '{{.path.basename}}'
       # Sûr uniquement grâce à `preserveResourcesOnDeletion` ci-dessus : le contrôleur
       # ApplicationSet retire ce finalizer avant de supprimer une Application générée.
       finalizers:
