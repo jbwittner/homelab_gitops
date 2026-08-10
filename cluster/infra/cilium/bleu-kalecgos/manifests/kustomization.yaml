@@ -1,5 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
+# ⚠️ `namePrefix` restitue les noms historiques (`bleu-kalecgos-l2`, `bleu-kalecgos-pool`) à
+# partir des noms nus portés par les manifestes. Le changer renomme les ressources : Cilium
+# cesserait d'annoncer les IP de LB le temps que la nouvelle politique soit posée.
+namePrefix: bleu-kalecgos-
 resources:
+  - ../../common/manifests
   - ip-pool.yaml
-  - l2-policy.yaml

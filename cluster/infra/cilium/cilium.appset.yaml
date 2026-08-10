@@ -26,6 +26,10 @@ spec:
         # Un niveau de profondeur : ne matche que les dossiers de cluster, pas leurs `manifests/`.
         directories:
           - path: cluster/infra/cilium/*
+          # ⚠️ `common/` est un dossier partagé, pas un cluster : sans cette exclusion le
+          # generator produirait une Application `common-cilium` vers un cluster `common`.
+          - path: cluster/infra/cilium/common
+            exclude: true
   template:
     metadata:
       name: '{{.path.basename}}-cilium'
@@ -49,8 +53,14 @@ spec:
             # `helm install cilium` du bootstrap. Le changer renommerait toutes les ressources
             # Cilium et détruirait le CNI.
             releaseName: cilium
+            # Deux couches : les values communes, puis l'éventuelle surcharge du cluster.
+            # L'ordre fait foi — le second fichier écrase le premier.
             valueFiles:
+              - '$values/cluster/infra/cilium/common/helm-values.yaml'
               - '$values/{{.path.path}}/helm-values.yaml'
+            # Rend la surcharge facultative : aucun cluster n'en a aujourd'hui, et sans ce flag
+            # l'absence du fichier ferait échouer le rendu Helm.
+            ignoreMissingValueFiles: true
         - repoURL: https://github.com/jbwittner/homelab_gitops.git
           targetRevision: main
           ref: values

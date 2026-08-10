@@ -9,19 +9,32 @@ composant du [runbook](../../../doc/runbook-bootstrap.md).
 
 ## Fichiers
 
-Cilium tourne sur **tous** les clusters avec une conf propre à chacun : un sous-dossier par
-cluster, découvert par le generator git de l'ApplicationSet.
+Cilium tourne sur **tous** les clusters. Ce qui est commun vit dans `common/`, ce qui est propre
+à un cluster dans son sous-dossier — seul ce dernier est découvert par le generator git de
+l'ApplicationSet, `common/` en est explicitement exclu.
 
 - `cilium.appset.yaml` — ApplicationSet (archétype (b) : chart + `$values` + `manifests/`),
-  produit une Application `<cluster>-cilium` par sous-dossier. Version du chart épinglée dans
-  `targetRevision` (SemVer **sans `v`**), commune à tous les clusters.
-- `<cluster>/helm-values.yaml` — source unique des values : `kubeProxyReplacement`,
-  `l2announcements`, `gatewayAPI`, `k8sServiceHost`/`k8sServicePort` (endpoint apiserver local
-  du nœud), `cgroup.autoMount: false` (le cgroup est monté par l'hôte)
-- `<cluster>/manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool`, une plage **disjointe** par
-  cluster : `192.168.1.80-84` (bleu-kalecgos), `192.168.1.85-89` (bleu-arcanagos)
-  (cf. [doc/reseau.md](../../../doc/reseau.md))
-- `<cluster>/manifests/l2-policy.yaml` — `CiliumL2AnnouncementPolicy`, annonce L2 des IP de LB
+  produit une Application `<cluster>-cilium` par sous-dossier de cluster. Version du chart
+  épinglée dans `targetRevision` (SemVer **sans `v`**), commune à tous les clusters.
+- `common/helm-values.yaml` — values communes : `kubeProxyReplacement`, `l2announcements`,
+  `gatewayAPI`, `k8sServiceHost`/`k8sServicePort` (endpoint apiserver local du nœud),
+  `cgroup.autoMount: false` (le cgroup est monté par l'hôte)
+- `common/manifests/l2-policy.yaml` — `CiliumL2AnnouncementPolicy`, annonce L2 des IP de LB.
+  Identique partout, donc porté une seule fois.
+- `<cluster>/manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool`, la seule ressource réellement
+  spécifique : une plage **disjointe** par cluster, `192.168.1.80-84` (bleu-kalecgos),
+  `192.168.1.85-89` (bleu-arcanagos) (cf. [doc/reseau.md](../../../doc/reseau.md))
+- `<cluster>/manifests/kustomization.yaml` — assemble `../../common/manifests` + `ip-pool.yaml`
+  et applique le `namePrefix: <cluster>-`, qui donne leurs noms finaux aux deux ressources.
+
+## Diverger sur un cluster
+
+- **Une value** : créer `<cluster>/helm-values.yaml` avec les seules clés à écraser. Il est
+  chargé après `common/helm-values.yaml` et reste facultatif (`ignoreMissingValueFiles`).
+- **Une ressource** : l'ajouter à `<cluster>/manifests/` et la référencer dans son
+  `kustomization.yaml`. Pour en *modifier* une de `common/`, un `patches:` au même endroit.
+- **Un cluster de plus** : créer `<cluster>/manifests/{kustomization.yaml,ip-pool.yaml}` sur le
+  modèle d'un existant. Le generator le découvre, rien d'autre à toucher.
 
 ## Contraintes
 

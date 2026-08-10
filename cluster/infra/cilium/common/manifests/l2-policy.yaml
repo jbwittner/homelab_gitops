@@ -1,10 +1,11 @@
 apiVersion: cilium.io/v2alpha1
 kind: CiliumL2AnnouncementPolicy
 metadata:
-  name: bleu-kalecgos-l2
+  # Le `namePrefix` du kustomization.yaml de chaque cluster préfixe ce nom → `<cluster>-l2`.
+  name: l2
 spec:
   loadBalancerIPs: true
-  # Pour restreindre à l'interface physique de vert-eranikus :
+  # Pour restreindre à l'interface physique du nœud :
   # interfaces:
   #   - ^enp1s0$
   nodeSelector:

@@ -1,4 +1,7 @@
-# helm-values.yaml — source unique Cilium pour bleu-kalecgos
+# helm-values.yaml — values Cilium COMMUNES à tous les clusters.
+# Un cluster qui doit diverger pose un `<cluster>/helm-values.yaml` : il est chargé après
+# celui-ci et ne redéclare que les clés à écraser (`ignoreMissingValueFiles` côté appset rend
+# ce second fichier facultatif).
 ipam:
   mode: kubernetes
 kubeProxyReplacement: true

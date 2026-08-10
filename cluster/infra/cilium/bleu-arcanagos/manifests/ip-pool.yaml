@@ -1,7 +1,8 @@
 apiVersion: cilium.io/v2
 kind: CiliumLoadBalancerIPPool
 metadata:
-  name: bleu-arcanagos-pool
+  # Préfixé par le `namePrefix` du kustomization.yaml → `bleu-arcanagos-pool`.
+  name: pool
 spec:
   blocks:
     - start: "192.168.1.85"
