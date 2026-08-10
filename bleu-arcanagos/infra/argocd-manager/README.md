@@ -42,9 +42,25 @@ Geste manuel unique, sur le cluster **arcanagos** (kubeconfig pointant dessus) :
 ```bash
 kubectl apply -k bleu-arcanagos/infra/argocd-manager/manifests
 kubectl -n kube-system get secret argocd-manager-token -o jsonpath='{.data.token}' | base64 -d ; echo
-kubectl -n kube-system get secret argocd-manager-token -o jsonpath='{.data.ca\.crt}'        # déjà en base64
-kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' ; echo             # URL de l'apiserver
+kubectl -n kube-system get secret argocd-manager-token -o jsonpath='{.data.ca\.crt}' ; echo
+kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' ; echo
 ```
+
+Le token controller remplit **trois** clés dans `argocd-manager-token` ; les voici mappées sur le
+Secret de cluster du hub :
+
+| Sortie | Champ côté hub | Encodage |
+|---|---|---|
+| `.data.token` | `config.bearerToken` | **à décoder** (`base64 -d`) : il part dans une chaîne JSON |
+| `.data.ca\.crt` | `config.tlsClientConfig.caData` | **à copier tel quel** : `.data.` est déjà en base64, et `caData` attend du base64 de PEM |
+| `.clusters[0].cluster.server` (kubeconfig) | `server` | texte brut |
+
+> [!TIP]
+> Si le Secret n'est pas encore rempli, le CA se récupère aussi ailleurs — même valeur :
+> ```bash
+> kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' ; echo
+> kubectl -n kube-system get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' | base64 -w0 ; echo   # PEM → à encoder
+> ```
 
 Puis, côté **hub** : le cluster s'enregistre par un Secret ArgoCD, donc par un `SealedSecret`
 committé — pas par `argocd cluster add`, qui est une écriture impérative. Renseigner le template
@@ -61,9 +77,9 @@ metadata:
     argocd.argoproj.io/secret-type: cluster
 stringData:
   name: bleu-arcanagos          # doit matcher destination.name des .app.yaml de ce cluster
-  server: https://<apiserver>:6443
+  server: https://<apiserver>:6443                     # sortie de kubectl config view
   config: |
-    {"bearerToken":"<token>","tlsClientConfig":{"insecure":false,"caData":"<ca.crt base64>"}}
+    {"bearerToken":"<token décodé>","tlsClientConfig":{"insecure":false,"caData":"<sortie de .data.ca\.crt, telle quelle>"}}
 ```
 
 Sceller avec la clé du **hub**, committer, supprimer le clair
