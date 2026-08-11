@@ -63,6 +63,7 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
 | [kube-prometheus-stack](cluster/app/kube-prometheus-stack/README.md) | hub | Prometheus, Alertmanager, Grafana, exporters, dashboards maison |
 | [loki](cluster/app/loki/README.md) | hub | Stockage et requêtage des logs |
 | [alloy](cluster/app/alloy/README.md) | hub | Collecte des logs des pods → Loki |
+| [openbao](cluster/app/openbao/README.md) | hub | Coffre de secrets (raft intégré) + agent injector — contenu hors Git |
 | [renovate](cluster/app/renovate/README.md) | hub | CronJob de mise à jour des dépendances de ce repo |
 | [test-nginx](cluster/app/test-nginx/README.md) | hub | Smoke test permanent : stockage (PVC) + CNPG |
 
@@ -91,7 +92,12 @@ geste **unique pour le repo**, pas par cluster. La procédure est générique : 
 choisit via `export CLUSTER=…`, ses valeurs vivent dans [doc/clusters/](doc/clusters/).
 
 > [!CAUTION]
-> Le seul élément **non reconstructible** depuis ce dépôt est la **clé privée sealed-secrets**
-> du hub. Sans son backup (coffre, hors cluster, hors Git), tous les `SealedSecret` committés
-> sont morts — y compris le Secret d'enregistrement des clusters spokes — et il faut
-> re-provisionner chaque credential amont. C'est un prérequis du runbook.
+> Deux éléments sont **non reconstructibles** depuis ce dépôt, et leur backup (coffre, hors
+> cluster, hors Git) est un prérequis du runbook :
+>
+> 1. La **clé privée sealed-secrets** du hub. Sans elle, tous les `SealedSecret` committés sont
+>    morts — y compris le Secret d'enregistrement des clusters spokes — et il faut
+>    re-provisionner chaque credential amont.
+> 2. Les **clés de descellement d'openbao** et le contenu de son PVC. Le coffre est le seul
+>    composant dont les données ne vivent pas dans Git : voir
+>    [cluster/app/openbao](cluster/app/openbao/README.md) pour les snapshots raft.

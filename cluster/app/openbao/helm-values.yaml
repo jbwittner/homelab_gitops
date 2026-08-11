@@ -1,0 +1,103 @@
+# helm-values — openbao (gestionnaire de secrets, stockage raft intégré)
+
+global:
+  # TLS terminé au Gateway, backends joints en HTTP clair — comme tout le repo
+  # (doc/reseau.md). Sans effet sur le chiffrement AU REPOS d'OpenBao, qui est
+  # indépendant : seul le transport intra-cluster est en clair.
+  tlsDisable: true
+
+# --- Agent injector ---
+# Activé par défaut dans le chart (`"-"` + `global.enabled: true`) ; explicité ici parce que
+# c'est un choix. Il n'injecte RIEN tant que la méthode d'auth `kubernetes`, une policy et un
+# role n'existent pas côté OpenBao — configuration interne au coffre, qui ne vit pas dans ce
+# repo (cf. README, section « Ce qui n'est pas GitOps »).
+injector:
+  enabled: true
+
+server:
+  # HA + raft à UN SEUL replica. Sur ce cluster mono-nœud, le coût est identique à un
+  # `standalone` (un pod, un PVC) — un cluster raft à un nœud est leader sans élection —
+  # mais on gagne :
+  #   - un backend transactionnel, là où l'upstream déconseille explicitement `file`
+  #     en production (« not transactional and lacks system-level file locking ») ;
+  #   - `bao operator raft snapshot save`, qui sauvegarde À CHAUD — seul filet réel, le
+  #     contenu d'OpenBao étant la seule chose du homelab absente de Git ;
+  #   - le passage à 3 replicas comme simple changement de value, pas une migration.
+  ha:
+    enabled: true
+    replicas: 1
+    raft:
+      enabled: true
+      # Node ID = nom du pod. Sinon un ID aléatoire est régénéré à chaque redémarrage et le
+      # nœud se réenregistre comme un nouveau pair dans la configuration raft.
+      setNodeId: true
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          # Requis par le ServiceMonitor : /v1/sys/metrics est sinon authentifié, et
+          # Prometheus n'a pas de token. N'expose que des compteurs et jauges — jamais
+          # le contenu d'un secret — et le port 8200 n'est pas routé hors cluster pour
+          # ce chemin (l'HTTPRoute sert l'UI, mais l'endpoint reste en ClusterIP).
+          telemetry {
+            unauthenticated_metrics_access = "true"
+          }
+        }
+
+        storage "raft" {
+          path = "/openbao/data"
+        }
+
+        # Pose sur le pod les labels dont dépendent les Services `-active` / `-standby`
+        # et le ServiceMonitor (notamment `openbao-active`).
+        service_registration "kubernetes" {}
+
+        telemetry {
+          prometheus_retention_time = "30s"
+          disable_hostname = true
+        }
+
+    # À un replica, le helper `openbao.pdb.maxUnavailable` du chart calcule 0 — ce qui BLOQUE
+    # tout drain du nœud (`kubectl drain` attend indéfiniment). Le PDB ne protège aucune HA
+    # ici : désactivé volontairement.
+    disruptionBudget:
+      enabled: false
+
+  dataStorage:
+    enabled: true
+    # Un coffre tient dans très peu : ce sont des KV chiffrés, pas des données applicatives.
+    # StorageClass par défaut du cluster = openebs-lvm-thin.
+    size: 5Gi
+
+  # LE COFFRE. Le défaut des StatefulSets récents supprime les PVC avec le StatefulSet :
+  # sans ce `Retain`, un `prune` ArgoCD ou un passage à 0 replica effacerait toutes les
+  # données — irrécupérables, puisqu'elles ne sont pas dans Git.
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+
+# Pas de Service `ui` séparé : `ui = true` dans la config HCL ci-dessus suffit à servir
+# l'interface sur le port 8200 du Service `openbao`, vers lequel pointe l'HTTPRoute.
+ui:
+  enabled: false
+
+serverTelemetry:
+  serviceMonitor:
+    enabled: true
+    # `selectors` REMPLACE le bloc de labels par défaut du template (`release: prometheus`).
+    # Le prometheus-operator du chart kube-prometheus-stack ne sélectionne que ce label-ci
+    # (serviceMonitorSelectorNilUsesHelmValues) — même contrainte que pour alloy.
+    selectors:
+      release: kube-prometheus-stack
+
+  # Dashboard upstream du chart NON déployé : il ne porte pas l'annotation `grafana_folder`
+  # qui range les dashboards maison dans le dossier « Wittnerlab ».
+  grafanaDashboard:
+    enabled: false
+
+# Secrets montés en volume via le Secrets Store CSI driver — driver absent du repo.
+csi:
+  enabled: false

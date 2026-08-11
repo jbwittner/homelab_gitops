@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: secrets
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Gestionnaire de secrets, stockage raft intégré (archétype b : chart + `$values` +
+  # `manifests/`). Contrairement à sealed-secrets, ce composant n'est PAS un canal de
+  # secrets GitOps : son contenu vit dans le PVC, hors de Git — voir README.
+  sources:
+    - repoURL: https://openbao.github.io/openbao-helm
+      chart: openbao
+      targetRevision: 0.29.0
+      helm:
+        releaseName: openbao
+        valueFiles:
+          - $values/cluster/app/openbao/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    # Ressources annexes : namespace + HTTPRoute (le chart sait générer un HTTPRoute,
+    # mais pas avec les champs explicites qu'exige ArgoCD — cf. README).
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: cluster/app/openbao/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: openbao
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

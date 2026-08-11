@@ -50,6 +50,7 @@ Mono-nœud **`vert-eranikus`**, Talos.
 | Listener propre au cluster | `https-internal-kalecgos` — `*.kalecgos.lan.wittner.tech` |
 | Secret TLS du listener | `wildcard-kalecgos-lan-tls` (ns `gateway`) |
 | Entrée DNS à créer | `*.kalecgos.lan.wittner.tech` → `192.168.1.80` |
+| Entrée DNS non spécifique au cluster | `*.lan.wittner.tech` → `192.168.1.80` (listener `https-internal`, utilisé par `openbao`) |
 
 Les noms `bleu-kalecgos-pool` / `bleu-kalecgos-l2` viennent du `namePrefix: bleu-kalecgos-` de
 [`cluster/infra/cilium/bleu-kalecgos/manifests/kustomization.yaml`](../../cluster/infra/cilium/bleu-kalecgos/manifests/kustomization.yaml) :
@@ -63,6 +64,7 @@ aujourd'hui que **ici**, `gateway-api` étant un composant mono-cluster (cf.
 
 **Exposé aujourd'hui** : `argocd.kalecgos.lan.wittner.tech`,
 `grafana.kalecgos.lan.wittner.tech` (listener `https-internal-kalecgos`),
+`openbao.lan.wittner.tech` (listener `https-internal`),
 `authentik.wittner.tech` (listener `https-public`).
 
 ## Stockage
@@ -86,7 +88,7 @@ tier 1/2 : root, infra, app
 appsets  : cilium, argocd-manager
 infra    : argocd, cert-manager, cert-manager-config, gateway-api, openebs, sealed-secrets,
            bleu-kalecgos-cilium
-app      : alloy, authentik, cnpg, kube-prometheus-stack, loki, renovate, test-nginx
+app      : alloy, authentik, cnpg, kube-prometheus-stack, loki, openbao, renovate, test-nginx
 ```
 
 ```bash
@@ -97,6 +99,11 @@ kubectl -n argocd get app -l homelab.wittner.tech/cluster=bleu-kalecgos   # → 
 
 Tous deviennent illisibles si la clé sealed-secrets de ce cluster est perdue — **y compris le
 Secret de cluster du spoke `bleu-arcanagos`**, scellé ici.
+
+> [!NOTE]
+> [`openbao`](../../cluster/app/openbao/README.md) ne figure pas dans ce tableau : son contenu
+> n'est pas scellé dans Git mais stocké dans son PVC. Ses **clés de descellement** sont un second
+> élément à sauvegarder au coffre, indépendant de la clé sealed-secrets.
 
 | SealedSecret | Namespace | Clé(s) | Composant | Source amont à re-provisionner |
 |---|---|---|---|---|
