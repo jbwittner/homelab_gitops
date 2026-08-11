@@ -4,7 +4,7 @@ type: fiche-cluster
 cluster: bleu-kalecgos
 tags: [homelab, wittnerlab, kubernetes, argocd, gitops, cluster, fiche-cluster]
 created: 2026-08-09
-modified: 2026-08-10
+modified: 2026-08-11
 status: stable
 ---
 
@@ -95,47 +95,52 @@ app      : alloy, authentik, cnpg, kube-prometheus-stack, loki, renovate, test-n
 kubectl -n argocd get app -l homelab.wittner.tech/cluster=bleu-kalecgos   # → cilium, external-secrets
 ```
 
-## SealedSecrets
+## Secrets
 
-Tous deviennent illisibles si la clé sealed-secrets de ce cluster est perdue — **y compris le
-Secret de cluster du spoke `bleu-arcanagos`**, scellé ici.
+Deux canaux, deux backups **non interchangeables**. Le critère qui répartit les secrets entre eux
+est dans [regles-gitops.md](../regles-gitops.md).
 
-> [!NOTE]
-> [`openbao`](../../cluster/infra/openbao/README.md) ne figure pas dans ce tableau : son contenu
-> n'est pas scellé dans Git mais stocké dans son PVC. Ses **clés de descellement** sont un second
-> élément à sauvegarder au coffre, indépendant de la clé sealed-secrets.
+### Canal 1 — SealedSecrets (étape 8a du runbook)
 
-| SealedSecret | Namespace | Clé(s) | Composant | Source amont à re-provisionner |
-|---|---|---|---|---|
-| `cloudflare-api-token` | `cert-manager` | `api-token` | `cert-manager-config` | Token API Cloudflare (`Zone:DNS:Edit` + `Zone:Zone:Read`) |
-| `argocd-oidc` | `argocd` | `client-secret` | `argocd` | Provider OIDC authentik (Terraform, autre repo) |
-| `argocd-notifications-secret` | `argocd` | `grafana-api-key` | `argocd` | Service account token Grafana |
-| `cluster-bleu-arcanagos` | `argocd` | `name`, `server`, `config` | `argocd` | Token du SA `kube-system/argocd-manager` du spoke |
-| `grafana-oidc` | `monitoring` | `client-secret` | `kube-prometheus-stack` | Provider OIDC authentik (Terraform) |
-| `grafana-admin` | `monitoring` | `admin-user`, `admin-password` | `kube-prometheus-stack` | Généré localement (`openssl rand`) |
-| `authentik-secrets` | `authentik` | `secret-key` | `authentik` | Généré à la 1re install — **ne jamais changer ensuite** |
-| `renovate-env` | `renovate` | `RENOVATE_GITHUB_COM_TOKEN`, `RENOVATE_TOKEN` | `renovate` | PAT GitHub |
+Les deux secrets en amont du coffre dans le graphe de bootstrap. Illisibles si la clé
+sealed-secrets de ce cluster est perdue — **y compris le Secret de cluster du spoke
+`bleu-arcanagos`**, scellé ici.
 
-`cloudflare-api-token` est **bloquant pour le bootstrap** : sans lui, pas de DNS-01, donc pas de
-certificat, donc aucun listener TLS opérationnel.
+| SealedSecret | Namespace | Clé(s) | Composant | Template en clair | Source amont |
+|---|---|---|---|---|---|
+| `cloudflare-api-token` | `cert-manager` | `api-token` | [cert-manager-config](../../cluster/infra/cert-manager-config/README.md) | `cluster/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml` | Token API Cloudflare (`Zone:DNS:Edit` + `Zone:Zone:Read`) |
+| `cluster-bleu-arcanagos` | `argocd` | `name`, `server`, `config` | [argocd-manager](../../cluster/infra/argocd-manager/README.md) | `cluster/infra/argocd/manifests/cluster-bleu-arcanagos.secret.yaml` | Token du SA `kube-system/argocd-manager` du spoke |
 
-### Ordre de scellement (étape 8 du runbook)
+Sceller le token Cloudflare **en premier** : il est bloquant pour le bootstrap (sans lui, pas de
+DNS-01, donc pas de certificat, donc aucun listener TLS opérationnel). Le Secret de cluster
+dépend du spoke — son SA `argocd-manager` doit être posé (étape 2bis de son propre bootstrap)
+pour que le token existe.
 
-| Ordre | Secret | Chemin du template | Détail |
-|---|---|---|---|
-| 1 | Token Cloudflare | `cluster/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml` | [cert-manager-config](../../cluster/infra/cert-manager-config/README.md) |
-| 2 | Admin Grafana (break-glass) | `cluster/app/kube-prometheus-stack/manifests/grafana-admin.secret.yaml` | [kube-prometheus-stack](../../cluster/app/kube-prometheus-stack/README.md) |
-| 3 | `AUTHENTIK_SECRET_KEY` | (généré, cf. README) | [authentik](../../cluster/app/authentik/README.md) |
-| 4 | OIDC ArgoCD | `cluster/infra/argocd/manifests/argocd-oidc.secret.yaml` | [argocd](../../cluster/infra/argocd/README.md) |
-| 5 | OIDC Grafana | `cluster/app/kube-prometheus-stack/manifests/grafana-oidc.secret.yaml` | [kube-prometheus-stack](../../cluster/app/kube-prometheus-stack/README.md) |
-| 6 | Token notifications Grafana | `cluster/infra/argocd/manifests/argocd-notifications.secret.yaml` | [argocd](../../cluster/infra/argocd/README.md) |
-| 7 | PAT GitHub Renovate | `cluster/app/renovate/manifests/renovate.secret.yaml` | [renovate](../../cluster/app/renovate/README.md) |
-| 8 | Secret de cluster du spoke | `cluster/infra/argocd/manifests/cluster-bleu-arcanagos.secret.yaml` | [argocd-manager](../../cluster/infra/argocd-manager/README.md) |
+### Canal 2 — openbao (étape 8b du runbook)
 
-Les 3, 4 et 5 dépendent d'authentik : il doit tourner et ses providers OIDC être créés
-(Terraform, autre repo) avant de pouvoir sceller les client-secrets. Le 6 dépend de Grafana
-(service account token créé dans l'UI). Le 8 dépend du spoke : son SA `argocd-manager` doit être
-posé (étape 2bis de son propre bootstrap) pour que le token existe.
+Chiffrés dans le PVC d'[openbao](../../cluster/infra/openbao/README.md), pas dans Git ; le repo
+ne contient que les `*.externalsecret.yaml` qui pointent dessus, via
+[external-secrets](../../cluster/infra/external-secrets/README.md). Leur sauvegarde, ce sont les
+**clés de descellement** + un **snapshot raft**, indépendants de la clé sealed-secrets.
+
+| Chemin KV (`kv/…`) | Secret produit | Namespace | Clé(s) | Composant | Source amont |
+|---|---|---|---|---|---|
+| `homelab/grafana/admin` | `grafana-admin` | `monitoring` | `admin-user`, `admin-password` | [kube-prometheus-stack](../../cluster/app/kube-prometheus-stack/README.md) | Généré localement (`openssl rand`) |
+| `homelab/authentik/secrets` | `authentik-secrets` | `authentik` | `secret-key` | [authentik](../../cluster/app/authentik/README.md) | Généré à la 1re install — **ne jamais changer ensuite** |
+| `homelab/argocd/oidc` | `argocd-oidc` | `argocd` | `client-secret` | [argocd](../../cluster/infra/argocd/README.md) | Provider OIDC authentik (Terraform, autre repo) |
+| `homelab/grafana/oidc` | `grafana-oidc` | `monitoring` | `client-secret` | [kube-prometheus-stack](../../cluster/app/kube-prometheus-stack/README.md) | Provider OIDC authentik (Terraform) |
+| `homelab/argocd/notifications` | `argocd-notifications-secret` | `argocd` | `grafana-api-key` | [argocd](../../cluster/infra/argocd/README.md) | Service account token Grafana |
+| `homelab/renovate/github` | `renovate-env` | `renovate` | `token` → `RENOVATE_TOKEN` + `RENOVATE_GITHUB_COM_TOKEN` | [renovate](../../cluster/app/renovate/README.md) | PAT GitHub |
+
+L'ordre du tableau est celui à suivre : les trois entrées OIDC/authentik supposent authentik en
+marche et ses providers créés (Terraform, autre repo) ; les notifications supposent Grafana en
+marche (le service account token se crée dans son UI).
+
+⚠️ Prérequis à tout `bao kv put` : le coffre **descellé** et **configuré par le repo Terraform**
+(moteur KV v2 sur `kv`, mount d'auth `kubernetes-bleu-kalecgos`, role `external-secrets` +
+policy de lecture sur `kv/data/homelab/*`). Sans cette configuration, les `ExternalSecret`
+restent en `permission denied`. Le mount est **propre au cluster** : chaque cluster portant ESO
+a le sien, cf. [external-secrets](../../cluster/infra/external-secrets/README.md).
 
 ## Vérification finale
 

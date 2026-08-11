@@ -3,9 +3,11 @@
 ## Règle GitOps — NON négociable
 
 **Interdit de pousser des données au cluster hors GitOps.** Toute ressource vit dans Git,
-appliquée par **ArgoCD**. `kubectl` en écriture = bootstrap ArgoCD + debug read-only, rien
-d'autre. Secrets : jamais en clair, uniquement **SealedSecrets** (`kubeseal`). Une modif =
-éditer le manifeste, commit, push. Détail : [doc/regles-gitops.md](doc/regles-gitops.md).
+appliquée par **ArgoCD**. `kubectl` en écriture = bootstrap ArgoCD + descellement d'openbao +
+debug read-only, rien d'autre. Secrets : jamais en clair, **deux canaux et deux seulement** —
+`SealedSecret` (dans Git) pour ce qui est en amont du coffre dans le bootstrap, **openbao** via
+`ExternalSecret` pour tout le reste. Une modif = éditer le manifeste, commit, push. Détail :
+[doc/regles-gitops.md](doc/regles-gitops.md).
 
 ## Un seul arbre, plusieurs clusters
 
@@ -45,8 +47,16 @@ Règles complètes : [doc/conventions.md](doc/conventions.md). Points critiques 
 - READMEs composants : minimaux, **aucune version épinglée** (source unique :
   `targetRevision` du `.app.yaml`/`.appset.yaml`, ou le `kustomization.yaml` pour un install
   upstream).
-- Secrets : template en clair `<name>.secret.yaml` (**gitignoré**) → `kubeseal` →
-  `<name>.sealed.yaml` (committé, référencé dans le `kustomization.yaml`).
+- Secrets, deux formes selon le canal — le choix dépend de la **position dans le graphe de
+  bootstrap**, pas d'une préférence (critère : `doc/regles-gitops.md`) :
+  - **SealedSecret** : template en clair `<name>.secret.yaml` (**gitignoré**) → `kubeseal` →
+    `<name>.sealed.yaml` (committé). Réservé aux 2 secrets d'amorçage (token DNS Cloudflare,
+    Secret de cluster du spoke).
+  - **openbao** : `<name>.externalsecret.yaml` (`ExternalSecret`, committé) — un simple pointeur, la
+    valeur se pose au coffre par `bao kv put`. Tout le reste. `deletionPolicy: Retain`
+    obligatoire. Jamais dans un dossier servant à l'`apply -k` d'amorçage (d'où
+    `cluster/infra/argocd/external-secrets/`, second `source` de l'app `argocd`).
+  - Les deux formes sont référencées dans le `kustomization.yaml` du composant consommateur.
 - Index des composants : [README.md](README.md) racine — mis à jour dans le **même commit**
   qu'un ajout/suppression de composant.
 
@@ -60,10 +70,12 @@ en `ApplicationSet`. Détail : [doc/reseau.md](doc/reseau.md).
 
 [doc/runbook-bootstrap.md](doc/runbook-bootstrap.md) — procédure **générique** (tous clusters,
 paramétrée par `export CLUSTER=…`), part d'un cluster vierge **sans CNI**. Les valeurs propres à
-un cluster (nœud, pool L2, wildcard DNS, disque, inventaire des SealedSecrets) vivent dans sa
-fiche : [doc/clusters/](doc/clusters/) — y ajouter un fichier pour tout nouveau cluster. Le seul
-élément non reconstructible depuis Git est la **clé privée sealed-secrets** du hub (elle scelle
-aussi les secrets des spokes) : son backup (coffre) est un prérequis du runbook, pas une option.
+un cluster (nœud, pool L2, wildcard DNS, disque, inventaire des secrets) vivent dans sa
+fiche : [doc/clusters/](doc/clusters/) — y ajouter un fichier pour tout nouveau cluster. **Deux**
+éléments ne sont pas reconstructibles depuis Git, et ils se partagent les secrets du cluster : la
+**clé privée sealed-secrets** du hub (2 secrets, dont ceux des spokes) et le couple **clés de
+descellement openbao + snapshot raft** (les 6 autres). Leurs backups (coffre) sont des prérequis
+du runbook, pas des options.
 
 ## Skills projet
 

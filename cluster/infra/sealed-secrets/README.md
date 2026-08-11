@@ -3,9 +3,12 @@
 ## Rôle
 
 Contrôleur [Bitnami sealed-secrets](https://github.com/bitnami/sealed-secrets) : déchiffre dans
-le cluster les `SealedSecret` committés dans Git. **Seul canal autorisé** pour les secrets —
-règle : [doc/regles-gitops.md](../../../doc/regles-gitops.md). Wave **-8** : le contrôleur
-précède tout SealedSecret consommé plus tard.
+le cluster les `SealedSecret` committés dans Git. C'est l'un des **deux** canaux de secrets du
+repo, aux côtés d'[openbao](../openbao/README.md) + [external-secrets](../external-secrets/README.md) —
+critère de choix : [doc/regles-gitops.md](../../../doc/regles-gitops.md). Il porte les **deux**
+secrets situés en amont du coffre dans le graphe de bootstrap : le token DNS de
+`cert-manager-config` et le Secret de cluster du spoke. Wave **-8** : le contrôleur précède tout
+SealedSecret consommé plus tard.
 
 ## Fichiers
 

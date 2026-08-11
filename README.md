@@ -49,12 +49,12 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
 | [argocd-manager](cluster/infra/argocd-manager/README.md) | spokes (appset) | Identité `cluster-admin` avec laquelle le hub pilote un cluster distant (wave -20) |
 | [cilium](cluster/infra/cilium/README.md) | tous (appset) | CNI, remplacement de kube-proxy, Gateway API, LB annoncé en L2 |
 | [gateway-api](cluster/infra/gateway-api/README.md) | hub | CRDs Gateway API + le `Gateway` partagé `shared-gw` (wave -10) |
-| [sealed-secrets](cluster/infra/sealed-secrets/README.md) | hub | Déchiffre les `SealedSecret` du repo — canal de secrets n°1 (wave -8) |
-| [external-secrets](cluster/infra/external-secrets/README.md) | tous (appset) | Tire les secrets d'openbao en `Secret` natifs — canal n°2 (wave -7) |
+| [sealed-secrets](cluster/infra/sealed-secrets/README.md) | hub | Déchiffre les `SealedSecret` du repo — canal des 2 secrets d'amorçage (wave -8) |
+| [external-secrets](cluster/infra/external-secrets/README.md) | tous (appset) | Tire les secrets d'openbao en `Secret` natifs — canal des 6 autres (wave -7) |
 | [cert-manager](cluster/infra/cert-manager/README.md) | hub | Moteur d'émission TLS (wave -5) |
 | [cert-manager-config](cluster/infra/cert-manager-config/README.md) | hub | `ClusterIssuer` Let's Encrypt DNS-01 + certificats wildcard (wave -4) |
 | [openebs](cluster/infra/openebs/README.md) | hub | Stockage LocalPV-LVM, StorageClass par défaut du cluster |
-| [openbao](cluster/infra/openbao/README.md) | hub | Coffre de secrets (raft intégré) + agent injector — contenu hors Git, descellement manuel (wave 1) |
+| [openbao](cluster/infra/openbao/README.md) | hub | Coffre de secrets (raft intégré) — contenu hors Git, descellement manuel (wave 1) |
 
 ### `cluster/app/` — applicatif
 
@@ -78,6 +78,8 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
 - [doc/reseau.md](doc/reseau.md) — exposition réseau (Gateway API, `shared-gw`, listeners, TLS)
 - [doc/secrets.md](doc/secrets.md) — architecture des secrets : les deux canaux, le modèle d'objets
   ESO (`ClusterSecretStore` / `ExternalSecret` / `Secret`), un store par cluster, rotation
+- [doc/openbao-terraform.md](doc/openbao-terraform.md) — le contrat que le repo Terraform doit
+  poser dans le coffre (engine KV, un mount d'auth par cluster, policy, rôles)
 - [doc/runbook-bootstrap.md](doc/runbook-bootstrap.md) — bootstrap / disaster recovery complet,
   depuis un cluster vierge sans CNI — **procédure générique, tous clusters**
 - [doc/clusters/](doc/clusters/) — une fiche par cluster : les valeurs que le runbook
@@ -96,11 +98,13 @@ choisit via `export CLUSTER=…`, ses valeurs vivent dans [doc/clusters/](doc/cl
 
 > [!CAUTION]
 > Deux éléments sont **non reconstructibles** depuis ce dépôt, et leur backup (coffre, hors
-> cluster, hors Git) est un prérequis du runbook :
+> cluster, hors Git) est un prérequis du runbook. Ils se **partagent** les secrets du cluster :
+> ni l'un ni l'autre ne suffit seul.
 >
-> 1. La **clé privée sealed-secrets** du hub. Sans elle, tous les `SealedSecret` committés sont
->    morts — y compris le Secret d'enregistrement des clusters spokes — et il faut
->    re-provisionner chaque credential amont.
-> 2. Les **clés de descellement d'openbao** et le contenu de son PVC. Le coffre est le seul
->    composant dont les données ne vivent pas dans Git : voir
->    [cluster/infra/openbao](cluster/infra/openbao/README.md) pour les snapshots raft.
+> 1. La **clé privée sealed-secrets** du hub — elle protège les **2** `SealedSecret` du repo :
+>    le token DNS de cert-manager et le Secret d'enregistrement du spoke. Sans elle, ces deux
+>    fichiers sont morts et il faut re-provisionner leur credential amont.
+> 2. Les **clés de descellement d'openbao** et un **snapshot raft** de son PVC — ils portent les
+>    **6** autres secrets (SSO ArgoCD et Grafana, `secret_key` authentik, admin Grafana,
+>    notifications, PAT Renovate). Un snapshot sans les clés est illisible, et réciproquement :
+>    voir [cluster/infra/openbao](cluster/infra/openbao/README.md).

@@ -35,25 +35,34 @@ kubectl apply -f cluster/root.yaml
   `path` → `manifests/`)
 - `manifests/kustomization.yaml` — install upstream **épinglé ici** + namespace + patchs + HTTPRoute
 - `manifests/namespace.yaml` — ns `argocd`
-- `manifests/argocd-cmd-params-cm.yaml` — patch `server.insecure: "true"` (TLS terminé au Gateway)
+- `manifests/argocd-cmd-params-cm.yaml` — patch `server.insecure: "true"` (TLS terminé au
+  Gateway) + `controller.diff.server.side: "true"` (cf. §Diff)
 - `manifests/argocd-cm.yaml` — patch de la config ArgoCD : `url` externe, status badge,
   `oidc.config` (SSO authentik)
 - `manifests/argocd-rbac-cm.yaml` — patch RBAC : défaut `role:readonly`, groupe authentik
   `app-argocd-admin` → `role:admin`
 - `manifests/argocd-httproute.yaml` — UI via `shared-gw` (cf. [doc/reseau.md](../../../doc/reseau.md))
-- `manifests/argocd-oidc.sealed.yaml` — SealedSecret `argocd-oidc`, clé `client-secret` (OIDC)
 - `manifests/argocd-notifications-cm.yaml` — patch notifications : service Grafana, templates,
   triggers, souscriptions globales (cf. §Notifications)
-- `manifests/argocd-notifications-secret-patch.yaml` — patch du Secret vide livré par l'upstream :
-  annotation d'adoption sealed-secrets, aucune donnée (cf. §Notifications)
-- `manifests/argocd-notifications.sealed.yaml` — SealedSecret `argocd-notifications-secret`,
-  clé `grafana-api-key`
+- `external-secrets/argocd-oidc.externalsecret.yaml` — `ExternalSecret` `argocd-oidc`, clé
+  `client-secret` (OIDC), servi par openbao
+- `external-secrets/argocd-notifications.externalsecret.yaml` — `ExternalSecret`
+  `argocd-notifications-secret`, clé `grafana-api-key` (cf. §Notifications)
 - `manifests/cluster-bleu-kalecgos.yaml` — Secret de cluster qui **nomme le cluster local**
   `bleu-kalecgos` (sans lui : entrée `in-cluster` codée en dur). Aucun credential dedans → clair,
   rien à sceller (cf. §Nommage du cluster local)
 - `manifests/cluster-bleu-arcanagos.sealed.yaml` — SealedSecret du cluster **spoke**
   `bleu-arcanagos` (bearer token du SA `argocd-manager`, cf.
-  [argocd-manager](../argocd-manager/README.md))
+  [argocd-manager](../argocd-manager/README.md)). **Le seul secret de ce composant qui reste
+  scellé** : il est requis à l'étape 2bis du bootstrap, donc avant qu'openbao existe.
+
+> [!IMPORTANT]
+> **Deux dossiers, et la séparation est load-bearing.** `manifests/` est aussi la cible de
+> l'`apply -k` manuel du bootstrap, exécuté quand seul ArgoCD tourne : la CRD `ExternalSecret`
+> n'y existe pas encore (elle arrive en wave -7 avec
+> [external-secrets](../external-secrets/README.md)). Les `ExternalSecret` vivent donc dans
+> `external-secrets/`, déclaré comme **second `source`** de cette Application. Y mettre un
+> `ExternalSecret` ferait échouer le geste d'amorçage sur `no matches for kind`.
 
 ## Contraintes — self-management
 
@@ -67,10 +76,40 @@ kubectl apply -f cluster/root.yaml
 >   `selfHeal: true` est OK.
 > - Diff persistant sur un webhook/CRD → `ignoreDifferences` ciblé
 >   (`RespectIgnoreDifferences=true` déjà actif).
-> - Les `group/kind/weight` et le `matches` de la HTTPRoute sont **explicites** — sinon les
->   defaults CRD injectés côté live créent un `OutOfSync` permanent.
 > - Un fichier référencé mais absent dans `kustomization.yaml` casse `kustomize build` et met
 >   l'app self-managed en erreur : commenter la ligne d'un `*.sealed.yaml` pas encore scellé.
+
+## Diff — `controller.diff.server.side`
+
+Réglage **global** (`argocd-cmd-params-cm`), il vaut pour toutes les Applications du repo.
+
+Par défaut le controller compare l'objet **live complet** au manifeste de Git. Or un CRD injecte
+ses valeurs par défaut à l'admission — `remoteRef.conversionStrategy`/`decodingStrategy`/
+`metadataPolicy` sur un `ExternalSecret`, `group`/`kind`/`weight` sur une `HTTPRoute`… Absents de
+Git, présents côté live : `OutOfSync` permanent, qu'aucune sync ne résorbe puisque le champ
+renaît à chaque apply. Le seul contournement était d'écrire ces defaults à la main dans **chaque**
+manifeste, à refaire pour chaque nouvelle ressource.
+
+Avec le flag, le controller applique en **dry-run côté serveur** et diffe le résultat prédit :
+les defaults n'apparaissent plus, quel que soit le CRD. Écrire les defaults à la main devient
+donc inutile (ceux déjà en place ne gênent pas — ils documentent l'appliqué).
+
+> [!IMPORTANT]
+> Ce n'est **pas** un substitut à `ignoreDifferences` : le server-side diff supprime les diffs
+> dus aux defaults d'un **schéma**, pas ceux dus à une valeur écrite par un **contrôleur** après
+> coup (le `caBundle` d'[openbao](../openbao/README.md), le `/data` d'un token de
+> [argocd-manager](../argocd-manager/README.md)). Ces exceptions-là restent nécessaires.
+
+Le flag est lu comme **variable d'environnement** par le controller : un changement de la
+ConfigMap ne prend effet qu'au redémarrage du pod.
+
+```bash
+kubectl -n argocd rollout restart statefulset/argocd-application-controller
+kubectl -n argocd rollout status statefulset/argocd-application-controller
+# Vérifier la prise en compte
+kubectl -n argocd exec statefulset/argocd-application-controller -- \
+  printenv ARGOCD_APPLICATION_CONTROLLER_SERVER_SIDE_DIFF
+```
 
 ## Opérations
 
@@ -94,20 +133,20 @@ Compte local `admin` conservé en break-glass (`/auth/login`).
 **Câblage du client-secret** (après le `terraform apply`, avec l'output `client_secret`) —
 commandes **depuis la racine du repo** :
 
+Le secret vit dans openbao — **rien à committer**, l'`ExternalSecret` qui le pointe est déjà
+dans le repo :
+
 ```bash
-# 1. Coller l'output client_secret dans le template en clair (gitignoré, clé client-secret) :
-#    cluster/infra/argocd/manifests/argocd-oidc.secret.yaml
-
-# 2. Sceller, puis supprimer le clair
-kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-  < cluster/infra/argocd/manifests/argocd-oidc.secret.yaml \
-  > cluster/infra/argocd/manifests/argocd-oidc.sealed.yaml
-rm cluster/infra/argocd/manifests/argocd-oidc.secret.yaml
-
-# 3. Commit + push (la ligne `- argocd-oidc.sealed.yaml` est déjà dans kustomization.yaml).
+kubectl -n openbao exec -ti openbao-0 -- \
+  bao kv put kv/homelab/argocd/oidc client-secret=<output terraform client_secret>
 ```
 
-Rotation : régénérer le secret côté Terraform, re-renseigner le template, re-sceller (étape 2).
+Rotation : régénérer le secret côté Terraform, refaire le `bao kv put`. ESO reprend la valeur au
+prochain `refreshInterval` (1 h) ; pour l'appliquer tout de suite :
+
+```bash
+kubectl -n argocd annotate externalsecret argocd-oidc force-sync=$(date +%s) --overwrite
+```
 
 ## Notifications — annotations Grafana
 
@@ -119,27 +158,21 @@ les dashboards Grafana.
 
 Contrainte du contrôleur : il ne lit **que** le Secret `argocd-notifications-secret` du ns
 `argocd` (nom imposé, pas de `$autre-secret:clé` comme dans `argocd-cm`). Comme l'upstream livre
-déjà ce Secret vide, il est patché avec `sealedsecrets.bitnami.com/managed: "true"` pour que le
-contrôleur sealed-secrets l'adopte et y injecte la clé.
+déjà ce Secret **vide**, l'`ExternalSecret` qui le remplit est en `creationPolicy: Merge` : en
+`Owner`, ESO refuserait de s'approprier un objet qu'il n'a pas créé. C'est exactement le rôle que
+tenait l'annotation `sealedsecrets.bitnami.com/managed: "true"` du patch, désormais supprimé.
 
 **Câblage du token** — il ne se provisionne pas en GitOps : création manuelle côté Grafana, puis
-scellage.
+dépôt au coffre.
 
 ```bash
 # 1. Grafana → Administration → Users and access → Service accounts
 #    Créer `argocd-notifications`, rôle Editor, puis « Add service account token »
 #    (le token glsa_… n'est affiché qu'une fois).
 
-# 2. Coller le token dans le template en clair (gitignoré, clé grafana-api-key) :
-#    cluster/infra/argocd/manifests/argocd-notifications.secret.yaml
-
-# 3. Sceller, puis supprimer le clair
-kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-  < cluster/infra/argocd/manifests/argocd-notifications.secret.yaml \
-  > cluster/infra/argocd/manifests/argocd-notifications.sealed.yaml
-rm cluster/infra/argocd/manifests/argocd-notifications.secret.yaml
-
-# 4. Commit + push.
+# 2. Le déposer au coffre — rien à committer.
+kubectl -n openbao exec -ti openbao-0 -- \
+  bao kv put kv/homelab/argocd/notifications grafana-api-key=<glsa_…>
 ```
 
 **Où les voir** : une annotation Grafana ne s'affiche **nulle part** par défaut — il faut qu'un

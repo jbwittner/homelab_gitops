@@ -17,8 +17,8 @@ avoir 7 jours révolus avant qu'une branche ou une PR soit créée.
   `restartPolicy: Never`. Dépôts ciblés en `args`, configuration du bot via `env` + `envFrom`
   (secret `renovate-env`)
 - `manifests/namespace.yaml` — ns `renovate` (`sync-wave: -1`)
-- `manifests/renovate.sealed.yaml` — SealedSecret `renovate-env` (PAT GitHub)
-- `manifests/renovate.secret.yaml` — template en clair, **gitignoré**
+- `manifests/renovate.externalsecret.yaml` — `ExternalSecret` `renovate-env` (PAT GitHub), servi par
+  [openbao](../../infra/openbao/README.md)
 - `manifests/kustomization.yaml` — assemblage
 
 ## Contraintes
@@ -35,23 +35,16 @@ avoir 7 jours révolus avant qu'une branche ou une PR soit créée.
 
 ### Câblage du secret
 
-Commandes **depuis la racine du repo** ; les `*.secret.yaml` sont gitignorés.
+Le PAT vit dans openbao — **rien à committer**, l'`ExternalSecret` qui le pointe est déjà dans
+le repo. Une seule entrée au coffre alimente les **deux** variables attendues par Renovate
+(`RENOVATE_TOKEN` pour la plateforme, `RENOVATE_GITHUB_COM_TOKEN` pour les lookups de releases) :
 
 ```bash
-# 1. Renseigner le template local :
-#    cluster/app/renovate/manifests/renovate.secret.yaml
-#    → RENOVATE_GITHUB_COM_TOKEN et RENOVATE_TOKEN (PAT GitHub)
-
-# 2. Sceller, puis supprimer le clair
-kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-  < cluster/app/renovate/manifests/renovate.secret.yaml \
-  > cluster/app/renovate/manifests/renovate.sealed.yaml
-rm cluster/app/renovate/manifests/renovate.secret.yaml
-
-# 3. Commit + push (la ligne `- renovate.sealed.yaml` est déjà dans kustomization.yaml).
+kubectl -n openbao exec -ti openbao-0 -- \
+  bao kv put kv/homelab/renovate/github token=<PAT GitHub>
 ```
 
-Rotation : régénérer le PAT côté GitHub, re-renseigner le template, re-sceller (étape 2).
+Rotation : régénérer le PAT côté GitHub, refaire le `bao kv put` — les deux variables suivent.
 
 ### Droits du token
 

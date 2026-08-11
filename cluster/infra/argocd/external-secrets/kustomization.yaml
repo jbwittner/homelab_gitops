@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+# ⚠️ Dossier SÉPARÉ de `../manifests/`, et c'est load-bearing : `manifests/` est aussi la cible
+# de l'`apply -k` manuel du bootstrap (étape 2 du runbook), exécuté quand seul ArgoCD existe.
+# La CRD `ExternalSecret` n'est posée qu'en wave -7 par le composant external-secrets : mettre
+# ces objets dans `manifests/` ferait échouer le geste d'amorçage sur `no matches for kind`.
+# Les deux dossiers sont deux `source` de la même Application `argocd`.
+resources:
+  - argocd-oidc.externalsecret.yaml
+  - argocd-notifications.externalsecret.yaml

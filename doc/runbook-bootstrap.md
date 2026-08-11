@@ -3,7 +3,7 @@ title: Bootstrap / disaster recovery — procédure générique
 type: runbook
 tags: [homelab, wittnerlab, kubernetes, argocd, gitops, bootstrap, disaster-recovery, runbook]
 created: 2026-07-17
-modified: 2026-08-10
+modified: 2026-08-11
 status: stable
 ---
 
@@ -89,7 +89,7 @@ cluster :
 - `kubectl` récent (kustomize intégré, avec support des ressources distantes — l'install ArgoCD
   tire `raw.githubusercontent.com`).
 - `helm` (un seul usage : l'install Cilium de l'étape 1).
-- `kubeseal` (scellement des secrets, étapes 3 et 8).
+- `kubeseal` (scellement des 2 SealedSecrets, étapes 3 et 8a).
 - `argocd` CLI — optionnel, seulement pour le mot de passe admin (étape 2).
 - Clone de `homelab_gitops` à jour : `https://github.com/jbwittner/homelab_gitops.git`
   (dépôt **public** → clone HTTPS anonyme, aucun credential Git côté cluster).
@@ -111,10 +111,16 @@ git -C . rev-parse --abbrev-ref HEAD     # doit être `main` à jour
 ## Prérequis credentials — à réunir AVANT de commencer
 
 > [!CAUTION]
-> **Tout est reconstructible depuis Git, sauf les secrets.** Le repo ne contient que des
-> `SealedSecret` : ils sont indéchiffrables sans la **clé privée du contrôleur sealed-secrets**.
-> Repartir sans cette clé n'est pas un bootstrap, c'est un re-scellement complet de tous les
-> secrets du cluster (étape 8 en entier, avec tous les credentials amont à re-provisionner).
+> **Tout est reconstructible depuis Git, sauf les secrets** — et ils empruntent **deux** canaux,
+> donc deux backups distincts et non interchangeables :
+>
+> - les deux `SealedSecret` du repo, indéchiffrables sans la **clé privée du contrôleur
+>   sealed-secrets** ;
+> - les six secrets du **coffre openbao**, illisibles sans ses **clés de descellement**, et
+>   perdus sans un **snapshot raft**.
+>
+> Repartir sans l'un des deux n'est pas un bootstrap, c'est un re-provisionnement de la moitié
+> correspondante (étape 8a ou 8b, avec les credentials amont à récupérer).
 
 ### 1. La clé sealed-secrets (le credential critique)
 
@@ -154,27 +160,47 @@ Absence de sortie ou `0` → le fichier n'est pas une clé exploitable : aller c
 ### 2. Ce que cette clé protège
 
 **L'inventaire des `SealedSecret` est propre au cluster** — il vit dans sa fiche
-([`doc/clusters/`](clusters/)), avec pour chacun le namespace, les clés et la source amont à
-re-provisionner. Tous deviennent illisibles si la clé est perdue, **y compris les Secrets de
-cluster des spokes** scellés côté hub : leur perte coupe le hub de ses clusters distants (le token
-se relit et se rescelle, cf.
-[`argocd-manager/README.md`](../cluster/infra/argocd-manager/README.md)).
+([`doc/clusters/`](clusters/)). Sur le hub il tient en **deux** entrées, et ce sont précisément
+les deux secrets qui vivent en amont du coffre dans le graphe de bootstrap
+([critère](regles-gitops.md)) :
 
-Un secret y est systématiquement **bloquant pour le bootstrap** : le **token du provider DNS**
-consommé par `cert-manager-config`. Sans lui, pas de DNS-01, donc pas de certificat, donc aucun
-listener TLS opérationnel sur `shared-gw`.
+- le **token du provider DNS** (`cloudflare-api-token`), systématiquement **bloquant** : sans
+  lui, pas de DNS-01, donc pas de certificat, donc aucun listener TLS opérationnel sur
+  `shared-gw` ;
+- le **Secret de cluster du spoke** (`cluster-bleu-arcanagos`), scellé côté hub : sa perte coupe
+  le hub de ses clusters distants (le token se relit et se rescelle, cf.
+  [`argocd-manager/README.md`](../cluster/infra/argocd-manager/README.md)).
 
-### 3. Les autres credentials (première construction, ou re-scellement)
+### 2bis. Les clés de descellement d'openbao
+
+**Même statut que la clé sealed-secrets, pour les six autres secrets** : SSO ArgoCD et Grafana,
+`secret_key` d'authentik, admin Grafana, notifications, PAT Renovate. À réunir depuis le coffre :
+
+- les **clés de descellement** (parts issues du `bao operator init`) — sans elles le PVC est
+  définitivement illisible, aucune restauration n'y change rien ;
+- un **snapshot raft** récent, si le PVC est perdu ou le cluster reconstruit.
+
+Vérification : les deux ensemble, ou rien. Un snapshot sans les clés est un fichier chiffré mort,
+des clés sans snapshot ne ressuscitent aucune valeur.
+
+### 3. Les autres credentials (première construction, ou re-provisionnement)
 
 À avoir sous la main **avant** l'étape 8, dans l'ordre donné par la fiche : token du provider
 DNS, outputs Terraform des providers OIDC (autre repo), PAT GitHub. Les credentials qui
 dépendent d'un service déployé par le cluster lui-même (ex. un token de service account Grafana)
 se créent après coup, une fois ce service en marche.
 
+⚠️ Prévoir aussi l'**état du repo Terraform** qui configure le coffre (auth `kubernetes`, KV,
+policy, role `external-secrets`) : sans lui, openbao démarre vide et les `ExternalSecret`
+échouent, même clés de descellement en main.
+
 > [!CAUTION]
-> **Secrets — règle générale.** Les templates en clair `*.secret.yaml` sont **gitignorés** et
-> ne doivent jamais quitter le poste ni survivre au scellement. Seuls les `*.sealed.yaml` sont
-> committés. Backup de la clé sealed-secrets : coffre uniquement, jamais dans Git.
+> **Secrets — règle générale.** Les templates en clair `*.secret.yaml` sont **gitignorés** et ne
+> doivent jamais quitter le poste ni survivre au scellement. Seuls les `*.sealed.yaml` et les
+> `*.externalsecret.yaml` sont committés — ces derniers ne contiennent aucun chiffré, juste un pointeur
+> vers un chemin du coffre. Les valeurs du canal openbao ne transitent par **aucun** fichier :
+> elles vont directement du poste au coffre par `bao kv put`. Backups (clé sealed-secrets, clés
+> de descellement, snapshot raft) : coffre uniquement, jamais dans Git.
 
 ---
 
@@ -192,13 +218,21 @@ se créent après coup, une fois ce service en marche.
 3. Clé sealed-secrets restaurée                  ← geste manuel n°2 (DR uniquement, hub)
 4. Tier-1 app-of-apps (apply cluster/root.yaml)  ← geste manuel n°3, UNE FOIS, sur le hub
      └─ déroule seul : argocd-manager (-20) → gateway-api (-10) → sealed-secrets (-8)
-        → cert-manager (-5) → cert-manager-config (-4) → argocd (-1)
-        → cilium/openebs/apps (0)
+        → external-secrets, appset (-7) → cert-manager (-5) → cert-manager-config (-4)
+        → argocd (-1) → cilium/openebs (0) → openbao (1)
+        (en parallèle, sans relation d'ordre avec ce qui précède : les apps de cluster/app/)
 5. Exposition : Gateway programmée + restart one-shot de cilium-operator + DNS
 6. TLS Let's Encrypt (DNS-01) sur les wildcards
 7. Stockage : namespace privileged → Job VG → StorageClass
-8. Secrets applicatifs & SSO (première construction uniquement)
+8a. Les 2 SealedSecrets (première construction uniquement)
+8b. Descellement d'openbao + les 6 secrets du coffre  ← geste manuel n°4, à CHAQUE redémarrage
 ```
+
+⚠️ **Les sync-waves n'ordonnent qu'à l'intérieur d'un même app-of-apps.** `cluster/infra/` et
+`cluster/app/` sont deux Applications sœurs synchronisées en parallèle : une wave d'`infra` ne
+garantit rien vis-à-vis d'un composant d'`app`. C'est la raison pour laquelle **openbao est un
+composant d'infra** — c'est ce qui lui permet de porter la wave `1`, donc d'être ordonné après
+la StorageClass d'openebs, dont son PVC dépend.
 
 | Étape | Ce qui casse si tu la sautes |
 |---|---|
@@ -210,6 +244,7 @@ se créent après coup, une fois ce service en marche.
 | 5. Exposition | Sans restart de `cilium-operator` à la 1re pose des CRDs, la Gateway reste `Pending` ; sans secret TLS, le listener reste `ResolvedRefs=False` |
 | 6. Token du provider DNS | DNS-01 bloqué, `Certificate` jamais `Ready`, aucun accès HTTPS valide |
 | 7. Label PSA sur `openebs` | DaemonSet `lvm-node` et Job VG (privileged) rejetés par l'admission `baseline` |
+| 8b. Descellement d'openbao | Les 6 `ExternalSecret` restent `NotReady` : pas de SSO (ArgoCD, Grafana), authentik ne démarre pas, Renovate n'a pas de token. Les charges déjà servies continuent (`deletionPolicy: Retain`), mais rien de neuf n'arrive |
 
 > [!NOTE]
 > **Rebuild à froid vs première construction.** Toutes les Applications vivent déjà dans le repo :
@@ -298,10 +333,13 @@ kubectl apply -k cluster/infra/argocd/manifests --server-side --force-conflicts
 > [!NOTE]
 > **Deux échecs attendus à ce stade**, non bloquants :
 > - la **HTTPRoute** — les CRDs Gateway API n'existent pas encore ; elle convergera à l'étape 5 ;
-> - les **SealedSecrets** (`argocd-oidc`, `argocd-notifications`, `cluster-bleu-arcanagos`) — la
->   CRD `SealedSecret` n'est posée qu'à l'étape 4 ; ils convergeront ensuite. Corollaire : les
->   clusters **spokes** ne sont pas joignables avant que le contrôleur sealed-secrets ait
->   déchiffré leur Secret de cluster.
+> - le **SealedSecret** `cluster-bleu-arcanagos` — la CRD `SealedSecret` n'est posée qu'à
+>   l'étape 4 ; il convergera ensuite. Corollaire : les clusters **spokes** ne sont pas joignables
+>   avant que le contrôleur sealed-secrets ait déchiffré leur Secret de cluster.
+>
+> Les `ExternalSecret` d'ArgoCD, eux, **ne sont pas concernés** : ils vivent dans
+> `cluster/infra/argocd/external-secrets/`, hors du dossier de cet `apply -k`, précisément pour
+> que leur CRD absente ne fasse pas échouer le geste d'amorçage.
 >
 > Si l'`apply -k` refuse **en bloc** à cause d'un type inconnu : commenter temporairement les
 > lignes concernées dans `kustomization.yaml` pour le bootstrap, le self-management les reposera
@@ -652,8 +690,16 @@ fiche du cluster.
 
 ## Étape 8 — Secrets applicatifs et SSO (première construction)
 
-En **rebuild avec la bonne clé**, cette étape est déjà faite : les `*.sealed.yaml` du repo se
-déchiffrent seuls. Elle ne sert qu'à une première construction ou à un re-scellement complet.
+Les secrets du cluster passent par **deux canaux**, et cette étape se lit en deux temps. Le
+critère qui répartit les secrets entre eux est dans
+[regles-gitops.md](regles-gitops.md) ; l'inventaire par cluster est dans sa
+[fiche](clusters/).
+
+En **rebuild**, les deux moitiés sont déjà faites — les `*.sealed.yaml` se déchiffrent seuls
+avec la bonne clé, et le contenu du coffre revient avec le snapshot raft restauré à l'étape 8b.
+Cette étape ne sert qu'à une première construction ou à un re-provisionnement complet.
+
+### 8a — Les deux SealedSecrets
 
 **Le cert public du contrôleur, une fois** (`pub-cert.pem` est gitignoré) :
 
@@ -674,20 +720,49 @@ kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets 
 rm cluster/<partie>/<name>/manifests/<secret>.secret.yaml
 ```
 
-L'**ordre de scellement** et le chemin de chaque template sont dans la fiche du cluster
-([`doc/clusters/`](clusters/)), avec le README du composant à suivre pour chacun. Deux
-dépendances structurent cet ordre, quel que soit le cluster :
-
-- les client-secrets **OIDC** exigent que le provider d'identité tourne et que ses providers
-  soient créés (Terraform, autre repo) ;
-- les tokens de **service account** d'un service déployé ici (ex. notifications ArgoCD ←
-  Grafana) exigent ce service en marche.
+Le chemin de chaque template est dans la fiche du cluster ([`doc/clusters/`](clusters/)). Sur le
+hub il n'y en a que deux, et le **token du provider DNS est bloquant** : sans lui, pas de DNS-01,
+donc aucun listener TLS opérationnel (étape 6).
 
 ⚠️ Le scellement se fait **toujours contre le contrôleur du hub** — c'est lui qui porte la clé,
 y compris pour les secrets d'un spoke (son Secret de cluster).
 
-**Et immédiatement après : sauvegarder la clé au coffre** (cf. étape 3) — à partir de maintenant,
-elle est le seul élément non reconstructible du cluster.
+**Et immédiatement après : sauvegarder la clé au coffre** (cf. étape 3).
+
+### 8b — Les six secrets du coffre
+
+Prérequis : openbao déployé (wave `1`), **descellé**, et configuré par le **repo Terraform**
+(moteur KV v2 sur `kv`, un mount d'auth `kubernetes-${CLUSTER}` par cluster portant ESO, role
+`external-secrets` + policy de lecture sur `kv/data/homelab/*` — contrat détaillé dans
+[`cluster/infra/openbao`](../cluster/infra/openbao/README.md)). Sans cette configuration, les
+`ExternalSecret` échouent en `permission denied` et rien ne s'écrit.
+
+Poser chaque valeur au coffre — **aucun commit, aucun `kubeseal`** : le repo contient déjà les
+`*.externalsecret.yaml` qui pointent dessus.
+
+```bash
+kubectl -n openbao exec -ti openbao-0 -- bao kv put kv/homelab/<chemin> <clé>=<valeur>
+```
+
+Les chemins et les clés attendus sont la table « Contenu du coffre » de
+[`cluster/infra/openbao`](../cluster/infra/openbao/README.md). Deux dépendances structurent
+l'ordre, quel que soit le cluster :
+
+- les client-secrets **OIDC** (argocd, grafana) exigent que le provider d'identité tourne et que
+  ses providers soient créés (Terraform, autre repo) ;
+- les tokens de **service account** d'un service déployé ici (ex. notifications ArgoCD ←
+  Grafana) exigent ce service en marche.
+
+Vérifier que le pont est passant — la colonne `STATUS` doit être `SecretSynced` partout :
+
+```bash
+kubectl get externalsecrets -A
+kubectl get clustersecretstore openbao -o yaml     # status.conditions → Ready=True
+```
+
+**Et immédiatement après : sauvegarder le coffre** — snapshot raft **et** clés de descellement,
+séparément (cf. [`cluster/infra/openbao`](../cluster/infra/openbao/README.md)). À partir de
+maintenant, ces six credentials ne vivent plus que là.
 
 ---
 
@@ -699,8 +774,16 @@ kubectl get nodes                                        # Ready
 kubectl -n gateway get gateway shared-gw                 # PROGRAMMED=True
 kubectl -n gateway get certificate                       # tous READY=True
 kubectl get sc
+kubectl get externalsecrets -A                           # tous STATUS=SecretSynced
+kubectl get clustersecretstore openbao                   # Ready (⇒ coffre descellé + configuré)
 curl -I https://argocd.${CLUSTER_DOMAIN}
 ```
+
+> [!NOTE]
+> Un `ExternalSecret` en erreur alors que tout le reste est vert = coffre **scellé** (après un
+> redémarrage de son pod) ou repo Terraform pas appliqué. Les Applications concernées passent
+> `Degraded` sans que leurs charges s'arrêtent : cf.
+> [`cluster/infra/external-secrets`](../cluster/infra/external-secrets/README.md).
 
 Le bloc de vérification complet, avec les hostnames et le smoke test réels du cluster, est dans
 sa fiche : [`doc/clusters/`](clusters/).

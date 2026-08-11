@@ -77,8 +77,10 @@ certificat Let's Encrypt pour un nom qui n'est pas joignable depuis Internet.
 Créer un `HTTPRoute` dans le `manifests/` du composant :
 
 - `parentRefs` → `shared-gw` (ns `gateway`) + `sectionName` du listener adapté ;
-- `group`/`kind`/`weight` **explicites** dans le `backendRef`, et le `matches` explicite dans la
-  règle — sinon les defaults injectés par le CRD côté live créent un `OutOfSync` permanent ;
+- `group`/`kind`/`weight` et le `matches` **explicites** — plus obligatoires depuis que le
+  server-side diff est actif (`controller.diff.server.side` dans
+  [argocd](../cluster/infra/argocd/README.md), qui absorbe les defaults injectés par le CRD),
+  mais gardés dans le modèle : ils documentent ce qui est réellement appliqué ;
 - backend en **HTTP clair** (le TLS est terminé au Gateway).
 
 Modèle de référence :

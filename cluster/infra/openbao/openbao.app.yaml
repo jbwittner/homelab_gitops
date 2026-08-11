@@ -18,8 +18,10 @@ metadata:
 spec:
   project: default
   # Gestionnaire de secrets, stockage raft intégré (archétype b : chart + `$values` +
-  # `manifests/`). Contrairement à sealed-secrets, ce composant n'est PAS un canal de
-  # secrets GitOps : son contenu vit dans le PVC, hors de Git — voir README.
+  # `manifests/`). Second canal de secrets du repo à côté de sealed-secrets, consommé via
+  # [external-secrets](../external-secrets/README.md) : la différence n'est pas le rôle mais
+  # l'emplacement du chiffré — dans Git pour un SealedSecret, dans le PVC pour openbao.
+  # Critère de choix entre les deux : doc/regles-gitops.md.
   sources:
     - repoURL: https://openbao.github.io/openbao-helm
       chart: openbao

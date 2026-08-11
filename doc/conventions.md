@@ -203,18 +203,28 @@ d'**infra** — sinon sa dépendance à la StorageClass d'`openebs` ne serait pa
 
 ## Secrets d'un composant
 
-Dans `manifests/` du composant qui consomme le secret :
+Deux canaux, donc deux formes de fichier — dans `manifests/` du composant qui **consomme** le
+secret. Le choix entre les deux n'est pas libre : il dépend de la position du secret dans le
+graphe de bootstrap, critère et inventaire dans [regles-gitops.md](regles-gitops.md).
 
-- `<name>.secret.yaml` — template **en clair**, gitignoré (`*.secret.yaml`), jamais committé ;
-- `<name>.sealed.yaml` — le `SealedSecret`, committé et **référencé dans le
-  `kustomization.yaml`**.
+| Canal | Fichier committé | Pendant en clair | Où vit la valeur |
+|---|---|---|---|
+| SealedSecret | `<name>.sealed.yaml` | `<name>.secret.yaml`, **gitignoré** (`*.secret.yaml`) | dans Git, chiffrée |
+| openbao | `<name>.externalsecret.yaml` (`ExternalSecret`) | aucun — rien à sceller | dans le coffre |
+
+Dans les deux cas le fichier est **référencé dans le `kustomization.yaml`**.
 
 ⚠️ Un fichier référencé mais absent casse `kustomize build` et met toute l'Application en erreur :
 tant qu'un secret n'est pas scellé, garder sa ligne **commentée** dans le `kustomization.yaml`.
 
 Un `SealedSecret` est chiffré pour un couple **(nom, namespace)** et pour la clé d'**un** cluster :
-le déplacer, ou viser un autre cluster, impose de le resceller. Détail et exceptions (Secrets sans
-credential admis en clair) : [regles-gitops.md](regles-gitops.md).
+le déplacer, ou viser un autre cluster, impose de le resceller. Un `ExternalSecret` n'a pas cette
+contrainte — c'est un pointeur, il se déplace librement.
+
+⚠️ **Un `ExternalSecret` ne va jamais dans un dossier servant à l'`apply -k` d'amorçage.** Seul
+`cluster/infra/argocd/manifests/` est dans ce cas : ses `ExternalSecret` vivent donc dans
+`cluster/infra/argocd/external-secrets/`, déclaré comme second `source` de la même Application.
+La CRD `ExternalSecret` n'existe pas à l'étape 2 du bootstrap.
 
 ## Commandes de la documentation
 

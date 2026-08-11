@@ -19,7 +19,8 @@ groupes côté authentik sont gérés en **Terraform** (autre repo), pas ici.
 - `manifests/namespace.yaml` — ns `authentik`
 - `manifests/authentik-db.yaml` — `Cluster` CNPG (l'opérateur génère le service
   `authentik-db-rw` et le secret `authentik-db-app`)
-- `manifests/authentik-secrets.sealed.yaml` — SealedSecret `authentik-secrets`, clé `secret-key`
+- `manifests/authentik-secrets.externalsecret.yaml` — `ExternalSecret` `authentik-secrets`, clé
+  `secret-key`, servi par [openbao](../../infra/openbao/README.md)
 - `manifests/authentik-httproute.yaml` — HTTPRoute → `shared-gw`
 - `manifests/kustomization.yaml` — assemblage
 
@@ -44,13 +45,13 @@ groupes côté authentik sont gérés en **Terraform** (autre repo), pas ici.
   kubectl -n authentik get cluster
   kubectl -n authentik get pods
   ```
-- **Générer et sceller le `secret-key`** (première installation) — depuis la racine du repo :
+- **Générer le `secret-key`** (première installation uniquement) — il va au coffre, pas dans
+  Git ; l'`ExternalSecret` qui le pointe est déjà dans le repo :
   ```bash
-  kubectl create secret generic authentik-secrets -n authentik --dry-run=client -o yaml \
-    --from-literal=secret-key="$(openssl rand -base64 60 | tr -d '\n')" \
-  | kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-    > cluster/app/authentik/manifests/authentik-secrets.sealed.yaml
+  kubectl -n openbao exec -ti openbao-0 -- sh -c \
+    'bao kv put kv/homelab/authentik/secrets secret-key="$(openssl rand -base64 60 | tr -d "\n")"'
   ```
-  Puis commit + push.
+  Le KV v2 est **versionné** : un écrasement accidentel se rattrape par `bao kv rollback`, ce que
+  le scellement ne permettait pas. Ne jamais s'en servir pour autant (cf. Contraintes).
 - **Logs** : `kubectl -n authentik logs deploy/authentik-server`,
   `kubectl -n authentik logs deploy/authentik-worker`.

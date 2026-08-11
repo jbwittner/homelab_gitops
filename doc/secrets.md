@@ -49,6 +49,17 @@ Secret/grafana-oidc                     lu par Grafana via envValueFrom.secretKe
 L'inventaire des chemins KV et de leurs consommateurs est dans
 [`cluster/infra/openbao`](../cluster/infra/openbao/README.md), table « Contenu du coffre ».
 
+⚠️ **Un seul secrets engine, plusieurs méthodes d'auth.** Les deux notions sont indépendantes, et
+OpenBao emploie le mot « kubernetes » des deux côtés pour deux choses opposées — l'engine
+*fabrique* des ServiceAccounts éphémères, l'auth *consomme* un token pour identifier un client.
+
+| | Rôle | Combien |
+|---|---|---|
+| Secrets engine (`kv` v2) | *où* sont rangés les secrets | **1**, partagé — le coffre ne dépend d'aucun cluster |
+| Auth method (`kubernetes-<cluster>`) | *comment* un client prouve qui il est | **1 par cluster** — chaque mount est lié à un API server |
+
+Ce que Terraform doit poser exactement : [openbao-terraform.md](openbao-terraform.md).
+
 ## Pourquoi `ClusterSecretStore` et pas `SecretStore`
 
 ESO offre les deux. `SecretStore` est **namespacé** : il n'est utilisable que par les

@@ -4,5 +4,5 @@ namespace: authentik
 resources:
   - namespace.yaml
   - authentik-db.yaml
-  - authentik-secrets.sealed.yaml
+  - authentik-secrets.externalsecret.yaml
   - authentik-httproute.yaml

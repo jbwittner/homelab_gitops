@@ -5,3 +5,17 @@ metadata:
   namespace: argocd
 data:
   server.insecure: "true"
+  # Diff côté serveur pour TOUTES les Applications (env
+  # `ARGOCD_APPLICATION_CONTROLLER_SERVER_SIDE_DIFF` du controller).
+  #
+  # Sans lui, le controller compare l'objet live COMPLET au manifeste de Git : tout champ à
+  # valeur par défaut dans un CRD (`remoteRef.conversionStrategy` d'un ExternalSecret, le
+  # `group`/`kind`/`weight` d'une HTTPRoute…) est injecté à l'admission, absent de Git, donc
+  # signalé en `OutOfSync` — et une sync ne le corrige jamais puisqu'il renaît à chaque apply.
+  # Le contournement était d'écrire ces defaults à la main dans chaque manifeste : à refaire
+  # pour chaque nouvelle ressource. Avec ce flag, le controller fait un apply en dry-run et
+  # diffe le résultat prédit — les defaults ne remontent plus, quel que soit le CRD.
+  #
+  # Prérequis satisfait ici : toutes les Applications du repo sont en `ServerSideApply=true`
+  # (le server-side diff suppose le même manager côté apply).
+  controller.diff.server.side: "true"
