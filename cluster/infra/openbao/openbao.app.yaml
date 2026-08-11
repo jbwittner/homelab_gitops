@@ -39,7 +39,25 @@ spec:
   destination:
     name: bleu-kalecgos
     namespace: openbao
+  # Le cert-controller de l'agent injector génère son certificat au démarrage et PATCHE lui-même
+  # le `caBundle` du MutatingWebhookConfiguration. Le chart, lui, rend le champ vide
+  # (`injector.certs.caBundle` non renseigné) : Git ne peut pas connaître cette valeur, elle
+  # naît dans le cluster. Sans cette exception, l'Application est OutOfSync en permanence.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: openbao-agent-injector-cfg
+      # jqPathExpressions plutôt que jsonPointers : couvre tous les webhooks de l'objet sans
+      # coder en dur un index `/webhooks/0/...` qui casserait si le chart en ajoutait un.
+      jqPathExpressions:
+        - '.webhooks[]?.clientConfig.caBundle'
   syncPolicy:
     automated:
       selfHeal: true
       prune: true
+    syncOptions:
+      # ⚠️ Load-bearing, et pas seulement cosmétique : sans lui `ignoreDifferences` masque le
+      # diff dans l'UI mais la sync réapplique quand même le manifeste de Git, donc remet le
+      # caBundle à vide — le webhook devient injoignable et l'admission échoue. Avec lui, ArgoCD
+      # laisse le champ tel que le cert-controller l'a écrit.
+      - RespectIgnoreDifferences=true
