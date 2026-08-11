@@ -50,7 +50,7 @@ ne l'est pas.
 |---|---|---|
 | `argocd.lan.wittner.tech` | `https-internal-kalecgos` | [argocd](../cluster/infra/argocd/README.md) |
 | `grafana.lan.wittner.tech` | `https-internal-kalecgos` | [kube-prometheus-stack](../cluster/app/kube-prometheus-stack/README.md) |
-| `openbao.lan.wittner.tech` | `https-internal` | [openbao](../cluster/app/openbao/README.md) |
+| `openbao.lan.wittner.tech` | `https-internal` | [openbao](../cluster/infra/openbao/README.md) |
 | `authentik.wittner.tech` | `https-public` | [authentik](../cluster/app/authentik/README.md) |
 
 Non exposés volontairement : Prometheus, Alertmanager (port-forward), Loki (API sans
@@ -65,7 +65,7 @@ ce cluster** (kalecgos : `*.kalecgos.lan.wittner.tech → 192.168.1.80` ; cf.
 Le wildcard **non spécifique à un cluster** `*.lan.wittner.tech` (listener `https-internal`) doit
 lui aussi être résolu. Il n'appartient à aucun cluster par construction, mais `shared-gw`
 n'existant que sur le hub, il pointe aujourd'hui vers `192.168.1.80` comme les autres. Son
-premier utilisateur est [openbao](../cluster/app/openbao/README.md) : si le résolveur porte des
+premier utilisateur est [openbao](../cluster/infra/openbao/README.md) : si le résolveur porte des
 entrées nominatives plutôt qu'un vrai wildcard, `openbao.lan.wittner.tech` est à créer à la main.
 
 Les zones `*.lan` ne sont jamais publiées chez

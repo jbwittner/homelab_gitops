@@ -53,6 +53,7 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
 | [cert-manager](cluster/infra/cert-manager/README.md) | hub | Moteur d'émission TLS (wave -5) |
 | [cert-manager-config](cluster/infra/cert-manager-config/README.md) | hub | `ClusterIssuer` Let's Encrypt DNS-01 + certificats wildcard (wave -4) |
 | [openebs](cluster/infra/openebs/README.md) | hub | Stockage LocalPV-LVM, StorageClass par défaut du cluster |
+| [openbao](cluster/infra/openbao/README.md) | hub | Coffre de secrets (raft intégré) + agent injector — contenu hors Git, descellement manuel (wave 1) |
 
 ### `cluster/app/` — applicatif
 
@@ -63,7 +64,6 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
 | [kube-prometheus-stack](cluster/app/kube-prometheus-stack/README.md) | hub | Prometheus, Alertmanager, Grafana, exporters, dashboards maison |
 | [loki](cluster/app/loki/README.md) | hub | Stockage et requêtage des logs |
 | [alloy](cluster/app/alloy/README.md) | hub | Collecte des logs des pods → Loki |
-| [openbao](cluster/app/openbao/README.md) | hub | Coffre de secrets (raft intégré) + agent injector — contenu hors Git |
 | [renovate](cluster/app/renovate/README.md) | hub | CronJob de mise à jour des dépendances de ce repo |
 | [test-nginx](cluster/app/test-nginx/README.md) | hub | Smoke test permanent : stockage (PVC) + CNPG |
 
@@ -100,4 +100,4 @@ choisit via `export CLUSTER=…`, ses valeurs vivent dans [doc/clusters/](doc/cl
 >    re-provisionner chaque credential amont.
 > 2. Les **clés de descellement d'openbao** et le contenu de son PVC. Le coffre est le seul
 >    composant dont les données ne vivent pas dans Git : voir
->    [cluster/app/openbao](cluster/app/openbao/README.md) pour les snapshots raft.
+>    [cluster/infra/openbao](cluster/infra/openbao/README.md) pour les snapshots raft.

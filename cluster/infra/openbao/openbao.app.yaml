@@ -3,6 +3,12 @@ kind: Application
 metadata:
   name: openbao
   namespace: argocd
+  annotations:
+    # APRÈS openebs (wave 0) : le coffre a un PVC, et sans la StorageClass par défaut il reste
+    # `Pending`. Ce n'est possible que depuis qu'openbao est un composant d'INFRA : les waves
+    # ne s'ordonnent qu'à l'intérieur d'un même app-of-apps, donc tant qu'openbao vivait sous
+    # `cluster/app/` aucune relation d'ordre ne le liait à openebs.
+    argocd.argoproj.io/sync-wave: "1"
   labels:
     app.kubernetes.io/name: openbao
     app.kubernetes.io/part-of: homelab-gitops
@@ -21,7 +27,7 @@ spec:
       helm:
         releaseName: openbao
         valueFiles:
-          - $values/cluster/app/openbao/helm-values.yaml
+          - $values/cluster/infra/openbao/helm-values.yaml
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
@@ -29,7 +35,7 @@ spec:
     # mais pas avec les champs explicites qu'exige ArgoCD — cf. README).
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
-      path: cluster/app/openbao/manifests
+      path: cluster/infra/openbao/manifests
   destination:
     name: bleu-kalecgos
     namespace: openbao

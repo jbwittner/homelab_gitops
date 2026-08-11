@@ -86,9 +86,9 @@ et l'a donc :
 ```
 tier 1/2 : root, infra, app
 appsets  : cilium, argocd-manager
-infra    : argocd, cert-manager, cert-manager-config, gateway-api, openebs, sealed-secrets,
-           bleu-kalecgos-cilium
-app      : alloy, authentik, cnpg, kube-prometheus-stack, loki, openbao, renovate, test-nginx
+infra    : argocd, cert-manager, cert-manager-config, gateway-api, openbao, openebs,
+           sealed-secrets, bleu-kalecgos-cilium
+app      : alloy, authentik, cnpg, kube-prometheus-stack, loki, renovate, test-nginx
 ```
 
 ```bash
@@ -101,7 +101,7 @@ Tous deviennent illisibles si la clé sealed-secrets de ce cluster est perdue �
 Secret de cluster du spoke `bleu-arcanagos`**, scellé ici.
 
 > [!NOTE]
-> [`openbao`](../../cluster/app/openbao/README.md) ne figure pas dans ce tableau : son contenu
+> [`openbao`](../../cluster/infra/openbao/README.md) ne figure pas dans ce tableau : son contenu
 > n'est pas scellé dans Git mais stocké dans son PVC. Ses **clés de descellement** sont un second
 > élément à sauvegarder au coffre, indépendant de la clé sealed-secrets.
 
