@@ -4,8 +4,8 @@ namespace: monitoring
 resources:
   - namespace.yaml
   - grafana-httproute.yaml
-  - grafana-oidc.sealed.yaml
-  - grafana-admin.sealed.yaml
+  - grafana-oidc.externalsecret.yaml
+  - grafana-admin.externalsecret.yaml
   - dashboard-talos-nodes.yaml
   - dashboard-argocd.yaml
   - dashboard-ressources-cluster.yaml

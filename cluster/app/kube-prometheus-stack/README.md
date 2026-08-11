@@ -21,8 +21,9 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   `instance` du node-exporter, scrapes control-plane désactivés
 - `manifests/namespace.yaml` — ns `monitoring`
 - `manifests/grafana-httproute.yaml` — HTTPRoute Grafana → `shared-gw`
-- `manifests/grafana-oidc.sealed.yaml` — SealedSecret `grafana-oidc`, clé `client-secret`
-- `manifests/grafana-admin.sealed.yaml` — SealedSecret `grafana-admin`, clés `admin-user` /
+- `manifests/grafana-oidc.externalsecret.yaml` — `ExternalSecret` `grafana-oidc`, clé `client-secret`,
+  servi par [openbao](../../infra/openbao/README.md)
+- `manifests/grafana-admin.externalsecret.yaml` — `ExternalSecret` `grafana-admin`, clés `admin-user` /
   `admin-password` (break-glass)
 - `manifests/dashboard-talos-nodes.yaml` — dashboard « Système — nœuds Talos » (sidecar, label
   `grafana_dashboard: "1"`) ; porte la couche d'annotations « Déploiements ArgoCD » (tags
@@ -44,8 +45,11 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 
 ## Contraintes
 
-- Un `*.sealed.yaml` référencé mais absent casse `kustomize build` et met toute l'Application en
-  erreur : garder la ligne **commentée** tant que le secret n'est pas scellé.
+- Un fichier référencé mais absent casse `kustomize build` et met toute l'Application en erreur :
+  garder la ligne **commentée** tant que le secret n'existe pas.
+- **Le compte admin est le break-glass du SSO** : il repose sur `deletionPolicy: Retain` de son
+  `ExternalSecret`. Coffre scellé, l'objet passe `NotReady` (donc l'Application `Degraded`) mais
+  le `Secret` reste en place et le login local continue de marcher. Ne jamais passer en `Delete`.
 - Tout ServiceMonitor destiné à ce Prometheus doit porter le label
   `release: kube-prometheus-stack` (`serviceMonitorSelectorNilUsesHelmValues`) — vaut aussi pour
   [loki](../loki/README.md), [alloy](../alloy/README.md) et [openebs](../../infra/openebs/README.md).
@@ -69,28 +73,23 @@ Compte local `admin` (secret `grafana-admin`) conservé en break-glass.
 
 ### Câblage des secrets
 
-Commandes **depuis la racine du repo** ; les `*.secret.yaml` sont gitignorés.
+Les deux secrets vivent dans openbao — **rien à committer**, les `ExternalSecret` qui les
+pointent sont déjà dans le repo :
 
 ```bash
-# 1. Renseigner les templates locaux :
-#    cluster/app/kube-prometheus-stack/manifests/grafana-oidc.secret.yaml  → client-secret (output terraform)
-#    cluster/app/kube-prometheus-stack/manifests/grafana-admin.secret.yaml → admin-user / admin-password
-#      (mot de passe : openssl rand -base64 30)
+kubectl -n openbao exec -ti openbao-0 -- \
+  bao kv put kv/homelab/grafana/oidc client-secret=<output terraform client_secret>
 
-# 2. Sceller, puis supprimer les fichiers en clair
-kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-  < cluster/app/kube-prometheus-stack/manifests/grafana-oidc.secret.yaml \
-  > cluster/app/kube-prometheus-stack/manifests/grafana-oidc.sealed.yaml
-kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-  < cluster/app/kube-prometheus-stack/manifests/grafana-admin.secret.yaml \
-  > cluster/app/kube-prometheus-stack/manifests/grafana-admin.sealed.yaml
-rm cluster/app/kube-prometheus-stack/manifests/grafana-{oidc,admin}.secret.yaml
-
-# 3. Commit + push (les 2 lignes *.sealed.yaml sont déjà dans kustomization.yaml).
+kubectl -n openbao exec -ti openbao-0 -- \
+  bao kv put kv/homelab/grafana/admin admin-user=admin admin-password="$(openssl rand -base64 30)"
 ```
 
-Rotation : régénérer côté Terraform (OIDC) ou `openssl` (admin), re-renseigner le template,
-re-sceller (étape 2).
+Rotation : régénérer côté Terraform (OIDC) ou `openssl` (admin), refaire le `bao kv put`. ESO
+reprend la valeur au prochain `refreshInterval` (1 h) ; pour l'appliquer tout de suite :
+
+```bash
+kubectl -n monitoring annotate externalsecret grafana-oidc force-sync=$(date +%s) --overwrite
+```
 
 ### Scrape d'ArgoCD
 
