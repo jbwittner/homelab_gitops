@@ -4,7 +4,9 @@ metadata:
   name: argocd-server
   namespace: argocd
 spec:
-  # Attache au Gateway partagé (ns gateway), listener interne dédié kalecgos.
+  # Attache au Gateway partagé (ns gateway), listener interne `*.lan.wittner.tech`
+  # (secret wildcard-lan-tls) — il doit couvrir le hostname ci-dessous, sinon la route
+  # n'est attachée à aucun listener et le Gateway répond 404.
   # group/kind explicites : sinon le CRD Gateway API les injecte en defaults côté live
   # et ArgoCD (sans ServerSideDiff) voit un OutOfSync permanent.
   parentRefs:
@@ -12,7 +14,7 @@ spec:
       kind: Gateway
       name: shared-gw
       namespace: gateway
-      sectionName: https-internal-kalecgos
+      sectionName: https-internal
   hostnames:
     - argocd.lan.wittner.tech
   rules:

@@ -10,7 +10,9 @@ spec:
       kind: Gateway
       name: shared-gw
       namespace: gateway
-      sectionName: https-internal-kalecgos
+      # Listener `*.lan.wittner.tech` : il doit couvrir le hostname ci-dessous, sinon
+      # la route n'est attachée à aucun listener et le Gateway répond 404.
+      sectionName: https-internal
   hostnames:
     - grafana.lan.wittner.tech
   rules:
