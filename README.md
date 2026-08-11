@@ -49,7 +49,8 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
 | [argocd-manager](cluster/infra/argocd-manager/README.md) | spokes (appset) | Identité `cluster-admin` avec laquelle le hub pilote un cluster distant (wave -20) |
 | [cilium](cluster/infra/cilium/README.md) | tous (appset) | CNI, remplacement de kube-proxy, Gateway API, LB annoncé en L2 |
 | [gateway-api](cluster/infra/gateway-api/README.md) | hub | CRDs Gateway API + le `Gateway` partagé `shared-gw` (wave -10) |
-| [sealed-secrets](cluster/infra/sealed-secrets/README.md) | hub | Déchiffre les `SealedSecret` du repo — seul canal de secrets (wave -8) |
+| [sealed-secrets](cluster/infra/sealed-secrets/README.md) | hub | Déchiffre les `SealedSecret` du repo — canal de secrets n°1 (wave -8) |
+| [external-secrets](cluster/infra/external-secrets/README.md) | tous (appset) | Tire les secrets d'openbao en `Secret` natifs — canal n°2 (wave -7) |
 | [cert-manager](cluster/infra/cert-manager/README.md) | hub | Moteur d'émission TLS (wave -5) |
 | [cert-manager-config](cluster/infra/cert-manager-config/README.md) | hub | `ClusterIssuer` Let's Encrypt DNS-01 + certificats wildcard (wave -4) |
 | [openebs](cluster/infra/openebs/README.md) | hub | Stockage LocalPV-LVM, StorageClass par défaut du cluster |
@@ -75,6 +76,8 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
   `ApplicationSet`, layout des composants, naming, archétypes, sync-waves, pattern `helm-values`,
   convention des secrets
 - [doc/reseau.md](doc/reseau.md) — exposition réseau (Gateway API, `shared-gw`, listeners, TLS)
+- [doc/secrets.md](doc/secrets.md) — architecture des secrets : les deux canaux, le modèle d'objets
+  ESO (`ClusterSecretStore` / `ExternalSecret` / `Secret`), un store par cluster, rotation
 - [doc/runbook-bootstrap.md](doc/runbook-bootstrap.md) — bootstrap / disaster recovery complet,
   depuis un cluster vierge sans CNI — **procédure générique, tous clusters**
 - [doc/clusters/](doc/clusters/) — une fiche par cluster : les valeurs que le runbook

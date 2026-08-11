@@ -1,0 +1,45 @@
+# helm-values — external-secrets (ESO : coffre openbao → Secret Kubernetes natif)
+
+# Les CRD sont livrées par le chart lui-même (défaut). Les sortir dans un composant séparé
+# imposerait un ordre supplémentaire pour rien : ce chart est le seul à les poser.
+installCRDs: true
+
+crds:
+  # v1beta1 est déprécié et disparaît le 2026-05-01 côté upstream. Tout le repo écrit en
+  # `external-secrets.io/v1` : rien à servir en plus.
+  unsafeServeV1Beta1: false
+
+# `serviceaccounts/token` en `create` — indispensable et load-bearing : le ClusterSecretStore
+# s'authentifie auprès d'openbao via `serviceAccountRef`, donc ESO forge un token pour son
+# propre ServiceAccount avec l'API TokenRequest. Sans cette permission, l'auth Kubernetes
+# d'openbao échoue et TOUS les ExternalSecret du repo restent NotReady.
+rbac:
+  create: true
+  serviceAccountTokenCreate: true
+
+serviceAccount:
+  create: true
+  # Nom explicite : il est référencé nommément par le ClusterSecretStore ET par le role
+  # `external-secrets` côté openbao (bound_service_account_names). Le laisser vide le ferait
+  # dériver du fullname du chart — même valeur aujourd'hui, mais implicite.
+  name: external-secrets
+
+# Cache des tokens Vault/OpenBao : sans lui, ESO refait un login à chaque réconciliation de
+# chaque ExternalSecret. À 6 ExternalSecret ce n'est pas un problème de charge, mais chaque
+# login crée un lease côté coffre.
+vault:
+  enableTokenCache: true
+
+serviceMonitor:
+  enabled: true
+  # `additionalLabels` s'AJOUTE aux labels du template (contrairement à `selectors` du chart
+  # openbao, qui les remplace). Le prometheus-operator de kube-prometheus-stack ne sélectionne
+  # que ce label-ci (serviceMonitorSelectorNilUsesHelmValues) — même contrainte que pour alloy.
+  additionalLabels:
+    release: kube-prometheus-stack
+  # ⚠️ `skipIfMissing` (défaut) : au TOUT PREMIER bootstrap, ESO (wave -7) est déployé avant
+  # kube-prometheus-stack (wave 0), donc la CRD ServiceMonitor n'existe pas encore et le
+  # template est silencieusement omis. ArgoCD cachant les manifestes rendus, il faut un
+  # **Hard Refresh** de l'Application une fois kube-prometheus-stack en place pour que la
+  # cible apparaisse. `alwaysRender` ferait l'inverse : sync en échec au bootstrap.
+  renderMode: skipIfMissing

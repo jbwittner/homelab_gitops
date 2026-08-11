@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ⚠️ `includeSelectors: false` obligatoire : à `true`, kustomize injecte aussi ces paires dans
+# les `selector` et `template.metadata.labels`, champs immuables sur bien des ressources.
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: external-secrets
+      app.kubernetes.io/part-of: homelab-gitops
+      app.kubernetes.io/component: secrets
+      homelab.wittner.tech/cluster: bleu-kalecgos
+
+resources:
+  - ../../common/manifests
+  - clustersecretstore-openbao.yaml

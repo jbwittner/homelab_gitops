@@ -107,13 +107,16 @@ Applications attendues dans ArgoCD (côté **hub**, ns `argocd`) :
 ```
 bleu-arcanagos-argocd-manager     # wave -20 de l'appset, prune: false, sans finalizer
 bleu-arcanagos-cilium
+bleu-arcanagos-external-secrets   # contrôleur ESO local + ClusterSecretStore vers le coffre du hub
 ```
 
 ```bash
 kubectl -n argocd get app -l homelab.wittner.tech/cluster=bleu-arcanagos
 ```
 
-## SealedSecrets
+## Secrets
+
+### Canal 1 — SealedSecrets
 
 Aucun **dans ce cluster** : pas de contrôleur `sealed-secrets` ici, donc aucune clé propre à
 `bleu-arcanagos` à sauvegarder ni à restaurer.
@@ -126,6 +129,24 @@ En revanche, un secret de ce cluster vit **côté hub**, scellé avec la clé de
 
 Le perdre ne perd pas le cluster : le token se relit dans `argocd-manager-token` et se rescelle
 (cf. [`argocd-manager/README.md`](../../cluster/infra/argocd-manager/README.md)).
+
+### Canal 2 — openbao
+
+Aucun secret consommé ici à ce jour : le cluster est en construction. L'infrastructure est en
+place — [external-secrets](../../cluster/infra/external-secrets/README.md) y tourne et y pose un
+`ClusterSecretStore` nommé `openbao`, comme sur le hub.
+
+Deux différences avec le hub, toutes deux dues au fait que **le coffre est sur le hub** :
+
+| Élément | Valeur ici |
+|---|---|
+| `server` du store | `https://openbao.lan.wittner.tech` — via `shared-gw` du hub, pas `openbao.openbao.svc` qui ne résout pas ici |
+| Mount d'auth côté openbao | `kubernetes-bleu-arcanagos`, à configurer avec le `kubernetes_host`, le `kubernetes_ca_cert` et un `token_reviewer_jwt` **de ce cluster** — openbao n'a aucun accès local à son API TokenReview |
+
+⚠️ Conséquence de bootstrap absente sur le hub : les secrets de ce cluster dépendent de
+l'exposition du hub (Gateway programmée, certificat wildcard émis, DNS `*.lan.wittner.tech`
+résolu). Tant que ce chemin n'est pas opérationnel, aucun `ExternalSecret` ne peut se
+rafraîchir ici.
 
 ## Vérification
 

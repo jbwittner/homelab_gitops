@@ -45,7 +45,7 @@ C'est le **seul** critère de choix entre les deux formes :
 | | Forme | Fichier | Nom des Applications | Exemples |
 |---|---|---|---|---|
 | Déployé sur **un** cluster | `Application` | `<name>.app.yaml` | `<name>` (= dossier) | `argocd`, `openebs`, `loki`… |
-| Déployé sur **plusieurs** clusters | `ApplicationSet` | `<name>.appset.yaml` | `<cluster>-<name>` (template) | `cilium`, `argocd-manager` |
+| Déployé sur **plusieurs** clusters | `ApplicationSet` | `<name>.appset.yaml` | `<cluster>-<name>` (template) | `cilium`, `argocd-manager`, `external-secrets` |
 
 Le **dossier** et le **nom de fichier** ne prennent jamais de préfixe de cluster : c'est
 `infra/cilium/cilium.appset.yaml`, qui produit `bleu-kalecgos-cilium` et `bleu-arcanagos-cilium`.
@@ -188,11 +188,18 @@ par le contrôleur ApplicationSet et déroulent leurs propres waves de ressource
 |---|---|---|
 | -20 | `argocd-manager` (appset) | identité des clusters **spokes** — credential d'accès du hub, avant tout le reste |
 | -10 | `gateway-api` | CRDs Gateway API + `shared-gw` |
-| -8 | `sealed-secrets` | contrôleur de déchiffrement des secrets |
+| -8 | `sealed-secrets` | contrôleur de déchiffrement des secrets — canal 1 |
+| -7 | `external-secrets` (appset) | CRDs + contrôleur du canal 2. ⚠️ wave sur l'appset, pas sur les Applications générées : la présence des CRDs avant le 1er `ExternalSecret` (celui d'`argocd`, -1) est *éventuelle*, pas ordonnée |
 | -5 | `cert-manager` | émission TLS |
 | -4 | `cert-manager-config` | ClusterIssuer Let's Encrypt + wildcards |
 | -1 | `argocd` | self-management |
 | 0 (défaut, non annoté) | `cilium`, `openebs`, tous les composants de `app/` | reste de la stack |
+| 1 | `openbao` | le coffre a un PVC : après la StorageClass posée par `openebs` (0) |
+
+⚠️ **Une wave n'ordonne qu'à l'intérieur d'un même app-of-apps.** `infra` et `app` sont deux
+Applications sœurs synchronisées en parallèle : aucune wave d'`infra` ne garantit quoi que ce
+soit vis-à-vis d'un composant d'`app`. C'est pour cette raison qu'`openbao` est un composant
+d'**infra** — sinon sa dépendance à la StorageClass d'`openebs` ne serait pas exprimable.
 
 ## Secrets d'un composant
 
