@@ -34,7 +34,7 @@ grafana:
     passwordKey: admin-password
   grafana.ini:
     server:
-      root_url: https://grafana.kalecgos.lan.wittner.tech
+      root_url: https://grafana.lan.wittner.tech
     auth.generic_oauth:
       enabled: true
       name: Authentik

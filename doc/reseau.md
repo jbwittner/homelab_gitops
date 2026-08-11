@@ -48,8 +48,8 @@ ne l'est pas.
 
 | Hostname | Listener | Composant |
 |---|---|---|
-| `argocd.kalecgos.lan.wittner.tech` | `https-internal-kalecgos` | [argocd](../cluster/infra/argocd/README.md) |
-| `grafana.kalecgos.lan.wittner.tech` | `https-internal-kalecgos` | [kube-prometheus-stack](../cluster/app/kube-prometheus-stack/README.md) |
+| `argocd.lan.wittner.tech` | `https-internal-kalecgos` | [argocd](../cluster/infra/argocd/README.md) |
+| `grafana.lan.wittner.tech` | `https-internal-kalecgos` | [kube-prometheus-stack](../cluster/app/kube-prometheus-stack/README.md) |
 | `openbao.lan.wittner.tech` | `https-internal` | [openbao](../cluster/app/openbao/README.md) |
 | `authentik.wittner.tech` | `https-public` | [authentik](../cluster/app/authentik/README.md) |
 

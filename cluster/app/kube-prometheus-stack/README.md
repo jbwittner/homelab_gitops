@@ -4,7 +4,7 @@
 
 Stack d'observabilité du cluster : Prometheus + Alertmanager + Grafana + prometheus-operator
 (CRDs ServiceMonitor/PodMonitor) + node-exporter + kube-state-metrics. Grafana est exposé sur
-`https://grafana.kalecgos.lan.wittner.tech` via `shared-gw` (listener `https-internal-kalecgos`),
+`https://grafana.lan.wittner.tech` via `shared-gw` (listener `https-internal-kalecgos`),
 en **SSO authentik (OIDC)** avec **login local conservé** en break-glass. Prometheus et
 Alertmanager restent internes (non exposés).
 
@@ -61,7 +61,7 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 Le Provider / Application / groupes côté authentik sont gérés en **Terraform** (autre repo).
 Contrat : `clientID=grafana`, issuer `https://authentik.wittner.tech/application/o/grafana/`,
 scopes `openid profile email groups`, redirect URI
-`https://grafana.kalecgos.lan.wittner.tech/login/generic_oauth`.
+`https://grafana.lan.wittner.tech/login/generic_oauth`.
 
 Mapping des groupes (claim `groups`, cf. `role_attribute_path` dans `helm-values.yaml`) :
 **`app-grafana-admin`** → rôle Admin, **`app-grafana-viewer`** → rôle Viewer, défaut Viewer.

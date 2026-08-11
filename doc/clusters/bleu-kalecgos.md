@@ -62,8 +62,8 @@ Les deux autres listeners de `shared-gw` (`https-public` `*.wittner.tech`, `http
 aujourd'hui que **ici**, `gateway-api` étant un composant mono-cluster (cf.
 [reseau.md](../reseau.md)).
 
-**Exposé aujourd'hui** : `argocd.kalecgos.lan.wittner.tech`,
-`grafana.kalecgos.lan.wittner.tech` (listener `https-internal-kalecgos`),
+**Exposé aujourd'hui** : `argocd.lan.wittner.tech`,
+`grafana.lan.wittner.tech` (listener `https-internal-kalecgos`),
 `openbao.lan.wittner.tech` (listener `https-internal`),
 `authentik.wittner.tech` (listener `https-public`).
 
@@ -147,6 +147,6 @@ kubectl -n gateway get gateway shared-gw                 # PROGRAMMED=True, ADDR
 kubectl -n gateway get certificate                       # 3× READY=True
 kubectl get sc openebs-lvm-thin
 kubectl -n test-nginx get pods,pvc,clusters.postgresql.cnpg.io   # smoke test stockage + CNPG
-curl -I https://argocd.kalecgos.lan.wittner.tech
-curl -I https://grafana.kalecgos.lan.wittner.tech
+curl -I https://argocd.lan.wittner.tech
+curl -I https://grafana.lan.wittner.tech
 ```

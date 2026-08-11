@@ -12,7 +12,7 @@ spec:
       namespace: gateway
       sectionName: https-internal-kalecgos
   hostnames:
-    - grafana.kalecgos.lan.wittner.tech
+    - grafana.lan.wittner.tech
   rules:
     - matches:
         - path:
