@@ -25,7 +25,7 @@ server:
   #   - le passage à 3 replicas comme simple changement de value, pas une migration.
   ha:
     enabled: true
-    replicas: 1
+    replicas: 2
     raft:
       enabled: true
       # Node ID = nom du pod. Sinon un ID aléatoire est régénéré à chaque redémarrage et le
@@ -86,7 +86,7 @@ ui:
 
 serverTelemetry:
   serviceMonitor:
-    enabled: true
+    enabled: false
     # `selectors` REMPLACE le bloc de labels par défaut du template (`release: prometheus`).
     # Le prometheus-operator du chart kube-prometheus-stack ne sélectionne que ce label-ci
     # (serviceMonitorSelectorNilUsesHelmValues) — même contrainte que pour alloy.
