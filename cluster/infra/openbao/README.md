@@ -37,9 +37,20 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 
 ## Contraintes
 
-- **OpenBao démarre scellé.** Après chaque redémarrage du pod, il faut le desceller à la main
-  (voir Opérations). Tant qu'il l'est, l'API répond `503` et le pod n'est pas `Ready` — c'est
-  attendu, pas une panne.
+- **OpenBao démarre scellé.** Après chaque redémarrage d'un pod, il faut le desceller à la main
+  (voir Opérations), **pod par pod** : les clés de descellement ne transitent pas entre pairs
+  raft. Tant qu'il l'est, l'API répond `503` et le pod n'est pas `Ready` — c'est attendu, pas une
+  panne.
+- **Le nombre de replicas doit être IMPAIR, et il faut autant de nœuds que de replicas.** Le
+  quorum raft est la majorité stricte : à 2 replicas il en faut 2, soit zéro panne tolérée pour
+  deux fois la surface de panne d'un nœud unique — strictement pire que 1. À 3, la perte d'un
+  nœud est absorbée. Et l'anti-affinité du chart est `requiredDuringScheduling` sur
+  `kubernetes.io/hostname` : un replica de plus que de nœuds reste `Pending` indéfiniment.
+- **Sans `retry_join`, un nouveau pod ne rejoint jamais le raft.** Son PVC est vide, il démarre
+  `Initialized false` + `Sealed true`, la readiness probe échoue, et il reste `0/1` pour
+  toujours — sans rien dans les logs qui ressemble à une erreur. Les stanzas `retry_join` du
+  `helm-values.yaml` pointent chaque pod via le Service **headless** `openbao-internal` ; un
+  nœud qui a déjà un état raft les ignore.
 - **Un coffre scellé ne casse rien, mais teinte le mur en rouge.** Les `ExternalSecret` qui en
   dépendent passent `NotReady`, donc les Applications `argocd`, `authentik`,
   `kube-prometheus-stack` et `renovate` passent `Degraded` — alors que leurs charges tournent
@@ -58,8 +69,9 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   que les pods labellisés `openbao-active: "true"`, label posé une fois le nœud descellé et
   leader : un OpenBao scellé n'y a aucun endpoint, et l'UI serait injoignable exactement quand on
   en a besoin pour le desceller.
-- **Le PDB est désactivé.** À un replica le chart calcule `maxUnavailable: 0`, ce qui bloque
-  indéfiniment tout `kubectl drain` du nœud.
+- **Le PDB est activé.** À 3 replicas le chart calcule `maxUnavailable: 1` : un `kubectl drain`
+  reste possible et le quorum (2 sur 3) est protégé. Il était désactivé tant qu'on tournait à
+  1 replica, où le chart calcule `0` — ce qui bloque indéfiniment tout drain sans rien protéger.
 - **La cible Prometheus disparaît quand OpenBao est scellé** (le ServiceMonitor sélectionne le
   Service `-active`, sans endpoint dans cet état). Une alerte sur ce composant doit donc porter
   sur l'*absence* de la série, pas sur `up == 0`.
@@ -141,11 +153,16 @@ Trois pièges, tous vérifiés à la connexion :
   ```bash
   kubectl -n openbao exec -ti openbao-0 -- bao operator init
   ```
-- **Desceller** (après chaque redémarrage du pod) — répéter avec 3 parts de clé distinctes :
+- **Desceller** (après chaque redémarrage) — **sur chaque pod**, en répétant la commande avec
+  3 parts de clé distinctes. Un pair raft scellé ne se fait pas desceller par les autres :
   ```bash
-  kubectl -n openbao exec -ti openbao-0 -- bao operator unseal
+  for p in 0 1 2; do kubectl -n openbao exec -ti openbao-$p -- bao operator unseal; done
   kubectl -n openbao exec -ti openbao-0 -- bao status     # Sealed=false, HA Mode=active
+  kubectl -n openbao exec -ti openbao-1 -- bao status     # Sealed=false, HA Mode=standby
   ```
+  Un pod qui rejoint le raft pour la **première fois** (PVC neuf) doit être descellé avec les
+  parts du cluster existant, pas réinitialisé : `bao operator init` ne se lance qu'une fois, sur
+  `openbao-0`.
 - **Se connecter en SSO authentik** (cf. §SSO ; suppose le coffre descellé et le mount `oidc`
   posé par Terraform). UI : `https://openbao.lan.wittner.tech` → méthode **OIDC** dans le menu
   déroulant. CLI, depuis la racine du repo — un navigateur s'ouvre, le callback revient sur un

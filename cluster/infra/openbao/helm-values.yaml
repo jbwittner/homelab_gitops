@@ -27,7 +27,7 @@ server:
   # il faut AUTANT DE NŒUDS que de replicas, sinon les pods en trop restent `Pending`.
   ha:
     enabled: true
-    replicas: 3
+    replicas: 1
     raft:
       enabled: true
       # Node ID = nom du pod. Sinon un ID aléatoire est régénéré à chaque redémarrage et le
