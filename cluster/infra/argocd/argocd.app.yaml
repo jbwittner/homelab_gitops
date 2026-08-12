@@ -20,9 +20,9 @@ spec:
     # ⚠️ Les ExternalSecret sont DEHORS de `manifests/`, volontairement : ce dossier sert aussi
     # à l'`apply -k` d'amorçage, où la CRD `ExternalSecret` n'existe pas encore (elle arrive en
     # wave -7 avec external-secrets). Les garder ici ferait échouer le geste de bootstrap.
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
-      targetRevision: main
-      path: cluster/infra/argocd/external-secrets
+    # - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    #  targetRevision: main
+    #  path: cluster/infra/argocd/external-secrets
   destination:
     name: bleu-kalecgos
     namespace: argocd
