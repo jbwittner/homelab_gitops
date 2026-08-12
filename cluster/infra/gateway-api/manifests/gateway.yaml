@@ -32,16 +32,3 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
-    - name: https-internal-kalecgos
-      protocol: HTTPS
-      port: 443
-      hostname: "*.kalecgos.lan.wittner.tech"
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - group: ""
-            kind: Secret
-            name: wildcard-kalecgos-lan-tls
-      allowedRoutes:
-        namespaces:
-          from: All
