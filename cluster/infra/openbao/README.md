@@ -2,7 +2,7 @@
 
 ## Rôle
 
-Gestionnaire de secrets (fork libre de Vault), stockage **raft intégré**, un replica. C'est
+Gestionnaire de secrets (fork libre de Vault), stockage **raft intégré**, trois replicas. C'est
 l'un des deux canaux de secrets du repo, à côté de
 [`sealed-secrets`](../sealed-secrets/README.md), et il porte la majorité d'entre eux — six des
 huit. Différence entre les deux : l'emplacement du chiffré, **dans Git** pour un `SealedSecret`,
@@ -31,7 +31,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 
 - `openbao.app.yaml` — Application (archétype (b) : Helm + `$values` + `manifests/`), ns
   `openbao`, wave `1`
-- `helm-values.yaml` — raft 1 replica, injector, ServiceMonitor, rétention du PVC
+- `helm-values.yaml` — raft 3 replicas + `retry_join`, injector, ServiceMonitor, rétention du PVC
 - `manifests/namespace.yaml` — ns `openbao` (wave -1), sans label PodSecurity
 - `manifests/openbao-httproute.yaml` — UI sur le listener `https-internal` de `shared-gw`
 

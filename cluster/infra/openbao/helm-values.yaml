@@ -15,17 +15,19 @@ injector:
   enabled: true
 
 server:
-  # HA + raft à UN SEUL replica. Sur ce cluster mono-nœud, le coût est identique à un
-  # `standalone` (un pod, un PVC) — un cluster raft à un nœud est leader sans élection —
-  # mais on gagne :
-  #   - un backend transactionnel, là où l'upstream déconseille explicitement `file`
+  # HA + raft à 3 replicas. Raft veut un nombre IMPAIR : le quorum est la majorité stricte,
+  # donc 2 nœuds exigent 2 votants (zéro panne tolérée, pour deux fois plus de surface de
+  # panne qu'à 1 nœud — strictement pire). 3 nœuds tolèrent la perte d'un nœud.
+  # Le backend raft apporte par ailleurs, à n'importe quel compte de replicas :
+  #   - un stockage transactionnel, là où l'upstream déconseille explicitement `file`
   #     en production (« not transactional and lacks system-level file locking ») ;
   #   - `bao operator raft snapshot save`, qui sauvegarde À CHAUD — seul filet réel, le
-  #     contenu d'OpenBao étant la seule chose du homelab absente de Git ;
-  #   - le passage à 3 replicas comme simple changement de value, pas une migration.
+  #     contenu d'OpenBao étant la seule chose du homelab absente de Git.
+  # ⚠️ L'anti-affinité du chart est `requiredDuringScheduling` sur `kubernetes.io/hostname` :
+  # il faut AUTANT DE NŒUDS que de replicas, sinon les pods en trop restent `Pending`.
   ha:
     enabled: true
-    replicas: 2
+    replicas: 3
     raft:
       enabled: true
       # Node ID = nom du pod. Sinon un ID aléatoire est régénéré à chaque redémarrage et le
@@ -49,6 +51,23 @@ server:
 
         storage "raft" {
           path = "/openbao/data"
+
+          # SANS ces `retry_join`, un pod dont le PVC est vide ne rejoint JAMAIS le raft :
+          # il démarre `Initialized false` + `Sealed true`, la readiness probe échoue, et il
+          # reste 0/1 indéfiniment. Les adresses sont celles du Service headless
+          # `openbao-internal` — donc résolues par pod, contrairement au Service `openbao`.
+          # En `http` : `global.tlsDisable` ci-dessus.
+          # Un nœud qui a déjà un état raft sur son PVC ignore ces stanzas : les lister tous,
+          # y compris soi-même, est sans effet de bord et évite un ordre de démarrage imposé.
+          retry_join {
+            leader_api_addr = "http://openbao-0.openbao-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://openbao-1.openbao-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://openbao-2.openbao-internal:8200"
+          }
         }
 
         # Pose sur le pod les labels dont dépendent les Services `-active` / `-standby`
@@ -60,11 +79,12 @@ server:
           disable_hostname = true
         }
 
-    # À un replica, le helper `openbao.pdb.maxUnavailable` du chart calcule 0 — ce qui BLOQUE
-    # tout drain du nœud (`kubectl drain` attend indéfiniment). Le PDB ne protège aucune HA
-    # ici : désactivé volontairement.
+    # À 3 replicas le helper `openbao.pdb.maxUnavailable` du chart calcule 1 : un drain reste
+    # possible, et le quorum raft (2 sur 3) est protégé. C'est le cas où le PDB sert vraiment
+    # — il était désactivé tant qu'on tournait à 1 replica, où le helper calcule 0 et BLOQUE
+    # tout `kubectl drain` sans rien protéger.
     disruptionBudget:
-      enabled: false
+      enabled: true
 
   dataStorage:
     enabled: true
