@@ -7,8 +7,6 @@ metadata:
     app.kubernetes.io/name: alloy
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: monitoring
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   # Grafana Alloy en DaemonSet : lit les fichiers de logs des conteneurs sur le nœud

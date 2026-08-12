@@ -7,8 +7,6 @@ metadata:
     app.kubernetes.io/name: renovate
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: automation
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
