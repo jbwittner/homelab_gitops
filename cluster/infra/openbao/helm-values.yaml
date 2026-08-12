@@ -15,51 +15,107 @@ injector:
   enabled: true
 
 server:
-  # HA + raft à 3 replicas. Raft veut un nombre IMPAIR : le quorum est la majorité stricte,
-  # donc 2 nœuds exigent 2 votants (zéro panne tolérée, pour deux fois plus de surface de
-  # panne qu'à 1 nœud — strictement pire). 3 nœuds tolèrent la perte d'un nœud.
-  # Le backend raft apporte par ailleurs, à n'importe quel compte de replicas :
+  # HA + raft à UN SEUL replica. Sur ce cluster le coût est identique à un `standalone`
+  # (un pod, un PVC) — un cluster raft à un nœud est leader sans élection — mais on gagne :
   #   - un stockage transactionnel, là où l'upstream déconseille explicitement `file`
   #     en production (« not transactional and lacks system-level file locking ») ;
   #   - `bao operator raft snapshot save`, qui sauvegarde À CHAUD — seul filet réel, le
   #     contenu d'OpenBao étant la seule chose du homelab absente de Git.
-  # ⚠️ L'anti-affinité du chart est `requiredDuringScheduling` sur `kubernetes.io/hostname` :
-  # il faut AUTANT DE NŒUDS que de replicas, sinon les pods en trop restent `Pending`.
+  #
+  # Pour monter en HA, deux règles apprises à la dure (cf. README, section Opérations) :
+  #   - le compte de replicas doit être IMPAIR. Le quorum est la majorité stricte : à 2
+  #     replicas il faut 2 votants, soit zéro panne tolérée pour deux fois la surface de panne
+  #     d'un nœud unique — strictement pire que 1. Aller de 1 à 3, jamais s'arrêter à 2.
+  #   - il faut AUTANT DE NŒUDS que de replicas : l'anti-affinité du chart est
+  #     `requiredDuringScheduling` sur `kubernetes.io/hostname`, les pods en trop restent
+  #     `Pending`.
+  # Et pour REDESCENDRE : `bao operator raft remove-peer <pod>` AVANT de baisser `replicas`.
+  # Un scale down ne retire pas le pair de la configuration raft — le quorum est alors calculé
+  # sur des votants injoignables, et le coffre part en élection perpétuelle.
   ha:
     enabled: true
-    # TEMPORAIRE — remontée de quorum. `openbao-1` est encore un Voter dans la configuration
-    # raft : tant qu'il n'est pas retiré par `bao operator raft remove-peer`, un scale down à 1
-    # laisse 2 votants pour 1 pod joignable, donc AUCUN quorum et une élection en boucle.
-    # Séquence : 2 → desceller openbao-1 → remove-peer → 1. Cf. README, section Opérations.
     replicas: 1
     raft:
       enabled: true
       # Node ID = nom du pod. Sinon un ID aléatoire est régénéré à chaque redémarrage et le
       # nœud se réenregistre comme un nouveau pair dans la configuration raft.
       setNodeId: true
+      config: |
+        ui = true
 
-    # À 3 replicas le helper `openbao.pdb.maxUnavailable` du chart calcule 1 : un drain reste
-    # possible, et le quorum raft (2 sur 3) est protégé. C'est le cas où le PDB sert vraiment
-    # — il était désactivé tant qu'on tournait à 1 replica, où le helper calcule 0 et BLOQUE
-    # tout `kubectl drain` sans rien protéger.
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          # Requis par le ServiceMonitor : /v1/sys/metrics est sinon authentifié, et
+          # Prometheus n'a pas de token. N'expose que des compteurs et jauges — jamais
+          # le contenu d'un secret — et le port 8200 n'est pas routé hors cluster pour
+          # ce chemin (l'HTTPRoute sert l'UI, mais l'endpoint reste en ClusterIP).
+          telemetry {
+            unauthenticated_metrics_access = "true"
+          }
+        }
+
+        storage "raft" {
+          path = "/openbao/data"
+
+          # Sans `retry_join`, un pod dont le PVC est vide ne rejoint JAMAIS le raft : il
+          # démarre `Initialized false` + `Sealed true`, la readiness probe échoue, et il reste
+          # `0/1` indéfiniment — sans rien dans les logs qui ressemble à une erreur.
+          # Sans effet à 1 replica (un nœud qui a déjà un état raft ignore ces stanzas), mais
+          # c'est exactement ce qui manque le jour où on ajoute un nœud. Adresses résolues par
+          # le Service HEADLESS `openbao-internal`, donc pod par pod, contrairement à `openbao`.
+          # En `http` : `global.tlsDisable` ci-dessus.
+          retry_join {
+            leader_api_addr = "http://openbao-0.openbao-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://openbao-1.openbao-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://openbao-2.openbao-internal:8200"
+          }
+        }
+
+        # Pose sur le pod les labels dont dépendent les Services `-active` / `-standby`
+        # et le ServiceMonitor (notamment `openbao-active`).
+        service_registration "kubernetes" {}
+
+        telemetry {
+          prometheus_retention_time = "30s"
+          disable_hostname = true
+        }
+
+    # À un replica, le helper `openbao.pdb.maxUnavailable` du chart calcule 0 — ce qui BLOQUE
+    # tout drain du nœud (`kubectl drain` attend indéfiniment, `ALLOWED DISRUPTIONS: 0`).
+    # Le PDB ne protège aucune HA ici : désactivé volontairement. À réactiver en même temps
+    # que le passage à 3 replicas, où le helper calcule 1 et où il protège vraiment le quorum.
     disruptionBudget:
-      enabled: true
+      enabled: false
 
   dataStorage:
     enabled: true
     # Un coffre tient dans très peu : ce sont des KV chiffrés, pas des données applicatives.
     # StorageClass par défaut du cluster = openebs-lvm-thin.
     size: 5Gi
+    # ⚠️ NE PAS mettre `annotations: {argocd.argoproj.io/sync-options: Prune=false}` ici : le
+    # champ atterrit dans `volumeClaimTemplates`, qui est IMMUABLE sur un StatefulSet existant
+    # (« updates to statefulset spec for fields other than 'replicas', … are forbidden »), donc
+    # la sync ArgoCD échoue — et l'annotation ne s'appliquerait de toute façon qu'aux PVC créés
+    # ENSUITE, pas à `data-openbao-0`. La protection contre le prune se règle au niveau
+    # d'ArgoCD, cf. README section Contraintes.
 
-  # LE COFFRE. Le défaut des StatefulSets récents supprime les PVC avec le StatefulSet :
-  # sans ce `Retain`, un `prune` ArgoCD ou un passage à 0 replica effacerait toutes les
-  # données — irrécupérables, puisqu'elles ne sont pas dans Git.
+  # Protège d'UN SEUL chemin : le garbage collector du StatefulSet (suppression du STS, passage
+  # à 0 replica). Il ne protège PAS du `prune` ArgoCD, qui adopte ce PVC via son label
+  # `app.kubernetes.io/instance` et l'a déjà détruit une fois (`data-openbao-1`, reprovisionné à
+  # vide). Avec `reclaimPolicy: Delete` sur openebs-lvm-thin, cette suppression emporte le LV.
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
     whenScaled: Retain
 
-# Pas de Service `ui` séparé : `ui = true` dans la config HCL ci-dessus suffit à servir
-# l'interface sur le port 8200 du Service `openbao`, vers lequel pointe l'HTTPRoute.
+# `ui = true` dans la config HCL ci-dessus sert déjà l'interface sur le port 8200 du Service
+# `openbao`, vers lequel pointe l'HTTPRoute. Le Service `openbao-ui` créé ici est donc
+# redondant et non routé — inoffensif, mais on peut repasser à `false` sans rien casser.
 ui:
   enabled: true
 

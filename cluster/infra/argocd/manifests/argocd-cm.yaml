@@ -9,6 +9,18 @@ data:
   url: https://argocd.lan.wittner.tech
   # Enables application status badge feature
   statusbadge.enabled: "true"
+  # ⚠️ Load-bearing pour la survie des données. Par défaut Argo trace ses ressources par le
+  # LABEL `app.kubernetes.io/instance` — un label que posent aussi les charts Helm sur des objets
+  # qu'Argo n'a jamais créés. Il les ADOPTE donc, et dès qu'ils sortent de l'ensemble désiré
+  # (un scale down suffit) `prune: true` les supprime.
+  # Vécu : le PVC `data-openbao-1`, créé par le `volumeClaimTemplates` du StatefulSet openbao,
+  # détruit par un prune lors d'un passage de 2 à 1 replica — et avec lui le LV, la StorageClass
+  # openebs-lvm-thin étant en `reclaimPolicy: Delete`. Le `persistentVolumeClaimRetentionPolicy:
+  # Retain` du StatefulSet ne protège PAS de ce chemin : il ne couvre que son propre GC.
+  # En tracking par ANNOTATION, Argo pose `argocd.argoproj.io/tracking-id` sur ce qu'il applique
+  # lui-même : une ressource créée par un contrôleur (PVC de STS, Secret d'opérateur, Job) ne la
+  # porte pas, n'est jamais adoptée, donc jamais prunée.
+  application.resourceTrackingMethod: annotation
   # SSO OIDC via authentik. clientSecret référence la SealedSecret argocd-oidc
   # (clé client-secret), pas argocd-secret managé par Argo. Le provider/application
   # côté authentik est géré en Terraform (autre repo) — contrat : clientID=argocd,

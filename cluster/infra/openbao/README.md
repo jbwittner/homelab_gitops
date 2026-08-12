@@ -2,7 +2,7 @@
 
 ## Rôle
 
-Gestionnaire de secrets (fork libre de Vault), stockage **raft intégré**, trois replicas. C'est
+Gestionnaire de secrets (fork libre de Vault), stockage **raft intégré**, un replica. C'est
 l'un des deux canaux de secrets du repo, à côté de
 [`sealed-secrets`](../sealed-secrets/README.md), et il porte la majorité d'entre eux — six des
 huit. Différence entre les deux : l'emplacement du chiffré, **dans Git** pour un `SealedSecret`,
@@ -31,7 +31,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 
 - `openbao.app.yaml` — Application (archétype (b) : Helm + `$values` + `manifests/`), ns
   `openbao`, wave `1`
-- `helm-values.yaml` — raft 3 replicas + `retry_join`, injector, ServiceMonitor, rétention du PVC
+- `helm-values.yaml` — raft 1 replica + `retry_join`, injector, ServiceMonitor, rétention du PVC
 - `manifests/namespace.yaml` — ns `openbao` (wave -1), sans label PodSecurity
 - `manifests/openbao-httproute.yaml` — UI sur le listener `https-internal` de `shared-gw`
 
@@ -41,11 +41,17 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   (voir Opérations), **pod par pod** : les clés de descellement ne transitent pas entre pairs
   raft. Tant qu'il l'est, l'API répond `503` et le pod n'est pas `Ready` — c'est attendu, pas une
   panne.
-- **Le nombre de replicas doit être IMPAIR, et il faut autant de nœuds que de replicas.** Le
-  quorum raft est la majorité stricte : à 2 replicas il en faut 2, soit zéro panne tolérée pour
-  deux fois la surface de panne d'un nœud unique — strictement pire que 1. À 3, la perte d'un
-  nœud est absorbée. Et l'anti-affinité du chart est `requiredDuringScheduling` sur
-  `kubernetes.io/hostname` : un replica de plus que de nœuds reste `Pending` indéfiniment.
+- **Monter en HA : 1 → 3, jamais 2, et autant de nœuds que de replicas.** Le quorum raft est la
+  majorité stricte : à 2 replicas il en faut 2, soit zéro panne tolérée pour deux fois la surface
+  de panne d'un nœud unique — strictement pire que 1. À 3, la perte d'un nœud est absorbée. Et
+  l'anti-affinité du chart est `requiredDuringScheduling` sur `kubernetes.io/hostname` : un
+  replica de plus que de nœuds reste `Pending` indéfiniment.
+- **Redescendre : `remove-peer` AVANT de baisser `replicas`.** Un scale down ne retire pas le
+  pair de la configuration raft. Le quorum reste calculé sur des votants devenus injoignables, le
+  nœud survivant part en élection perpétuelle (`failed to make requestVote RPC … no such host`,
+  `HA Mode: standby` sans leader, `/v1/sys/health` en `429`) — et on ne peut plus en sortir par
+  l'API, puisque retirer un pair est *lui-même* une écriture raft qui exige le quorum perdu.
+  Séquence en Opérations.
 - **Sans `retry_join`, un nouveau pod ne rejoint jamais le raft.** Son PVC est vide, il démarre
   `Initialized false` + `Sealed true`, la readiness probe échoue, et il reste `0/1` pour
   toujours — sans rien dans les logs qui ressemble à une erreur. Les stanzas `retry_join` du
@@ -63,15 +69,29 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 - **Les clés de descellement et le token root ne vont JAMAIS dans Git**, même en `SealedSecret` :
   ce sont elles qui protègent tout le reste. Elles vivent au coffre, hors cluster, comme la clé
   privée sealed-secrets. Sans elles, le contenu du PVC est définitivement illisible.
-- **`persistentVolumeClaimRetentionPolicy: Retain`** des deux côtés : sans ça, un `prune` ArgoCD
-  ou un passage à 0 replica effacerait le PVC, donc le coffre. Ne pas y toucher.
+- **Le PVC est protégé contre DEUX chemins de suppression distincts, par deux mécanismes qui
+  vivent à des endroits différents. Les deux sont nécessaires.**
+  1. Le **prune ArgoCD** : le PVC est créé par le `volumeClaimTemplates` du StatefulSet, pas par
+     ArgoCD — mais il hérite du label `app.kubernetes.io/instance: openbao`. C'était le label de
+     tracking par défaut d'ArgoCD, qui l'**adoptait** donc, et le supprimait dès qu'il sortait de
+     l'ensemble désiré (un scale down suffit) ; avec `reclaimPolicy: Delete` sur
+     openebs-lvm-thin, le LV partait avec. Détruit en vrai une fois (`data-openbao-1`, puis
+     reprovisionné à vide). Fermé par `application.resourceTrackingMethod: annotation` dans
+     [argocd](../argocd/README.md) (`manifests/argocd-cm.yaml`) — **la protection ne vit pas dans
+     ce composant**.
+  2. Le **GC du StatefulSet** (suppression du STS, passage à 0 replica) :
+     `persistentVolumeClaimRetentionPolicy: Retain` des deux côtés, dans `helm-values.yaml`.
+
+  ⚠️ Le point 2 ne protège **pas** du point 1 — c'est le piège, parce qu'il en donne
+  l'impression. Ne retirer ni l'un ni l'autre.
 - **L'HTTPRoute pointe sur le Service `openbao`, pas `openbao-active`.** Ce dernier ne sélectionne
   que les pods labellisés `openbao-active: "true"`, label posé une fois le nœud descellé et
   leader : un OpenBao scellé n'y a aucun endpoint, et l'UI serait injoignable exactement quand on
   en a besoin pour le desceller.
-- **Le PDB est activé.** À 3 replicas le chart calcule `maxUnavailable: 1` : un `kubectl drain`
-  reste possible et le quorum (2 sur 3) est protégé. Il était désactivé tant qu'on tournait à
-  1 replica, où le chart calcule `0` — ce qui bloque indéfiniment tout drain sans rien protéger.
+- **Le PDB est désactivé.** À un replica le chart calcule `maxUnavailable: 0` (`ALLOWED
+  DISRUPTIONS: 0`), ce qui bloque indéfiniment tout `kubectl drain` du nœud sans protéger aucune
+  HA. À réactiver en même temps que le passage à 3 replicas, où le chart calcule `1` et où il
+  protège vraiment le quorum.
 - **La cible Prometheus disparaît quand OpenBao est scellé** (le ServiceMonitor sélectionne le
   Service `-active`, sans endpoint dans cet état). Une alerte sur ce composant doit donc porter
   sur l'*absence* de la série, pas sur `up == 0`.
@@ -153,13 +173,26 @@ Trois pièges, tous vérifiés à la connexion :
   ```bash
   kubectl -n openbao exec -ti openbao-0 -- bao operator init
   ```
-- **Desceller** (après chaque redémarrage) — **sur chaque pod**, en répétant la commande avec
-  3 parts de clé distinctes. Un pair raft scellé ne se fait pas desceller par les autres :
+- **Desceller** (après chaque redémarrage) — répéter avec 3 parts de clé distinctes :
   ```bash
-  for p in 0 1 2; do kubectl -n openbao exec -ti openbao-$p -- bao operator unseal; done
+  kubectl -n openbao exec -ti openbao-0 -- bao operator unseal
   kubectl -n openbao exec -ti openbao-0 -- bao status     # Sealed=false, HA Mode=active
-  kubectl -n openbao exec -ti openbao-1 -- bao status     # Sealed=false, HA Mode=standby
   ```
+  En HA, **un pod par un pod** : raft réplique le stockage *chiffré*, pas la master key. Les
+  parts ne transitent jamais entre pairs, un nœud scellé ne se fait pas desceller par le leader.
+  N pods = N descellements après chaque redémarrage.
+- **Changer le nombre de replicas.** Monter est direct (`replicas: N`, commit, push, puis
+  desceller chaque nouveau pod). **Redescendre exige de retirer le pair D'ABORD**, sinon le
+  quorum est perdu et on ne peut plus le récupérer par l'API :
+  ```bash
+  kubectl -n openbao exec -ti openbao-0 -- bao login                        # token root
+  kubectl -n openbao exec -ti openbao-0 -- bao operator raft list-peers
+  kubectl -n openbao exec -ti openbao-0 -- bao operator raft remove-peer openbao-2
+  kubectl -n openbao exec -ti openbao-0 -- bao operator raft list-peers     # le pair a disparu
+  # SEULEMENT ensuite : baisser `replicas` dans helm-values.yaml, commit, push
+  ```
+  Le PVC du pod retiré survit (`whenScaled: Retain` + `Prune=false`) : le supprimer à la main,
+  sinon il sera réutilisé tel quel — avec un état raft périmé — à la prochaine remontée.
   Un pod qui rejoint le raft pour la **première fois** (PVC neuf) doit être descellé avec les
   parts du cluster existant, pas réinitialisé : `bao operator init` ne se lance qu'une fois, sur
   `openbao-0`.

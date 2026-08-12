@@ -79,6 +79,31 @@ kubectl apply -f cluster/root.yaml
 > - Un fichier référencé mais absent dans `kustomization.yaml` casse `kustomize build` et met
 >   l'app self-managed en erreur : commenter la ligne d'un `*.sealed.yaml` pas encore scellé.
 
+## Tracking des ressources — `application.resourceTrackingMethod: annotation`
+
+Réglage **global** (`manifests/argocd-cm.yaml`), il vaut pour toutes les Applications du repo, et
+c'est un garde-fou contre la **perte de données**, pas un détail de confort.
+
+Par défaut Argo trace ce qui lui appartient via le **label** `app.kubernetes.io/instance`. Or ce
+label est aussi posé par les charts Helm sur des objets qu'Argo n'a jamais créés — typiquement
+les PVC issus d'un `volumeClaimTemplates`, les Secrets générés par un opérateur, les Jobs. Argo
+les **adopte**, et dès qu'ils sortent de l'ensemble désiré (un scale down suffit), `prune: true`
+les supprime.
+
+> [!WARNING]
+> Arrivé pour de vrai : le PVC `data-openbao-1` d'[openbao](../openbao/README.md), détruit par un
+> prune lors d'un passage de 2 à 1 replica — et avec lui le LV, `openebs-lvm-thin` étant en
+> `reclaimPolicy: Delete`. Le `persistentVolumeClaimRetentionPolicy: Retain` du StatefulSet **ne
+> protège pas de ce chemin** : il ne couvre que son propre garbage collector. Le coffre était
+> vide ce jour-là ; il ne le sera pas toujours.
+
+En tracking par **annotation**, Argo pose `argocd.argoproj.io/tracking-id` sur ce qu'il applique
+lui-même. Une ressource créée par un contrôleur ne la porte pas → jamais adoptée → jamais prunée.
+
+Au basculement, les ressources encore tracées par label le restent jusqu'à leur prochaine sync,
+qui les ré-annote. Elles peuvent apparaître `OutOfSync` ou en *orphaned* pendant la transition —
+sans risque de prune, une ressource non tracée n'étant justement pas candidate.
+
 ## Diff — `controller.diff.server.side`
 
 Réglage **global** (`argocd-cmd-params-cm`), il vaut pour toutes les Applications du repo.
