@@ -4,7 +4,8 @@ kind: Kustomization
 # ClusterIssuer (cluster-scoped), Certificates (ns gateway), token Cloudflare (SealedSecret, ns cert-manager).
 # Chaque manifeste porte son propre namespace → pas de `namespace:` global ici.
 resources:
-  - clusterissuer.yaml
+  - clusterissuer-staging.yaml
+  # - clusterissuer-prod.yaml
   - certificates.yaml
   # Décommenter APRÈS avoir scellé le token (cf. README.md) — sinon build kustomize KO (fichier absent) :
-  - cloudflare-api-token.sealed.yaml
+  # - cloudflare-api-token.sealed.yaml
