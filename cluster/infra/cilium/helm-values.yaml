@@ -5,7 +5,7 @@ ipam:
   mode: kubernetes
 kubeProxyReplacement: true
 operator:
-  replicas: 1
+  replicas: 2
 k8sServiceHost: localhost
 k8sServicePort: 7445
 securityContext:
@@ -33,6 +33,9 @@ cgroup:
 # Features gérées ici, communes aux deux consommateurs :
 l2announcements:
   enabled: true
+  leaseDuration: 3s
+  leaseRenewDeadline: 1s
+  leaseRetryPeriod: 500ms
 k8sClientRateLimit:
   qps: 10
   burst: 20
