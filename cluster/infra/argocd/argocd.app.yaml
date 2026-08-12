@@ -20,9 +20,12 @@ spec:
     # ⚠️ Les ExternalSecret sont DEHORS de `manifests/`, volontairement : ce dossier sert aussi
     # à l'`apply -k` d'amorçage, où la CRD `ExternalSecret` n'existe pas encore (elle arrive en
     # wave -7 avec external-secrets). Les garder ici ferait échouer le geste de bootstrap.
-    # - repoURL: https://github.com/jbwittner/homelab_gitops.git
-    #  targetRevision: main
-    #  path: cluster/infra/argocd/external-secrets
+    # Argo, lui, les applique bien : à son tour de sync (wave -1) la CRD est posée depuis
+    # longtemps. Sans cette source, `argocd-notifications-secret` et le clientSecret OIDC
+    # restent vides et les deux fonctionnalités échouent silencieusement.
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: cluster/infra/argocd/external-secrets
   destination:
     name: bleu-kalecgos
     namespace: argocd
