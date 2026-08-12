@@ -77,8 +77,8 @@ cluster :
 |---|---|---|
 | Un endpoint apiserver joignable en local sur le nœud | `cilium` (`k8sServiceHost`/`k8sServicePort` de son `helm-values.yaml`) | Agent Cilium incapable de joindre l'apiserver sans kube-proxy |
 | `/sys/fs/cgroup` déjà monté par l'hôte (`cgroup.autoMount.enabled: false`) | `cilium` | Agent en `CrashLoopBackOff` |
-| Modules noyau `dm_mod`, `dm_thin_pool`, `dm_snapshot` chargés | `openebs` | `pvcreate`/`vgcreate` échouent dans le Job de bootstrap du VG |
-| Une **partition brute** étiquetée (partlabel dans la fiche) | `openebs` | Job VG en échec, pas de StorageClass, tous les PVC `Pending` |
+| Modules noyau `dm_mod`, `dm_thin_pool`, `dm_snapshot` chargés **sur chaque nœud** | `openebs` | `pvcreate`/`vgcreate` échouent dans le DaemonSet de bootstrap du VG |
+| Une **partition brute** étiquetée (partlabel dans la fiche) **sur chaque nœud** | `openebs` | DaemonSet VG jamais `Healthy`, pas de StorageClass, tous les PVC `Pending` |
 | PodSecurity `baseline` appliqué au cluster, `kube-system` exempté | `openebs`, `alloy`, `kube-prometheus-stack` | Rien : les namespaces concernés sont labellisés `privileged` par leurs manifestes |
 | Une entrée DNS wildcard `*.${CLUSTER_DOMAIN}` → IP du LB du cluster | exposition HTTP | Les URLs ne résolvent pas ; le cluster, lui, est sain |
 
@@ -223,7 +223,7 @@ policy, role `external-secrets`) : sans lui, openbao démarre vide et les `Exter
         (en parallèle, sans relation d'ordre avec ce qui précède : les apps de cluster/app/)
 5. Exposition : Gateway programmée + restart one-shot de cilium-operator + DNS
 6. TLS Let's Encrypt (DNS-01) sur les wildcards
-7. Stockage : namespace privileged → Job VG → StorageClass
+7. Stockage : namespace privileged → DaemonSet VG → StorageClass
 8a. Les 2 SealedSecrets (première construction uniquement)
 8b. Descellement d'openbao + les 6 secrets du coffre  ← geste manuel n°4, à CHAQUE redémarrage
 ```
@@ -243,7 +243,7 @@ la StorageClass d'openebs, dont son PVC dépend.
 | 4. Tier-1 | Les Applications n'existent pas : ArgoCD tourne à vide |
 | 5. Exposition | Sans restart de `cilium-operator` à la 1re pose des CRDs, la Gateway reste `Pending` ; sans secret TLS, le listener reste `ResolvedRefs=False` |
 | 6. Token du provider DNS | DNS-01 bloqué, `Certificate` jamais `Ready`, aucun accès HTTPS valide |
-| 7. Label PSA sur `openebs` | DaemonSet `lvm-node` et Job VG (privileged) rejetés par l'admission `baseline` |
+| 7. Label PSA sur `openebs` | DaemonSets `lvm-node` et `lvmvg-bootstrap` (privileged) rejetés par l'admission `baseline` |
 | 8b. Descellement d'openbao | Les 6 `ExternalSecret` restent `NotReady` : pas de SSO (ArgoCD, Grafana), authentik ne démarre pas, Renovate n'a pas de token. Les charges déjà servies continuent (`deletionPolicy: Retain`), mais rien de neuf n'arrive |
 
 > [!NOTE]
@@ -658,29 +658,35 @@ irréductible par sync-waves de **ressource** :
 
 ```
 namespace `openebs` labellisé PSA privileged (-1)
-  → hook Sync `lvmvg-bootstrap` (0) : pvcreate + vgcreate sur la partition brute du nœud
+  → DaemonSet `lvmvg-bootstrap` (0) : pvcreate + vgcreate sur la partition brute, SUR CHAQUE NŒUD
     → StorageClass (1)
 ```
 
 Nom du VG, partlabel de la partition et nom de la StorageClass : dans la fiche du cluster.
 
-Rien à lancer à la main. Le label PSA `privileged` sur le namespace est ce qui autorise le
-DaemonSet node-plugin et le Job (tous deux `privileged`) sous une admission `baseline` : c'est un
-mécanisme natif, chirurgical et versionné, préféré à toute modification de la configuration
-d'admission du cluster.
+Rien à lancer à la main. Le label PSA `privileged` sur le namespace est ce qui autorise les deux
+DaemonSets — node-plugin et bootstrap du VG, tous deux `privileged` — sous une admission
+`baseline` : c'est un mécanisme natif, chirurgical et versionné, préféré à toute modification de
+la configuration d'admission du cluster.
 
 > [!NOTE]
 > **Bootstrap du VG.** LocalPV-LVM ne provisionne **pas** le Volume Group, il l'exige préexistant.
 > Le VG est donc créé par un conteneur privilégié qui embarque `lvm2` (la même image que le
 > node-plugin), à partir de la partition brute étiquetée. C'est le seul état réel sur disque, non
 > réconciliable par GitOps — le script est **idempotent** (skip si PV/VG déjà présents).
+>
+> Le stockage étant **node-local**, il faut un VG par nœud : d'où un DaemonSet et non un Job. Un
+> nœud ajouté après le bootstrap est traité automatiquement (pod → VG), à condition qu'il porte la
+> partition brute et les modules noyau. La StorageClass (wave 1) attend que le DaemonSet soit
+> `Healthy`, c'est-à-dire que **tous** les nœuds schedulables aient leur VG.
 
 **Vérification :**
 
 ```bash
 kubectl get ns openebs --show-labels            # pod-security.kubernetes.io/enforce=privileged
-kubectl -n openebs get pods                     # controller + node plugin Running
-kubectl -n openebs logs job/lvmvg-bootstrap     # pvcreate/vgcreate ou « déjà présent — skip »
+kubectl -n openebs get pods -o wide             # controller + node plugin + bootstrap Running, par nœud
+kubectl -n openebs get ds lvmvg-bootstrap       # DESIRED == READY ⇒ un VG sur chaque nœud
+kubectl -n openebs logs -l app.kubernetes.io/component=vg-bootstrap -c vg-bootstrap --prefix --tail=-1
 kubectl get sc
 ```
 

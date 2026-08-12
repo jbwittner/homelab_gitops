@@ -12,10 +12,16 @@
 #     kube_pod_spec_volumes_persistentvolumeclaims_info (détection des PVC orphelins).
 #   - exporter OpenEBS lvm-localpv (ServiceMonitor du composant openebs) : lvm_lv_* et lvm_vg_*.
 #
-# Pourquoi une rangée thin pool : la StorageClass `openebs-lvm-thin` provisionne en volumes
-# FINS. La somme des PVC peut donc dépasser la taille réelle du pool ; c'est le remplissage du
-# pool — pas celui des PVC — qui décide du moment où les écritures échouent. Les deux vues sont
-# donc présentes et ne se substituent pas l'une à l'autre.
+# Pourquoi une rangée thin pool : le nom `openebs-lvm-thin` est historique, la classe provisionne
+# aujourd'hui en volumes ÉPAIS (`thinProvision: "no"`) — ces panneaux restent vides tant qu'aucun
+# thin pool n'existe. Ils sont conservés parce qu'en provisionnement fin la somme des PVC peut
+# dépasser la taille réelle du pool : c'est alors le remplissage du POOL — pas celui des PVC —
+# qui décide du moment où les écritures échouent, et les deux vues ne se substituent pas.
+#
+# Pourquoi rien n'est agrégé sur l'axe nœud : le stockage est NODE-LOCAL, il y a un VG `lvmvg`
+# PAR NŒUD. Une somme mentirait — 20 Gio libres répartis 19 + 1 ne provisionnent pas un PVC de
+# 5 Gio sur le second nœud. Les vues VG sont donc par nœud (série par `instance`), et les tuiles
+# thin pool montrent le PIRE nœud.
 #
 # Le détail VG / disques / filesystems des nœuds vit dans « Système — nœuds Talos ».
 apiVersion: v1
@@ -1645,7 +1651,7 @@ data:
           ],
           "title": "Thin pool — données",
           "type": "stat",
-          "description": "LE seuil critique du provisionnement fin : un thin pool plein provoque des erreurs d'écriture sur TOUS les volumes qu'il porte, quel que soit leur remplissage individuel. Les PVC peuvent sur-réserver, pas le pool."
+          "description": "LE seuil critique du provisionnement fin : un thin pool plein provoque des erreurs d'écriture sur TOUS les volumes qu'il porte, quel que soit leur remplissage individuel. Les PVC peuvent sur-réserver, pas le pool. Il y a un pool par nœud : la tuile montre le PIRE d'entre eux (détail par nœud dans « Thin pool dans le temps »)."
         },
         {
           "datasource": {
@@ -1723,7 +1729,7 @@ data:
           ],
           "title": "Thin pool — métadonnées",
           "type": "stat",
-          "description": "Se sature indépendamment des données et casse le pool tout autant."
+          "description": "Se sature indépendamment des données et casse le pool tout autant. Comme la tuile voisine : pire nœud."
         },
         {
           "datasource": {
@@ -1793,15 +1799,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(1 - sum(lvm_vg_free_size_bytes) / sum(lvm_vg_total_size_bytes)) * 100",
-              "legendFormat": "",
+              "expr": "(1 - lvm_vg_free_size_bytes / lvm_vg_total_size_bytes) * 100",
+              "legendFormat": "{{instance}}",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "VG — remplissage",
           "type": "stat",
-          "description": "Espace du VG réellement alloué. Détail disques/filesystems : dashboard « Système — nœuds Talos »."
+          "description": "Espace du VG réellement alloué, UNE VALEUR PAR NŒUD (le stockage est node-local : les VG ne s'additionnent pas). Détail disques/filesystems : dashboard « Système — nœuds Talos »."
         },
         {
           "datasource": {
@@ -1859,15 +1865,15 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum(lvm_vg_free_size_bytes)",
-              "legendFormat": "",
+              "expr": "lvm_vg_free_size_bytes",
+              "legendFormat": "{{instance}}",
               "range": true,
               "refId": "A"
             }
           ],
           "title": "VG — libre",
           "type": "stat",
-          "description": "Marge restante pour provisionner de nouveaux volumes."
+          "description": "Marge restante pour provisionner de nouveaux volumes, PAR NŒUD. Ces valeurs ne s'additionnent pas : un pod est provisionné sur le nœud que le scheduler lui a choisi, et seule la marge de CE nœud compte."
         },
         {
           "datasource": {
@@ -2036,8 +2042,8 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "max(lvm_lv_used_percent{segtype=\"thin-pool\"})",
-              "legendFormat": "Données",
+              "expr": "lvm_lv_used_percent{segtype=\"thin-pool\"}",
+              "legendFormat": "{{instance}} — données",
               "range": true,
               "refId": "A"
             },
@@ -2047,8 +2053,8 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "max(lvm_lv_mda_used_percent{segtype=\"thin-pool\"})",
-              "legendFormat": "Métadonnées",
+              "expr": "lvm_lv_mda_used_percent{segtype=\"thin-pool\"}",
+              "legendFormat": "{{instance}} — métadonnées",
               "range": true,
               "refId": "B"
             }

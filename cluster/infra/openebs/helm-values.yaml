@@ -35,9 +35,17 @@ lvm-localpv:
   # Télémétrie anonyme (Google Analytics) — coupée.
   analytics:
     enabled: false
-  # Mono-nœud.
+  # Un seul contrôleur CSI (leader unique) : suffisant quel que soit le nombre de nœuds, le
+  # provisionnement n'étant pas sur le chemin critique des I/O. Seul effet d'une panne du nœud qui
+  # l'héberge : les créations/extensions/suppressions de volumes sont en pause le temps du
+  # reschedule — les volumes déjà montés continuent de servir. À passer à 2 le jour où cette
+  # pause devient gênante.
   lvmController:
     replicas: 1
+  # Placement du node-plugin (DaemonSet) : défauts du sous-chart, ni nodeSelector ni tolerations →
+  # tous les nœuds schedulables. Si on ajoute ici des `lvmNode.tolerations` pour couvrir un nœud
+  # portant un taint, répercuter les MÊMES tolérations sur
+  # manifests/vg-bootstrap-daemonset.yaml, sinon le driver tourne sur un nœud dépourvu de VG.
   # kubeletDir : défaut sous-chart = /var/lib/kubelet/ == défaut Talos → AUCUN override.
   # crds : NE PAS toucher `lvm-localpv.crds`. Les CRDs LVM sont posées par le sous-chart lvm ;
   #        les CRDs CSI VolumeSnapshot sont déléguées au sous-chart top-level `openebs-crds`

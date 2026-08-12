@@ -180,7 +180,7 @@ Deux niveaux distincts, à ne pas confondre :
 - **wave d'Application** (annotation sur le `.app.yaml` / `.appset.yaml`) — ordonne les composants
   entre eux ;
 - **wave de ressource** (annotation sur un manifeste de `manifests/`) — ordonne l'intérieur d'un
-  composant, ex. `openebs` : namespace (-1) → hook VG (0) → StorageClass (1).
+  composant, ex. `openebs` : namespace (-1) → DaemonSet de bootstrap du VG (0) → StorageClass (1).
 
 ⚠️ Sur un `ApplicationSet`, l'annotation de wave porte sur **l'ApplicationSet lui-même** (c'est
 lui que le tier-2 synchronise), pas sur les Applications générées — celles-ci sont créées ensuite

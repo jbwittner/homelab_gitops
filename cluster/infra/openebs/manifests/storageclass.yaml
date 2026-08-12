@@ -3,8 +3,8 @@ kind: StorageClass
 metadata:
   name: openebs-lvm-thin
   annotations:
-    # [ArgoCD, pas K8s] Ordre de déploiement : la SC est posée en DERNIER (après le Job VG en
-    # wave 0), une fois le VG créé et le driver Healthy. N'influence pas le comportement du volume.
+    # [ArgoCD, pas K8s] Ordre de déploiement : la SC est posée en DERNIER (après le DaemonSet de
+    # bootstrap du VG en wave 0), une fois le VG créé SUR CHAQUE NŒUD et le driver Healthy. N'influence pas le comportement du volume.
     argocd.argoproj.io/sync-wave: "1"
     # [K8s] ACTIF : cette SC est la SC PAR DÉFAUT du cluster — tout PVC sans `storageClassName`
     # l'utilise automatiquement. La retirer obligerait chaque PVC à nommer sa classe (et laisserait
@@ -20,7 +20,8 @@ parameters:
   # Backend de stockage visé par le driver. Pour LocalPV-LVM, toujours "lvm".
   storage: "lvm"
 
-  # Nom EXACT du Volume Group dans lequel tailler les LV (celui créé par le vg-bootstrap-job).
+  # Nom EXACT du Volume Group dans lequel tailler les LV (celui créé, sur chaque nœud, par
+  # vg-bootstrap-daemonset.yaml).
   # Alternative non utilisée ici : `vgpattern: "lvmvg.*"` (regex de sélection). Si les deux sont
   # fournis, `volgroup` gagne.
   volgroup: "lvmvg"

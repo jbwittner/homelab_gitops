@@ -19,9 +19,11 @@ spec:
   #   - L'image `openebs/lvm-driver` embarque lvm2 → commandes LVM DANS le conteneur (node-plugin
   #     monte /dev de l'hôte, privileged) : aucun lvm2 userspace requis côté Talos immuable.
   #   - `manifests/` porte l'ordonnancement irréductible via sync-waves de RESSOURCE :
-  #       namespace (privileged, -1) → Job bootstrap VG (0) → StorageClass thin (1).
+  #       namespace (privileged, -1) → DaemonSet bootstrap VG (0) → StorageClass thin (1).
+  #     Le bootstrap du VG est un DaemonSet (et non un Job) : stockage node-local ⇒ un VG par
+  #     nœud, y compris sur un nœud ajouté après coup (détail : manifests/vg-bootstrap-daemonset.yaml).
   #   - Pas de CreateNamespace : le namespace est créé ET labellisé `privileged` par
-  #     manifests/namespace.yaml (sinon le DaemonSet + le Job privileged sont rejetés par PSA baseline).
+  #     manifests/namespace.yaml (sinon les DaemonSets privileged sont rejetés par PSA baseline).
   sources:
     - repoURL: https://openebs.github.io/openebs
       chart: openebs

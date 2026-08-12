@@ -3,10 +3,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Ordre déclaratif via sync-waves de ressource (pas via l'ordre de cette liste) :
-#   namespace (-1) → Job VG (0) → StorageClass (1).
+#   namespace (-1) → DaemonSet de bootstrap du VG (0) → StorageClass (1).
 resources:
   - namespace.yaml
   - storageclass.yaml
-  - vg-bootstrap-job.yaml
+  - vg-bootstrap-daemonset.yaml
   - servicemonitor.yaml
   - prometheusrule.yaml

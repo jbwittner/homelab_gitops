@@ -31,7 +31,11 @@ Ce cluster héberge **l'unique ArgoCD du repo**. Conséquences :
 
 ## Nœud
 
-Mono-nœud **`vert-eranikus`**, Talos.
+Mono-nœud **`vert-eranikus`**, Talos. Les attentes ci-dessous valent **par nœud** : un nœud
+ajouté plus tard doit les satisfaire toutes avant de rejoindre le cluster — en particulier la
+partition brute et les modules noyau d'`openebs` (stockage node-local ⇒ un VG par nœud, cf.
+[cluster/infra/openebs](../../cluster/infra/openebs/README.md)). Rien à modifier dans le repo :
+le DaemonSet de bootstrap prend le nouveau nœud en charge tout seul.
 
 | Attente | Valeur | Consommateur |
 |---|---|---|
@@ -72,7 +76,7 @@ aujourd'hui que **ici**, `gateway-api` étant un composant mono-cluster (cf.
 | Élément | Valeur |
 |---|---|
 | Partition brute | `/dev/disk/by-partlabel/r-lvmpv` |
-| Volume Group | `lvmvg` — créé par le hook `lvmvg-bootstrap` |
+| Volume Group | `lvmvg` — un par nœud, créé par le DaemonSet `lvmvg-bootstrap` |
 | StorageClass | `openebs-lvm-thin` (**défaut du cluster**) |
 
 ## Composants

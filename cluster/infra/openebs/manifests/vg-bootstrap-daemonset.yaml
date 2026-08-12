@@ -1,0 +1,136 @@
+# Bootstrap du Volume Group `lvmvg` sur la partition brute `r-lvmpv`, SUR CHAQUE NŒUD.
+#
+# Pourquoi un bootstrap : LocalPV-LVM ne provisionne PAS le VG, il l'exige préexistant. Talos n'a
+# pas de lvm2 userspace sur l'hôte → on crée PV+VG depuis un conteneur privilégié qui embarque
+# lvm2 (MÊME image que le node-plugin : versions lvm2/device-mapper alignées).
+#
+# Pourquoi un DAEMONSET (et plus un Job hook) : le stockage est NODE-LOCAL — il faut un VG sur
+# CHAQUE nœud susceptible d'accueillir un pod avec PVC. Un Job ne lance qu'UN pod, donc un seul
+# nœud se retrouvait avec un VG (et lequel n'était même pas déterministe) : toute la capacité des
+# autres nœuds était inexistante pour le provisionnement.
+#   Le suivi de capacité CSI amortit la casse — `storageCapacity: true` (défaut du sous-chart
+#   lvm-localpv, non surchargé ici) fait publier une CSIStorageCapacity par nœud, ce qui écarte du
+#   scheduling les nœuds sans VG. C'est un amortisseur, pas un filet : la capacité est publiée
+#   périodiquement, donc un PVC peut encore être épinglé (`volume.kubernetes.io/selected-node`)
+#   sur un nœud sans VG — le provisionnement y échoue alors en boucle, sans reschedule
+#   automatique. Et un pod contraint à ce nœud (nodeSelector/affinité) n'aurait aucun volume.
+# Un DaemonSet couvre le cluster entier et, surtout, traite un nœud AJOUTÉ PLUS TARD sans
+# retoucher ce dépôt : le pod y démarre, crée le VG, et le nœud devient éligible tout seul.
+#
+# Pourquoi le travail est dans un INITCONTAINER : un DaemonSet n'est « Healthy » pour ArgoCD que
+# lorsque tous ses pods sont disponibles, ce qui n'arrive qu'une fois les initContainers terminés
+# avec succès. Le conteneur principal ne fait donc rien (il dort) : sa seule fonction est de
+# transformer « VG créé sur tous les nœuds » en une condition de santé de la ressource, ce qui
+# ordonne la wave 1 (StorageClass) DERRIÈRE le bootstrap — exactement ce que le hook faisait,
+# mais pour N nœuds. Un nœud absent/NotReady n'est pas compté dans `desiredNumberScheduled` :
+# pas de blocage éternel sur un nœud éteint.
+#
+# Placement : ni `tolerations` ni `nodeSelector`, DÉLIBÉRÉMENT — même couverture que le DaemonSet
+# node-plugin du chart (lui aussi sans tolérations par défaut). Les deux doivent rester alignés :
+# un nœud sans node-plugin n'a pas d'entrée topologique CSI, donc aucun pod à PVC n'y est
+# schedulé, donc il n'a pas besoin de VG. Si un jour on tolère un taint côté node-plugin
+# (`lvm-localpv.lvmNode.tolerations` dans helm-values.yaml), le tolérer ICI aussi.
+#
+# État réel sur disque, hors GitOps (analogue AdGuard). Script IDEMPOTENT (skip si PV/VG déjà là)
+# → rejoué sans danger à chaque démarrage de pod (reboot de nœud, rollout, nouveau nœud).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lvmvg-bootstrap
+  namespace: openebs
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: openebs-lvm
+    app.kubernetes.io/component: vg-bootstrap
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openebs-lvm
+      app.kubernetes.io/component: vg-bootstrap
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openebs-lvm
+        app.kubernetes.io/component: vg-bootstrap
+    spec:
+      initContainers:
+        - name: vg-bootstrap
+          image: docker.io/openebs/lvm-driver:1.9.1
+          securityContext:
+            privileged: true
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              export LVM_SUPPRESS_FD_WARNINGS=1
+
+              PART="/dev/disk/by-partlabel/r-lvmpv"
+              VG="lvmvg"
+
+              # Prérequis de provisionnement du nœud (cf. fiche cluster). Sans la partition, on
+              # échoue AVEC UN MESSAGE CLAIR plutôt que sur un pvcreate cryptique.
+              if [ ! -e "${PART}" ]; then
+                echo "!! ${PART} absente sur le nœud ${NODE_NAME} — partition brute non provisionnée"
+                exit 1
+              fi
+
+              # Partlabel Talos → device réel. pvs/vgs raisonnent sur le chemin résolu.
+              DEV="$(readlink -f "${PART}")"
+              echo ">> [${NODE_NAME}] partition brute r-lvmpv résolue : ${DEV}"
+
+              # PV : créer seulement si le device n'est pas déjà un Physical Volume.
+              if pvs --noheadings -o pv_name 2>/dev/null | tr -d ' ' | grep -qx "${DEV}"; then
+                echo ">> PV déjà présent sur ${DEV} — skip pvcreate"
+              else
+                echo ">> pvcreate ${DEV}"
+                pvcreate "${DEV}"
+              fi
+
+              # VG : créer seulement s'il n'existe pas encore.
+              if vgs --noheadings -o vg_name 2>/dev/null | tr -d ' ' | grep -qx "${VG}"; then
+                echo ">> VG ${VG} déjà présent — skip vgcreate"
+              else
+                echo ">> vgcreate ${VG} ${DEV}"
+                vgcreate "${VG}" "${DEV}"
+              fi
+
+              echo ">> État final :"
+              vgdisplay "${VG}"
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+      containers:
+        # Conteneur « témoin » : ne fait RIEN d'autre que rester Ready pour que le DaemonSet soit
+        # Healthy (cf. en-tête). Non privilégié, aucun accès à /dev.
+        - name: pause
+          image: docker.io/openebs/lvm-driver:1.9.1
+          command:
+            - /bin/sh
+            - -c
+            - |
+              trap 'exit 0' TERM INT
+              while true; do sleep 3600 & wait $!; done
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
