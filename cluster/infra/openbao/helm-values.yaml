@@ -27,7 +27,11 @@ server:
   # il faut AUTANT DE NŒUDS que de replicas, sinon les pods en trop restent `Pending`.
   ha:
     enabled: true
-    replicas: 1
+    # TEMPORAIRE — remontée de quorum. `openbao-1` est encore un Voter dans la configuration
+    # raft : tant qu'il n'est pas retiré par `bao operator raft remove-peer`, un scale down à 1
+    # laisse 2 votants pour 1 pod joignable, donc AUCUN quorum et une élection en boucle.
+    # Séquence : 2 → desceller openbao-1 → remove-peer → 1. Cf. README, section Opérations.
+    replicas: 2
     raft:
       enabled: true
       # Node ID = nom du pod. Sinon un ID aléatoire est régénéré à chaque redémarrage et le
