@@ -8,8 +8,8 @@ metadata:
 spec:
   secretName: wildcard-public-tls
   issuerRef:
-    #name: letsencrypt-prod
-    name: letsencrypt-staging
+    # Bascule staging <-> prod : les deux ClusterIssuer sont déployés (cf. kustomization.yaml).
+    name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
     - "*.wittner.tech"
@@ -22,8 +22,8 @@ metadata:
 spec:
   secretName: wildcard-lan-tls
   issuerRef:
-    #name: letsencrypt-prod
-    name: letsencrypt-staging
+    # Bascule staging <-> prod : les deux ClusterIssuer sont déployés (cf. kustomization.yaml).
+    name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
     - "*.lan.wittner.tech"

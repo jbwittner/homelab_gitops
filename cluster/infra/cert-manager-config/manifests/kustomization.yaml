@@ -4,8 +4,10 @@ kind: Kustomization
 # ClusterIssuer (cluster-scoped), Certificates (ns gateway), token Cloudflare (SealedSecret, ns cert-manager).
 # Chaque manifeste porte son propre namespace → pas de `namespace:` global ici.
 resources:
+  # Les deux ClusterIssuer coexistent : `certificates.yaml` choisit lequel émet. Staging sert à
+  # valider une chaîne DNS-01 sans consommer les quotas Let's Encrypt production.
   - clusterissuer-staging.yaml
-  # - clusterissuer-prod.yaml
+  - clusterissuer-prod.yaml
   - certificates.yaml
-  # Décommenter APRÈS avoir scellé le token (cf. README.md) — sinon build kustomize KO (fichier absent) :
+  # Prérequis : token scellé (cf. README.md) — sinon build kustomize KO (fichier absent).
   - cloudflare-api-token.sealed.yaml
