@@ -85,14 +85,14 @@ et l'a donc :
 
 ```
 tier 1/2 : root, infra, app
-appsets  : cilium, argocd-manager, external-secrets
-infra    : argocd, cert-manager, cert-manager-config, gateway-api, openbao, openebs,
-           sealed-secrets, bleu-kalecgos-cilium, bleu-kalecgos-external-secrets
+appsets  : cilium, argocd-manager
+infra    : argocd, cert-manager, cert-manager-config, external-secrets, gateway-api, openbao,
+           openebs, sealed-secrets, bleu-kalecgos-cilium
 app      : alloy, authentik, cnpg, kube-prometheus-stack, loki, renovate, test-nginx
 ```
 
 ```bash
-kubectl -n argocd get app -l homelab.wittner.tech/cluster=bleu-kalecgos   # → cilium, external-secrets
+kubectl -n argocd get app -l homelab.wittner.tech/cluster=bleu-kalecgos   # → cilium
 ```
 
 ## Secrets

@@ -8,45 +8,56 @@ C'est le **second canal de secrets** du repo, à côté de
 [sealed-secrets](../sealed-secrets/README.md) — critère de choix entre les deux :
 [doc/regles-gitops.md](../../../doc/regles-gitops.md).
 
-Déployé sur **tous les clusters** (`ApplicationSet`) : un `Secret` Kubernetes ne traverse pas les
-clusters, donc chaque cluster a besoin de son propre contrôleur pour matérialiser localement ce
-qu'il consomme. Le coffre, lui, reste unique et vit sur le hub.
+Déployé sur le **hub uniquement** (`Application`) : c'est le seul cluster qui consomme des secrets
+du coffre aujourd'hui. Un `Secret` Kubernetes ne traversant pas les clusters, le jour où un spoke
+en consommera il lui faudra son propre contrôleur — donc une migration en `ApplicationSet`
+(cf. § Étendre à un second cluster).
 
 ## Fichiers
 
-- `external-secrets.appset.yaml` — `ApplicationSet`, generator git sur `external-secrets/*`
-  (`common/` exclu), wave `-7` ; produit `<cluster>-external-secrets`
-- `common/helm-values.yaml` — CRDs par le chart, RBAC `serviceaccounts/token`, cache de tokens,
-  ServiceMonitor. Identique partout
-- `common/manifests/namespace.yaml` — ns `external-secrets` (wave -1), sans label PodSecurity
-- `<cluster>/manifests/clustersecretstore-openbao.yaml` — le `ClusterSecretStore`, **propre au
-  cluster** (cf. § Par cluster)
-- `<cluster>/manifests/kustomization.yaml` — `../../common/manifests` + le store du cluster
+- `external-secrets.app.yaml` — `Application`, wave `-7`, destination `bleu-kalecgos`
+- `helm-values.yaml` — CRDs par le chart, RBAC `serviceaccounts/token`, cache de tokens,
+  ServiceMonitor
+- `manifests/namespace.yaml` — ns `external-secrets` (wave -1), sans label PodSecurity
+- `manifests/clustersecretstore-openbao.yaml` — le `ClusterSecretStore` `openbao`, en accès
+  intra-cluster
+- `manifests/kustomization.yaml` — les deux ci-dessus, sans champ `namespace:` (ressources
+  cluster-scoped)
 
-## Par cluster
+## Le store
 
-Tout est commun **sauf le `ClusterSecretStore`**, pour deux raisons qui n'en font qu'une :
-depuis un spoke, openbao n'est ni à la même adresse, ni joignable avec la même identité.
+| | `bleu-kalecgos` (hub) |
+|---|---|
+| `server` | `http://openbao.openbao.svc.cluster.local:8200` — intra-cluster |
+| `mountPath` | `kubernetes-bleu-kalecgos` |
+| Prérequis côté openbao | mount local |
 
-| | `bleu-kalecgos` (hub) | `bleu-arcanagos` (spoke) |
-|---|---|---|
-| `server` | `http://openbao.openbao.svc.cluster.local:8200` — intra-cluster | `https://openbao.lan.wittner.tech` — via `shared-gw` |
-| `mountPath` | `kubernetes-bleu-kalecgos` | `kubernetes-bleu-arcanagos` |
-| Prérequis côté openbao | mount local | mount + `kubernetes_host`, `kubernetes_ca_cert` et `token_reviewer_jwt` du spoke |
+Le **nom du store est `openbao`**, et ce n'est pas décoratif : les `ExternalSecret` des composants
+le référencent sans savoir sur quel cluster ils tournent, ce qui rendrait un composant déplaçable
+d'un cluster à l'autre sans retoucher ses secrets. Conserver ce nom sur tout futur cluster.
 
-Le **nom du store est `openbao` partout**, et c'est load-bearing : les `ExternalSecret` des
-composants le référencent sans savoir sur quel cluster ils tournent, ce qui rend un composant
-déplaçable d'un cluster à l'autre sans retoucher ses secrets.
+## Étendre à un second cluster
 
-Onboarder un cluster = créer `<cluster>/manifests/` à partir d'un existant (kustomization +
-store), puis déclarer le mount correspondant côté Terraform.
+Un spoke qui consomme un secret du coffre a besoin de **son propre contrôleur ESO** : un `Secret`
+Kubernetes ne traverse pas les clusters. Ce composant repasse alors en `ApplicationSet`
+(cf. [doc/conventions.md](../../../doc/conventions.md)) — `helm-values.yaml` et
+`manifests/namespace.yaml` vont dans `common/`, le store dans `<cluster>/manifests/`. Deux
+différences pour un spoke, toutes deux dues au fait que le coffre vit sur le hub :
+
+- `server` : `https://openbao.lan.wittner.tech` (via `shared-gw`), `openbao.openbao.svc` ne
+  résolvant pas depuis un spoke. Dépendance de bootstrap qui n'existe pas ici : Gateway
+  programmée, certificat wildcard émis, DNS résolu.
+- mount d'auth `kubernetes-<cluster>`, à configurer côté openbao avec le `kubernetes_host`, le
+  `kubernetes_ca_cert` et un `token_reviewer_jwt` **du spoke** — openbao n'a aucun accès local à
+  son API TokenReview.
+
+⚠️ La migration **renomme** l'Application (`external-secrets` → `bleu-kalecgos-external-secrets`).
 
 ## Contraintes
 
 - **Un mount d'auth par cluster, ce n'est pas un choix de style.** Une méthode d'auth
   `kubernetes` d'openbao est configurée pour **un** API server (issuer, CA, TokenReview) : un
-  mount unique partagé ne saurait pas valider les tokens des autres clusters. Et pour un spoke,
-  openbao n'a aucun accès local à son API TokenReview — d'où le `token_reviewer_jwt`.
+  mount unique partagé ne saurait pas valider les tokens d'un autre cluster.
 - **L'auth ne consomme aucun secret.** ESO forge un token pour son propre ServiceAccount via
   l'API TokenRequest. C'est ce qui permet d'introduire ce composant **sans ajouter de
   SealedSecret**, et donc de descendre le repo à deux scellés. Corollaire :
@@ -59,34 +70,29 @@ store), puis déclarer le mount correspondant côté Terraform.
 - **Une Application dont un `ExternalSecret` est en erreur passe `Degraded`.** ArgoCD embarque
   un health check pour ce type. Coffre scellé ⇒ les composants concernés virent au rouge alors
   que les charges tournent normalement. Signal correct, mais à savoir lire.
-- **La wave `-7` porte sur l'`ApplicationSet`, pas sur les Applications générées.** Le tier-2
-  `infra` synchronise l'appset ; c'est ensuite le contrôleur ApplicationSet qui crée les
-  Applications, hors de cet ordonnancement. La présence des CRDs avant le premier
-  `ExternalSecret` du repo (celui d'`argocd`, wave `-1`) est donc **éventuelle**, pas ordonnée :
-  si la CRD manque encore, la sync d'argocd échoue et converge au retry. Même compromis que
-  [cilium](../cilium/README.md) et [argocd-manager](../argocd-manager/README.md).
-- **Sur un spoke, le store dépend de l'exposition du hub.** Passer par
-  `openbao.lan.wittner.tech` suppose la Gateway programmée, le certificat wildcard émis et le
-  DNS résolu. Cette dépendance de bootstrap n'existe pas sur le hub.
+- **La wave `-7` est de nouveau ordonnante.** Sous forme d'`ApplicationSet`, elle portait sur
+  l'appset et non sur les Applications générées : la présence des CRDs avant le premier
+  `ExternalSecret` du repo (celui d'`argocd`, wave `-1`) n'était qu'*éventuelle*. Le tier-2
+  `infra` synchronisant désormais l'Application elle-même, l'ordre est **garanti**.
 - **La config du coffre n'est pas dans ce repo.** Le store suppose côté openbao un moteur KV
   v2 sur `kv`, le mount d'auth du cluster, un role `external-secrets` borné au ServiceAccount du
   même nom, et une policy en lecture sur `kv/data/homelab/*`. Ce contrat vit dans le repo
   Terraform. Rien ici ne le vérifie : s'il manque, les `ExternalSecret` échouent en
   `permission denied`.
 - **ServiceMonitor.** `renderMode: skipIfMissing` : le template est omis là où la CRD
-  `ServiceMonitor` n'existe pas — sur un spoke sans Prometheus, et sur le hub au tout premier
-  bootstrap (ESO en wave `-7` précède kube-prometheus-stack). ArgoCD cachant le rendu, un
-  **Hard Refresh** est nécessaire pour voir la cible apparaître après coup.
+  `ServiceMonitor` n'existe pas — au tout premier bootstrap, ESO (wave `-7`) précédant
+  kube-prometheus-stack. ArgoCD cachant le rendu, un **Hard Refresh** est nécessaire pour voir
+  la cible apparaître après coup.
 
 ## Opérations
 
-- **Inventaire des secrets servis, sur un cluster donné** :
+- **Inventaire des secrets servis** :
   ```bash
   kubectl get externalsecrets -A
   ```
-- **État des Applications générées** :
+- **État de l'Application** :
   ```bash
-  kubectl -n argocd get app -l app.kubernetes.io/name=external-secrets
+  kubectl -n argocd get app external-secrets
   ```
 - **Diagnostiquer un `ExternalSecret` en échec** — la cause est dans les conditions :
   ```bash
@@ -95,9 +101,8 @@ store), puis déclarer le mount correspondant côté Terraform.
   ```
   | Message | Cause |
   |---|---|
-  | `permission denied` | policy/role manquant côté openbao, ou mauvais mount pour ce cluster |
+  | `permission denied` | policy/role manquant côté openbao, ou mauvais mount |
   | `Vault is sealed` / `503` | coffre scellé — le desceller (cf. [openbao](../openbao/README.md)) |
-  | `connection refused` / timeout (spoke) | exposition du hub incomplète : Gateway, certificat ou DNS |
   | `cannot get ClusterSecretStore` | le store n'est pas encore synchronisé (wave 1) |
 - **Vérifier l'état du pont** :
   ```bash
@@ -108,5 +113,5 @@ store), puis déclarer le mount correspondant côté Terraform.
   ```bash
   kubectl -n monitoring annotate externalsecret grafana-oidc force-sync=$(date +%s) --overwrite
   ```
-- **Upgrade** : bumper `targetRevision` dans `external-secrets.appset.yaml` — un seul point de
-  bump pour tous les clusters. Les CRDs sont livrées par le chart, donc mises à jour avec.
+- **Upgrade** : bumper `targetRevision` dans `external-secrets.app.yaml`. Les CRDs sont livrées
+  par le chart, donc mises à jour avec.

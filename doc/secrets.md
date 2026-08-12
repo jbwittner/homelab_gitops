@@ -72,16 +72,18 @@ Corollaire : comme l'objet n'a pas de namespace, son `serviceAccountRef` doit ê
 
 ## Un store par cluster, et ce n'est pas un choix de style
 
-ESO tourne sur **tous** les clusters ([ApplicationSet](../cluster/infra/external-secrets/README.md)) :
-un `Secret` Kubernetes ne traverse pas les clusters, donc chacun doit matérialiser localement ce
-qu'il consomme. Le coffre, lui, reste unique et vit sur le hub. Deux choses en découlent :
+ESO ne tourne aujourd'hui que sur le **hub**
+([`Application`](../cluster/infra/external-secrets/README.md)) : c'est le seul cluster qui consomme
+des secrets du coffre. Ce n'est pas extensible gratuitement — un `Secret` Kubernetes ne traverse pas
+les clusters, donc **chaque** cluster consommateur doit matérialiser localement ce qu'il lit, avec
+son propre contrôleur et son propre store. Le coffre, lui, reste unique et vit sur le hub.
 
-| | hub (`bleu-kalecgos`) | spoke (`bleu-arcanagos`) |
+| | hub (`bleu-kalecgos`) | un futur spoke consommateur |
 |---|---|---|
 | `server` | `http://openbao.openbao.svc.cluster.local:8200` | `https://openbao.lan.wittner.tech` — via `shared-gw` |
-| `mountPath` | `kubernetes-bleu-kalecgos` | `kubernetes-bleu-arcanagos` |
+| `mountPath` | `kubernetes-bleu-kalecgos` | `kubernetes-<cluster>` |
 
-- **L'adresse** : `openbao.openbao.svc` ne résout pas depuis un spoke. On repasse par
+- **L'adresse** : `openbao.openbao.svc` ne résout pas depuis un spoke. On repasserait par
   l'exposition du coffre sur `shared-gw` ([reseau.md](reseau.md)), donc en HTTPS — certificat
   Let's Encrypt, chaîne publiquement approuvée, aucun `caProvider` à déclarer.
 - **Le mount d'auth** : une méthode d'auth `kubernetes` d'openbao est configurée pour **un** API
@@ -90,9 +92,9 @@ qu'il consomme. Le coffre, lui, reste unique et vit sur le hub. Deux choses en d
   `kubernetes_ca_cert` et un `token_reviewer_jwt` : openbao n'a aucun accès local à l'API
   TokenReview d'un cluster distant.
 
-Le **nom du store est `openbao` partout**, et c'est load-bearing : les `ExternalSecret` le
-référencent sans savoir sur quel cluster ils tournent, ce qui rend un composant déplaçable d'un
-cluster à l'autre sans retoucher ses secrets.
+Le **nom du store est `openbao`**, et c'est load-bearing : les `ExternalSecret` le référencent sans
+savoir sur quel cluster ils tournent, ce qui rend un composant déplaçable d'un cluster à l'autre
+sans retoucher ses secrets — à condition de garder ce nom sur tout cluster ajouté.
 
 > [!IMPORTANT]
 > **Aucun credential d'amorçage.** ESO forge un token pour son propre ServiceAccount via l'API

@@ -50,7 +50,7 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
 | [cilium](cluster/infra/cilium/README.md) | tous (appset) | CNI, remplacement de kube-proxy, Gateway API, LB annoncé en L2 |
 | [gateway-api](cluster/infra/gateway-api/README.md) | hub | CRDs Gateway API + le `Gateway` partagé `shared-gw` (wave -10) |
 | [sealed-secrets](cluster/infra/sealed-secrets/README.md) | hub | Déchiffre les `SealedSecret` du repo — canal des 2 secrets d'amorçage (wave -8) |
-| [external-secrets](cluster/infra/external-secrets/README.md) | tous (appset) | Tire les secrets d'openbao en `Secret` natifs — canal des 6 autres (wave -7) |
+| [external-secrets](cluster/infra/external-secrets/README.md) | hub | Tire les secrets d'openbao en `Secret` natifs — canal des 6 autres (wave -7) |
 | [cert-manager](cluster/infra/cert-manager/README.md) | hub | Moteur d'émission TLS (wave -5) |
 | [cert-manager-config](cluster/infra/cert-manager-config/README.md) | hub | `ClusterIssuer` Let's Encrypt DNS-01 + certificats wildcard (wave -4) |
 | [openebs](cluster/infra/openebs/README.md) | hub | Stockage LocalPV-LVM, StorageClass par défaut du cluster |

@@ -107,7 +107,6 @@ Applications attendues dans ArgoCD (côté **hub**, ns `argocd`) :
 ```
 bleu-arcanagos-argocd-manager     # wave -20 de l'appset, prune: false, sans finalizer
 bleu-arcanagos-cilium
-bleu-arcanagos-external-secrets   # contrôleur ESO local + ClusterSecretStore vers le coffre du hub
 ```
 
 ```bash
@@ -132,21 +131,20 @@ Le perdre ne perd pas le cluster : le token se relit dans `argocd-manager-token`
 
 ### Canal 2 — openbao
 
-Aucun secret consommé ici à ce jour : le cluster est en construction. L'infrastructure est en
-place — [external-secrets](../../cluster/infra/external-secrets/README.md) y tourne et y pose un
-`ClusterSecretStore` nommé `openbao`, comme sur le hub.
+Aucun secret consommé ici à ce jour : le cluster est en construction. Et **rien pour en consommer**
+— [external-secrets](../../cluster/infra/external-secrets/README.md) est redevenu mono-cluster
+(hub uniquement), ce cluster n'a donc ni contrôleur ESO ni `ClusterSecretStore`.
 
-Deux différences avec le hub, toutes deux dues au fait que **le coffre est sur le hub** :
+Le premier secret consommé ici imposera de remettre ESO sur ce cluster : un `Secret` Kubernetes ne
+traverse pas les clusters. C'est une migration du composant en `ApplicationSet` (procédure dans
+son [README](../../cluster/infra/external-secrets/README.md), § Étendre à un second cluster), plus,
+côté Terraform, un mount d'auth `kubernetes-bleu-arcanagos` configuré avec le `kubernetes_host`,
+le `kubernetes_ca_cert` et un `token_reviewer_jwt` **de ce cluster** — openbao n'a aucun accès
+local à son API TokenReview.
 
-| Élément | Valeur ici |
-|---|---|
-| `server` du store | `https://openbao.lan.wittner.tech` — via `shared-gw` du hub, pas `openbao.openbao.svc` qui ne résout pas ici |
-| Mount d'auth côté openbao | `kubernetes-bleu-arcanagos`, à configurer avec le `kubernetes_host`, le `kubernetes_ca_cert` et un `token_reviewer_jwt` **de ce cluster** — openbao n'a aucun accès local à son API TokenReview |
-
-⚠️ Conséquence de bootstrap absente sur le hub : les secrets de ce cluster dépendent de
-l'exposition du hub (Gateway programmée, certificat wildcard émis, DNS `*.lan.wittner.tech`
-résolu). Tant que ce chemin n'est pas opérationnel, aucun `ExternalSecret` ne peut se
-rafraîchir ici.
+⚠️ Le store d'un spoke pointerait `https://openbao.lan.wittner.tech` (via `shared-gw` du hub),
+`openbao.openbao.svc` ne résolvant pas ici. D'où une dépendance de bootstrap absente sur le hub :
+Gateway programmée, certificat wildcard émis, DNS `*.lan.wittner.tech` résolu.
 
 ## Vérification
 

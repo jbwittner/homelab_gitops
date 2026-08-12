@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Pas de champ `namespace:` ici, contrairement aux autres composants : les deux ressources sont
+# cluster-scoped (`Namespace` et `ClusterSecretStore`). Le transformer de namespace de kustomize
+# ne connaît pas les CRDs et poserait un `metadata.namespace` parasite sur le store.
+resources:
+  - namespace.yaml
+  - clustersecretstore-openbao.yaml

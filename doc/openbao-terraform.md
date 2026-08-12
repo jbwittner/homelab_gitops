@@ -97,8 +97,10 @@ variable "clusters" {
 resource "vault_auth_backend" "k8s" {
   for_each = var.clusters
   type     = "kubernetes"
-  # ⚠️ Ce path DOIT matcher le `mountPath` du ClusterSecretStore du cluster, dans
-  # cluster/infra/external-secrets/<cluster>/manifests/clustersecretstore-openbao.yaml
+  # ⚠️ Ce path DOIT matcher le `mountPath` du ClusterSecretStore du cluster. Aujourd'hui seul le
+  # hub en a un : cluster/infra/external-secrets/manifests/clustersecretstore-openbao.yaml
+  # (le composant est mono-cluster ; un second cluster le ferait passer en ApplicationSet, avec
+  # un store par sous-dossier <cluster>/manifests/).
   path     = "kubernetes-${each.key}"
 }
 
@@ -129,9 +131,10 @@ déjà employé par [argocd-manager](../cluster/infra/argocd-manager/README.md) 
 hub.
 
 > [!WARNING]
-> **Ces manifestes n'existent pas encore** sous
-> `cluster/infra/external-secrets/bleu-arcanagos/manifests/`. Tant qu'ils ne sont pas posés, le
-> mount du spoke ne peut pas être configuré et seul le hub lit le coffre.
+> **Ces manifestes n'existent pas**, et ESO ne tourne plus sur le spoke : le composant
+> [external-secrets](../cluster/infra/external-secrets/README.md) est mono-cluster (hub). Seul le
+> hub lit le coffre. Ouvrir un spoke suppose d'abord d'y redéployer ESO (migration en
+> `ApplicationSet`), puis d'y poser le ServiceAccount `auth-delegator` ci-dessus.
 
 Le récupérer sans le faire transiter par un fichier, une fois les manifestes en place :
 
@@ -180,7 +183,7 @@ resource "vault_kubernetes_auth_backend_role" "external_secrets" {
   role_name = "external-secrets"
 
   # Le ServiceAccount d'ESO, tel que le pose le chart (`serviceAccount.name` dans
-  # cluster/infra/external-secrets/common/helm-values.yaml).
+  # cluster/infra/external-secrets/helm-values.yaml).
   bound_service_account_names      = ["external-secrets"]
   bound_service_account_namespaces = ["external-secrets"]
 

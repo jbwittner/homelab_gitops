@@ -218,7 +218,7 @@ policy, role `external-secrets`) : sans lui, openbao démarre vide et les `Exter
 3. Clé sealed-secrets restaurée                  ← geste manuel n°2 (DR uniquement, hub)
 4. Tier-1 app-of-apps (apply cluster/root.yaml)  ← geste manuel n°3, UNE FOIS, sur le hub
      └─ déroule seul : argocd-manager (-20) → gateway-api (-10) → sealed-secrets (-8)
-        → external-secrets, appset (-7) → cert-manager (-5) → cert-manager-config (-4)
+        → external-secrets (-7) → cert-manager (-5) → cert-manager-config (-4)
         → argocd (-1) → cilium/openebs (0) → openbao (1)
         (en parallèle, sans relation d'ordre avec ce qui précède : les apps de cluster/app/)
 5. Exposition : Gateway programmée + restart one-shot de cilium-operator + DNS
