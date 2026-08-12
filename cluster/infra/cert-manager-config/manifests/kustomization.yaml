@@ -8,4 +8,4 @@ resources:
   # - clusterissuer-prod.yaml
   - certificates.yaml
   # Décommenter APRÈS avoir scellé le token (cf. README.md) — sinon build kustomize KO (fichier absent) :
-  # - cloudflare-api-token.sealed.yaml
+  - cloudflare-api-token.sealed.yaml
