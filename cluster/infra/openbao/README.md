@@ -4,8 +4,8 @@
 
 Gestionnaire de secrets (fork libre de Vault), stockage **raft intégré**, un replica. C'est
 l'un des deux canaux de secrets du repo, à côté de
-[`sealed-secrets`](../sealed-secrets/README.md), et il porte la majorité d'entre eux — six des
-huit. Différence entre les deux : l'emplacement du chiffré, **dans Git** pour un `SealedSecret`,
+[`sealed-secrets`](../sealed-secrets/README.md), et il porte la quasi-totalité d'entre eux — sept
+des huit. Différence entre les deux : l'emplacement du chiffré, **dans Git** pour un `SealedSecret`,
 **dans le PVC** pour openbao. Il n'est pas consommé directement : c'est
 [external-secrets](../external-secrets/README.md) qui en tire des `Secret` Kubernetes natifs.
 Critère de choix entre les deux canaux :
@@ -23,6 +23,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 | `homelab/argocd/oidc` | `client-secret` | [argocd](../argocd/README.md) |
 | `homelab/argocd/notifications` | `grafana-api-key` | [argocd](../argocd/README.md) |
 | `homelab/authentik/secrets` | `secret-key` | [authentik](../../app/authentik/README.md) |
+| `homelab/cert-manager/cloudflare` | `api-token` | [cert-manager-config](../cert-manager-config/README.md) — solver DNS-01, consommé en wave `-4` (cf. Contraintes) |
 | `homelab/grafana/admin` | `admin-user`, `admin-password` | [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) |
 | `homelab/grafana/oidc` | `client-secret` | [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) |
 | `homelab/renovate/github` | `token` | [renovate](../../app/renovate/README.md) |
@@ -59,9 +60,15 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   nœud qui a déjà un état raft les ignore.
 - **Un coffre scellé ne casse rien, mais teinte le mur en rouge.** Les `ExternalSecret` qui en
   dépendent passent `NotReady`, donc les Applications `argocd`, `authentik`,
-  `kube-prometheus-stack` et `renovate` passent `Degraded` — alors que leurs charges tournent
-  normalement, les `Secret` déjà matérialisés étant conservés (`deletionPolicy: Retain`). Ce
-  n'est pas une panne applicative : c'est le signal que les secrets ne se rafraîchissent plus.
+  `cert-manager-config`, `kube-prometheus-stack` et `renovate` passent `Degraded` — alors que
+  leurs charges tournent normalement, les `Secret` déjà matérialisés étant conservés
+  (`deletionPolicy: Retain`). Ce n'est pas une panne applicative : c'est le signal que les
+  secrets ne se rafraîchissent plus.
+- **Le coffre est désormais en amont de l'émission TLS, et il est en wave `1`.** Depuis la
+  migration du token Cloudflare, [cert-manager-config](../cert-manager-config/README.md)
+  (wave `-4`) tire son secret d'ici : au bootstrap à froid, **aucun certificat wildcard n'est
+  émis avant le descellement manuel**, donc aucun listener TLS de `shared-gw` n'est programmé.
+  L'ordre du runbook n'est pas modifié — mais ce qui attendait le coffre s'est élargi.
 - **Wave `1`, après openebs.** Le coffre a un PVC : sans la StorageClass par défaut il reste
   `Pending`. Cet ordre n'existe que parce qu'openbao est un composant d'**infra** — les
   sync-waves ne s'ordonnent qu'à l'intérieur d'un même app-of-apps, donc `cluster/app/` et
@@ -99,7 +106,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   serveur, il ne configure rien à l'intérieur : méthode d'auth `kubernetes`, policies, roles et
   moteurs de secrets sont posés par le provider Terraform/OpenTofu qui gère déjà les providers
   OIDC authentik. Le **contrat** attendu par
-  [external-secrets](../external-secrets/README.md) — et sans lequel les six `ExternalSecret`
+  [external-secrets](../external-secrets/README.md) — et sans lequel les sept `ExternalSecret`
   échouent en `permission denied` :
   - un moteur KV **v2** monté sur `kv` ;
   - **un mount d'auth `kubernetes` par cluster**, nommé `kubernetes-<cluster>` — une méthode
@@ -120,7 +127,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 - **Le SSO du coffre dépend d'un composant que le coffre alimente.** authentik tire son
   `secret-key` de `kv/homelab/authentik/secrets` : une reconstruction complète part donc
   forcément du **token root**, pas du login authentik. C'est aussi vrai à froid — au bootstrap,
-  authentik n'existe pas encore quand il faut poser les six secrets. L'OIDC est un confort
+  authentik n'existe pas encore quand il faut poser les sept secrets. L'OIDC est un confort
   d'exploitation, jamais un chemin d'amorçage.
 - **L'OIDC fait sortir le pod vers un nom public.** Pour valider un login, openbao va chercher le
   document de découverte et les JWKS sur `https://authentik.wittner.tech` — depuis l'intérieur du
@@ -129,8 +136,8 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 - **Ce que le coffre ne servira jamais.** Un secret dont openbao ou ESO a besoin pour
   fonctionner ne peut pas venir d'openbao. Concrètement : le jour où `snapshotAgent` poussera
   vers S3/MinIO, **ses credentials devront être un `SealedSecret`** — sinon la sauvegarde du
-  coffre dépend du coffre. Même raisonnement pour les deux secrets restés scellés
-  (cf. [`doc/regles-gitops.md`](../../../doc/regles-gitops.md)).
+  coffre dépend du coffre. Même raisonnement pour le secret resté scellé — le Secret de cluster
+  du spoke (cf. [`doc/regles-gitops.md`](../../../doc/regles-gitops.md)).
 - **L'agent injector n'est utilisé par aucun composant.** Il injecte des *fichiers dans des
   pods*, or les huit consommateurs du repo exigent tous un `Secret` natif (`existingSecret`,
   `secretKeyRef`, `envFrom`, `$secret:clé` d'ArgoCD, Secret de cluster). C'est ESO qui fait le

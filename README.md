@@ -49,8 +49,8 @@ Index unique du repo — un composant ajouté ou supprimé est reflété ici **d
 | [argocd-manager](cluster/infra/argocd-manager/README.md) | spokes (appset) | Identité `cluster-admin` avec laquelle le hub pilote un cluster distant (wave -20) |
 | [cilium](cluster/infra/cilium/README.md) | hub | CNI, remplacement de kube-proxy, Gateway API, LB annoncé en L2 |
 | [gateway-api](cluster/infra/gateway-api/README.md) | hub | CRDs Gateway API + le `Gateway` partagé `shared-gw` (wave -10) |
-| [sealed-secrets](cluster/infra/sealed-secrets/README.md) | hub | Déchiffre les `SealedSecret` du repo — canal des 2 secrets d'amorçage (wave -8) |
-| [external-secrets](cluster/infra/external-secrets/README.md) | hub | Tire les secrets d'openbao en `Secret` natifs — canal des 6 autres (wave -7) |
+| [sealed-secrets](cluster/infra/sealed-secrets/README.md) | hub | Déchiffre les `SealedSecret` du repo — canal du seul secret d'amorçage restant (wave -8) |
+| [external-secrets](cluster/infra/external-secrets/README.md) | hub | Tire les secrets d'openbao en `Secret` natifs — canal des 7 autres (wave -7) |
 | [cert-manager](cluster/infra/cert-manager/README.md) | hub | Moteur d'émission TLS (wave -5) |
 | [cert-manager-config](cluster/infra/cert-manager-config/README.md) | hub | `ClusterIssuer` Let's Encrypt DNS-01 + certificats wildcard (wave -4) |
 | [openebs](cluster/infra/openebs/README.md) | hub | Stockage LocalPV-LVM, StorageClass par défaut du cluster |
@@ -101,10 +101,14 @@ choisit via `export CLUSTER=…`, ses valeurs vivent dans [doc/clusters/](doc/cl
 > cluster, hors Git) est un prérequis du runbook. Ils se **partagent** les secrets du cluster :
 > ni l'un ni l'autre ne suffit seul.
 >
-> 1. La **clé privée sealed-secrets** du hub — elle protège les **2** `SealedSecret` du repo :
->    le token DNS de cert-manager et le Secret d'enregistrement du spoke. Sans elle, ces deux
->    fichiers sont morts et il faut re-provisionner leur credential amont.
+> 1. La **clé privée sealed-secrets** du hub — elle protège le **seul** `SealedSecret` restant du
+>    repo : le Secret d'enregistrement du spoke. Sans elle, ce fichier est mort et il faut
+>    re-provisionner son credential amont.
 > 2. Les **clés de descellement d'openbao** et un **snapshot raft** de son PVC — ils portent les
->    **6** autres secrets (SSO ArgoCD et Grafana, `secret_key` authentik, admin Grafana,
->    notifications, PAT Renovate). Un snapshot sans les clés est illisible, et réciproquement :
->    voir [cluster/infra/openbao](cluster/infra/openbao/README.md).
+>    **7** autres secrets (SSO ArgoCD et Grafana, `secret_key` authentik, admin Grafana,
+>    notifications, PAT Renovate, token DNS Cloudflare). Un snapshot sans les clés est illisible,
+>    et réciproquement : voir [cluster/infra/openbao](cluster/infra/openbao/README.md).
+>
+> ⚠️ Le poids a basculé vers le point 2 : depuis la migration du token Cloudflare, un coffre
+> irrécupérable emporte aussi l'**émission TLS** — plus de wildcard, donc plus de listener HTTPS
+> sur `shared-gw` tant que le token n'est pas re-provisionné chez Cloudflare.

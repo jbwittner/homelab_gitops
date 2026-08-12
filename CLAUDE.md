@@ -50,8 +50,8 @@ Règles complètes : [doc/conventions.md](doc/conventions.md). Points critiques 
 - Secrets, deux formes selon le canal — le choix dépend de la **position dans le graphe de
   bootstrap**, pas d'une préférence (critère : `doc/regles-gitops.md`) :
   - **SealedSecret** : template en clair `<name>.secret.yaml` (**gitignoré**) → `kubeseal` →
-    `<name>.sealed.yaml` (committé). Réservé aux 2 secrets d'amorçage (token DNS Cloudflare,
-    Secret de cluster du spoke).
+    `<name>.sealed.yaml` (committé). Réservé au seul secret d'amorçage restant : le Secret de
+    cluster du spoke.
   - **openbao** : `<name>.externalsecret.yaml` (`ExternalSecret`, committé) — un simple pointeur, la
     valeur se pose au coffre par `bao kv put`. Tout le reste. `deletionPolicy: Retain`
     obligatoire. Jamais dans un dossier servant à l'`apply -k` d'amorçage (d'où
@@ -73,8 +73,9 @@ paramétrée par `export CLUSTER=…`), part d'un cluster vierge **sans CNI**. L
 un cluster (nœud, pool L2, wildcard DNS, disque, inventaire des secrets) vivent dans sa
 fiche : [doc/clusters/](doc/clusters/) — y ajouter un fichier pour tout nouveau cluster. **Deux**
 éléments ne sont pas reconstructibles depuis Git, et ils se partagent les secrets du cluster : la
-**clé privée sealed-secrets** du hub (2 secrets, dont ceux des spokes) et le couple **clés de
-descellement openbao + snapshot raft** (les 6 autres). Leurs backups (coffre) sont des prérequis
+**clé privée sealed-secrets** du hub (1 secret, celui du spoke) et le couple **clés de
+descellement openbao + snapshot raft** (les 7 autres, dont le token DNS Cloudflare — donc
+l'émission TLS). Leurs backups (coffre) sont des prérequis
 du runbook, pas des options.
 
 ## Skills projet

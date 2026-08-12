@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# ClusterIssuer (cluster-scoped), Certificates (ns gateway), token Cloudflare (SealedSecret, ns cert-manager).
+# ClusterIssuer (cluster-scoped), Certificates (ns gateway), token Cloudflare (ExternalSecret, ns cert-manager).
 # Chaque manifeste porte son propre namespace → pas de `namespace:` global ici.
 resources:
   # Les deux ClusterIssuer coexistent : `certificates.yaml` choisit lequel émet. Staging sert à
@@ -9,5 +9,6 @@ resources:
   - clusterissuer-staging.yaml
   - clusterissuer-prod.yaml
   - certificates.yaml
-  # Prérequis : token scellé (cf. README.md) — sinon build kustomize KO (fichier absent).
-  - cloudflare-api-token.sealed.yaml
+  # Prérequis : la valeur posée au coffre (cf. README.md). Le manifeste n'est qu'un pointeur, il
+  # se rend toujours — c'est l'ExternalSecret qui reste NotReady si le chemin KV est vide.
+  - cloudflare-api-token.externalsecret.yaml
