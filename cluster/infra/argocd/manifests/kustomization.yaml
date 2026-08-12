@@ -13,13 +13,6 @@ resources:
   - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.5.0/manifests/install.yaml
   - argocd-httproute.yaml
   - cluster-bleu-kalecgos.yaml
-  # Secret de cluster du spoke : SealedSecret et non ExternalSecret, et c'est irréductible —
-  # il est requis à l'étape 2bis du bootstrap, donc AVANT qu'openbao existe. Cf.
-  # doc/regles-gitops.md, « Quel canal pour quel secret ».
-  - cluster-bleu-arcanagos.sealed.yaml
-  # Les secrets OIDC et notifications viennent d'openbao : ../external-secrets/, second
-  # `source` de cette Application (hors de ce dossier, qui sert à l'apply -k d'amorçage).
-  # Référencer un fichier inexistant casse `kustomize build` → app self-managed en erreur.
 patches:
   - path: argocd-cmd-params-cm.yaml
     target:
