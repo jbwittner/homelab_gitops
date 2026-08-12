@@ -8,6 +8,7 @@ metadata:
 spec:
   secretName: wildcard-public-tls
   issuerRef:
+    #name: letsencrypt-prod
     name: letsencrypt-staging
     kind: ClusterIssuer
   dnsNames:
@@ -21,6 +22,7 @@ metadata:
 spec:
   secretName: wildcard-lan-tls
   issuerRef:
+    #name: letsencrypt-prod
     name: letsencrypt-staging
     kind: ClusterIssuer
   dnsNames:
