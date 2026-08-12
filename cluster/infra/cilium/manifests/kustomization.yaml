@@ -1,10 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# ⚠️ `namePrefix` restitue les noms historiques (`bleu-arcanagos-l2`, `bleu-arcanagos-pool`) à
-# partir des noms nus portés par les manifestes. Le changer renomme les ressources : Cilium
-# cesserait d'annoncer les IP de LB le temps que la nouvelle politique soit posée.
-namePrefix: bleu-arcanagos-
+# ⚠️ `namePrefix` restitue les noms historiques (`bleu-kalecgos-l2`, `bleu-kalecgos-pool`) à
+# partir des noms nus portés par les manifestes. Il vient de l'époque multi-cluster et n'a plus
+# de rôle de désambiguïsation, mais le retirer RENOMME les ressources : Cilium cesserait
+# d'annoncer les IP de LB le temps que la nouvelle politique soit posée.
+namePrefix: bleu-kalecgos-
 
 # ⚠️ `includeSelectors: false` obligatoire : à `true`, kustomize injecte aussi ces paires dans
 # les `selector` et `template.metadata.labels`, champs immuables sur bien des ressources.
@@ -18,8 +19,7 @@ labels:
       app.kubernetes.io/name: cilium
       app.kubernetes.io/part-of: homelab-gitops
       app.kubernetes.io/component: cni
-      homelab.wittner.tech/cluster: bleu-arcanagos
 
 resources:
-  - ../../common/manifests
+  - l2-policy.yaml
   - ip-pool.yaml

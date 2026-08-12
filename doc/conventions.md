@@ -45,10 +45,10 @@ C'est le **seul** critère de choix entre les deux formes :
 | | Forme | Fichier | Nom des Applications | Exemples |
 |---|---|---|---|---|
 | Déployé sur **un** cluster | `Application` | `<name>.app.yaml` | `<name>` (= dossier) | `argocd`, `openebs`, `external-secrets`, `loki`… |
-| Déployé sur **plusieurs** clusters | `ApplicationSet` | `<name>.appset.yaml` | `<cluster>-<name>` (template) | `cilium`, `argocd-manager` |
+| Déployé sur **plusieurs** clusters | `ApplicationSet` | `<name>.appset.yaml` | `<cluster>-<name>` (template) | **aucun aujourd'hui** — le repo est mono-cluster |
 
-Le **dossier** et le **nom de fichier** ne prennent jamais de préfixe de cluster : c'est
-`infra/cilium/cilium.appset.yaml`, qui produit `bleu-kalecgos-cilium` et `bleu-arcanagos-cilium`.
+Le **dossier** et le **nom de fichier** ne prennent jamais de préfixe de cluster : ce serait
+`infra/cilium/cilium.appset.yaml`, produisant `bleu-kalecgos-cilium` et `bleu-arcanagos-cilium`.
 
 ⚠️ Le préfixe des Applications générées est **load-bearing** : toutes les Applications de tous les
 clusters cohabitent dans le namespace `argocd` du hub. Sans préfixe, deux clusters portant le même
@@ -96,9 +96,10 @@ directories:
     exclude: true
 ```
 
-Modèle complet : [`infra/cilium`](../cluster/infra/cilium/README.md) (chart + values en deux
-couches + base kustomize commune). [`infra/argocd-manager`](../cluster/infra/argocd-manager/README.md)
-est la variante sans `common/` — chaque cluster porte l'intégralité de ses manifestes.
+Aucun composant n'est aujourd'hui sous cette forme — le repo n'a plus qu'un cluster. Le dernier à
+l'avoir été est [`infra/cilium`](../cluster/infra/cilium/README.md) (chart + values en deux
+couches + base kustomize commune) ; son README décrit la migration inverse, et `git log
+cluster/infra/cilium` en donne le modèle exact.
 
 ## Règles sur l'Application
 
@@ -126,7 +127,8 @@ est la variante sans `common/` — chaque cluster porte l'intégralité de ses m
 - `ServerSideApply=true` dès que le composant embarque des CRDs volumineuses (ArgoCD,
   prometheus-operator, Gateway API, OpenEBS, Cilium) ou de gros ConfigMaps (Loki).
 - **`preserveResourcesOnDeletion: true`** sur tout `ApplicationSet` dont la disparition d'un
-  dossier couperait le cluster (`cilium` : le CNI ; `argocd-manager` : le credential d'accès).
+  dossier couperait le cluster (typiquement le CNI ou le credential d'accès du hub). Aucun
+  `ApplicationSet` dans le repo aujourd'hui — règle à réappliquer au premier recréé.
 
 ## Charts Helm — values dans un fichier
 
@@ -167,7 +169,7 @@ dans `helm-values.yaml`.
 | Archétype | Forme | Composants |
 |---|---|---|
 | (a) | Helm + `$values` multi-source | `cert-manager`, `cnpg` |
-| (b) | (a) + 3ᵉ source `manifests/` | `openebs`, `alloy`, `authentik`, `loki`, `kube-prometheus-stack`, `cilium` (en appset, values en deux couches) |
+| (b) | (a) + 3ᵉ source `manifests/` | `openebs`, `alloy`, `authentik`, `loki`, `kube-prometheus-stack`, `cilium` |
 | (c) | kustomize seul (`source.path` → `manifests/`) | `argocd`, `cert-manager-config`, `gateway-api`, `renovate`, `test-nginx`, `argocd-manager` (en appset) |
 | (d) | Helm sans values (migre vers (a) dès qu'une value est customisée) | `sealed-secrets` |
 

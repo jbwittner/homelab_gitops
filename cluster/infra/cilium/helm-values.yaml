@@ -1,7 +1,6 @@
-# helm-values.yaml — values Cilium COMMUNES à tous les clusters.
-# Un cluster qui doit diverger pose un `<cluster>/helm-values.yaml` : il est chargé après
-# celui-ci et ne redéclare que les clés à écraser (`ignoreMissingValueFiles` côté appset rend
-# ce second fichier facultatif).
+# helm-values.yaml — values Cilium du cluster `bleu-kalecgos`, le seul où tourne ce composant.
+# ⚠️ Ce fichier est aussi celui que passe le `helm install cilium` de l'étape 3 du runbook de
+# bootstrap : les deux doivent rester alignés, sinon l'Application diverge dès le premier sync.
 ipam:
   mode: kubernetes
 kubeProxyReplacement: true

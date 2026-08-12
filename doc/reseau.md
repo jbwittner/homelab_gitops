@@ -8,8 +8,9 @@ classe `cilium`), défini dans
 Exposer un service = un `HTTPRoute` qui s'y attache.
 
 - **LB** : **une IP par cluster**, allouée par le `CiliumLoadBalancerIPPool` propre au cluster et
-  annoncée en **L2** — manifestes dans `cluster/infra/cilium/<cluster>/manifests/`. Les plages des
-  clusters sont **disjointes** ; valeurs dans [les fiches cluster](clusters/).
+  annoncée en **L2** — manifestes dans `cluster/infra/cilium/manifests/` (tant que Cilium est
+  mono-cluster ; un second cluster le repasse en `ApplicationSet`, plages **disjointes**).
+  Valeurs dans [les fiches cluster](clusters/).
 - **TLS terminé au Gateway** : secrets `wildcard-*-tls` (ns `gateway`), émis par cert-manager
   (Let's Encrypt DNS-01 Cloudflare), référencés en `Terminate` par les listeners. Les backends
   sont joints en HTTP clair.

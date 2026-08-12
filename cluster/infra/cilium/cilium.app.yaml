@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: cilium
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: cni
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Archétype (b) : chart Helm + `$values` + `manifests/`.
+  # Cilium était porté par un ApplicationSet tant qu'il y avait deux clusters ; il n'en reste
+  # qu'un, d'où cette Application. Le retour au multi-cluster = migration inverse décrite dans
+  # doc/conventions.md (un sous-dossier par cluster + `common/`).
+  sources:
+    - repoURL: https://helm.cilium.io/
+      chart: cilium
+      targetRevision: 1.20.0
+      helm:
+        # ⚠️ releaseName DOIT rester `cilium` : la release a été adoptée depuis le
+        # `helm install cilium` du bootstrap. Le changer renommerait toutes les ressources
+        # Cilium et détruirait le CNI.
+        releaseName: cilium
+        valueFiles:
+          - $values/cluster/infra/cilium/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: cluster/infra/cilium/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: ""
+      kind: ConfigMap
+      name: cilium-config
+      namespace: kube-system
+      jsonPointers:
+        - /data

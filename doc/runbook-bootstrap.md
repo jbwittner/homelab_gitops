@@ -34,9 +34,9 @@ export CLUSTER_DOMAIN=kalecgos.lan.wittner.tech     # wildcard interne du cluste
 
 ⚠️ `${CLUSTER}` n'est **plus** un dossier de premier niveau : l'arbre de déploiement est unique
 (`cluster/`). La variable nomme le cluster — donc son Secret d'enregistrement
-(`cluster-${CLUSTER}`), le suffixe de son backup de clé, et ses sous-dossiers dans les composants
-multi-cluster (`cluster/infra/cilium/${CLUSTER}/`,
-`cluster/infra/argocd-manager/${CLUSTER}/`).
+(`cluster-${CLUSTER}`), le suffixe de son backup de clé, et les sous-dossiers qu'il aurait dans
+un composant multi-cluster (`cluster/infra/<name>/${CLUSTER}/`). Le repo n'ayant plus qu'un
+cluster, aucun composant n'est aujourd'hui dans ce cas : tous sont des `Application`.
 
 | Cluster | Fiche | État |
 |---|---|---|
@@ -75,7 +75,7 @@ cluster :
 
 | Attente | Composant concerné | Effet si absente |
 |---|---|---|
-| Un endpoint apiserver joignable en local sur le nœud | `cilium` (`k8sServiceHost`/`k8sServicePort` de `common/helm-values.yaml`) | Agent Cilium incapable de joindre l'apiserver sans kube-proxy |
+| Un endpoint apiserver joignable en local sur le nœud | `cilium` (`k8sServiceHost`/`k8sServicePort` de son `helm-values.yaml`) | Agent Cilium incapable de joindre l'apiserver sans kube-proxy |
 | `/sys/fs/cgroup` déjà monté par l'hôte (`cgroup.autoMount.enabled: false`) | `cilium` | Agent en `CrashLoopBackOff` |
 | Modules noyau `dm_mod`, `dm_thin_pool`, `dm_snapshot` chargés | `openebs` | `pvcreate`/`vgcreate` échouent dans le Job de bootstrap du VG |
 | Une **partition brute** étiquetée (partlabel dans la fiche) | `openebs` | Job VG en échec, pas de StorageClass, tous les PVC `Pending` |
@@ -262,34 +262,35 @@ la StorageClass d'openebs, dont son PVC dépend.
 > **Sans CNI, rien ne schedule.** Le cluster est livré sans CNI : tous les pods, CoreDNS compris,
 > restent `Pending` jusqu'à ce que Cilium tourne.
 
-Cilium est un composant **multi-cluster** : un `ApplicationSet`
-([`cluster/infra/cilium/cilium.appset.yaml`](../cluster/infra/cilium/cilium.appset.yaml)) avec la
-version du chart **commune à tous les clusters**, des values en deux couches
-(`common/helm-values.yaml`, puis l'éventuelle surcharge `${CLUSTER}/helm-values.yaml`) et un
-`${CLUSTER}/manifests/` par cluster. Version et values ont donc une **source unique** dans le
-repo : ne jamais les retaper à la main — les lire.
+Cilium est aujourd'hui un composant **mono-cluster** : une `Application`
+([`cluster/infra/cilium/cilium.app.yaml`](../cluster/infra/cilium/cilium.app.yaml)) qui porte la
+version du chart et pointe un `helm-values.yaml` unique. Version et values ont donc une **source
+unique** dans le repo : ne jamais les retaper à la main — les lire.
 
 ```bash
 helm repo add cilium https://helm.cilium.io/ && helm repo update cilium
 
-CILIUM_VERSION="$(command grep -A3 'chart: cilium' cluster/infra/cilium/cilium.appset.yaml \
+CILIUM_VERSION="$(command grep -A3 'chart: cilium' cluster/infra/cilium/cilium.app.yaml \
   | command grep 'targetRevision:' | awk '{print $2}')"
-echo "Cilium ${CILIUM_VERSION}"     # doit correspondre au targetRevision de l'ApplicationSet
+echo "Cilium ${CILIUM_VERSION}"     # doit correspondre au targetRevision de l'Application
 
-# Les values dans le MÊME ordre que l'appset : commun d'abord, surcharge du cluster ensuite
-# (cette seconde couche est facultative — aucun cluster ne diverge aujourd'hui).
-VALUES=(-f cluster/infra/cilium/common/helm-values.yaml)
-[ -f "cluster/infra/cilium/${CLUSTER}/helm-values.yaml" ] \
-  && VALUES+=(-f "cluster/infra/cilium/${CLUSTER}/helm-values.yaml")
-
-helm install cilium cilium/cilium --version "${CILIUM_VERSION}" -n kube-system "${VALUES[@]}"
+helm install cilium cilium/cilium --version "${CILIUM_VERSION}" -n kube-system \
+  -f cluster/infra/cilium/helm-values.yaml
 ```
 
 > [!WARNING]
-> **Le `--version`, le `releaseName` et l'ordre des values sont load-bearing.** La release
-> **doit** s'appeler `cilium` : l'Application `${CLUSTER}-cilium` (étape 4) *adopte* ce release. Un
+> **Le `--version`, le `releaseName` et les values sont load-bearing.** La release
+> **doit** s'appeler `cilium` : l'Application `cilium` (étape 4) *adopte* ce release. Un
 > nom différent renommerait toutes les ressources Cilium et détruirait le CNI. Une version — ou un
-> jeu de values — différent de celui de l'appset ferait diverger l'app dès le premier sync.
+> jeu de values — différent de celui de l'Application la ferait diverger dès le premier sync.
+
+> [!NOTE]
+> **Bootstrap d'un second cluster.** Cilium redeviendrait alors multi-cluster (`ApplicationSet`,
+> values en deux couches `common/` + `${CLUSTER}/`, cf.
+> [`cluster/infra/cilium/README.md`](../cluster/infra/cilium/README.md)) : c'est la migration à
+> faire **avant** cette étape, et les chemins ci-dessus deviennent
+> `cluster/infra/cilium/{cilium.appset.yaml,common/helm-values.yaml}` plus l'éventuelle surcharge
+> `${CLUSTER}/helm-values.yaml`, passée **après** la couche commune.
 
 **Vérification :**
 
@@ -301,8 +302,8 @@ kubectl -n kube-system get pods -l k8s-app=kube-dns      # CoreDNS passe Running
 
 > [!NOTE]
 > **Reprise en main par ArgoCD.** Ce `helm install` est le **seul geste Helm** du bootstrap. Une
-> fois le tier-1 lancé (étape 4), l'Application `${CLUSTER}-cilium` (chart + `$values` +
-> `${CLUSTER}/manifests/` ip-pool/l2-policy) adopte le release et passe `Synced` sans rien changer.
+> fois le tier-1 lancé (étape 4), l'Application `cilium` (chart + `$values` + `manifests/`
+> ip-pool/l2-policy) adopte le release et passe `Synced` sans rien changer.
 
 ---
 

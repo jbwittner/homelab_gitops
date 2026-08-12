@@ -9,34 +9,28 @@ composant du [runbook](../../../doc/runbook-bootstrap.md).
 
 ## Fichiers
 
-Cilium tourne sur **tous** les clusters. Ce qui est commun vit dans `common/`, ce qui est propre
-à un cluster dans son sous-dossier — seul ce dernier est découvert par le generator git de
-l'ApplicationSet, `common/` en est explicitement exclu.
+Composant **mono-cluster** (archétype (b) : chart + `$values` + `manifests/`), déployé sur le hub
+`bleu-kalecgos` — le seul cluster du repo.
 
-- `cilium.appset.yaml` — ApplicationSet (archétype (b) : chart + `$values` + `manifests/`),
-  produit une Application `<cluster>-cilium` par sous-dossier de cluster. Version du chart
-  épinglée dans `targetRevision` (SemVer **sans `v`**), commune à tous les clusters.
-- `common/helm-values.yaml` — values communes : `kubeProxyReplacement`, `l2announcements`,
-  `gatewayAPI`, `k8sServiceHost`/`k8sServicePort` (endpoint apiserver local du nœud),
-  `cgroup.autoMount: false` (le cgroup est monté par l'hôte)
-- `common/manifests/l2-policy.yaml` — `CiliumL2AnnouncementPolicy`, annonce L2 des IP de LB.
-  Identique partout, donc porté une seule fois.
-- `<cluster>/manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool`, la seule ressource réellement
-  spécifique : une plage **disjointe** par cluster, `192.168.1.80-84` (bleu-kalecgos),
-  `192.168.1.85-89` (bleu-arcanagos) (cf. [doc/reseau.md](../../../doc/reseau.md))
-- `<cluster>/manifests/kustomization.yaml` — assemble `../../common/manifests` + `ip-pool.yaml`,
-  applique le `namePrefix: <cluster>-` qui donne leurs noms finaux aux deux ressources, et pose
-  les labels communs plus `homelab.wittner.tech/cluster: <cluster>`. C'est le seul endroit où le
-  nom du cluster est écrit en dur — les manifestes eux-mêmes n'en savent rien.
+- `cilium.app.yaml` — l'`Application`. Version du chart épinglée dans `targetRevision`
+  (SemVer **sans `v`**).
+- `helm-values.yaml` — `kubeProxyReplacement`, `l2announcements`, `gatewayAPI`,
+  `k8sServiceHost`/`k8sServicePort` (endpoint apiserver local du nœud), `cgroup.autoMount: false`
+  (le cgroup est monté par l'hôte). Également passé au `helm install` de bootstrap.
+- `manifests/l2-policy.yaml` — `CiliumL2AnnouncementPolicy`, annonce L2 des IP de LB.
+- `manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool`, plage `192.168.1.80-84`
+  (cf. [doc/reseau.md](../../../doc/reseau.md)).
+- `manifests/kustomization.yaml` — assemble les deux, applique le `namePrefix: bleu-kalecgos-`
+  qui leur donne leurs noms finaux et pose les labels communs.
 
-## Diverger sur un cluster
+## Repasser en multi-cluster
 
-- **Une value** : créer `<cluster>/helm-values.yaml` avec les seules clés à écraser. Il est
-  chargé après `common/helm-values.yaml` et reste facultatif (`ignoreMissingValueFiles`).
-- **Une ressource** : l'ajouter à `<cluster>/manifests/` et la référencer dans son
-  `kustomization.yaml`. Pour en *modifier* une de `common/`, un `patches:` au même endroit.
-- **Un cluster de plus** : créer `<cluster>/manifests/{kustomization.yaml,ip-pool.yaml}` sur le
-  modèle d'un existant. Le generator le découvre, rien d'autre à toucher.
+Cilium était porté par un `ApplicationSet` du temps où le repo avait deux clusters. Y revenir =
+la migration décrite dans [doc/conventions.md](../../../doc/conventions.md) : renommer
+`cilium.app.yaml` en `cilium.appset.yaml` (generator git sur `cluster/infra/cilium/*`, `common/`
+exclu, `preserveResourcesOnDeletion: true`), déplacer `helm-values.yaml` et `manifests/` sous
+`common/`, et poser un `<cluster>/manifests/` par cluster (au minimum son `ip-pool.yaml`, plage
+**disjointe**). L'Application `cilium` devient alors `bleu-kalecgos-cilium`.
 
 ## Contraintes
 
@@ -45,6 +39,9 @@ l'ApplicationSet, `common/` en est explicitement exclu.
 >   bootstrap ; un autre `releaseName` renommerait toutes les ressources et détruirait le CNI.
 > - **Même version de chart** entre le `helm install` du bootstrap et le `targetRevision` de
 >   l'Application, sinon l'app diverge dès le premier sync.
+> - **`namePrefix: bleu-kalecgos-`** : hérité du multi-cluster, il n'a plus de rôle de
+>   désambiguïsation mais le retirer renommerait `bleu-kalecgos-l2` / `bleu-kalecgos-pool`, donc
+>   interromprait l'annonce des IP de LB.
 > - **Compat Gateway API** : la version des CRDs posées par `gateway-api` est couplée à la
 >   version de Cilium — vérifier la table de compatibilité upstream **avant** tout bump, des deux
 >   côtés (cf. `../gateway-api/manifests/kustomization.yaml`).
@@ -54,8 +51,7 @@ l'ApplicationSet, `common/` en est explicitement exclu.
 
 ## Opérations
 
-- **Upgrade** : bumper `targetRevision` dans `cilium.appset.yaml` (un seul point pour tous les
-  clusters), commit, push. Vérifier la matrice
+- **Upgrade** : bumper `targetRevision` dans `cilium.app.yaml`, commit, push. Vérifier la matrice
   Gateway API d'abord, et relire les *Upgrade Notes* upstream sur un saut de mineure.
 - **Debug** :
   ```bash

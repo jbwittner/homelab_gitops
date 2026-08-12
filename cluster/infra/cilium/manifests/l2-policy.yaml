@@ -1,7 +1,7 @@
 apiVersion: cilium.io/v2alpha1
 kind: CiliumL2AnnouncementPolicy
 metadata:
-  # Le `namePrefix` du kustomization.yaml de chaque cluster préfixe ce nom → `<cluster>-l2`.
+  # Préfixé par le `namePrefix` du kustomization.yaml → `bleu-kalecgos-l2`.
   name: l2
 spec:
   loadBalancerIPs: true

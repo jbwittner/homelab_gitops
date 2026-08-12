@@ -53,9 +53,9 @@ Mono-nœud **`vert-eranikus`**, Talos.
 | Entrée DNS non spécifique au cluster | `*.lan.wittner.tech` → `192.168.1.80` (listener `https-internal`, utilisé par `openbao`) |
 
 Les noms `bleu-kalecgos-pool` / `bleu-kalecgos-l2` viennent du `namePrefix: bleu-kalecgos-` de
-[`cluster/infra/cilium/bleu-kalecgos/manifests/kustomization.yaml`](../../cluster/infra/cilium/bleu-kalecgos/manifests/kustomization.yaml) :
-les manifestes eux-mêmes portent les noms nus `pool` et `l2` (`l2-policy.yaml` vit dans
-`common/`, partagé avec les autres clusters).
+[`cluster/infra/cilium/manifests/kustomization.yaml`](../../cluster/infra/cilium/manifests/kustomization.yaml) :
+les manifestes eux-mêmes portent les noms nus `pool` et `l2`. Ce préfixe est hérité de l'époque
+où `cilium` était multi-cluster ; il est conservé pour ne pas renommer ces deux ressources.
 
 Les deux autres listeners de `shared-gw` (`https-public` `*.wittner.tech`, `https-internal`
 `*.lan.wittner.tech`) ne sont pas spécifiques à ce cluster — mais `shared-gw` n'existe
@@ -79,20 +79,15 @@ aujourd'hui que **ici**, `gateway-api` étant un composant mono-cluster (cf.
 
 Index complet avec un lien par composant : [`README.md`](../../README.md) racine.
 
-Applications attendues dans ArgoCD après l'étape 4 du runbook — les composants mono-cluster de ce
-cluster ne portent **pas** de préfixe (c'est le hub) ; `cilium` est généré par un `ApplicationSet`
-et l'a donc :
+Applications attendues dans ArgoCD après l'étape 4 du runbook. Le repo n'ayant plus qu'un
+cluster, tous les composants sont des `Application` mono-cluster : aucun `ApplicationSet`, donc
+aucun nom préfixé `<cluster>-`.
 
 ```
 tier 1/2 : root, infra, app
-appsets  : cilium, argocd-manager
-infra    : argocd, cert-manager, cert-manager-config, external-secrets, gateway-api, openbao,
-           openebs, sealed-secrets, bleu-kalecgos-cilium
+infra    : argocd, cert-manager, cert-manager-config, cilium, external-secrets, gateway-api,
+           openbao, openebs, sealed-secrets
 app      : alloy, authentik, cnpg, kube-prometheus-stack, loki, renovate, test-nginx
-```
-
-```bash
-kubectl -n argocd get app -l homelab.wittner.tech/cluster=bleu-kalecgos   # → cilium
 ```
 
 ## Secrets
@@ -146,7 +141,7 @@ a le sien, cf. [external-secrets](../../cluster/infra/external-secrets/README.md
 
 ```bash
 kubectl get applications -n argocd                       # toutes Synced/Healthy
-kubectl get applicationsets -n argocd                    # cilium, argocd-manager
+kubectl get applicationsets -n argocd                    # aucun aujourd'hui (repo mono-cluster)
 kubectl get nodes                                        # vert-eranikus Ready
 kubectl -n gateway get gateway shared-gw                 # PROGRAMMED=True, ADDRESS=192.168.1.80
 kubectl -n gateway get certificate                       # 3× READY=True
