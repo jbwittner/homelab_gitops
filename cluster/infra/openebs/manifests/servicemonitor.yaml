@@ -17,3 +17,12 @@ spec:
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
+      # L'exporter tourne en DaemonSet : son `instance` est l'IP du pod (10.244.x.y:9500),
+      # réattribuée à chaque redémarrage et illisible aussi bien dans un graphe que dans une
+      # notification d'alerte. Le stockage LVM étant node-local, le nom du nœud est la seule
+      # identité stable et la clé de lecture naturelle de ces métriques : on l'attache ici,
+      # une fois, plutôt que de le reconstruire par jointure dans chaque requête.
+      # `instance` est conservé tel quel — il désigne la cible de scrape réelle.
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node

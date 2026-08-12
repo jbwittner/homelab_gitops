@@ -946,7 +946,7 @@ data:
               },
               "editorMode": "code",
               "expr": "(1 - lvm_vg_free_size_bytes / lvm_vg_total_size_bytes) * 100",
-              "legendFormat": "{{name}} @ {{instance}}",
+              "legendFormat": "{{node}} · {{name}}",
               "range": true,
               "refId": "A"
             }
@@ -2727,7 +2727,7 @@ data:
                   },
                   "editorMode": "code",
                   "expr": "lvm_vg_free_size_bytes",
-                  "legendFormat": "{{name}} — libre",
+                  "legendFormat": "{{node}} · {{name}} — libre",
                   "range": true,
                   "refId": "A"
                 },
@@ -2738,7 +2738,7 @@ data:
                   },
                   "editorMode": "code",
                   "expr": "lvm_vg_total_size_bytes",
-                  "legendFormat": "{{name}} — capacité",
+                  "legendFormat": "{{node}} · {{name}} — capacité",
                   "range": true,
                   "refId": "B"
                 }

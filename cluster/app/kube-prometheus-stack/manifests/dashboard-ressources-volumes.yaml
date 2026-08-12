@@ -1800,7 +1800,7 @@ data:
               },
               "editorMode": "code",
               "expr": "(1 - lvm_vg_free_size_bytes / lvm_vg_total_size_bytes) * 100",
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{node}}",
               "range": true,
               "refId": "A"
             }
@@ -1866,7 +1866,7 @@ data:
               },
               "editorMode": "code",
               "expr": "lvm_vg_free_size_bytes",
-              "legendFormat": "{{instance}}",
+              "legendFormat": "{{node}}",
               "range": true,
               "refId": "A"
             }

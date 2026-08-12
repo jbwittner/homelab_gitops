@@ -3,7 +3,9 @@
 # Le stockage est NODE-LOCAL : il y a un VG `lvmvg` PAR NŒUD, tous exposés sous le même
 # `name="lvmvg"`. Les seuils sont donc évalués série par série (jamais agrégés — 20 Gio libres
 # répartis 19 + 1 ne permettent pas de provisionner 5 Gio) et chaque annotation nomme le nœud via
-# `instance`, sans quoi deux VG saturés sont indiscernables dans la notification.
+# `node`, sans quoi deux VG saturés sont indiscernables dans la notification. Ce label est
+# attaché par un relabeling du ServiceMonitor : l'exporter étant un DaemonSet, son `instance`
+# natif est l'IP du pod, réattribuée à chaque redémarrage et inexploitable dans une alerte.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -21,8 +23,8 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "VG {{ $labels.name }} ({{ $labels.instance }}) rempli à {{ $value | printf \"%.1f\" }}%"
-            description: "Le VolumeGroup {{ $labels.name }} du nœud {{ $labels.instance }} dépasse 85% d'occupation."
+            summary: "VG {{ $labels.name }} ({{ $labels.node }}) rempli à {{ $value | printf \"%.1f\" }}%"
+            description: "Le VolumeGroup {{ $labels.name }} du nœud {{ $labels.node }} dépasse 85% d'occupation."
 
         - alert: OpenEBSLvmVgSpaceCritical
           expr: (1 - lvm_vg_free_size_bytes / lvm_vg_total_size_bytes) * 100 > 95
@@ -30,8 +32,8 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: "VG {{ $labels.name }} ({{ $labels.instance }}) critique : {{ $value | printf \"%.1f\" }}%"
-            description: "Plus aucune marge pour provisionner de nouveaux PVC sur le nœud {{ $labels.instance }} — les autres nœuds ne compensent pas, le stockage est node-local."
+            summary: "VG {{ $labels.name }} ({{ $labels.node }}) critique : {{ $value | printf \"%.1f\" }}%"
+            description: "Plus aucune marge pour provisionner de nouveaux PVC sur le nœud {{ $labels.node }} — les autres nœuds ne compensent pas, le stockage est node-local."
 
         - alert: OpenEBSLvmVgMissingPv
           expr: lvm_vg_missing_pv_count > 0
@@ -39,8 +41,8 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: "VG {{ $labels.name }} ({{ $labels.instance }}) : PV manquant"
-            description: "{{ $value }} PV absent(s) sur le nœud {{ $labels.instance }} — volumes potentiellement inaccessibles."
+            summary: "VG {{ $labels.name }} ({{ $labels.node }}) : PV manquant"
+            description: "{{ $value }} PV absent(s) sur le nœud {{ $labels.node }} — volumes potentiellement inaccessibles."
 
         - alert: OpenEBSLvmVgMetadataLow
           expr: (1 - lvm_vg_mda_free_size_bytes / lvm_vg_mda_total_size_bytes) * 100 > 80
@@ -48,8 +50,8 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "Métadonnées VG {{ $labels.name }} ({{ $labels.instance }}) à {{ $value | printf \"%.1f\" }}%"
-            description: "Zone de métadonnées LVM en voie de saturation sur le nœud {{ $labels.instance }} — risque de blocage des opérations LVM."
+            summary: "Métadonnées VG {{ $labels.name }} ({{ $labels.node }}) à {{ $value | printf \"%.1f\" }}%"
+            description: "Zone de métadonnées LVM en voie de saturation sur le nœud {{ $labels.node }} — risque de blocage des opérations LVM."
 
         - alert: OpenEBSLvmVolumeUnhealthy
           expr: lvm_lv_health_status > 0
@@ -57,8 +59,8 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: "LV {{ $labels.name }} en état dégradé sur {{ $labels.instance }}"
-            description: "Statut santé non nominal sur {{ $labels.dm_path }} (VG {{ $labels.vg }}, nœud {{ $labels.instance }})."
+            summary: "LV {{ $labels.name }} en état dégradé sur {{ $labels.node }}"
+            description: "Statut santé non nominal sur {{ $labels.dm_path }} (VG {{ $labels.vg }}, nœud {{ $labels.node }})."
 
         # Un nœud dont l'exporter est muet est un nœud dont on ne voit NI le remplissage NI la
         # santé des volumes : cette alerte est le garde-fou de toutes les autres.
@@ -68,5 +70,5 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "Exporter OpenEBS LVM injoignable sur {{ $labels.instance }}"
+            summary: "Exporter OpenEBS LVM injoignable sur {{ $labels.node }}"
             description: "Plus de métriques LVM pour ce nœud — la supervision de son stockage est aveugle."
