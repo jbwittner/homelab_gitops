@@ -33,51 +33,6 @@ server:
       # Node ID = nom du pod. Sinon un ID aléatoire est régénéré à chaque redémarrage et le
       # nœud se réenregistre comme un nouveau pair dans la configuration raft.
       setNodeId: true
-      config: |
-        ui = true
-
-        listener "tcp" {
-          tls_disable = 1
-          address = "[::]:8200"
-          cluster_address = "[::]:8201"
-          # Requis par le ServiceMonitor : /v1/sys/metrics est sinon authentifié, et
-          # Prometheus n'a pas de token. N'expose que des compteurs et jauges — jamais
-          # le contenu d'un secret — et le port 8200 n'est pas routé hors cluster pour
-          # ce chemin (l'HTTPRoute sert l'UI, mais l'endpoint reste en ClusterIP).
-          telemetry {
-            unauthenticated_metrics_access = "true"
-          }
-        }
-
-        storage "raft" {
-          path = "/openbao/data"
-
-          # SANS ces `retry_join`, un pod dont le PVC est vide ne rejoint JAMAIS le raft :
-          # il démarre `Initialized false` + `Sealed true`, la readiness probe échoue, et il
-          # reste 0/1 indéfiniment. Les adresses sont celles du Service headless
-          # `openbao-internal` — donc résolues par pod, contrairement au Service `openbao`.
-          # En `http` : `global.tlsDisable` ci-dessus.
-          # Un nœud qui a déjà un état raft sur son PVC ignore ces stanzas : les lister tous,
-          # y compris soi-même, est sans effet de bord et évite un ordre de démarrage imposé.
-          retry_join {
-            leader_api_addr = "http://openbao-0.openbao-internal:8200"
-          }
-          retry_join {
-            leader_api_addr = "http://openbao-1.openbao-internal:8200"
-          }
-          retry_join {
-            leader_api_addr = "http://openbao-2.openbao-internal:8200"
-          }
-        }
-
-        # Pose sur le pod les labels dont dépendent les Services `-active` / `-standby`
-        # et le ServiceMonitor (notamment `openbao-active`).
-        service_registration "kubernetes" {}
-
-        telemetry {
-          prometheus_retention_time = "30s"
-          disable_hostname = true
-        }
 
     # À 3 replicas le helper `openbao.pdb.maxUnavailable` du chart calcule 1 : un drain reste
     # possible, et le quorum raft (2 sur 3) est protégé. C'est le cas où le PDB sert vraiment
@@ -102,7 +57,7 @@ server:
 # Pas de Service `ui` séparé : `ui = true` dans la config HCL ci-dessus suffit à servir
 # l'interface sur le port 8200 du Service `openbao`, vers lequel pointe l'HTTPRoute.
 ui:
-  enabled: false
+  enabled: true
 
 serverTelemetry:
   serviceMonitor:
