@@ -16,6 +16,14 @@
 # Les requêtes hwmon ne présument aucune topologie matérielle : nombre de NVMe/SSD
 # variable selon le nœud, chips coretemp multiples, capteurs multiples par disque
 # (composite + capteurs internes). Tout est agrégé/étiqueté par chip et par capteur.
+#
+# Seuils hwmon : node_hwmon_temp_{max,crit}_celsius est systématiquement encadré par
+# « > 0 < 200 ». Un capteur NVMe sans seuil configuré renvoie 0xFFFF K, que le driver
+# nvme du noyau expose tel quel dans tempN_max — soit 65535 - 273.15 = 65261.85 °C.
+# Sans ce filtre, la série bidon écrase l'échelle des graphiques de température et
+# rend absurdes les ratios « % du seuil ». Les capteurs internes (NAND, contrôleur)
+# sont les principaux concernés : contrairement à ce que l'on pourrait croire, ils
+# déclarent bien un seuil, mais invalide.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -87,7 +95,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Une ligne par nœud : reste lisible que le cluster en compte 2, 3 ou davantage. « Load / cœur » est le load average 1 min divisé par le nombre de cœurs — 1.00 = exactement saturé. Un tiret signifie que le nœud n'expose pas ce capteur (pas de coretemp, pas de NVMe), pas qu'il est en panne.",
+          "description": "Une ligne par nœud : reste lisible que le cluster en compte 2, 3 ou davantage. « Load / cœur » est le load average 1 min divisé par le nombre de cœurs — 1.00 = exactement saturé. Un tiret signifie que le nœud n'expose pas ce capteur (pas de coretemp, pas de NVMe) ou, pour « NVMe (% seuil) », qu'aucun disque n'annonce de seuil valide — pas qu'il est en panne.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -373,7 +381,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}) * 100",
+              "expr": "max by (instance) (node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) (node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} > 0 < 200)) * 100",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -3082,7 +3090,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "description": "Composite Temperature (temp1) rapportée au seuil WCTEMP annoncé par le disque. Une barre par disque. Comparable entre modèles hétérogènes, contrairement aux °C bruts : un SSD peut annoncer 79 °C de seuil et un autre 99 °C. Seul le composite est retenu ici — c'est le seul capteur auquel WCTEMP/CCTEMP s'appliquent, donc le seul dont le ratio ait un sens. 100 % = seuil warning atteint, throttling imminent.",
+              "description": "Composite Temperature (temp1) rapportée au seuil WCTEMP annoncé par le disque. Une barre par disque. Comparable entre modèles hétérogènes, contrairement aux °C bruts : un SSD peut annoncer 79 °C de seuil et un autre 99 °C. Seul le composite est retenu ici — c'est le seul capteur auquel WCTEMP/CCTEMP s'appliquent, donc le seul dont le ratio ait un sens. 100 % = seuil warning atteint, throttling imminent. Un disque dont le seuil annoncé sort de la plage 0–200 °C (0xFFFF K = seuil désactivé) n'a pas de barre : le ratio serait dénué de sens.",
               "fieldConfig": {
                 "defaults": {
                   "color": {
@@ -3150,7 +3158,7 @@ data:
                     "uid": "${DS_PROMETHEUS}"
                   },
                   "editorMode": "code",
-                  "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} * 100, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+                  "expr": "label_replace(node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) (node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} > 0 < 200) * 100, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
                   "legendFormat": "{{instance}} · {{disque}}",
                   "range": true,
                   "refId": "A"
@@ -3164,7 +3172,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "description": "Un disque = un chip hwmon (nvme_nvme0, nvme_nvme1, …), découvert dynamiquement. Hiérarchie de lecture : trait épais plein = Composite Temperature (temp1), le capteur de référence auquel WCTEMP/CCTEMP s'appliquent et qui déclenche le throttling. Pointillés fins = capteurs internes secondaires (NAND, contrôleur), informatifs, sans seuil déclaré — ne pas les comparer aux lignes de seuil. Tirets orange/rouge = WCTEMP/CCTEMP propres à chaque disque, très variables d'un modèle à l'autre, d'où l'absence de seuil fixe ici.",
+              "description": "Un disque = un chip hwmon (nvme_nvme0, nvme_nvme1, …), découvert dynamiquement. Hiérarchie de lecture : trait épais plein = Composite Temperature (temp1), le capteur de référence auquel WCTEMP/CCTEMP s'appliquent et qui déclenche le throttling. Pointillés fins = capteurs internes secondaires (NAND, contrôleur), informatifs, sans seuil exploitable — ne pas les comparer aux lignes de seuil. Tirets orange/rouge = WCTEMP/CCTEMP propres à chaque disque, très variables d'un modèle à l'autre, d'où l'absence de seuil fixe ici. Les seuils hors de la plage 0–200 °C sont écartés : un disque qui n'a pas de seuil configuré renvoie 0xFFFF K, que le noyau convertit littéralement en 65261.9 °C — valeur qui écrasait l'échelle de ce graphique.",
               "fieldConfig": {
                 "defaults": {
                   "color": {
@@ -3375,7 +3383,7 @@ data:
                     "uid": "${DS_PROMETHEUS}"
                   },
                   "editorMode": "code",
-                  "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+                  "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_max_celsius{instance=~\"$instance\",chip=~\"nvme.*\"} > 0 < 200), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
                   "legendFormat": "{{instance}} · {{disque}} — seuil warning",
                   "range": true,
                   "refId": "B"
@@ -3386,7 +3394,7 @@ data:
                     "uid": "${DS_PROMETHEUS}"
                   },
                   "editorMode": "code",
-                  "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_crit_celsius{instance=~\"$instance\",chip=~\"nvme.*\"}), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+                  "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_crit_celsius{instance=~\"$instance\",chip=~\"nvme.*\"} > 0 < 200), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
                   "legendFormat": "{{instance}} · {{disque}} — seuil critique",
                   "range": true,
                   "refId": "C"
@@ -3634,7 +3642,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "description": "Chaque capteur hwmon disponible, tous chips confondus, avec ses seuils constructeur sur la même ligne. Table de référence pour savoir ce que le nœud expose réellement. Une cellule de seuil vide n'est pas un défaut : seul le capteur composite (temp1) des NVMe porte un WCTEMP/CCTEMP, les capteurs internes n'en déclarent aucun.",
+              "description": "Chaque capteur hwmon disponible, tous chips confondus, avec ses seuils constructeur sur la même ligne. Table de référence pour savoir ce que le nœud expose réellement. Une cellule de seuil vide n'est pas un défaut : soit le capteur ne déclare aucun seuil, soit il en déclare un invalide (0xFFFF K → 65261.9 °C, filtré ici), ce que font couramment les capteurs internes des NVMe. Seul le composite (temp1) porte un WCTEMP/CCTEMP réellement utilisable.",
               "fieldConfig": {
                 "defaults": {
                   "color": {
@@ -3734,7 +3742,7 @@ data:
                     "uid": "${DS_PROMETHEUS}"
                   },
                   "editorMode": "code",
-                  "expr": "max by (instance, chip, sensor) (node_hwmon_temp_max_celsius{instance=~\"$instance\"})",
+                  "expr": "max by (instance, chip, sensor) (node_hwmon_temp_max_celsius{instance=~\"$instance\"} > 0 < 200)",
                   "format": "table",
                   "instant": true,
                   "legendFormat": "",
@@ -3747,7 +3755,7 @@ data:
                     "uid": "${DS_PROMETHEUS}"
                   },
                   "editorMode": "code",
-                  "expr": "max by (instance, chip, sensor) (node_hwmon_temp_crit_celsius{instance=~\"$instance\"})",
+                  "expr": "max by (instance, chip, sensor) (node_hwmon_temp_crit_celsius{instance=~\"$instance\"} > 0 < 200)",
                   "format": "table",
                   "instant": true,
                   "legendFormat": "",
