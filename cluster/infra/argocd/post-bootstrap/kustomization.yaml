@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+# ⚠️ Dossier SÉPARÉ de `../manifests/`, et c'est load-bearing : `manifests/` est aussi la cible
+# de l'`apply -k` manuel du bootstrap (étape 1 du README), exécuté quand seul ArgoCD existe.
+# Tout ce qui vit ici consomme une CRD posée PLUS TARD par le tier-1 — le geste d'amorçage
+# échouerait dessus sur `no matches for kind` :
+#   - `ExternalSecret`  → CRD posée en wave -7 par external-secrets
+#   - `HTTPRoute`       → CRD posée en wave -10 par gateway-api
+# Les deux dossiers sont deux `source` de la même Application `argocd`, qui les applique en
+# wave -1 : à ce moment-là les deux CRDs sont là depuis longtemps.
+#
+# Critère d'aiguillage : ce qui CASSE l'apply d'amorçage vient ici. Ce qui s'applique proprement
+# reste dans `manifests/`, même si c'est inutile à ce stade — les patchs RBAC (authentik) et
+# notifications (Grafana) sont dans ce cas : inertes tant que leur interlocuteur n'existe pas,
+# mais sans conséquence sur le démarrage d'Argo.
+resources:
+  - argocd-oidc.externalsecret.yaml
+  - argocd-notifications.externalsecret.yaml
+  - argocd-httproute.yaml

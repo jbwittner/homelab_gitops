@@ -22,7 +22,9 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 # 3. Mot de passe admin initial
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d ; echo
 
-# 4. Accès UI au bootstrap (la HTTPRoute ne sert qu'après gateway-api + cert-manager)
+# 4. Accès UI au bootstrap : la HTTPRoute n'est même pas posée à ce stade (elle est dans
+#    post-bootstrap/, appliquée par Argo en wave -1) et ne routera qu'après gateway-api
+#    + cert-manager. Port-forward, donc.
 kubectl -n argocd port-forward svc/argocd-server 8080:443
 
 # 5. Lancer le tier-1 → ArgoCD déploie tout le reste dans l'ordre des sync-waves
@@ -33,7 +35,8 @@ kubectl apply -f cluster/root.yaml
 
 - `argocd.app.yaml` — Application self-management (archétype (c), wave -1, `prune: false`,
   `path` → `manifests/`)
-- `manifests/kustomization.yaml` — install upstream **épinglé ici** + namespace + patchs + HTTPRoute
+- `manifests/kustomization.yaml` — install upstream **épinglé ici** + namespace + patchs
+  (objets d'API cœur uniquement, cf. encadré ci-dessous)
 - `manifests/namespace.yaml` — ns `argocd`
 - `manifests/argocd-cmd-params-cm.yaml` — patch `server.insecure: "true"` (TLS terminé au
   Gateway) + `controller.diff.server.side: "true"` (cf. §Diff)
@@ -41,12 +44,13 @@ kubectl apply -f cluster/root.yaml
   `oidc.config` (SSO authentik)
 - `manifests/argocd-rbac-cm.yaml` — patch RBAC : défaut `role:readonly`, groupe authentik
   `app-argocd-admin` → `role:admin`
-- `manifests/argocd-httproute.yaml` — UI via `shared-gw` (cf. [doc/reseau.md](../../../doc/reseau.md))
 - `manifests/argocd-notifications-cm.yaml` — patch notifications : service Grafana, templates,
   triggers, souscriptions globales (cf. §Notifications)
-- `external-secrets/argocd-oidc.externalsecret.yaml` — `ExternalSecret` `argocd-oidc`, clé
+- `post-bootstrap/argocd-httproute.yaml` — UI via `shared-gw` (cf.
+  [doc/reseau.md](../../../doc/reseau.md))
+- `post-bootstrap/argocd-oidc.externalsecret.yaml` — `ExternalSecret` `argocd-oidc`, clé
   `client-secret` (OIDC), servi par openbao
-- `external-secrets/argocd-notifications.externalsecret.yaml` — `ExternalSecret`
+- `post-bootstrap/argocd-notifications.externalsecret.yaml` — `ExternalSecret`
   `argocd-notifications-secret`, clé `grafana-api-key` (cf. §Notifications)
 - `manifests/cluster-bleu-kalecgos.yaml` — Secret de cluster qui **nomme le cluster local**
   `bleu-kalecgos` (sans lui : entrée `in-cluster` codée en dur). Aucun credential dedans → clair,
@@ -58,11 +62,29 @@ kubectl apply -f cluster/root.yaml
 
 > [!IMPORTANT]
 > **Deux dossiers, et la séparation est load-bearing.** `manifests/` est aussi la cible de
-> l'`apply -k` manuel du bootstrap, exécuté quand seul ArgoCD tourne : la CRD `ExternalSecret`
-> n'y existe pas encore (elle arrive en wave -7 avec
-> [external-secrets](../external-secrets/README.md)). Les `ExternalSecret` vivent donc dans
-> `external-secrets/`, déclaré comme **second `source`** de cette Application. Y mettre un
-> `ExternalSecret` ferait échouer le geste d'amorçage sur `no matches for kind`.
+> l'`apply -k` manuel du bootstrap, exécuté quand seul ArgoCD tourne — donc **avant que le
+> tier-1 n'ait posé la moindre CRD**. Tout objet d'un groupe d'API tiers y ferait échouer le
+> geste d'amorçage sur `no matches for kind`. Ils vivent donc dans `post-bootstrap/`, déclaré
+> comme **second `source`** de cette Application :
+>
+> | Objet | CRD posée par | Wave |
+> |---|---|---|
+> | `ExternalSecret` (OIDC, notifications) | [external-secrets](../external-secrets/README.md) | `-7` |
+> | `HTTPRoute` (UI) | [gateway-api](../gateway-api/README.md) | `-10` |
+>
+> Les deux arrivent donc **après** l'amorçage manuel, mais **avant** la wave `-1` où Argo
+> synchronise cette Application : le tour de piste est complet, la route et les secrets sont
+> posés par Argo lui-même.
+>
+> **Le critère est « est-ce que ça CASSE l'apply d'amorçage », pas « est-ce que c'est utile à
+> l'amorçage ».** Les patchs RBAC (groupe authentik) et notifications (Grafana, `cluster/app/`)
+> ne servent à rien tant que leur interlocuteur n'existe pas, mais ils s'appliquent proprement et
+> n'empêchent ni Argo de démarrer ni le compte local `admin` de fonctionner : ils restent dans
+> `manifests/`. Les sortir coûterait cher pour rien — leur cible vivant dans l'install upstream
+> de ce dossier, il faudrait l'en retirer par un `$patch: delete` et les reposer en ressources
+> autonomes, qui écraseraient en silence les clés que l'upstream pourrait y ajouter un jour
+> (`argocd-cm` en porte déjà 9 : `resource.exclusions` et les
+> `resource.customizations.ignoreResourceUpdates.*`).
 
 ## Contraintes — self-management
 

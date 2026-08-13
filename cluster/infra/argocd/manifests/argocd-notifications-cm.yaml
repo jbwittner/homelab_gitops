@@ -8,7 +8,7 @@ data:
   # (POST /api/annotations) à chaque événement souscrit. Appel in-cluster —
   # inutile de repasser par shared-gw/TLS pour du trafic argocd → monitoring.
   # `$grafana-api-key` est résolu dans le Secret `argocd-notifications-secret`
-  # (alimenté depuis openbao par ../external-secrets/argocd-notifications.externalsecret.yaml,
+  # (alimenté depuis openbao par ../post-bootstrap/argocd-notifications.externalsecret.yaml,
   # en `creationPolicy: Merge`) : le contrôleur ne lit QUE ce secret-là, d'où le nom
   # imposé (contrairement à `$argocd-oidc:client-secret` dans argocd-cm, qui accepte
   # n'importe quel secret).

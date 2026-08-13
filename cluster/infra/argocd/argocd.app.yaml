@@ -17,15 +17,16 @@ spec:
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/infra/argocd/manifests     # MÊME dossier que l'apply manuel du bootstrap
-    # ⚠️ Les ExternalSecret sont DEHORS de `manifests/`, volontairement : ce dossier sert aussi
-    # à l'`apply -k` d'amorçage, où la CRD `ExternalSecret` n'existe pas encore (elle arrive en
-    # wave -7 avec external-secrets). Les garder ici ferait échouer le geste de bootstrap.
-    # Argo, lui, les applique bien : à son tour de sync (wave -1) la CRD est posée depuis
-    # longtemps. Sans cette source, `argocd-notifications-secret` et le clientSecret OIDC
-    # restent vides et les deux fonctionnalités échouent silencieusement.
+    # ⚠️ Tout ce qui dépend d'une CRD du tier-1 est DEHORS de `manifests/`, volontairement : ce
+    # dossier sert aussi à l'`apply -k` d'amorçage, où n'existent ni la CRD `ExternalSecret`
+    # (wave -7, external-secrets) ni la CRD `HTTPRoute` (wave -10, gateway-api). Les garder là
+    # ferait échouer le geste de bootstrap sur `no matches for kind`.
+    # Argo, lui, les applique bien : à son tour de sync (wave -1) les deux CRDs sont posées
+    # depuis longtemps. Sans cette source, `argocd-notifications-secret` et le clientSecret OIDC
+    # restent vides (les deux fonctionnalités échouent silencieusement) et l'UI n'est pas routée.
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
-      path: cluster/infra/argocd/external-secrets
+      path: cluster/infra/argocd/post-bootstrap
   destination:
     name: bleu-kalecgos
     namespace: argocd
