@@ -38,7 +38,8 @@
       "Bash(kubectl get *)",
       "Bash(python3 -)",
       "WebFetch(domain:argo-cd.readthedocs.io)",
-      "WebFetch(domain:openbao.org)"
+      "WebFetch(domain:openbao.org)",
+      "Bash(kubectl top *)"
     ]
   }
 }

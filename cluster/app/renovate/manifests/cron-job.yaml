@@ -31,13 +31,17 @@ spec:
                   value: "false"
                 - name: RENOVATE_GIT_AUTHOR
                   value: "jbwittner <jeanbaptiste.wittner@outlook.com>"
+                # Plafonne le heap V8 sous la limite du conteneur : Node déclenche un GC au lieu
+                # de se faire tuer par le cgroup (exit 137, logs trompeurs car ils semblent complets).
+                - name: NODE_OPTIONS
+                  value: "--max-old-space-size=2048"
               envFrom:
                 - secretRef:
                     name: renovate-env
               resources:
                 requests:
-                  memory: 512Mi
+                  memory: 1Gi
                   cpu: 100m
                 limits:
-                  memory: 1Gi
+                  memory: 3Gi
           restartPolicy: Never
