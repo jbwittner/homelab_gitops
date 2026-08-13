@@ -120,13 +120,18 @@ ui:
   enabled: true
 
 serverTelemetry:
+  # ⚠️ NE PAS REPASSER À `true` : le ServiceMonitor est déployé par le composant frère
+  # `openbao-monitoring` (wave 2), pas par le chart, et le remettre ici en ferait deux.
+  #
+  # Raison du basculement : la doc de ce chart prévient que « the Prometheus operator *must* be
+  # installed before enabling this feature, if not the chart will fail to install due to missing
+  # CustomResourceDefinitions ». C'était vrai tant qu'openbao vivait sous `cluster/app/`, aux
+  # côtés de kube-prometheus-stack ; depuis son passage dans `cluster/infra/`, plus aucune
+  # relation d'ordre ne lie les deux (les waves ne s'ordonnent qu'à l'intérieur d'un
+  # app-of-apps) et la sync échouait au bootstrap. Le ServiceMonitor a donc été sorti du chart
+  # plutôt que supprimé — cf. cluster/infra/openbao-monitoring/README.md.
   serviceMonitor:
     enabled: false
-    # `selectors` REMPLACE le bloc de labels par défaut du template (`release: prometheus`).
-    # Le prometheus-operator du chart kube-prometheus-stack ne sélectionne que ce label-ci
-    # (serviceMonitorSelectorNilUsesHelmValues) — même contrainte que pour alloy.
-    selectors:
-      release: kube-prometheus-stack
 
   # Dashboard upstream du chart NON déployé : il ne porte pas l'annotation `grafana_folder`
   # qui range les dashboards maison dans le dossier « Wittnerlab ».

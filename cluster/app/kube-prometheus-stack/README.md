@@ -52,8 +52,9 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   le `Secret` reste en place et le login local continue de marcher. Ne jamais passer en `Delete`.
 - Tout ServiceMonitor destiné à ce Prometheus doit porter le label
   `release: kube-prometheus-stack` (`serviceMonitorSelectorNilUsesHelmValues`) — vaut aussi pour
-  [loki](../loki/README.md), [alloy](../alloy/README.md) et
-  [openebs-monitoring](../../infra/openebs-monitoring/README.md).
+  [loki](../loki/README.md), [alloy](../alloy/README.md),
+  [openebs-monitoring](../../infra/openebs-monitoring/README.md) et
+  [openbao-monitoring](../../infra/openbao-monitoring/README.md).
 - Grafana est en `deploymentStrategy: Recreate` : son PVC est RWO node-local, un rollout en
   rolling update produirait un double-mount.
 - Ne pas mettre `disable_login_form: true` : le formulaire local est le break-glass si authentik

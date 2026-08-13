@@ -32,7 +32,10 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 
 - `openbao.app.yaml` — Application (archétype (b) : Helm + `$values` + `manifests/`), ns
   `openbao`, wave `1`
-- `helm-values.yaml` — raft 1 replica + `retry_join`, injector, ServiceMonitor, rétention du PVC
+- `helm-values.yaml` — raft 1 replica + `retry_join`, injector, télémétrie serveur
+  (`unauthenticated_metrics_access` + `prometheus_retention_time`), rétention du PVC. Le
+  ServiceMonitor du chart y est **coupé volontairement** : il est porté par
+  [openbao-monitoring](../openbao-monitoring/README.md) (voir le commentaire du fichier)
 - `manifests/namespace.yaml` — ns `openbao` (wave -1), sans label PodSecurity
 - `manifests/openbao-httproute.yaml` — UI sur le listener `https-internal` de `shared-gw`
 
@@ -63,7 +66,13 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   `cert-manager-config`, `kube-prometheus-stack` et `renovate` passent `Degraded` — alors que
   leurs charges tournent normalement, les `Secret` déjà matérialisés étant conservés
   (`deletionPolicy: Retain`). Ce n'est pas une panne applicative : c'est le signal que les
-  secrets ne se rafraîchissent plus.
+  secrets ne se rafraîchissent plus. Depuis
+  [openbao-monitoring](../openbao-monitoring/README.md), cet état lève aussi une alerte
+  (`OpenBaoNoActiveNode`, 15 min) — un coffre scellé ne se voyait jusque-là qu'au mur ArgoCD.
+- **Scellé, le coffre n'est pas seulement `NotReady` : il devient invisible pour Prometheus.**
+  Sans leader, le Service `openbao-active` perd son endpoint et la cible de scrape disparaît au
+  lieu de tomber à zéro. Toute règle d'alerte sur ce composant doit être écrite en `absent(…)`,
+  jamais en `up == 0` (cf. [openbao-monitoring](../openbao-monitoring/README.md)).
 - **Le coffre est désormais en amont de l'émission TLS, et il est en wave `1`.** Depuis la
   migration du token Cloudflare, [cert-manager-config](../cert-manager-config/README.md)
   (wave `-4`) tire son secret d'ici : au bootstrap à froid, **aucun certificat wildcard n'est

@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Deux CRs `monitoring.coreos.com`, sans ordre entre elles (l'ordonnancement se joue à l'échelle
+# de l'Application, wave 2). Chaque manifeste porte son `namespace: openbao` → pas de
+# `namespace:` global.
+resources:
+  - servicemonitor.yaml
+  - prometheusrule.yaml

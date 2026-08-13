@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao-monitoring
+  namespace: argocd
+  annotations:
+    # DERNIER de la partie infra, comme openebs-monitoring : ses objets sont des CRs
+    # `monitoring.coreos.com`, absentes au bootstrap à froid. En wave 1 (celle d'openbao), une
+    # sync en échec retiendrait la wave suivante ; ici il n'y a personne derrière.
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: openbao-monitoring
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: secrets
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Volet POST-BOOTSTRAP d'[openbao](../openbao/README.md) : ServiceMonitor + alertes du coffre
+  # (archétype (c), path → `manifests/`).
+  #
+  # POURQUOI CE COMPOSANT EXISTE. Le chart openbao sait générer ce ServiceMonitor
+  # (`serverTelemetry.serviceMonitor.enabled`), mais sa propre doc prévient : « The Prometheus
+  # operator *must* be installed before enabling this feature, if not the chart will fail to
+  # install due to missing CustomResourceDefinitions ». Tant qu'openbao vivait sous
+  # `cluster/app/`, il était synchronisé par le même app-of-apps que kube-prometheus-stack et la
+  # CRD était là. Depuis son passage dans `cluster/infra/`, plus aucune relation d'ordre ne les
+  # lie (les waves ne s'ordonnent qu'à l'intérieur d'un app-of-apps) : le flag a dû être coupé
+  # pour débloquer la sync, et le coffre s'est retrouvé sans supervision. Le ServiceMonitor est
+  # donc écrit à la main ici — même contenu, mais dans une Application qui peut échouer sans
+  # conséquence tant que le stack d'observabilité n'est pas là.
+  #
+  # ⚠️ Dépendance CROSS-TIER (infra → app), qu'aucune sync-wave ne peut ordonner : au bootstrap
+  # à froid cette Application reste en erreur jusqu'à l'arrivée de kube-prometheus-stack, puis
+  # se répare seule (`selfHeal`). Aucun geste manuel, personne n'attend derrière.
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/infra/openbao-monitoring/manifests
+  destination:
+    name: bleu-kalecgos
+    # ns `openbao` — créé par le composant openbao (manifests/namespace.yaml, wave -1).
+    # Pas de CreateNamespace : ce composant ne possède pas le namespace.
+    namespace: openbao
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

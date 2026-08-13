@@ -1,0 +1,45 @@
+# Alertes du coffre.
+#
+# Elles ne reposent QUE sur `up`, la métrique synthétisée par Prometheus lui-même, et sur aucune
+# métrique interne d'OpenBao : les noms `bao_*` / `openbao_*` sont un héritage renommé du fork
+# Vault et n'ont pas été vérifiés contre l'endpoint réel de cette version. Une règle écrite sur
+# un nom de métrique inexistant ne lève jamais rien et ne le dit pas — c'est le pire des faux
+# négatifs pour un composant dont tout le reste du cluster dépend. La procédure pour en ajouter
+# à partir des métriques réellement servies est dans le README.
+#
+# Ce que `up` suffit à couvrir, grâce au ciblage du Service `openbao-active` (cf.
+# servicemonitor.yaml) : coffre scellé, pod absent, raft sans leader, endpoint injoignable — tous
+# se traduisent par « aucune cible active », et tous appellent la même action humaine.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: openbao-alerts
+  namespace: openbao
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: openbao.rules
+      rules:
+        # `absent(up{...} == 1)` et non `up == 0` : un coffre scellé n'a pas de leader, donc le
+        # Service `openbao-active` perd son endpoint et la série `up` DISPARAÎT au lieu de passer
+        # à 0. Cette forme couvre les deux cas d'un coup — série absente ET série à 0.
+        - alert: OpenBaoNoActiveNode
+          expr: absent(up{job="openbao-active"} == 1)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "OpenBao : aucun nœud actif"
+            description: "Coffre scellé (cas le plus courant, après tout redémarrage de pod), en panne, ou raft sans leader. Les Secret déjà matérialisés survivent (deletionPolicy: Retain) mais AUCUN secret ne se rafraîchit plus. Action : desceller, cf. le README d'openbao."
+
+        # Même condition, horizon différent : passé ce délai, ce n'est plus un redémarrage en
+        # cours, c'est un descellement que personne n'a fait.
+        - alert: OpenBaoSealedTooLong
+          expr: absent(up{job="openbao-active"} == 1)
+          for: 3h
+          labels:
+            severity: critical
+          annotations:
+            summary: "OpenBao inactif depuis 3 h"
+            description: "Le coffre n'a pas de nœud actif depuis 3 heures. Toute rotation de secret au coffre est ignorée depuis, et le prochain renouvellement Let's Encrypt (solver DNS-01, token servi par openbao) échouera si l'état persiste."
