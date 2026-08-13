@@ -24,6 +24,10 @@ spec:
   #     nœud, y compris sur un nœud ajouté après coup (détail : manifests/vg-bootstrap-daemonset.yaml).
   #   - Pas de CreateNamespace : le namespace est créé ET labellisé `privileged` par
   #     manifests/namespace.yaml (sinon les DaemonSets privileged sont rejetés par PSA baseline).
+  #   - VOLET BOOTSTRAP UNIQUEMENT : objets d'API cœur, déployables sur un cluster nu. Le
+  #     ServiceMonitor et le PrometheusRule du driver sont dans le composant frère
+  #     `openebs-monitoring` (wave 2) — leurs CRDs n'existent pas encore quand le stockage,
+  #     lui, doit déjà être debout.
   sources:
     - repoURL: https://openebs.github.io/openebs
       chart: openebs

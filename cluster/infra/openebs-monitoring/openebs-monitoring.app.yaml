@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openebs-monitoring
+  namespace: argocd
+  annotations:
+    # DERNIER de la partie infra (après openbao, wave 1) : rien ne dépend de ce composant, et il
+    # ne doit surtout pas être dans la même wave que `openebs` (0). Ses deux objets sont des CRs
+    # `monitoring.coreos.com` : au bootstrap à froid la CRD n'existe pas encore, la sync échoue,
+    # et une Application en échec en wave 0 retiendrait toute la suite — dont openebs lui-même.
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: openebs-monitoring
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: storage
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Volet POST-BOOTSTRAP d'[openebs](../openebs/README.md) : ServiceMonitor + PrometheusRule du
+  # moteur LocalPV-LVM (archétype (c), path → `manifests/`). Séparé du composant openebs pour la
+  # même raison que les ServiceMonitors ArgoCD vivent dans kube-prometheus-stack : ces objets
+  # exigent les CRDs de prometheus-operator, absentes tant que le stack d'observabilité
+  # (`cluster/app/kube-prometheus-stack`) n'est pas là. Le stockage, lui, doit être debout AVANT.
+  #
+  # ⚠️ La dépendance réelle est CROSS-TIER (infra → app) : aucune sync-wave ne l'ordonne, les deux
+  # parties étant syncées par deux app-of-apps distincts. Au bootstrap à froid cette Application
+  # reste donc en erreur jusqu'à l'arrivée de kube-prometheus-stack, puis se répare seule au
+  # retry suivant. C'est sans conséquence : personne n'attend derrière.
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/infra/openebs-monitoring/manifests
+  destination:
+    name: bleu-kalecgos
+    # ns `openebs` — créé et labellisé PSA par le composant openebs (manifests/namespace.yaml,
+    # wave -1). Pas de CreateNamespace ici : ce composant ne possède pas le namespace.
+    namespace: openebs
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

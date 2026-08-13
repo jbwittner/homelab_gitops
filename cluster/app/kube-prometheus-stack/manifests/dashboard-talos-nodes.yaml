@@ -6,7 +6,7 @@
 # Sources de métriques :
 #   - node-exporter        : CPU, mémoire, filesystems, réseau, hwmon
 #   - kube-state-metrics   : nombre de pods par nœud
-#   - openebs-lvm exporter : VolumeGroups LVM (ServiceMonitor openebs)
+#   - openebs-lvm exporter : VolumeGroups LVM (ServiceMonitor openebs-monitoring)
 #
 # Structure : la vue par défaut tient en une page — une table « État des nœuds »
 # (une ligne par nœud, donc lisible quel que soit le nombre de nœuds) suivie des

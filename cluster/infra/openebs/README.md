@@ -14,6 +14,11 @@ dans `helm-values.yaml`), pas un réglage de ce composant.
 
 ## Fichiers
 
+Ce composant ne porte que le **volet bootstrap** : le strict nécessaire pour que le cluster ait
+sa StorageClass par défaut. L'observabilité du moteur (ServiceMonitor + PrometheusRule) est dans
+le composant frère [openebs-monitoring](../openebs-monitoring/README.md), qui ne peut se déployer
+qu'après le stack d'observabilité.
+
 - `openebs.app.yaml` — Application (archétype (b) : chart parapluie + `$values` + `manifests/`)
 - `helm-values.yaml` — coupe tous les moteurs sauf LVM, ainsi que la télémétrie, le
   `preUpgradeHook` et l'observabilité empaquetée
@@ -27,11 +32,15 @@ dans `helm-values.yaml`), pas un réglage de ce composant.
   démarrage de pod
 - `manifests/storageclass.yaml` — `openebs-lvm-thin` (wave 1), `volgroup: lvmvg`,
   `WaitForFirstConsumer`, `allowVolumeExpansion`, classe par défaut du cluster
-- `manifests/servicemonitor.yaml` — scrape des métriques du driver
-- `manifests/prometheusrule.yaml` — règles d'alerte associées
 
 ## Contraintes
 
+- **Rien ici ne doit dépendre d'une CRD posée plus tard.** Le stockage est au tout début de la
+  chaîne de bootstrap : ce composant ne contient que des objets d'API cœur (Namespace, DaemonSet,
+  StorageClass), disponibles dès le premier `kubectl apply`. Tout ce qui exige une CRD tierce va
+  dans [openebs-monitoring](../openebs-monitoring/README.md) — une Application `openebs` bloquée
+  sur un `ServiceMonitor` non résolu retiendrait derrière elle toutes les waves suivantes, à
+  commencer par [openbao](../openbao/README.md) (wave 1) et son PVC.
 - **Le VG n'est pas provisionné par le driver** : LocalPV-LVM l'exige préexistant. C'est le rôle
   du DaemonSet de bootstrap, seul état réel sur disque non réconciliable par GitOps.
 - **La partition brute `r-lvmpv` doit exister sur CHAQUE nœud** (prérequis de provisionnement,

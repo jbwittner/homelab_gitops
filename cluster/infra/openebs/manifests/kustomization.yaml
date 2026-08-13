@@ -2,11 +2,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Volet BOOTSTRAP du composant : uniquement ce qu'il faut pour que le cluster ait sa StorageClass
+# par défaut. Le ServiceMonitor et le PrometheusRule vivent dans le composant frère
+# `openebs-monitoring` (CRDs prometheus-operator absentes à ce stade).
+#
 # Ordre déclaratif via sync-waves de ressource (pas via l'ordre de cette liste) :
 #   namespace (-1) → DaemonSet de bootstrap du VG (0) → StorageClass (1).
 resources:
   - namespace.yaml
   - storageclass.yaml
   - vg-bootstrap-daemonset.yaml
-  - servicemonitor.yaml
-  - prometheusrule.yaml

@@ -10,7 +10,8 @@
 #     GET_VOLUME_STATS, et uniquement pour les volumes effectivement montés par un pod.
 #   - kube-state-metrics        : kube_persistentvolumeclaim_*, kube_persistentvolume_*,
 #     kube_pod_spec_volumes_persistentvolumeclaims_info (détection des PVC orphelins).
-#   - exporter OpenEBS lvm-localpv (ServiceMonitor du composant openebs) : lvm_lv_* et lvm_vg_*.
+#   - exporter OpenEBS lvm-localpv (ServiceMonitor du composant openebs-monitoring) : lvm_lv_*
+#     et lvm_vg_*.
 #
 # Pourquoi une rangée thin pool : le nom `openebs-lvm-thin` est historique, la classe provisionne
 # aujourd'hui en volumes ÉPAIS (`thinProvision: "no"`) — ces panneaux restent vides tant qu'aucun
