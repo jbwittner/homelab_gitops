@@ -38,6 +38,11 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   [openbao-monitoring](../openbao-monitoring/README.md) (voir le commentaire du fichier)
 - `manifests/namespace.yaml` — ns `openbao` (wave -1), sans label PodSecurity
 - `manifests/openbao-httproute.yaml` — UI sur le listener `https-internal` de `shared-gw`
+- `manifests/openbao-snapshot-s3.secret.yaml` — **clair, gitignoré** : template d'entrée de
+  `kubeseal` pour les credentials S3 de la sauvegarde (`AWS_ACCESS_KEY_ID`,
+  `AWS_SECRET_ACCESS_KEY`). Le produit scellé, `openbao-snapshot-s3.sealed.yaml`, est le seul des
+  deux qui se committe — et la ligne correspondante du `kustomization.yaml` reste **commentée**
+  tant qu'il n'existe pas (cf. Opérations)
 
 ## Contraintes
 
@@ -145,7 +150,9 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 - **Ce que le coffre ne servira jamais.** Un secret dont openbao ou ESO a besoin pour
   fonctionner ne peut pas venir d'openbao. Concrètement : le jour où `snapshotAgent` poussera
   vers S3/MinIO, **ses credentials devront être un `SealedSecret`** — sinon la sauvegarde du
-  coffre dépend du coffre. Même raisonnement pour le secret resté scellé — le Secret de cluster
+  coffre dépend du coffre. C'est le seul `SealedSecret` prévu dans ce composant
+  (`openbao-snapshot-s3`, cf. Fichiers et Opérations) : tout autre secret d'ici doit passer par
+  le coffre. Même raisonnement pour le secret resté scellé — le Secret de cluster
   du spoke (cf. [`doc/regles-gitops.md`](../../../doc/regles-gitops.md)).
 - **L'agent injector n'est utilisé par aucun composant.** Il injecte des *fichiers dans des
   pods*, or les huit consommateurs du repo exigent tous un `Secret` natif (`existingSecret`,
@@ -235,6 +242,24 @@ Trois pièges, tous vérifiés à la connexion :
   snapshot automatique (`snapshotAgent`), non activé : il ne sait pousser que vers S3, et le
   homelab n'a ni bucket ni MinIO. Le jour où l'un des deux existe, c'est la voie à privilégier
   plutôt qu'un CronJob maison.
+- **Sceller les credentials S3 de la sauvegarde** — depuis la racine du repo, cert public récupéré
+  au préalable (cf. [sealed-secrets](../sealed-secrets/README.md)) :
+  ```bash
+  # 1. Renseigner les deux valeurs dans le template en clair (gitignoré)
+  $EDITOR cluster/infra/openbao/manifests/openbao-snapshot-gcs.secret.yaml
+
+  # 2. Sceller — le chiffré est lié au couple (openbao-snapshot-gcs, openbao)
+  kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+    < cluster/infra/openbao/manifests/openbao-snapshot-gcs.secret.yaml \
+    > cluster/infra/openbao/manifests/openbao-snapshot-gcs.sealed.yaml
+
+  # 3. Supprimer le clair, décommenter la ressource dans manifests/kustomization.yaml, committer
+  rm cluster/infra/openbao/manifests/openbao-snapshot-gcs.secret.yaml
+  ```
+  L'ordre des étapes 2 et 3 n'est pas cosmétique : décommenter la ressource **avant** que le
+  `.sealed.yaml` existe casse le `kustomize build`, donc la sync de toute l'Application openbao,
+  pas seulement du secret. Rotation : refaire les trois étapes et committer — contrairement aux
+  secrets servis par le coffre, un scellé se refait passer par Git.
 - **Restaurer** :
   ```bash
   kubectl -n openbao cp ./openbao.snap openbao-0:/tmp/openbao.snap

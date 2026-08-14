@@ -4,3 +4,8 @@ namespace: openbao
 resources:
   - namespace.yaml
   - openbao-httproute.yaml
+  # Credentials S3 de la sauvegarde du coffre (`snapshotAgent`). Décommenter APRÈS avoir produit
+  # le fichier avec `kubeseal` (README, section Opérations) : une ressource déclarée mais absente
+  # fait échouer le `kustomize build` entier, donc la sync de TOUTE l'Application openbao — pas
+  # seulement du secret.
+  - openbao-snapshot-gcs.sealed.yaml

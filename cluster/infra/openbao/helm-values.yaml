@@ -141,3 +141,40 @@ serverTelemetry:
 # Secrets montés en volume via le Secrets Store CSI driver — driver absent du repo.
 csi:
   enabled: false
+
+
+# --- Sauvegarde : CronJob de snapshot raft vers GCS ---
+# `bao operator raft snapshot save` À CHAUD puis upload via s3cmd. GCS n'est pas
+# une cible supportée par l'agent (« only supports S3 as the final storage »), mais
+# le script passe `--host` ET `--host-bucket` à chaque appel s3cmd : l'API
+# d'interopérabilité S3 de GCS est donc atteignable. Chemin non documenté —
+# validé par un `restore` réel, pas par la présence d'un fichier dans le bucket.
+snapshotAgent:
+  enabled: true
+  # Horaire, pas toutes les 15 min : le contenu du coffre bouge très peu.
+  schedule: "0 * * * *"
+
+  # SealedSecret (cf. manifests/) — PAS un ExternalSecret : la sauvegarde du coffre
+  # ne peut pas dépendre du coffre. C'est le seul cas anti-cycle du repo à ce jour.
+  s3CredentialsSecret: "openbao-snapshot-gcs"
+
+  config:
+    s3Host: "storage.googleapis.com"
+    # ⚠️ `s3Bucket` n'est PAS le nom du bucket : il alimente `--host-bucket`,
+    # c'est-à-dire le gabarit d'URL de s3cmd. Le bucket réel vient de `s3Uri`.
+    # Le défaut du chart (même valeur dans les deux) est incohérent.
+    s3Bucket: "%(bucket)s.storage.googleapis.com"
+    s3Uri: "s3://<nom-du-bucket>"
+    s3ExpireDays: "14"
+
+    # Un mount d'auth par cluster — même mount que celui d'external-secrets.
+    baoAuthPath: "kubernetes-bleu-kalecgos"
+    baoRole: "snapshot"
+
+  # Nœud à 16 Go dans le cluster : pas de Job sans limites.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
