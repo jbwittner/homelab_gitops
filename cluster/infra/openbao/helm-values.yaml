@@ -163,8 +163,8 @@ snapshotAgent:
     # ⚠️ `s3Bucket` n'est PAS le nom du bucket : il alimente `--host-bucket`,
     # c'est-à-dire le gabarit d'URL de s3cmd. Le bucket réel vient de `s3Uri`.
     # Le défaut du chart (même valeur dans les deux) est incohérent.
-    s3Bucket: "%(bucket)s.storage.googleapis.com"
-    s3Uri: "s3://<nom-du-bucket>"
+    s3Bucket: "storage.googleapis.com"
+    s3Uri: "s3://homelab-openbao-snapshots-6d84c670"
     s3ExpireDays: "14"
 
     # Un mount d'auth par cluster — même mount que celui d'external-secrets.
