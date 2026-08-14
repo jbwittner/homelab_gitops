@@ -27,6 +27,8 @@ d'une base ; velero est le filet de niveau cluster.
   schedule quotidienne, snapshots de volume et Job de CRDs coupés (chaque choix est commenté sur
   place)
 - `manifests/namespace.yaml` — ns `velero` (wave `-1`), labellisé **`privileged`**
+- `backup-now.sh` — déclenche une sauvegarde manuelle au périmètre exact de la Schedule (spec
+  recopiée, jamais retapée) et suit son déroulement. Détail en Opérations
 - `manifests/velero-gcs.sealed.yaml` — clé JSON du compte de service GCP, scellée. Seul des deux
   fichiers de secret à se committer
 - `manifests/velero-gcs.secret.yaml` — **clair, gitignoré** : template d'entrée de `kubeseal` ayant
@@ -170,19 +172,22 @@ d'une base ; velero est le filet de niveau cluster.
   ```
   `Unavailable` juste après l'installation = credential absent, mal scellé, ou droits IAM
   insuffisants sur le bucket.
-- **Lancer une sauvegarde à la main, au périmètre de la schedule.** La spec est recopiée depuis la
-  Schedule : rien à retaper, donc aucune dérive possible entre les deux périmètres.
+- **Lancer une sauvegarde à la main, au périmètre de la schedule** — depuis la racine du repo :
   ```bash
-  kubectl -n velero get schedule velero-daily -o json \
-    | jq '{apiVersion:"velero.io/v1", kind:"Backup",
-           metadata:{generateName:"manual-", namespace:"velero"},
-           spec:.spec.template}' \
-    | kubectl create -f -
+  cluster/infra/velero/backup-now.sh              # schedule `velero-daily`, suit jusqu'à la fin
+  DRY_RUN=1 cluster/infra/velero/backup-now.sh    # affiche le manifeste, ne crée rien
+  NO_WAIT=1 cluster/infra/velero/backup-now.sh    # crée et rend la main
   ```
+  Le script recopie `.spec.template` de la Schedule : le périmètre ne peut pas diverger de celui
+  qui tourne chaque nuit. Il refuse de partir si le `BackupStorageLocation` n'est pas `Available`,
+  prévient si aucun `node-agent` n'est prêt, et affiche en fin de course le **nombre de volumes
+  copiés** — le seul contrôle qui distingue une vraie sauvegarde d'une sauvegarde « verte et
+  vide ». Codes de sortie : `0` Completed, `2` PartiallyFailed, `3` délai dépassé.
+
   Le label `velero.io/schedule-name` est volontairement **omis** (la CLI, elle, le pose avec
   `--from-schedule`) : il ferait compter ce backup comme une exécution de la schedule dans les
   métriques, ce qui éteindrait l'alerte `VeleroBackupTooOld` alors que la schedule n'aurait pas
-  tourné. Un backup manuel doit rester `schedule=""`.
+  tourné. Un backup manuel doit rester `schedule=manuel`.
 
   Pour un périmètre différent, écrire la spec à la main — et se souvenir qu'un `includedNamespaces`
   omis vaut **tout le cluster** (cf. Contraintes) :
@@ -251,7 +256,7 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
 
   | CLI velero | kubectl |
   |---|---|
-  | `backup create --from-schedule X` | le `jq` ci-dessus |
+  | `backup create --from-schedule X` | `backup-now.sh` |
   | `backup delete X` | `DeleteBackupRequest` |
   | `backup describe X` | `get backups.velero.io X -o yaml` |
   | `restore create --from-backup X` | `Restore` ci-dessus |
@@ -259,12 +264,54 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
 
   Seul `backup logs` justifie vraiment d'installer la CLI (`brew install velero`) : le diagnostic
   d'un échec passe par une `DownloadRequest` pénible à manipuler à la main.
+- **Nettoyer un dépôt kopia orphelin.** velero crée un dépôt **par namespace sauvegardé**
+  (`kopia/<ns>/` dans le bucket, plus un `BackupRepository`) et ne le supprime **jamais**, même
+  quand plus aucune sauvegarde ne le référence : il continue à lancer un job de maintenance horaire
+  pour rien, et le préfixe reste dans le bucket. C'est ce que laisse derrière lui un backup lancé
+  sans `includedNamespaces` (cf. Contraintes). Vérifier d'abord qu'aucune sauvegarde ne couvre le
+  namespace visé, puis supprimer **le CR avant le préfixe** — l'inverse laisse velero avec un dépôt
+  déclaré mais introuvable, qui échoue à la maintenance suivante :
+  ```bash
+  kubectl -n velero get backups.velero.io \
+    -o custom-columns=NAME:.metadata.name,NS:.spec.includedNamespaces
+  kubectl -n velero delete backuprepository <ns>-default-kopia
+  gcloud storage rm -r gs://homelab-velero-backups-1a91ac18/kopia/<ns> --project=homelab-499008
+  ```
+- **Repartir de zéro** (⚠️ **irréversible** — détruit toutes les sauvegardes). L'ordre est
+  load-bearing : vider le bucket **d'abord**, sinon le contrôleur `backup-sync` recrée les objets
+  `Backup` depuis les métadonnées restées en ligne, dans la minute.
+  ```bash
+  # 1. Bucket (le bucket lui-même est conservé : il vient de Terraform)
+  gcloud storage rm --recursive "gs://homelab-velero-backups-1a91ac18/**" --project=homelab-499008
+
+  # 2. CRs — les Backup disparaissent souvent d'eux-mêmes une fois leurs données absentes
+  kubectl -n velero delete backups.velero.io --all
+  kubectl -n velero delete podvolumebackups --all
+  kubectl -n velero delete backuprepositories --all
+  kubectl -n velero delete restores.velero.io --all
+  kubectl -n velero delete jobs --all          # jobs de maintenance des dépôts supprimés
+
+  # 3. Redémarrer : remet à zéro les compteurs Prometheus et force la ré-init des dépôts kopia
+  kubectl -n velero rollout restart deploy/velero ds/node-agent
+
+  # 4. Contrôle
+  gcloud storage du -s gs://homelab-velero-backups-1a91ac18 --project=homelab-499008   # 0
+  kubectl -n velero get backupstoragelocation default                                   # Available
+  ```
+  Ne PAS supprimer le Secret `velero-repo-credentials` : la passphrase kopia sert aux dépôts
+  recréés, et s'en séparer rendrait illisible tout ce qui aurait survécu à l'effacement.
+  Le `rollout restart` affiche des avertissements PodSecurity `restricted` — normal, le namespace
+  n'impose que `enforce: privileged` (même forme que le namespace openebs), et l'avertissement est
+  calculé sur le profil `warn` par défaut du cluster.
 - **Mettre en pause la schedule** (maintenance, migration de bucket) :
   ```bash
   kubectl -n velero patch schedule velero-daily --type=merge -p '{"spec":{"paused":true}}'
   ```
-  Correctif durable : `schedules.daily.paused` dans `helm-values.yaml` — sinon `selfHeal` défait le
-  patch à la sync suivante.
+  ⚠️ Ne pas compter sur `selfHeal` pour défaire ce patch : `paused` n'est pas rendu par le chart,
+  donc absent de l'état désiré, donc **non possédé par ArgoCD** sous `ServerSideApply` — la pause
+  survit indéfiniment, sans apparaître comme une dérive. Une schedule oubliée en pause ne se voit
+  nulle part sauf dans `kubectl get schedules.velero.io` (colonne `PAUSED`). Pour une pause qui se
+  lit dans Git et se lève par un revert : `schedules.daily.paused: true` dans `helm-values.yaml`.
 - **Upgrade** : bumper `targetRevision` dans `velero.app.yaml` et, dans le même commit, l'image du
   plugin dans `helm-values.yaml` (Renovate ne la voit pas, cf. Contraintes).
 - **Debug** :
