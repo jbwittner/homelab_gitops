@@ -1,0 +1,109 @@
+# Alertes de sauvegarde.
+#
+# Principe directeur, hérité d'openbao-monitoring : un outil de backup échoue SILENCIEUSEMENT.
+# Les deux modes de panne les plus coûteux ne se voient sur aucun compteur d'échec —
+#   1. plus aucune sauvegarde ne se déclenche (série absente, pas série à zéro) ;
+#   2. la sauvegarde réussit mais ne contient aucune donnée de PV (node-agent absent).
+# D'où les formes en `absent(...)` et la règle sur le DaemonSet, qui n'utilisent pas les métriques
+# velero mais Prometheus lui-même et kube-state-metrics.
+#
+# `schedule` est le nom de la Schedule (`velero-daily`, préfixé par le releaseName). Les backups
+# créés à la main portent `schedule=""`.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: velero-alerts
+  namespace: velero
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: velero.rules
+      rules:
+        # Serveur injoignable : plus rien ne sera sauvegardé, et aucune des règles ci-dessous ne
+        # peut se déclencher puisqu'elles reposent toutes sur ses métriques.
+        - alert: VeleroDown
+          expr: absent(up{job="velero"} == 1)
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "velero : serveur injoignable"
+            description: "La cible de scrape du Deployment velero est absente ou à zéro depuis 15 min. Aucune sauvegarde ne peut être déclenchée et les autres alertes de ce groupe sont aveugles tant que cet état dure."
+
+        # Le bucket ne répond pas / credential invalide / droits IAM retirés. Les backups partent
+        # quand même en échec, mais cette alerte-ci nomme la cause.
+        - alert: VeleroBackupStorageLocationUnavailable
+          expr: velero_backup_location_status_gauge == 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "velero : BackupStorageLocation {{ $labels.backup_location_name }} indisponible"
+            description: "Le bucket GCS ne répond pas à la validation. Causes usuelles : clé de compte de service expirée ou révoquée, rôle storage.objectAdmin retiré, bucket supprimé. Aucune sauvegarde n'aboutira tant que ce n'est pas réglé."
+
+        # Un échec franc. Fenêtre de 6 h : la schedule est quotidienne, on ne veut pas rappeler
+        # l'incident pendant 24 h, mais un échec de nuit doit rester visible au réveil.
+        - alert: VeleroBackupFailed
+          expr: increase(velero_backup_failure_total[6h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "velero : échec de sauvegarde ({{ $labels.schedule }})"
+            description: "Au moins une sauvegarde a échoué dans les 6 dernières heures. Diagnostic : `velero backup logs <nom>`."
+
+        # Échec partiel : la sauvegarde existe et paraît verte dans la liste, mais des éléments
+        # manquent — typiquement un volume que node-agent n'a pas pu lire.
+        - alert: VeleroBackupPartiallyFailed
+          expr: increase(velero_backup_partial_failure_total[6h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "velero : sauvegarde partiellement en échec ({{ $labels.schedule }})"
+            description: "La sauvegarde s'est terminée en PartiallyFailed : elle est restaurable, mais incomplète. Vérifier les `podvolumebackups` associés avant de compter dessus."
+
+        # Le vrai risque : plus rien ne tourne. 36 h laissent passer un décalage de la schedule
+        # quotidienne (03:00) sans crier, mais pas une journée entière sautée.
+        - alert: VeleroBackupTooOld
+          expr: (time() - max by (schedule) (velero_backup_last_successful_timestamp{schedule!=""})) > 129600
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "velero : aucune sauvegarde réussie depuis 36 h ({{ $labels.schedule }})"
+            description: "La dernière sauvegarde réussie de cette schedule remonte à plus de 36 h alors qu'elle est quotidienne."
+
+        # Complément indispensable de la précédente : `time() - <métrique>` ne se déclenche JAMAIS
+        # si la série n'existe pas. Or elle disparaît à chaque redémarrage du pod velero (le gauge
+        # n'est repeuplé qu'au prochain backup réussi) et n'a jamais existé si aucune sauvegarde
+        # n'a encore abouti. Sans cette règle, un velero qui n'a jamais sauvegardé est silencieux.
+        - alert: VeleroNoBackupMetric
+          expr: absent(velero_backup_last_successful_timestamp)
+          for: 6h
+          labels:
+            severity: warning
+          annotations:
+            summary: "velero : aucune sauvegarde réussie connue"
+            description: "La métrique du dernier succès est absente depuis 6 h : soit aucune sauvegarde n'a jamais abouti, soit le serveur a redémarré et n'en a pas encore réussi une depuis. Dans les deux cas VeleroBackupTooOld est aveugle."
+
+        # Le mode d'échec « vert et vide » : sans node-agent sur un nœud, les objets Kubernetes
+        # sont sauvegardés mais AUCUNE donnée de PV de ce nœud ne l'est, et la sauvegarde est
+        # marquée Completed. Aucune métrique velero ne le signale — d'où kube-state-metrics.
+        - alert: VeleroNodeAgentNotReady
+          expr: kube_daemonset_status_number_unavailable{namespace="velero", daemonset="node-agent"} > 0
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "velero : node-agent absent sur au moins un nœud"
+            description: "Les données des PV portés par ce nœud ne sont PAS sauvegardées, alors que les sauvegardes continuent de se terminer en Completed. Causes usuelles : label PodSecurity `privileged` retiré du namespace velero (hostPath refusé à l'admission), ou taint ajouté au nœud sans tolération correspondante."
+
+        # La maintenance kopia est ce qui libère réellement l'espace des backups expirés. En échec
+        # prolongé, le bucket grossit indéfiniment sans qu'aucune sauvegarde n'échoue.
+        - alert: VeleroRepoMaintenanceFailing
+          expr: increase(velero_repo_maintenance_failure_total[24h]) > 2
+          labels:
+            severity: warning
+          annotations:
+            summary: "velero : maintenance du dépôt kopia en échec ({{ $labels.repository_name }})"
+            description: "Plus de deux échecs de maintenance en 24 h. L'espace des sauvegardes expirées n'est plus rendu : le bucket grossit sans limite. Diagnostic : `kubectl -n velero get backuprepositories` et les Jobs de maintenance du namespace."

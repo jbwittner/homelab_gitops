@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Trois CRs `monitoring.coreos.com`, sans ordre entre elles (l'ordonnancement se joue à l'échelle
+# de l'Application, wave 2). Chaque manifeste porte son `namespace: velero` → pas de `namespace:`
+# global.
+resources:
+  - servicemonitor.yaml
+  - podmonitor.yaml
+  - prometheusrule.yaml

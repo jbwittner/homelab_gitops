@@ -45,7 +45,9 @@
       "Bash(git fetch *)",
       "Bash(helm search *)",
       "Bash(curl -s \"https://raw.githubusercontent.com/vmware-tanzu/velero/v1.18.1/pkg/repository/manager.go\" \"https://raw.githubusercontent.com/vmware-tanzu/velero/v1.18.1/pkg/repository/config/keys.go\")",
-      "Bash(curl -s \"https://raw.githubusercontent.com/vmware-tanzu/velero/v1.18.1/pkg/cmd/server/config/config.go\")"
+      "Bash(curl -s \"https://raw.githubusercontent.com/vmware-tanzu/velero/v1.18.1/pkg/cmd/server/config/config.go\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/vmware-tanzu/velero/v1.18.1/pkg/metrics/metrics.go\")",
+      "Bash(kubectl -n velero get backups,schedules,podvolumebackups,backuprepositories)"
     ]
   }
 }

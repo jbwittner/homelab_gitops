@@ -1,0 +1,1051 @@
+# cluster/app/kube-prometheus-stack/manifests/dashboard-velero.yaml
+# Dashboard Grafana « Sauvegardes — velero »
+# Chargé automatiquement par le sidecar de kube-prometheus-stack
+# via le label grafana_dashboard: "1".
+#
+# Sources de métriques (ServiceMonitor + PodMonitor : cluster/infra/velero-monitoring) :
+#   - Service `velero` (8085)      : velero_backup_*, velero_restore_*, velero_repo_maintenance_*,
+#                                    velero_backup_location_status_gauge
+#   - pods `node-agent` (8085)     : podVolume_* — copie kopia des données de PV
+#
+# ⚠️ Les métriques du node-agent portent le préfixe `podVolume`, PAS `velero` (le code les
+# enregistre sous `podVolumeMetricsNamespace = "podVolume"`, casse comprise). Une requête
+# `velero_pod_volume_…` renvoie une série vide sans le dire.
+#
+# Ce que ce dashboard ne peut PAS montrer : la taille occupée dans le bucket GCS. velero expose la
+# taille du tarball d'OBJETS (velero_backup_tarball_size_bytes), jamais le volume du dépôt kopia
+# où vivent les données de PV — celui-ci se mesure côté GCP (`gcloud storage du`).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-velero
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: Wittnerlab
+data:
+  velero.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "id": 100,
+          "panels": [],
+          "title": "État",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Temps écoulé depuis la dernière sauvegarde réussie. Rouge au-delà de 36 h : la schedule est quotidienne, donc une journée a été sautée. « No data » n'est pas rassurant — la métrique disparaît au redémarrage du serveur velero et tant qu'aucune sauvegarde n'a abouti.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 93600 },
+                  { "color": "red", "value": 129600 }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+          "id": 1,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "time() - max(velero_backup_last_successful_timestamp{schedule=~\"$schedule\"})",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Dernière sauvegarde réussie",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Validation périodique du BackupStorageLocation par velero. Indisponible = bucket injoignable, clé de compte de service invalide ou droits IAM retirés : aucune sauvegarde n'aboutira.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [
+                {
+                  "options": {
+                    "0": { "color": "red", "index": 1, "text": "Indisponible" },
+                    "1": { "color": "green", "index": 0, "text": "Disponible" }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_location_status_gauge",
+              "instant": true,
+              "legendFormat": "{{backup_location_name}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Bucket (BackupStorageLocation)",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Nombre de Backups existants, toutes schedules confondues. Décroît quand le TTL (30 j) expire et que le GC de velero passe.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_total",
+              "instant": false,
+              "legendFormat": "",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Sauvegardes conservées",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Échecs francs sur 24 h. Les échecs PARTIELS ne sont pas comptés ici : voir le graphe « Résultats des sauvegardes ».",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "id": 4,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum(increase(velero_backup_failure_total{schedule=~\"$schedule\"}[24h])) or vector(0)",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Échecs (24 h)",
+          "type": "stat"
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+          "id": 101,
+          "panels": [],
+          "title": "Sauvegardes",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Une ligne par schedule. « Éléments en erreur » non nul avec un dernier statut à Succès = sauvegarde restaurable mais incomplète.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": false },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "text", "value": null }]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Dernier statut" },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "0": { "color": "red", "index": 1, "text": "Échec" },
+                          "1": { "color": "green", "index": 0, "text": "Succès" }
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  },
+                  { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Dernier succès (il y a)" },
+                "properties": [{ "id": "unit", "value": "s" }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Tarball d'objets" },
+                "properties": [{ "id": "unit", "value": "bytes" }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Éléments en erreur" },
+                "properties": [
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        { "color": "green", "value": null },
+                        { "color": "red", "value": 1 }
+                      ]
+                    }
+                  },
+                  { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+                ]
+              }
+            ]
+          },
+          "gridPos": { "h": 7, "w": 24, "x": 0, "y": 6 },
+          "id": 5,
+          "options": {
+            "cellHeight": "sm",
+            "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+            "showHeader": true,
+            "sortBy": [{ "desc": false, "displayName": "Schedule" }]
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_last_status{schedule=~\"$schedule\"}",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "time() - velero_backup_last_successful_timestamp{schedule=~\"$schedule\"}",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_tarball_size_bytes{schedule=~\"$schedule\"}",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "C"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_items_total{schedule=~\"$schedule\"}",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "D"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_items_errors{schedule=~\"$schedule\"}",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "E"
+            }
+          ],
+          "title": "Dernier état par schedule",
+          "transformations": [
+            { "id": "joinByField", "options": { "byField": "schedule", "mode": "outer" } },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time 1": true,
+                  "Time 2": true,
+                  "Time 3": true,
+                  "Time 4": true,
+                  "Time 5": true,
+                  "__name__ 1": true,
+                  "__name__ 2": true,
+                  "__name__ 3": true,
+                  "__name__ 4": true,
+                  "__name__ 5": true,
+                  "container 1": true,
+                  "container 2": true,
+                  "container 3": true,
+                  "container 4": true,
+                  "container 5": true,
+                  "endpoint 1": true,
+                  "endpoint 2": true,
+                  "endpoint 3": true,
+                  "endpoint 4": true,
+                  "endpoint 5": true,
+                  "instance 1": true,
+                  "instance 2": true,
+                  "instance 3": true,
+                  "instance 4": true,
+                  "instance 5": true,
+                  "job 1": true,
+                  "job 2": true,
+                  "job 3": true,
+                  "job 4": true,
+                  "job 5": true,
+                  "namespace 1": true,
+                  "namespace 2": true,
+                  "namespace 3": true,
+                  "namespace 4": true,
+                  "namespace 5": true,
+                  "pod 1": true,
+                  "pod 2": true,
+                  "pod 3": true,
+                  "pod 4": true,
+                  "pod 5": true,
+                  "service 1": true,
+                  "service 2": true,
+                  "service 3": true,
+                  "service 4": true,
+                  "service 5": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "Value #A": "Dernier statut",
+                  "Value #B": "Dernier succès (il y a)",
+                  "Value #C": "Tarball d'objets",
+                  "Value #D": "Éléments sauvegardés",
+                  "Value #E": "Éléments en erreur",
+                  "schedule": "Schedule"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Compteurs cumulés sur la fenêtre de rafraîchissement. Un échec PARTIEL est une sauvegarde qui existe et se restaure, mais à laquelle il manque des éléments — le plus souvent un volume que node-agent n'a pas pu lire.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": { "group": "A", "mode": "normal" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": ".*[Éé]chec.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": ".*Succès.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 13 },
+          "id": 6,
+          "options": {
+            "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "right", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_backup_success_total{schedule=~\"$schedule\"}[$__rate_interval]))",
+              "legendFormat": "Succès — {{schedule}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_backup_partial_failure_total{schedule=~\"$schedule\"}[$__rate_interval]))",
+              "legendFormat": "Échec partiel — {{schedule}}",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_backup_failure_total{schedule=~\"$schedule\"}[$__rate_interval]))",
+              "legendFormat": "Échec — {{schedule}}",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_backup_validation_failure_total{schedule=~\"$schedule\"}[$__rate_interval]))",
+              "legendFormat": "Échec de validation — {{schedule}}",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "title": "Résultats des sauvegardes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Quantiles calculés sur l'histogramme velero_backup_duration_seconds. Les bornes de l'histogramme s'arrêtent à 4 h : au-delà, le quantile sature.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 },
+          "id": 7,
+          "options": {
+            "legend": { "calcs": ["max"], "displayMode": "list", "placement": "right", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.95, sum by (le, schedule) (rate(velero_backup_duration_seconds_bucket{schedule=~\"$schedule\"}[$__rate_interval])))",
+              "legendFormat": "p95 — {{schedule}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.50, sum by (le, schedule) (rate(velero_backup_duration_seconds_bucket{schedule=~\"$schedule\"}[$__rate_interval])))",
+              "legendFormat": "p50 — {{schedule}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Durée des sauvegardes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Taille du tarball d'OBJETS Kubernetes uniquement. Les données des PV ne sont pas comptées ici : elles vont dans le dépôt kopia, dont la taille ne se mesure que côté bucket (`gcloud storage du`).",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "auto",
+                "spanNulls": true,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 29 },
+          "id": 8,
+          "options": {
+            "legend": { "calcs": ["lastNotNull"], "displayMode": "list", "placement": "right", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_tarball_size_bytes{schedule=~\"$schedule\"}",
+              "legendFormat": "{{schedule}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Taille du tarball d'objets",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Nombre d'éléments Kubernetes traités, et parmi eux ceux en erreur. Une chute brutale du nombre d'éléments signale un périmètre (includedNamespaces) qui a changé sans qu'on le veuille.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "auto",
+                "spanNulls": true,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "En erreur.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 37 },
+          "id": 9,
+          "options": {
+            "legend": { "calcs": ["lastNotNull"], "displayMode": "list", "placement": "right", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_items_total{schedule=~\"$schedule\"}",
+              "legendFormat": "Éléments — {{schedule}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "velero_backup_items_errors{schedule=~\"$schedule\"}",
+              "legendFormat": "En erreur — {{schedule}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Éléments sauvegardés",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 },
+          "id": 102,
+          "panels": [],
+          "title": "Données des PV — node-agent / kopia",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Latence des opérations de volume, par nœud et par opération (podVolume_*, servies par le DaemonSet node-agent). Panneau VIDE = node-agent absent ou jamais sollicité : dans ce cas les sauvegardes ne contiennent aucune donnée de PV, même vertes.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 46 },
+          "id": 10,
+          "options": {
+            "legend": { "calcs": ["max"], "displayMode": "list", "placement": "right", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.95, sum by (le, node, operation) (rate(podVolume_pod_volume_operation_latency_seconds_bucket[$__rate_interval])))",
+              "legendFormat": "p95 — {{node}} / {{operation}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Latence des opérations de volume (p95)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "PodVolumeBackup mis en file et traités, par nœud. Un écart durable entre les deux courbes = des copies qui s'accumulent sans être traitées.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 54 },
+          "id": 11,
+          "options": {
+            "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "right", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (node) (increase(podVolume_pod_volume_backup_enqueue_count[$__rate_interval]))",
+              "legendFormat": "En file — {{node}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (node) (increase(podVolume_pod_volume_backup_dequeue_count[$__rate_interval]))",
+              "legendFormat": "Traités — {{node}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "PodVolumeBackup — file d'attente",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 62 },
+          "id": 103,
+          "panels": [],
+          "title": "Dépôt kopia et restaurations",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "La maintenance du dépôt kopia est ce qui LIBÈRE réellement l'espace des sauvegardes expirées. En échec prolongé, le bucket grossit sans qu'aucune sauvegarde n'échoue. Panneau VIDE sur une installation neuve : ces compteurs n'apparaissent qu'après la première maintenance — l'absence de courbe ne vaut pas preuve de bonne santé.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": { "group": "A", "mode": "normal" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "[ÉE]chec.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 63 },
+          "id": 12,
+          "options": {
+            "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "right", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (repository_name) (increase(velero_repo_maintenance_success_total[$__rate_interval]))",
+              "legendFormat": "Succès — {{repository_name}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (repository_name) (increase(velero_repo_maintenance_failure_total[$__rate_interval]))",
+              "legendFormat": "Échec — {{repository_name}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Maintenance du dépôt kopia",
+          "type": "timeseries"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Restaurations. Panneau plat en temps normal — il ne sert qu'à confirmer, le jour où on restaure, que l'opération est bien passée.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": { "group": "A", "mode": "normal" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "[ÉE]chec.*" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 71 },
+          "id": 13,
+          "options": {
+            "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "right", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_restore_success_total[$__rate_interval]))",
+              "legendFormat": "Succès",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_restore_partial_failure_total[$__rate_interval]))",
+              "legendFormat": "Partiel",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_restore_failed_total[$__rate_interval]))",
+              "legendFormat": "Échec",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_restore_validation_failed_total[$__rate_interval]))",
+              "legendFormat": "Échec de validation",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "title": "Restaurations",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": [
+        "wittnerlab",
+        "velero",
+        "backup"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {},
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "definition": "label_values(velero_backup_last_status, schedule)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Schedule",
+            "multi": true,
+            "name": "schedule",
+            "options": [],
+            "query": {
+              "qryType": 1,
+              "query": "label_values(velero_backup_last_status, schedule)",
+              "refId": "schedule"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": { "from": "now-7d", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Sauvegardes — velero",
+      "uid": "velero-backups",
+      "version": 1,
+      "weekStart": ""
+    }

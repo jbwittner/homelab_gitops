@@ -1,0 +1,32 @@
+# Scrape des métriques du SERVEUR velero (Deployment) : tout ce qui concerne les sauvegardes
+# elles-mêmes — succès/échecs, durée, taille du tarball d'objets, état du BackupStorageLocation.
+# Reproduit ce que rendrait `metrics.serviceMonitor.enabled` du chart ; la raison pour laquelle ce
+# flag est coupé est dans l'en-tête de l'Application.
+#
+# Les métriques des DONNÉES de PV (kopia) ne sont PAS ici : elles sont servies par le DaemonSet
+# node-agent, sans Service, d'où le PodMonitor voisin.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    # Sélecteur du prometheus-operator de kube-prometheus-stack
+    # (`serviceMonitorSelectorNilUsesHelmValues`) : sans ce label, l'objet est ignoré en silence.
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - velero
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velero
+      app.kubernetes.io/instance: velero
+  endpoints:
+    # Nom du port du Service `velero` (8085). Le Service n'existe que parce que `metrics.enabled`
+    # est resté à `true` dans le helm-values du composant velero — c'est la seule partie de
+    # l'observabilité qui vit là-bas, et la couper viderait ce ServiceMonitor sans rien dire.
+    - port: http-monitoring
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero-monitoring
+  namespace: argocd
+  annotations:
+    # Wave 2, comme openbao-monitoring et openebs-monitoring : ses objets sont des CRs
+    # `monitoring.coreos.com`, absentes au bootstrap à froid. Personne ne dépend de cette wave,
+    # donc une sync en échec ne retient rien.
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: velero-monitoring
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: backup
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Volet POST-BOOTSTRAP de [velero](../velero/README.md) : ServiceMonitor + PodMonitor + alertes
+  # (archétype (c), path → `manifests/`).
+  #
+  # POURQUOI CE COMPOSANT EXISTE. Le chart velero sait générer ces deux objets
+  # (`metrics.serviceMonitor` / `metrics.nodeAgentPodMonitor`), mais leur activation par défaut
+  # passe par un `autodetect` qui interroge les Capabilities Helm — donc l'existence des CRDs
+  # prometheus-operator AU MOMENT DU RENDU. Or velero vit dans `cluster/infra/` et
+  # kube-prometheus-stack dans `cluster/app/` : aucune sync-wave ne les ordonne (les waves ne
+  # jouent qu'à l'intérieur d'un app-of-apps). Les flags sont donc coupés côté chart et les objets
+  # écrits à la main ici — même contenu, mais dans une Application qui peut échouer sans
+  # conséquence tant que le stack d'observabilité n'est pas là. Exactement le raisonnement
+  # d'[openbao-monitoring](../openbao-monitoring/README.md).
+  #
+  # ⚠️ Dépendance CROSS-TIER (infra → app) : au bootstrap à froid cette Application reste en
+  # erreur jusqu'à l'arrivée de kube-prometheus-stack, puis se répare seule (`selfHeal`).
+  #
+  # Le DASHBOARD Grafana ne vit PAS ici mais dans
+  # [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)
+  # (`manifests/dashboard-velero.yaml`) : le câblage côté Grafana appartient au composant qui
+  # porte Grafana, comme pour argocd. Ici on ne pose que ce qui produit la donnée.
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/infra/velero-monitoring/manifests
+  destination:
+    name: bleu-kalecgos
+    # ns `velero` — créé par le composant velero (manifests/namespace.yaml, wave -1).
+    # Pas de CreateNamespace : ce composant ne possède pas le namespace.
+    namespace: velero
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

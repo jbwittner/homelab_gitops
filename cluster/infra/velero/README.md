@@ -46,6 +46,14 @@ d'une base ; velero est le filet de niveau cluster.
   un cycle — un coffre perdu emporterait alors aussi l'accès aux sauvegardes qui permettent de le
   reconstruire (règle anti-cycle, [`doc/regles-gitops.md`](../../../doc/regles-gitops.md)). Même
   raisonnement que `openbao-snapshot-gcs`.
+- **`kubectl get backups` ne montre PAS les sauvegardes velero.** Le nom court `backups` est
+  ambigu dans ce cluster — [cnpg](../../app/cnpg/README.md) enregistre `backups.postgresql.cnpg.io`
+  et velero `backups.velero.io` — et kubectl tranche silencieusement en faveur de CNPG. La commande
+  répond `No resources found in velero namespace` alors que les sauvegardes existent : le pire des
+  faux négatifs, puisqu'il ressemble à « aucune sauvegarde n'a tourné ». Toujours écrire
+  **`backups.velero.io`**, et de même `restores.velero.io` / `schedules.velero.io`. Les noms non
+  ambigus (`podvolumebackups`, `backupstoragelocations`, `backuprepositories`) ne posent pas ce
+  problème.
 - **Sans le Secret `velero-gcs`, velero ne démarre pas** : le Deployment le monte en volume et
   reste en `ContainerCreating` tant qu'il manque. D'où l'ordre imposé lors d'une rotation —
   produire le `.sealed.yaml` **avant** de le déclarer dans `manifests/kustomization.yaml` : une
@@ -98,12 +106,15 @@ d'une base ; velero est le filet de niveau cluster.
   est déclarée dans Git ; la restaurer se battrait avec la sync ArgoCD. Même raison pour
   `kube-system`, reconstruit par Talos et le CNI. Avec une liste blanche, ils sont exclus de fait —
   aucune ligne à écrire.
-- **Aucun `ServiceMonitor` n'est posé par ce composant.** L'autodétection du chart repose sur les
-  Capabilities Helm, donc sur la présence des CRDs prometheus-operator au moment du rendu — non
-  garantie au bootstrap, `kube-prometheus-stack` vivant dans le tier `app`, sans relation d'ordre
-  avec `infra`. Même découpage que pour [openbao](../openbao/README.md) : sa place est un composant
-  frère `velero-monitoring`. **Conséquence directe : un échec de sauvegarde ne lève aujourd'hui
-  aucune alerte** — il se voit uniquement en listant les backups.
+- **Aucun `ServiceMonitor` n'est posé par ce composant** — ils vivent dans
+  [velero-monitoring](../velero-monitoring/README.md), avec le PodMonitor du node-agent et les
+  alertes. L'autodétection du chart repose sur les Capabilities Helm, donc sur la présence des
+  CRDs prometheus-operator au moment du rendu — non garantie au bootstrap, `kube-prometheus-stack`
+  vivant dans le tier `app`, sans relation d'ordre avec `infra`. Même découpage que pour
+  [openbao](../openbao/README.md). En revanche `metrics.enabled` reste **vrai** ici : c'est lui qui
+  crée le Service scrapé, et le couper viderait le ServiceMonitor du composant frère en silence.
+  Dashboard Grafana : dossier *Wittnerlab*, « Sauvegardes — velero » (le ConfigMap est dans
+  [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)).
 - **Renovate ne suit pas l'image du plugin.** La version du chart, dans `velero.app.yaml`, est bien
   prise en charge (manager `argocd`) ; l'image `velero-plugin-for-gcp` épinglée dans
   `helm-values.yaml` ne l'est pas — les `managerFilePatterns` du manager `kubernetes` ne couvrent
@@ -170,7 +181,7 @@ d'une base ; velero est le filet de niveau cluster.
   Avec la CLI : `velero backup create manual-1 --include-namespaces test-nginx --wait`.
 - **Suivre les sauvegardes et leur contenu** :
   ```bash
-  kubectl -n velero get backups,schedules
+  kubectl -n velero get backups.velero.io,schedules.velero.io   # suffixe obligatoire, cf. Contraintes
   kubectl -n velero get podvolumebackups          # un objet par volume copié par kopia
   velero backup describe <nom> --details
   velero backup logs <nom>
@@ -181,7 +192,7 @@ d'une base ; velero est le filet de niveau cluster.
   Git (cf. Contraintes) :
   ```bash
   velero restore create --from-backup <nom> --include-namespaces <ns>
-  kubectl -n velero get restores
+  kubectl -n velero get restores.velero.io
   velero restore describe <nom-du-restore> --details
   ```
 - **Mettre en pause la schedule** (maintenance, migration de bucket) :
@@ -194,7 +205,7 @@ d'une base ; velero est le filet de niveau cluster.
   plugin dans `helm-values.yaml` (Renovate ne la voit pas, cf. Contraintes).
 - **Debug** :
   ```bash
-  kubectl -n velero get pods,backupstoragelocation
+  kubectl -n velero get pods,backupstoragelocation,backups.velero.io
   kubectl -n velero logs deploy/velero
   kubectl -n velero logs ds/node-agent
   kubectl -n velero get backuprepositories        # un dépôt kopia par (namespace, BSL)
