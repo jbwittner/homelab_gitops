@@ -58,7 +58,7 @@ data:
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Temps écoulé depuis la dernière sauvegarde réussie. Rouge au-delà de 36 h : la schedule est quotidienne, donc une journée a été sautée. « No data » n'est pas rassurant — la métrique disparaît au redémarrage du serveur velero et tant qu'aucune sauvegarde n'a abouti.",
+          "description": "Temps écoulé depuis la dernière sauvegarde PLANIFIÉE réussie — les backups manuels sont exclus à dessein (tuile voisine) : un backup lancé à la main ne prouve pas que la schedule tourne, et le compter ici masquerait une schedule morte. Rouge au-delà de 36 h, la schedule étant quotidienne. « No data » n'est pas rassurant — la métrique disparaît au redémarrage du serveur velero et tant qu'aucune sauvegarde planifiée n'a abouti.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -90,14 +90,54 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "time() - max(velero_backup_last_successful_timestamp{schedule=~\"$schedule\"})",
+              "expr": "time() - max(velero_backup_last_successful_timestamp{schedule=~\"$schedule\", schedule!=\"\"})",
               "instant": true,
               "legendFormat": "",
               "range": false,
               "refId": "A"
             }
           ],
-          "title": "Dernière sauvegarde réussie",
+          "title": "Dernière sauvegarde planifiée",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Temps écoulé depuis le dernier backup lancé À LA MAIN (`schedule=\"\"`). Aucun seuil : rien n'impose d'en faire, cette tuile n'est pas un indicateur de santé. Elle sert à répondre à « est-ce que ma sauvegarde manuelle est bien passée ? » et à repérer les backups ad hoc — dont le périmètre vaut tout le cluster s'il n'a pas été restreint.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "fixed", "fixedColor": "text" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "text", "value": null }]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "id": 14,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "time() - max(velero_backup_last_successful_timestamp{schedule=\"\"})",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Dernier backup manuel",
           "type": "stat"
         },
         {
@@ -126,7 +166,7 @@ data:
             },
             "overrides": []
           },
-          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
           "id": 2,
           "options": {
             "colorMode": "background",
@@ -169,7 +209,7 @@ data:
             },
             "overrides": []
           },
-          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
           "id": 3,
           "options": {
             "colorMode": "value",
@@ -212,7 +252,7 @@ data:
             },
             "overrides": []
           },
-          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
           "id": 4,
           "options": {
             "colorMode": "background",
@@ -316,7 +356,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "velero_backup_last_status{schedule=~\"$schedule\"}",
+              "expr": "label_replace(velero_backup_last_status{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -325,7 +365,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "time() - velero_backup_last_successful_timestamp{schedule=~\"$schedule\"}",
+              "expr": "label_replace(time() - velero_backup_last_successful_timestamp{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -334,7 +374,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "velero_backup_tarball_size_bytes{schedule=~\"$schedule\"}",
+              "expr": "label_replace(velero_backup_tarball_size_bytes{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -343,7 +383,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "velero_backup_items_total{schedule=~\"$schedule\"}",
+              "expr": "label_replace(velero_backup_items_total{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -352,7 +392,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "velero_backup_items_errors{schedule=~\"$schedule\"}",
+              "expr": "label_replace(velero_backup_items_errors{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -482,7 +522,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "sum by (schedule) (increase(velero_backup_success_total{schedule=~\"$schedule\"}[$__rate_interval]))",
+              "expr": "label_replace(sum by (schedule) (increase(velero_backup_success_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "Succès — {{schedule}}",
               "range": true,
               "refId": "A"
@@ -490,7 +530,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "sum by (schedule) (increase(velero_backup_partial_failure_total{schedule=~\"$schedule\"}[$__rate_interval]))",
+              "expr": "label_replace(sum by (schedule) (increase(velero_backup_partial_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "Échec partiel — {{schedule}}",
               "range": true,
               "refId": "B"
@@ -498,7 +538,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "sum by (schedule) (increase(velero_backup_failure_total{schedule=~\"$schedule\"}[$__rate_interval]))",
+              "expr": "label_replace(sum by (schedule) (increase(velero_backup_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "Échec — {{schedule}}",
               "range": true,
               "refId": "C"
@@ -506,7 +546,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "sum by (schedule) (increase(velero_backup_validation_failure_total{schedule=~\"$schedule\"}[$__rate_interval]))",
+              "expr": "label_replace(sum by (schedule) (increase(velero_backup_validation_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "Échec de validation — {{schedule}}",
               "range": true,
               "refId": "D"
@@ -562,7 +602,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "histogram_quantile(0.95, sum by (le, schedule) (rate(velero_backup_duration_seconds_bucket{schedule=~\"$schedule\"}[$__rate_interval])))",
+              "expr": "label_replace(histogram_quantile(0.95, sum by (le, schedule) (rate(velero_backup_duration_seconds_bucket{schedule=~\"$schedule\"}[$__rate_interval]))), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "p95 — {{schedule}}",
               "range": true,
               "refId": "A"
@@ -570,7 +610,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "histogram_quantile(0.50, sum by (le, schedule) (rate(velero_backup_duration_seconds_bucket{schedule=~\"$schedule\"}[$__rate_interval])))",
+              "expr": "label_replace(histogram_quantile(0.50, sum by (le, schedule) (rate(velero_backup_duration_seconds_bucket{schedule=~\"$schedule\"}[$__rate_interval]))), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "p50 — {{schedule}}",
               "range": true,
               "refId": "B"
@@ -626,7 +666,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "velero_backup_tarball_size_bytes{schedule=~\"$schedule\"}",
+              "expr": "label_replace(velero_backup_tarball_size_bytes{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "{{schedule}}",
               "range": true,
               "refId": "A"
@@ -687,7 +727,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "velero_backup_items_total{schedule=~\"$schedule\"}",
+              "expr": "label_replace(velero_backup_items_total{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "Éléments — {{schedule}}",
               "range": true,
               "refId": "A"
@@ -695,7 +735,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "velero_backup_items_errors{schedule=~\"$schedule\"}",
+              "expr": "label_replace(velero_backup_items_errors{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "legendFormat": "En erreur — {{schedule}}",
               "range": true,
               "refId": "B"
@@ -1022,6 +1062,7 @@ data:
             "current": {},
             "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
             "definition": "label_values(velero_backup_last_status, schedule)",
+            "description": "Les backups lancés à la main portent un `schedule` VIDE : ils apparaissent comme une entrée blanche dans cette liste, et sous le nom « manuel » dans les graphes et le tableau (label_replace). Laisser « All » pour tout voir.",
             "hide": 0,
             "includeAll": true,
             "label": "Schedule",
