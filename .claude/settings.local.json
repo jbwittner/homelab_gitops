@@ -41,7 +41,8 @@
       "WebFetch(domain:openbao.org)",
       "Bash(kubectl top *)",
       "Bash(echo \"rc=$?\")",
-      "Bash(awk '/^---/{p=0} /name: openbao-snapshot$/{p=1} p')"
+      "Bash(awk '/^---/{p=0} /name: openbao-snapshot$/{p=1} p')",
+      "Bash(git fetch *)"
     ]
   }
 }
