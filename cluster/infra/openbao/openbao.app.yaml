@@ -53,6 +53,19 @@ spec:
       # coder en dur un index `/webhooks/0/...` qui casserait si le chart en ajoutait un.
       jqPathExpressions:
         - '.webhooks[]?.clientConfig.caBundle'
+    # Bug du chart openbao-0.29.0, `templates/snapshotagent-configmap.yaml` : la garde porte sur
+    # `baoAuthPath` mais la valeur émise est `baoAuthNamespace` — deux clés différentes. Comme
+    # `snapshotAgent.config.baoAuthPath` est renseigné (helm-values.yaml) le bloc est rendu, alors
+    # que `baoAuthNamespace` n'existe ni dans nos values ni dans celles du chart : la ligne sort
+    # vide, donc `null`. L'API k8s droppe les clés nulles du `data` d'un ConfigMap, si bien que le
+    # désiré porte la clé et le live jamais → OutOfSync permanent, sync après sync.
+    # Pas contournable côté values : le chart ne quote pas la valeur, `""` rend aussi une ligne
+    # vide. À retirer quand le chart corrige la garde.
+    - group: ""
+      kind: ConfigMap
+      name: openbao-snapshot
+      jqPathExpressions:
+        - '.data.BAO_AUTH_NAMESPACE'
   syncPolicy:
     automated:
       selfHeal: true
