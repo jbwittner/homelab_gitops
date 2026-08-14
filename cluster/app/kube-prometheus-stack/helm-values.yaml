@@ -109,3 +109,99 @@ kubeEtcd:
   enabled: false
 kubeProxy:
   enabled: false
+
+# --- kube-state-metrics : exposer les objets velero comme métriques ---
+#
+# POURQUOI. Les métriques natives de velero sont agrégées PAR SCHEDULE et écrasées à chaque
+# sauvegarde : `velero_backup_tarball_size_bytes` ne décrit que la DERNIÈRE. Impossible d'en tirer
+# la liste des sauvegardes existantes ni leur taille — ce sont des propriétés d'OBJETS, pas des
+# compteurs. KSM sait justement transformer des CRs en séries : c'est le seul chemin déclaratif
+# vers un tableau « une ligne par sauvegarde ».
+#
+# La taille des DONNÉES se reconstruit en sommant `velero_pvb_object_bytes` par `backup` (un
+# PodVolumeBackup par volume copié). Elle ne couvre pas les objets Kubernetes, dont le tarball
+# n'est exposé nulle part par CR — et aucune des deux ne mesure l'occupation RÉELLE du bucket,
+# kopia dédupliquant entre sauvegardes (cf. README de velero).
+kube-state-metrics:
+  # KSM ne lit que les ressources cœur par défaut : sans cette règle, les CRs velero.io sont
+  # invisibles et les métriques ci-dessous restent vides SANS erreur dans les logs.
+  rbac:
+    extraRules:
+      - apiGroups: ["velero.io"]
+        resources: ["backups", "podvolumebackups", "restores", "schedules"]
+        verbs: ["list", "watch"]
+  customResourceState:
+    enabled: true
+    config:
+      spec:
+        resources:
+          # --- Une série par objet Backup ---
+          - groupVersionKind:
+              group: velero.io
+              version: v1
+              kind: Backup
+            # Nom final = <metricNamePrefix>_<name> : velero_backup_object_info, etc. Le préfixe
+            # est distinct de `velero_backup_*` (métriques du serveur) À DESSEIN : deux sources,
+            # deux sémantiques — ici l'état d'un objet, là un compteur d'exécutions.
+            metricNamePrefix: velero_backup_object
+            labelsFromPath:
+              backup: [metadata, name]
+            metrics:
+              - name: info
+                help: "Sauvegarde velero existante (1 par objet Backup)"
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      phase: [status, phase]
+                      # Absent sur un backup manuel — c'est ce qui les distingue.
+                      schedule: [metadata, labels, velero.io/schedule-name]
+                      storage_location: [spec, storageLocation]
+              - name: items_backed_up
+                help: "Nombre d'éléments Kubernetes sauvegardés"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, progress, itemsBackedUp]
+                    nilIsZero: true
+              - name: start_time
+                help: "Début de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, startTimestamp]
+              - name: expiration
+                help: "Date d'expiration (TTL) de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, expiration]
+          # --- Une série par volume copié : c'est ici que vit la TAILLE des données ---
+          - groupVersionKind:
+              group: velero.io
+              version: v1
+              kind: PodVolumeBackup
+            metricNamePrefix: velero_pvb_object
+            labelsFromPath:
+              backup: [metadata, labels, velero.io/backup-name]
+              node: [spec, node]
+              volume: [spec, volume]
+              pod: [spec, pod, name]
+              volume_namespace: [spec, pod, namespace]
+            metrics:
+              - name: bytes
+                help: "Octets copiés par kopia pour ce volume"
+                each:
+                  type: Gauge
+                  gauge:
+                    # `status.progress` est un objet VIDE pour un volume sans donnée : nilIsZero
+                    # évite que ces PVB disparaissent de la somme au lieu d'y compter zéro.
+                    path: [status, progress, totalBytes]
+                    nilIsZero: true
+              - name: info
+                help: "PodVolumeBackup existant (1 par volume)"
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      phase: [status, phase]

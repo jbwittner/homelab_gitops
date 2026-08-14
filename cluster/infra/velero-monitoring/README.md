@@ -46,6 +46,27 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
 - **Le label `release: kube-prometheus-stack` est obligatoire** sur les trois objets : c'est le
   sélecteur du prometheus-operator (`serviceMonitorSelectorNilUsesHelmValues`). Sans lui, l'objet
   est ignoré sans erreur.
+- **Prometheus supprime les labels vides — c'est ce qui fait disparaître les backups manuels.**
+  velero étiquette ses métriques par `schedule` et y met une chaîne vide pour une sauvegarde
+  lancée à la main. Le label n'est donc pas stocké, et la cascade est entièrement silencieuse :
+  `label_values(velero_backup_last_status, schedule)` ne propose que `velero-daily`, le « All »
+  d'un dashboard s'interpole en `schedule=~"(velero-daily)"`, et les sauvegardes manuelles
+  s'évaporent des graphes alors que leurs métriques existent. La parade est un `metricRelabelings`
+  du ServiceMonitor qui réécrit le label vide en **`manuel`** au scrape. Conséquences à connaître :
+  toute requête doit viser `schedule="manuel"` et non `schedule=""`, et les échantillons **déjà
+  stockés** gardent l'ancienne forme jusqu'à expiration de la rétention (le dashboard couvre cette
+  période avec un `label_replace`, retirable ensuite).
+- **La liste des sauvegardes ne peut PAS venir des métriques de velero.** Elles sont agrégées par
+  schedule et écrasées à chaque exécution : `velero_backup_tarball_size_bytes` ne décrit que la
+  dernière, jamais l'historique. L'inventaire « une ligne par sauvegarde » vient de
+  **kube-state-metrics** en mode `customResourceState`, configuré dans le helm-values de
+  [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) : `velero_backup_object_*`
+  (objets `Backup`) et `velero_pvb_object_bytes` (octets par `PodVolumeBackup`). Sans la règle RBAC
+  `velero.io` qui l'accompagne, KSM ne voit pas ces CRs et les séries restent vides **sans erreur
+  dans ses logs**.
+- **`sum(velero_pvb_object_bytes)` n'est pas la taille du bucket.** C'est le volume *copié* par
+  kopia avant déduplication, et il ignore le tarball d'objets. L'occupation réelle se mesure
+  côté GCP (`gcloud storage du`), jamais depuis Prometheus.
 - **Les compteurs `velero_repo_maintenance_*` n'existent pas tant qu'aucune maintenance n'a
   tourné.** Un `CounterVec` Prometheus n'exporte une série qu'après son premier incrément :
   vérifié sur l'endpoint réel, ces métriques sont absentes sur une installation neuve. Conséquence

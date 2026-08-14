@@ -30,3 +30,19 @@ spec:
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
+      # ⚠️ LOAD-BEARING. velero étiquette ses métriques par `schedule`, et met une chaîne VIDE pour
+      # les sauvegardes lancées à la main. Or Prometheus ne stocke pas les labels vides : il les
+      # SUPPRIME. Conséquences en cascade, toutes silencieuses :
+      #   - `label_values(velero_backup_last_status, schedule)` ne renvoie que `velero-daily`,
+      #     donc la variable d'un dashboard ne propose jamais les backups manuels ;
+      #   - le « All » de cette variable s'interpole en `schedule=~"(velero-daily)"`, qui exclut
+      #     les séries sans label — les sauvegardes manuelles disparaissent des graphes alors que
+      #     leurs métriques existent bel et bien.
+      # On réécrit donc le label vide en `manuel` AU MOMENT DU SCRAPE : les séries deviennent
+      # sélectionnables comme n'importe quelle schedule, sans `label_replace` dans chaque requête.
+      metricRelabelings:
+        - sourceLabels: [__name__, schedule]
+          # `<nom>;` = le label schedule est vide ou absent (séparateur ';' entre les deux sources).
+          regex: "velero_backup_.*;"
+          targetLabel: schedule
+          replacement: manuel
