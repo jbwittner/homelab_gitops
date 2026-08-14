@@ -70,9 +70,26 @@ d'une base ; velero est le filet de niveau cluster.
   déclarés dans Git y sont reposés par ArgoCD ; ce que velero apporte d'utile, ce sont les
   **données** (PV/PVC) et les objets qui n'existent pas dans Git. Restaurer un namespace entier
   ressuscite aussi des ressources supprimées à dessein — restreindre le périmètre du `restore`.
-- **Le namespace `velero` et `kube-system` sont exclus de la schedule.** Le premier parce que sa
-  configuration est déclarée dans Git et qu'une restauration se battrait avec la sync ; le second
-  parce que ses objets sont reconstruits par Talos et le CNI.
+- **`spec.skipImmediately` de la Schedule ne se déclare pas dans Git.** Le contrôleur velero le
+  consomme : il le repasse lui-même à `false` dès qu'il l'a pris en compte. Déclaré à `true`, il
+  entre en boucle avec `selfHeal` — ArgoCD le repose, velero le retire, sans fin. Le levier
+  déclaratif équivalent est le flag serveur `--schedule-skip-immediately=true`. Corollaire : créer
+  ou recréer la Schedule déclenche une sauvegarde immédiate.
+- **La schedule fonctionne en liste blanche : ce qui n'est pas listé n'est pas sauvegardé, sans le
+  dire.** `includedNamespaces` ne contient aujourd'hui que `test-nginx` — périmètre de mise en
+  route, choisi jetable pour éprouver la chaîne complète (BSL → kopia → restauration) sans engager
+  le coffre ni les bases. **Ajouter un composant au cluster ne l'ajoute pas aux sauvegardes** :
+  c'est un geste explicite dans `helm-values.yaml`. Candidats connus, à ouvrir un par un :
+  `openbao` (raft 5Gi), `authentik` (Postgres CNPG 5Gi), `monitoring` (27Gi, dont 20Gi de TSDB
+  Prometheus reconstructible).
+- **Une copie kopia d'une base vivante est cohérente-crash, pas cohérente-transaction.** Elle vaut
+  ce que vaut un `kill -9` suivi d'un redémarrage : Postgres rejoue son WAL, openbao son raft. Pour
+  une restauration *propre*, la voie reste le backup natif (CNPG, snapshot raft). Velero est le
+  filet, pas le premier recours.
+- **Le namespace `velero` ne se sauvegarde pas lui-même.** Sa configuration (BSL, schedule, RBAC)
+  est déclarée dans Git ; la restaurer se battrait avec la sync ArgoCD. Même raison pour
+  `kube-system`, reconstruit par Talos et le CNI. Avec une liste blanche, ils sont exclus de fait —
+  aucune ligne à écrire.
 - **Aucun `ServiceMonitor` n'est posé par ce composant.** L'autodétection du chart repose sur les
   Capabilities Helm, donc sur la présence des CRDs prometheus-operator au moment du rendu — non
   garantie au bootstrap, `kube-prometheus-stack` vivant dans le tier `app`, sans relation d'ordre
@@ -138,11 +155,11 @@ d'une base ; velero est le filet de niveau cluster.
     namespace: velero
   spec:
     defaultVolumesToFsBackup: true
-    excludedNamespaces: [velero, kube-system]
+    includedNamespaces: [test-nginx]     # même liste blanche que la schedule
     ttl: 720h
   EOF
   ```
-  Avec la CLI : `velero backup create manual-1 --wait`.
+  Avec la CLI : `velero backup create manual-1 --include-namespaces test-nginx --wait`.
 - **Suivre les sauvegardes et leur contenu** :
   ```bash
   kubectl -n velero get backups,schedules

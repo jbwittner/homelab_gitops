@@ -111,15 +111,28 @@ schedules:
   daily:
     disabled: false
     schedule: "0 3 * * *"
-    # Une sauvegarde manquée au moment d'un redémarrage ne se rattrape pas au démarrage.
-    skipImmediately: true
+    # ⚠️ NE PAS déclarer `skipImmediately` ici. C'est un ordre à usage unique, pas un état désiré :
+    # le contrôleur le remet lui-même à `false` après l'avoir consommé (schedule_controller.go, il
+    # écrit aussi `status.lastSkipped`). Déclaré à `true`, il crée une boucle de dérive permanente
+    # avec `selfHeal` — ArgoCD le repose à `true`, velero le repasse à `false`, indéfiniment.
+    # Conséquence assumée : créer ou recréer la Schedule déclenche une sauvegarde immédiate, la
+    # première du cycle n'attendant pas 03:00. Pour l'éviter durablement, le levier déclaratif est
+    # le flag serveur `--schedule-skip-immediately=true` (configuration.extraArgs), pas ce champ.
     template:
       ttl: 720h            # 30 j — velero supprime lui-même le backup expiré dans le bucket
       storageLocation: default
-      # Le namespace `velero` est exclu volontairement : sa configuration (BSL, schedules, RBAC)
-      # est déclarée dans Git, la restaurer d'un backup entrerait en conflit avec la sync ArgoCD.
-      # `kube-system` l'est aussi : ses objets sont reconstruits par Talos et le CNI, pas restaurés.
-      excludedNamespaces:
-        - velero
-        - kube-system
+      # LISTE BLANCHE, et non une liste d'exclusions : rien n'est sauvegardé sans figurer ici.
+      # Contrepartie assumée — un composant ajouté au cluster n'est PAS couvert tant que son
+      # namespace n'est pas ajouté à cette liste, et rien ne le signale.
+      #
+      # Périmètre de départ volontairement réduit à un namespace JETABLE : il sert à prouver la
+      # chaîne complète (BSL → kopia → restauration) sans mettre le coffre ni les bases dans la
+      # boucle. Élargir ensuite, un namespace à la fois, en vérifiant à chaque ajout la présence
+      # des `podvolumebackups` attendus :
+      #   - openbao    (PVC raft 5Gi, chiffré — inutile sans les clés de descellement)
+      #   - authentik  (PVC Postgres CNPG 5Gi — copie cohérente-crash, cf. README)
+      #   - monitoring (27Gi dont 20Gi de TSDB Prometheus, reconstructible)
+      includedNamespaces:
+        - openbao
+        - test-nginx
       snapshotVolumes: false   # cohérent avec snapshotsEnabled: false — les données passent par kopia
