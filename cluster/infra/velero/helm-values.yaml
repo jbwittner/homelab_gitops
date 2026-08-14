@@ -1,0 +1,125 @@
+# helm-values — chart velero (sauvegarde/restauration du cluster vers un bucket GCS)
+#
+# Deux volets, distincts et tous deux nécessaires :
+#   - les OBJETS Kubernetes, sérialisés en tar dans le bucket par le Deployment `velero` ;
+#   - les DONNÉES des PV, copiées fichier à fichier par le DaemonSet `node-agent` (kopia).
+# Le second n'est pas un luxe ici : le stockage est OpenEBS LocalPV-LVM, dont les snapshots CSI
+# sont NODE-LOCAUX — ils ne survivent pas à la perte du nœud, donc ne sauvegardent rien au sens DR.
+
+# --- Accès au bucket ---
+# Secret pré-existant, produit par sealed-secrets (manifests/velero-gcs.sealed.yaml) et NON par le
+# chart : `secretContents` écrirait le credential en clair dans ce fichier, donc dans Git.
+# La clé DOIT s'appeler `cloud` ; pour le plugin GCP son contenu est la clé JSON d'un compte de
+# service (le fichier entier, tel que téléchargé), et non les clés HMAC d'interopérabilité S3
+# utilisées par la sauvegarde openbao.
+credentials:
+  useSecret: true
+  existingSecret: velero-gcs
+
+# --- Plugin objet ---
+# initContainer qui dépose son binaire dans le volume `plugins` partagé avec le serveur velero.
+# Plugin GCP, donc API GCS NATIVE : pas d'endpoint S3 à déclarer, pas de `region`, et surtout pas
+# le contournement `checksumAlgorithm: ""` qu'impose l'API XML compatible S3 de GCS au plugin AWS.
+# Contrepartie : le credential est une clé de compte de service JSON, pas une paire HMAC.
+initContainers:
+  - name: velero-plugin-for-gcp
+    image: velero/velero-plugin-for-gcp:v1.14.2
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: gcp
+      # ⚠️ Le bucket n'est PAS créé par ce composant : il est posé par le repo Terraform, avec le
+      # compte de service qui l'accède (README, Contraintes). Bucket DÉDIÉ, distinct de celui des
+      # snapshots openbao : les deux ont des cycles de vie et des rétentions différents, et velero
+      # fait son propre GC des backups expirés — un lifecycle GCS posé pour l'un casserait les
+      # restaurations de l'autre. Le suffixe aléatoire vient du côté Terraform (unicité globale des
+      # noms de bucket GCS) : le recopier tel quel, il n'est pas déductible.
+      bucket: homelab-velero-backups-1a91ac18
+      default: true
+      accessMode: ReadWrite
+      credential:
+        name: velero-gcs
+        key: cloud
+      # Aucun `config` : le plugin GCP lit la localisation du bucket via l'API. Ne PAS y mettre
+      # `serviceAccount` — ce champ sert au Workload Identity (sans clé), qui suppose un cluster
+      # GKE ; ici l'authentification se fait par la clé JSON montée depuis le Secret `velero-gcs`.
+      config: {}
+
+  # Pas de VolumeSnapshotLocation : voir `snapshotsEnabled` plus bas.
+
+  # --- Comportement serveur ---
+  # Tout volume est sauvegardé par node-agent SANS annotation sur le pod. C'est l'inverse du défaut
+  # velero (opt-in par pod) : ici l'oubli d'une annotation produirait une sauvegarde qui a l'air
+  # verte mais ne contient aucune donnée — le mode d'échec le plus coûteux d'un outil de backup.
+  defaultVolumesToFsBackup: true
+  uploaderType: kopia
+  # Filet : durée de vie d'un backup créé à la main sans `--ttl`. Les schedules fixent la leur.
+  defaultBackupTTL: 720h
+  logLevel: info
+
+# --- Job Helm de mise à jour des CRDs (→ PreSync ArgoCD à chaque sync) : coupé ---
+# Il existe pour Helm, qui n'applique le dossier `crds/` qu'à l'INSTALL et jamais aux upgrades.
+# ArgoCD, lui, rend le chart avec `--include-crds` : les 13 CRDs font partie de l'ensemble désiré
+# et sont réconciliées à chaque sync. Le Job ferait donc le travail une seconde fois, en impératif,
+# et rejouerait un Job à chaque sync du composant.
+upgradeCRDs: false
+
+# --- Données des PV : node-agent (kopia) ---
+deployNodeAgent: true
+nodeAgent:
+  # Défauts conformes à Talos (kubelet en /var/lib/kubelet) → aucun override de chemin.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 2Gi
+  # Pas de tolerations : les nœuds portant des PV sont schedulables. Un nœud tainté sans node-agent
+  # sauvegarderait ses objets mais pas ses données — même échec silencieux que ci-dessus.
+
+# --- Snapshots de volume : coupés ---
+# Un VolumeSnapshot LVM localpv reste sur le nœud qui porte le LV. Perte du nœud = perte du
+# snapshot AVEC le volume : ça ne protège de rien d'autre qu'une erreur logique, et ça donnerait
+# un second chemin de sauvegarde à moitié fiable en concurrence de kopia. À rouvrir seulement le
+# jour où le cluster aura un stockage répliqué ou un data-mover CSI.
+snapshotsEnabled: false
+
+# --- Observabilité : hors composant ---
+# Le chart sait poser ServiceMonitor et PodMonitor, mais l'`autodetect` s'appuie sur les
+# Capabilities Helm — donc sur l'existence des CRDs prometheus-operator au moment du rendu, ce qui
+# n'est pas garanti au bootstrap (kube-prometheus-stack vit dans le tier `app`, sans relation
+# d'ordre avec `infra`). Coupé explicitement, comme dans openbao ; sa place est un composant frère
+# `velero-monitoring` le jour où on voudra alerter sur les échecs de sauvegarde.
+metrics:
+  enabled: true          # port 8085 exposé, Service créé
+  serviceMonitor:
+    autodetect: false
+    enabled: false
+  nodeAgentPodMonitor:
+    autodetect: false
+    enabled: false
+
+# --- Sauvegarde planifiée ---
+# Portée par le chart (et non par `manifests/`) pour que la Schedule soit rendue APRÈS les CRDs du
+# même release, sans dépendre de l'ordre de kind d'ArgoCD.
+schedules:
+  daily:
+    disabled: false
+    schedule: "0 3 * * *"
+    # Une sauvegarde manquée au moment d'un redémarrage ne se rattrape pas au démarrage.
+    skipImmediately: true
+    template:
+      ttl: 720h            # 30 j — velero supprime lui-même le backup expiré dans le bucket
+      storageLocation: default
+      # Le namespace `velero` est exclu volontairement : sa configuration (BSL, schedules, RBAC)
+      # est déclarée dans Git, la restaurer d'un backup entrerait en conflit avec la sync ArgoCD.
+      # `kube-system` l'est aussi : ses objets sont reconstruits par Talos et le CNI, pas restaurés.
+      excludedNamespaces:
+        - velero
+        - kube-system
+      snapshotVolumes: false   # cohérent avec snapshotsEnabled: false — les données passent par kopia

@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"        # après sealed-secrets (-8), qui produit le credential du bucket
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: backup
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Sauvegarde et restauration du cluster vers un bucket GCS (plugin GCP, API native), objets
+  # Kubernetes ET données des PV. Archétype (b) : chart Helm + `$values` + `manifests/`.
+  #   - helm-values.yaml : BSL sur GCS, node-agent/kopia pour les données de PV, schedule
+  #     quotidienne. Les snapshots CSI sont coupés (LVM localpv = snapshot node-local, inutile en DR).
+  #   - manifests/ : le namespace (labellisé `privileged`) et le credential scellé du bucket.
+  #   - Wave `1`, comme openbao : velero n'a pas de PVC, mais il monte le Secret `velero-gcs`
+  #     déchiffré par sealed-secrets (wave -8). Tant que le SealedSecret n'est pas committé, le
+  #     Deployment reste en `ContainerCreating` sur un Secret absent — attendu, cf. README.
+  #   - Le credential est un SealedSecret et NON un ExternalSecret : velero est le moyen de
+  #     restaurer openbao. Le ranger dans le coffre qu'il restaure fermerait un cycle — un coffre
+  #     perdu emporterait alors aussi l'accès aux sauvegardes (règle anti-cycle, doc/regles-gitops.md).
+  #   - Pas de CreateNamespace : manifests/namespace.yaml crée le ns ET le labellise `privileged`,
+  #     sans quoi le DaemonSet node-agent (hostPath sur /var/lib/kubelet) est rejeté par le
+  #     PodSecurity `baseline` de Talos.
+  sources:
+    - repoURL: https://vmware-tanzu.github.io/helm-charts
+      chart: velero
+      targetRevision: 12.1.0
+      helm:
+        releaseName: velero
+        valueFiles:
+          - $values/cluster/infra/velero/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: cluster/infra/velero/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: velero
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true       # CRDs velero (Backup/Restore/Schedule…), annotations volumineuses

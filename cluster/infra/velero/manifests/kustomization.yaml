@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: velero
+resources:
+  - namespace.yaml
+  # Clé de compte de service GCP du bucket de sauvegarde. Le chiffré est lié au couple
+  # (velero-gcs, velero) : une rotation de la clé se refait passer par `kubeseal` et un commit
+  # (README, section Opérations).
+  - velero-gcs.sealed.yaml
