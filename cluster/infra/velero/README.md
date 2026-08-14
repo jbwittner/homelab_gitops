@@ -27,8 +27,10 @@ d'une base ; velero est le filet de niveau cluster.
   schedule quotidienne, snapshots de volume et Job de CRDs coupés (chaque choix est commenté sur
   place)
 - `manifests/namespace.yaml` — ns `velero` (wave `-1`), labellisé **`privileged`**
-- `backup-now.sh` — déclenche une sauvegarde manuelle au périmètre exact de la Schedule (spec
-  recopiée, jamais retapée) et suit son déroulement. Détail en Opérations
+- `velero-script.sh` — les gestes opérationnels : `list`, `show`, `backup`, `restore`, `delete`. Le
+  périmètre y est toujours **dérivé** (d'une Schedule pour un backup, du Backup source pour un
+  restore) et jamais retapé ; le nombre de volumes copiés est affiché partout. Ce n'est **pas** la
+  CLI `velero` — d'où le nom — tout passe par `kubectl` et `jq`. Détail en Opérations
 - `manifests/velero-gcs.sealed.yaml` — clé JSON du compte de service GCP, scellée. Seul des deux
   fichiers de secret à se committer
 - `manifests/velero-gcs.secret.yaml` — **clair, gitignoré** : template d'entrée de `kubeseal` ayant
@@ -172,22 +174,37 @@ d'une base ; velero est le filet de niveau cluster.
   ```
   `Unavailable` juste après l'installation = credential absent, mal scellé, ou droits IAM
   insuffisants sur le bucket.
-- **Lancer une sauvegarde à la main, au périmètre de la schedule** — depuis la racine du repo :
+- **Le script `velero-script.sh`** couvre les gestes courants. Depuis la racine du repo :
   ```bash
-  cluster/infra/velero/backup-now.sh              # schedule `velero-daily`, suit jusqu'à la fin
-  DRY_RUN=1 cluster/infra/velero/backup-now.sh    # affiche le manifeste, ne crée rien
-  NO_WAIT=1 cluster/infra/velero/backup-now.sh    # crée et rend la main
+  cluster/infra/velero/velero-script.sh list                       # tableau de bord
+  cluster/infra/velero/velero-script.sh show <backup>              # détail d'une sauvegarde
+  cluster/infra/velero/velero-script.sh backup                     # sauvegarde manuelle
+  cluster/infra/velero/velero-script.sh restore <backup> -n <ns>   # restauration
+  cluster/infra/velero/velero-script.sh delete <backup>            # suppression définitive
+  ```
+  Variables communes : `VELERO_NAMESPACE` (défaut `velero`), `TIMEOUT` (1800 s), `DRY_RUN=1`
+  (affiche le manifeste, n'envoie rien), `NO_WAIT=1` (crée et rend la main), `YES=1` (passe les
+  confirmations). Codes de sortie : `0` succès, `1` erreur, `2` PartiallyFailed, `3` délai dépassé.
+  Chaque sous-commande est détaillée ci-dessous, avec la voie `kubectl` équivalente — le script ne
+  fait que fabriquer ces CRs, et savoir les écrire à la main reste la porte de sortie le jour où il
+  n'est pas là.
+- **Lancer une sauvegarde à la main, au périmètre de la schedule** :
+  ```bash
+  cluster/infra/velero/velero-script.sh backup              # schedule `velero-daily`, suit jusqu'à la fin
+  cluster/infra/velero/velero-script.sh backup autre-sched  # une autre schedule
+  DRY_RUN=1 cluster/infra/velero/velero-script.sh backup    # affiche le manifeste, ne crée rien
   ```
   Le script recopie `.spec.template` de la Schedule : le périmètre ne peut pas diverger de celui
   qui tourne chaque nuit. Il refuse de partir si le `BackupStorageLocation` n'est pas `Available`,
   prévient si aucun `node-agent` n'est prêt, et affiche en fin de course le **nombre de volumes
   copiés** — le seul contrôle qui distingue une vraie sauvegarde d'une sauvegarde « verte et
-  vide ». Codes de sortie : `0` Completed, `2` PartiallyFailed, `3` délai dépassé.
+  vide ».
 
   Le label `velero.io/schedule-name` est volontairement **omis** (la CLI, elle, le pose avec
   `--from-schedule`) : il ferait compter ce backup comme une exécution de la schedule dans les
   métriques, ce qui éteindrait l'alerte `VeleroBackupTooOld` alors que la schedule n'aurait pas
-  tourné. Un backup manuel doit rester `schedule=manuel`.
+  tourné. Un backup manuel doit rester `schedule=manuel`. À la place, le script pose l'annotation
+  `homelab.wittner.tech/derived-from-schedule`, que `list` affiche en colonne `SOURCE`.
 
   Pour un périmètre différent, écrire la spec à la main — et se souvenir qu'un `includedNamespaces`
   omis vaut **tout le cluster** (cf. Contraintes) :
@@ -207,6 +224,25 @@ d'une base ; velero est le filet de niveau cluster.
   ```
 - **Suivre les sauvegardes et leur contenu** :
   ```bash
+  cluster/infra/velero/velero-script.sh list            # sauvegardes, schedules, restaurations
+  cluster/infra/velero/velero-script.sh list manual     # filtre par sous-chaîne du nom
+  cluster/infra/velero/velero-script.sh show <backup>   # détail d'une sauvegarde
+  ```
+  `list` donne trois tableaux. Pour chaque sauvegarde : phase, âge, expiration, **source**
+  (`velero-daily` si elle vient de la schedule, `manuel (velero-daily)` si elle vient de `backup`,
+  `manuel` sinon), colonne **`NS`**, objets, **volumes et taille copiés**. Une sauvegarde
+  `Completed` sans aucun volume est marquée `⚠ aucune donnée` — c'est le symptôme d'un node-agent
+  absent ou refusé à l'admission. `list` est la seule sous-commande qui n'exige pas un
+  `BackupStorageLocation` `Available` : c'est justement quand le bucket casse qu'on la lance.
+
+  **`NS` est un compteur, pas la liste.** La liste des namespaces grandit avec le périmètre et
+  déformerait le tableau ; le seul cas qui doit sauter aux yeux reste lisible tel quel — **`*` =
+  tout le cluster** (cf. Contraintes). Le périmètre complet, les erreurs, et le détail **volume par
+  volume** (namespace, pod, volume, phase, taille) sont dans `show <backup>` — c'est là qu'on
+  vérifie ce qui a *vraiment* été copié, et non seulement combien.
+
+  Voie manuelle :
+  ```bash
   kubectl -n velero get backups.velero.io,schedules.velero.io   # suffixe obligatoire, cf. Contraintes
   kubectl -n velero get backups.velero.io -o custom-columns=\
 NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.status.progress.itemsBackedUp
@@ -218,7 +254,13 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
 - **Supprimer une sauvegarde** — ⚠️ `kubectl delete backups.velero.io <nom>` **ne supprime rien
   durablement** : les données restent dans le bucket et le contrôleur `backup-sync` recrée l'objet
   à la synchro suivante (~1 min). Le seul chemin qui efface aussi le contenu est une
-  `DeleteBackupRequest` — c'est exactement ce que fabrique `velero backup delete` :
+  `DeleteBackupRequest` — c'est exactement ce que fabriquent `velero backup delete` et :
+  ```bash
+  cluster/infra/velero/velero-script.sh delete manual-xxxxx
+  ```
+  Le script refuse une sauvegarde `InProgress` (la supprimer en cours laisse des données
+  orphelines dans le dépôt kopia), affiche ce qui va disparaître, et demande la **frappe exacte du
+  nom** en confirmation. Voie manuelle :
   ```bash
   kubectl -n velero create -f - <<'EOF'
   apiVersion: velero.io/v1
@@ -237,6 +279,26 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
 - **Restaurer** — restreindre le périmètre, ArgoCD reposant de toute façon ce qui est déclaré dans
   Git (cf. Contraintes) :
   ```bash
+  cluster/infra/velero/velero-script.sh restore manual-xxxxx                    # périmètre du backup
+  cluster/infra/velero/velero-script.sh restore manual-xxxxx -n test-nginx      # restreint
+  cluster/infra/velero/velero-script.sh restore manual-xxxxx -n test-nginx --overwrite
+  DRY_RUN=1 cluster/infra/velero/velero-script.sh restore manual-xxxxx -n test-nginx
+  ```
+  Le périmètre est repris des `includedNamespaces` du **Backup source**, jamais retapé. Quatre
+  garde-fous, chacun correspondant à un échec silencieux constaté :
+  - une sauvegarde qui couvre **tout le cluster** (`includedNamespaces` absent ou `*`) est refusée
+    sans `-n` explicite — restaurer un cluster entier ne peut pas être un défaut implicite ;
+  - un `-n` **hors du périmètre** du backup est refusé : il produirait un `Restore` vide et vert ;
+  - les Applications **ArgoCD** qui ciblent les namespaces visés sont listées, avec la commande de
+    suspension de l'auto-sync à recopier. Le script n'y touche pas lui-même : un Ctrl-C au mauvais
+    moment laisserait une Application avec `automated` coupé, sans que ça se voie nulle part ;
+  - en fin de course, une restauration `Completed` **sans aucun `podvolumerestore`** alors que la
+    sauvegarde contenait des volumes est signalée — symétrique du « vert et vide » du backup.
+
+  `--overwrite` passe `existingResourcePolicy` à `update` : les objets déjà en place sont
+  **écrasés**. Sans lui, `none` laisse intact ce qui existe et ne repose que ce qui manque.
+  Voie manuelle :
+  ```bash
   kubectl -n velero create -f - <<'EOF'
   apiVersion: velero.io/v1
   kind: Restore
@@ -254,13 +316,14 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
 - **Sans la CLI velero** — tout ce qui précède est en `kubectl` parce que la CLI ne fait que
   fabriquer ces mêmes CRs. Équivalences :
 
-  | CLI velero | kubectl |
-  |---|---|
-  | `backup create --from-schedule X` | `backup-now.sh` |
-  | `backup delete X` | `DeleteBackupRequest` |
-  | `backup describe X` | `get backups.velero.io X -o yaml` |
-  | `restore create --from-backup X` | `Restore` ci-dessus |
-  | `backup logs X` | `DownloadRequest` (kind `BackupLog`) → URL signée à télécharger |
+  | CLI velero | `velero-script.sh` | kubectl |
+  |---|---|---|
+  | `backup create --from-schedule X` | `backup [X]` | `Backup` dérivé de `.spec.template` |
+  | `backup get` | `list` | `get backups.velero.io` |
+  | `backup describe X` | `show X` | `get backups.velero.io X -o yaml` |
+  | `backup delete X` | `delete X` | `DeleteBackupRequest` |
+  | `restore create --from-backup X` | `restore X` | `Restore` ci-dessus |
+  | `backup logs X` | — | `DownloadRequest` (kind `BackupLog`) → URL signée à télécharger |
 
   Seul `backup logs` justifie vraiment d'installer la CLI (`brew install velero`) : le diagnostic
   d'un échec passe par une `DownloadRequest` pénible à manipuler à la main.
