@@ -436,7 +436,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Une ligne par schedule. « Éléments en erreur » non nul avec un dernier statut à Succès = sauvegarde restaurable mais incomplète.",
+          "description": "Même lecture que le tableau du dessous, mais agrégée : une ligne par schedule au lieu d'une par sauvegarde. « manuel » regroupe les backups lancés à la main. Les totaux portent sur les sauvegardes ENCORE PRÉSENTES : ils baissent quand le TTL expire. « Données copiées » est la somme des PodVolumeBackup avant déduplication kopia — ce n'est pas l'occupation du bucket.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -498,54 +498,55 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Dernier succès (il y a)"
+                  "options": "Début (dernière)"
                 },
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "s"
+                    "value": "dateTimeAsIso"
                   }
                 ]
               },
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Tarball d'objets"
+                  "options": "Fin (dernière)"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Données copiées"
                 },
                 "properties": [
                   {
                     "id": "unit",
                     "value": "bytes"
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "gauge",
+                      "mode": "gradient"
+                    }
                   }
                 ]
               },
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Éléments en erreur"
+                  "options": "Prochaine expiration"
                 },
                 "properties": [
                   {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": null
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
                   }
                 ]
               }
@@ -562,11 +563,13 @@ data:
             "cellHeight": "sm",
             "footer": {
               "countRows": false,
-              "fields": "",
+              "fields": [
+                "Données copiées"
+              ],
               "reducer": [
                 "sum"
               ],
-              "show": false
+              "show": true
             },
             "showHeader": true,
             "sortBy": [
@@ -584,7 +587,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_replace(velero_backup_last_status{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "expr": "label_replace(count by (schedule) (velero_backup_object_info), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -596,7 +599,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_replace(time() - velero_backup_last_successful_timestamp{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "expr": "velero_backup_last_status{schedule=~\"$schedule\"}",
               "format": "table",
               "instant": true,
               "range": false,
@@ -608,7 +611,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_replace(velero_backup_tarball_size_bytes{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "expr": "label_replace(max by (schedule) ((velero_backup_object_start_time * on(backup) group_left(schedule) velero_backup_object_info)) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -620,7 +623,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_replace(velero_backup_items_total{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "expr": "label_replace(max by (schedule) ((velero_backup_object_completion_time * on(backup) group_left(schedule) velero_backup_object_info)) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -632,14 +635,38 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_replace(velero_backup_items_errors{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "expr": "label_replace(sum by (schedule) ((velero_backup_object_items_backed_up * on(backup) group_left(schedule) velero_backup_object_info)), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
               "refId": "E"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(sum by (schedule) (sum by (backup) (velero_pvb_object_bytes) * on(backup) group_left(schedule) velero_backup_object_info), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "F"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(min by (schedule) ((velero_backup_object_expiration * on(backup) group_left(schedule) velero_backup_object_info)) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "G"
             }
           ],
-          "title": "Dernier état par schedule",
+          "title": "Par schedule (agrégé)",
           "transformations": [
             {
               "id": "joinByField",
@@ -652,60 +679,129 @@ data:
               "id": "organize",
               "options": {
                 "excludeByName": {
+                  "Time": true,
                   "Time 1": true,
                   "Time 2": true,
                   "Time 3": true,
                   "Time 4": true,
                   "Time 5": true,
+                  "Time 6": true,
+                  "Time 7": true,
+                  "__name__": true,
                   "__name__ 1": true,
                   "__name__ 2": true,
                   "__name__ 3": true,
                   "__name__ 4": true,
                   "__name__ 5": true,
+                  "__name__ 6": true,
+                  "__name__ 7": true,
+                  "container": true,
                   "container 1": true,
                   "container 2": true,
                   "container 3": true,
                   "container 4": true,
                   "container 5": true,
+                  "container 6": true,
+                  "container 7": true,
+                  "endpoint": true,
                   "endpoint 1": true,
                   "endpoint 2": true,
                   "endpoint 3": true,
                   "endpoint 4": true,
                   "endpoint 5": true,
+                  "endpoint 6": true,
+                  "endpoint 7": true,
+                  "instance": true,
                   "instance 1": true,
                   "instance 2": true,
                   "instance 3": true,
                   "instance 4": true,
                   "instance 5": true,
+                  "instance 6": true,
+                  "instance 7": true,
+                  "job": true,
                   "job 1": true,
                   "job 2": true,
                   "job 3": true,
                   "job 4": true,
                   "job 5": true,
+                  "job 6": true,
+                  "job 7": true,
+                  "namespace": true,
                   "namespace 1": true,
                   "namespace 2": true,
                   "namespace 3": true,
                   "namespace 4": true,
                   "namespace 5": true,
+                  "namespace 6": true,
+                  "namespace 7": true,
+                  "pod": true,
                   "pod 1": true,
                   "pod 2": true,
                   "pod 3": true,
                   "pod 4": true,
                   "pod 5": true,
+                  "pod 6": true,
+                  "pod 7": true,
+                  "service": true,
                   "service 1": true,
                   "service 2": true,
                   "service 3": true,
                   "service 4": true,
-                  "service 5": true
+                  "service 5": true,
+                  "service 6": true,
+                  "service 7": true,
+                  "uid": true,
+                  "uid 1": true,
+                  "uid 2": true,
+                  "uid 3": true,
+                  "uid 4": true,
+                  "uid 5": true,
+                  "uid 6": true,
+                  "uid 7": true,
+                  "customresource_group": true,
+                  "customresource_group 1": true,
+                  "customresource_group 2": true,
+                  "customresource_group 3": true,
+                  "customresource_group 4": true,
+                  "customresource_group 5": true,
+                  "customresource_group 6": true,
+                  "customresource_group 7": true,
+                  "customresource_kind": true,
+                  "customresource_kind 1": true,
+                  "customresource_kind 2": true,
+                  "customresource_kind 3": true,
+                  "customresource_kind 4": true,
+                  "customresource_kind 5": true,
+                  "customresource_kind 6": true,
+                  "customresource_kind 7": true,
+                  "customresource_version": true,
+                  "customresource_version 1": true,
+                  "customresource_version 2": true,
+                  "customresource_version 3": true,
+                  "customresource_version 4": true,
+                  "customresource_version 5": true,
+                  "customresource_version 6": true,
+                  "customresource_version 7": true,
+                  "storage_location": true,
+                  "storage_location 1": true,
+                  "storage_location 2": true,
+                  "storage_location 3": true,
+                  "storage_location 4": true,
+                  "storage_location 5": true,
+                  "storage_location 6": true,
+                  "storage_location 7": true
                 },
                 "indexByName": {},
                 "renameByName": {
-                  "Value #A": "Dernier statut",
-                  "Value #B": "Dernier succès (il y a)",
-                  "Value #C": "Tarball d'objets",
-                  "Value #D": "Éléments sauvegardés",
-                  "Value #E": "Éléments en erreur",
-                  "schedule": "Schedule"
+                  "schedule": "Schedule",
+                  "Value #A": "Sauvegardes",
+                  "Value #B": "Dernier statut",
+                  "Value #C": "Début (dernière)",
+                  "Value #D": "Fin (dernière)",
+                  "Value #E": "Éléments (total)",
+                  "Value #F": "Données copiées",
+                  "Value #G": "Prochaine expiration"
                 }
               }
             }
@@ -793,47 +889,24 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Schedule"
+                  "options": "Début"
                 },
                 "properties": [
                   {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "match": "empty",
-                          "result": {
-                            "text": "manuel",
-                            "index": 0
-                          }
-                        },
-                        "type": "special"
-                      }
-                    ]
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
                   }
                 ]
               },
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Lancée il y a"
+                  "options": "Fin"
                 },
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "s"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Expire dans"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "s"
+                    "value": "dateTimeAsIso"
                   }
                 ]
               },
@@ -853,6 +926,18 @@ data:
                       "type": "gauge",
                       "mode": "gradient"
                     }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Expire le"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
                   }
                 ]
               }
@@ -881,7 +966,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Lancée il y a"
+                "displayName": "Début"
               }
             ]
           },
@@ -893,7 +978,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "velero_backup_object_info",
+              "expr": "label_replace(velero_backup_object_info, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -905,7 +990,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "time() - velero_backup_object_start_time",
+              "expr": "velero_backup_object_start_time * 1000",
               "format": "table",
               "instant": true,
               "range": false,
@@ -917,7 +1002,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "sum by (backup) (velero_pvb_object_bytes)",
+              "expr": "velero_backup_object_completion_time * 1000",
               "format": "table",
               "instant": true,
               "range": false,
@@ -941,11 +1026,23 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "velero_backup_object_expiration - time()",
+              "expr": "sum by (backup) (velero_pvb_object_bytes)",
               "format": "table",
               "instant": true,
               "range": false,
               "refId": "E"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "velero_backup_object_expiration * 1000",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "F"
             }
           ],
           "title": "Toutes les sauvegardes (objets Backup)",
@@ -961,71 +1058,104 @@ data:
               "id": "organize",
               "options": {
                 "excludeByName": {
+                  "Time": true,
                   "Time 1": true,
-                  "__name__ 1": true,
-                  "container 1": true,
-                  "endpoint 1": true,
-                  "instance 1": true,
-                  "job 1": true,
-                  "namespace 1": true,
-                  "pod 1": true,
-                  "service 1": true,
-                  "uid 1": true,
-                  "customresource_group 1": true,
-                  "customresource_kind 1": true,
-                  "customresource_version 1": true,
                   "Time 2": true,
-                  "__name__ 2": true,
-                  "container 2": true,
-                  "endpoint 2": true,
-                  "instance 2": true,
-                  "job 2": true,
-                  "namespace 2": true,
-                  "pod 2": true,
-                  "service 2": true,
-                  "uid 2": true,
-                  "customresource_group 2": true,
-                  "customresource_kind 2": true,
-                  "customresource_version 2": true,
                   "Time 3": true,
-                  "__name__ 3": true,
-                  "container 3": true,
-                  "endpoint 3": true,
-                  "instance 3": true,
-                  "job 3": true,
-                  "namespace 3": true,
-                  "pod 3": true,
-                  "service 3": true,
-                  "uid 3": true,
-                  "customresource_group 3": true,
-                  "customresource_kind 3": true,
-                  "customresource_version 3": true,
                   "Time 4": true,
-                  "__name__ 4": true,
-                  "container 4": true,
-                  "endpoint 4": true,
-                  "instance 4": true,
-                  "job 4": true,
-                  "namespace 4": true,
-                  "pod 4": true,
-                  "service 4": true,
-                  "uid 4": true,
-                  "customresource_group 4": true,
-                  "customresource_kind 4": true,
-                  "customresource_version 4": true,
                   "Time 5": true,
+                  "Time 6": true,
+                  "__name__": true,
+                  "__name__ 1": true,
+                  "__name__ 2": true,
+                  "__name__ 3": true,
+                  "__name__ 4": true,
                   "__name__ 5": true,
+                  "__name__ 6": true,
+                  "container": true,
+                  "container 1": true,
+                  "container 2": true,
+                  "container 3": true,
+                  "container 4": true,
                   "container 5": true,
+                  "container 6": true,
+                  "endpoint": true,
+                  "endpoint 1": true,
+                  "endpoint 2": true,
+                  "endpoint 3": true,
+                  "endpoint 4": true,
                   "endpoint 5": true,
+                  "endpoint 6": true,
+                  "instance": true,
+                  "instance 1": true,
+                  "instance 2": true,
+                  "instance 3": true,
+                  "instance 4": true,
                   "instance 5": true,
+                  "instance 6": true,
+                  "job": true,
+                  "job 1": true,
+                  "job 2": true,
+                  "job 3": true,
+                  "job 4": true,
                   "job 5": true,
+                  "job 6": true,
+                  "namespace": true,
+                  "namespace 1": true,
+                  "namespace 2": true,
+                  "namespace 3": true,
+                  "namespace 4": true,
                   "namespace 5": true,
+                  "namespace 6": true,
+                  "pod": true,
+                  "pod 1": true,
+                  "pod 2": true,
+                  "pod 3": true,
+                  "pod 4": true,
                   "pod 5": true,
+                  "pod 6": true,
+                  "service": true,
+                  "service 1": true,
+                  "service 2": true,
+                  "service 3": true,
+                  "service 4": true,
                   "service 5": true,
+                  "service 6": true,
+                  "uid": true,
+                  "uid 1": true,
+                  "uid 2": true,
+                  "uid 3": true,
+                  "uid 4": true,
                   "uid 5": true,
+                  "uid 6": true,
+                  "customresource_group": true,
+                  "customresource_group 1": true,
+                  "customresource_group 2": true,
+                  "customresource_group 3": true,
+                  "customresource_group 4": true,
                   "customresource_group 5": true,
+                  "customresource_group 6": true,
+                  "customresource_kind": true,
+                  "customresource_kind 1": true,
+                  "customresource_kind 2": true,
+                  "customresource_kind 3": true,
+                  "customresource_kind 4": true,
                   "customresource_kind 5": true,
+                  "customresource_kind 6": true,
+                  "customresource_version": true,
+                  "customresource_version 1": true,
+                  "customresource_version 2": true,
+                  "customresource_version 3": true,
+                  "customresource_version 4": true,
                   "customresource_version 5": true,
+                  "customresource_version 6": true,
+                  "storage_location": true,
+                  "storage_location 1": true,
+                  "storage_location 2": true,
+                  "storage_location 3": true,
+                  "storage_location 4": true,
+                  "storage_location 5": true,
+                  "storage_location 6": true,
                   "Value #A": true
                 },
                 "indexByName": {},
@@ -1033,11 +1163,11 @@ data:
                   "backup": "Sauvegarde",
                   "phase": "Phase",
                   "schedule": "Schedule",
-                  "storage_location": "Bucket",
-                  "Value #B": "Lancée il y a",
-                  "Value #C": "Données copiées",
+                  "Value #B": "Début",
+                  "Value #C": "Fin",
                   "Value #D": "Éléments",
-                  "Value #E": "Expire dans"
+                  "Value #E": "Données copiées",
+                  "Value #F": "Expire le"
                 }
               }
             }

@@ -170,6 +170,14 @@ kube-state-metrics:
                   type: Gauge
                   gauge:
                     path: [status, startTimestamp]
+              - name: completion_time
+                help: "Fin de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    # Pas de `nilIsZero` : une sauvegarde en cours n'a pas encore ce champ, et une
+                    # valeur 0 s'afficherait en « 1970 » au lieu de rester vide.
+                    path: [status, completionTimestamp]
               - name: expiration
                 help: "Date d'expiration (TTL) de la sauvegarde (timestamp Unix)"
                 each:
