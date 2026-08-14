@@ -151,8 +151,8 @@ csi:
 # validé par un `restore` réel, pas par la présence d'un fichier dans le bucket.
 snapshotAgent:
   enabled: true
-  # Horaire, pas toutes les 15 min : le contenu du coffre bouge très peu.
-  schedule: "0 * * * *"
+
+  schedule: "0 3 * * *"
 
   # SealedSecret (cf. manifests/) — PAS un ExternalSecret : la sauvegarde du coffre
   # ne peut pas dépendre du coffre. C'est le seul cas anti-cycle du repo à ce jour.
