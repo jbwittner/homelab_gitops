@@ -82,6 +82,14 @@ d'une base ; velero est le filet de niveau cluster.
   c'est un geste explicite dans `helm-values.yaml`. Candidats connus, à ouvrir un par un :
   `openbao` (raft 5Gi), `authentik` (Postgres CNPG 5Gi), `monitoring` (27Gi, dont 20Gi de TSDB
   Prometheus reconstructible).
+- **Le TTL de 30 jours est une fenêtre de récupération, pas un réglage de taille.** Le raccourcir
+  rend peu d'espace : kopia déduplique et ne stocke que des deltas, donc trente snapshots
+  quotidiens d'une donnée stable ne pèsent pas trente fois un snapshot. Et l'espace d'un backup
+  expiré n'est rendu qu'à la **maintenance** du dépôt kopia (toutes les heures par défaut), jamais
+  au moment où le `Backup` disparaît de `kubectl get backups`. Ce qu'un TTL court coûte, en
+  revanche, est immédiat : une corruption ou une suppression logique repérée au-delà de la fenêtre
+  n'est plus rattrapable. Pour un historique plus long, ajouter une schedule hebdomadaire à TTL
+  long (grand-père/père/fils) plutôt qu'allonger la quotidienne.
 - **Une copie kopia d'une base vivante est cohérente-crash, pas cohérente-transaction.** Elle vaut
   ce que vaut un `kill -9` suivi d'un redémarrage : Postgres rejoue son WAL, openbao son raft. Pour
   une restauration *propre*, la voie reste le backup natif (CNPG, snapshot raft). Velero est le

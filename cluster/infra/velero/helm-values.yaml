@@ -119,7 +119,15 @@ schedules:
     # première du cycle n'attendant pas 03:00. Pour l'éviter durablement, le levier déclaratif est
     # le flag serveur `--schedule-skip-immediately=true` (configuration.extraArgs), pas ce champ.
     template:
-      ttl: 720h            # 30 j — velero supprime lui-même le backup expiré dans le bucket
+      # 30 j. Ce TTL est une FENÊTRE DE RÉCUPÉRATION avant d'être un réglage de taille : le
+      # raccourcir ferait surtout perdre la capacité à rattraper une corruption ou une suppression
+      # logique repérée tardivement. Côté stockage le gain serait sous-linéaire — kopia déduplique
+      # et n'écrit que des deltas, donc 30 snapshots quotidiens d'une donnée stable ne pèsent pas
+      # 30 fois un snapshot. Et l'espace d'un backup expiré n'est de toute façon rendu qu'à la
+      # MAINTENANCE du dépôt kopia (toutes les heures par défaut), pas à sa disparition de
+      # `kubectl get backups`. Pour aller plus loin dans le temps sans gonfler le bucket, ajouter
+      # une schedule hebdomadaire à TTL long plutôt que d'allonger celle-ci.
+      ttl: 720h
       storageLocation: default
       # LISTE BLANCHE, et non une liste d'exclusions : rien n'est sauvegardé sans figurer ici.
       # Contrepartie assumée — un composant ajouté au cluster n'est PAS couvert tant que son
