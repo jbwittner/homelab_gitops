@@ -276,13 +276,21 @@ Trois pièges, tous vérifiés à la connexion :
   cluster/infra/openbao/openbao-script.sh snapshot          # sauvegarde manuelle (Job dérivé du CronJob)
   cluster/infra/openbao/openbao-script.sh verify latest     # RESTORE réel en Docker — aucune clé requise
   cluster/infra/openbao/openbao-script.sh verify oldest --unseal   # + descellement et contenu
+
+  cluster/infra/openbao/openbao-script.sh up oldest         # idem mais l'instance SURVIT
+  cluster/infra/openbao/openbao-script.sh unseal            # la desceller après coup
+  cluster/infra/openbao/openbao-script.sh bao kv get -mount=kv homelab/argocd
+  cluster/infra/openbao/openbao-script.sh stop              # la détruire
   ```
   La présence d'un objet dans le bucket ne prouve rien. `verify` remonte le snapshot dans un
   OpenBao jetable, l'y restaure, et vérifie que l'instance adopte la configuration de seal de la
   prod (`5 / 3`) : si c'est le cas, le keyring du snapshot a été ouvert et `state.bin` est intègre.
   Ce contrôle ne demande **aucune part de descellement** — c'est celui à passer régulièrement.
   `--unseal` va plus loin (parts de prod + token root) et compare le contenu au contrat dérivé des
-  `ExternalSecret` du cluster. Procédure manuelle et pièges détaillés :
+  `ExternalSecret` du cluster. `verify` **détruit** l'instance en sortant ; `up` la **garde**, pour
+  fouiller un coffre d'hier sans toucher la prod — conteneur `openbao-drill`, une seule instance à
+  la fois, fermée par `stop`. Une instance descellée sert tous les secrets du homelab en clair sur
+  `127.0.0.1:8210` : `status` la rappelle à chaque appel. Procédure manuelle et pièges détaillés :
   [`doc/openbao-restore-local.md`](../../../doc/openbao-restore-local.md).
   ⚠️ Ne jamais tester un restore sur `openbao-0` : `snapshot restore` écrase tout le raft. C'est
   précisément ce que fait `openbao-script.sh restore`, réservé à une vraie reprise.

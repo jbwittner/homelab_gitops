@@ -48,7 +48,16 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/vmware-tanzu/velero/v1.18.1/pkg/cmd/server/config/config.go\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/vmware-tanzu/velero/v1.18.1/pkg/metrics/metrics.go\")",
       "Bash(kubectl -n velero get backups,schedules,podvolumebackups,backuprepositories)",
-      "Bash(helm repo *)"
+      "Bash(helm repo *)",
+      "Bash(grep -n \"^[a-z_]*\\(\\)\\\\s*{\\\\|^usage\\\\|cmd_\\\\|^  [a-z-]*\\)\\\\s*$\" cluster/infra/openbao/openbao-script.sh)",
+      "Bash(kubectl -n velero get schedules.velero.io -o jsonpath='{range .items[*]}{.metadata.name}{\" NS=\"}{.spec.template.includedNamespaces}{\"\\\\n\"}{end}')",
+      "Bash(kubectl -n velero get backups.velero.io -o custom-columns=NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces --sort-by=.metadata.creationTimestamp)",
+      "Bash(kubectl -n velero get backup.velero.io velero-daily-20260815030017 -o jsonpath='{.status}')",
+      "Bash(kubectl -n velero get podvolumebackups -o custom-columns=NAME:.metadata.name,PVC:.spec.volume,PHASE:.status.phase,POD:.spec.pod.name)",
+      "Bash(kubectl -n velero get podvolumebackups -o json)",
+      "Bash(kubectl -n velero get backup.velero.io velero-daily-20260815030017 -o jsonpath='{.spec.resourcePolicy}{\"\\\\n\"}')",
+      "Bash(kubectl -n velero get schedule velero-daily -o jsonpath='{.spec.template.resourcePolicy}{\"\\\\n\"}')",
+      "Bash(kubectl -n velero get cm velero-volume-policies -o jsonpath='{.data.policies\\\\.yaml}')"
     ]
   }
 }

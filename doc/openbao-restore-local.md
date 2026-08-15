@@ -31,6 +31,36 @@ cluster/infra/openbao/openbao-script.sh verify oldest --unseal   # + étapes 6 e
 Le script encapsule les pièges listés plus bas et compare tout seul la configuration de seal
 obtenue à celle de la prod. Lire la suite si l'on veut savoir ce qu'il fait, ou s'en passer.
 
+**Deux contrats distincts, et c'est la seule chose à retenir :**
+
+| Commande | L'instance après la commande |
+|---|---|
+| `verify <réf>` | **détruite** — c'est un test, il ne laisse rien |
+| `up <réf>` | **laissée en vie** — pour fouiller le coffre d'hier |
+
+`up` sert quand on ne veut pas seulement une réponse oui/non : comparer une valeur à celle de la
+prod, récupérer un secret écrasé, voir ce qui a changé entre deux nuits. Le conteneur porte
+toujours le même nom (`openbao-drill`) et il ne peut y en avoir **qu'un** : remonter un autre
+snapshot exige de fermer le précédent. C'est ce qui évite de se retrouver avec trois coffres
+locaux dont on ne sait plus lequel contient quoi — et de lire une valeur dans le mauvais.
+
+```bash
+S=cluster/infra/openbao/openbao-script.sh
+
+$S up oldest                 # monte, restaure, laisse tourner — instance SCELLÉE
+$S unseal                    # descelle (3 parts, saisie masquée) quand on a décidé de le faire
+$S bao kv get -mount=kv homelab/argocd     # interroge l'instance LOCALE, jamais la prod
+$S status                    # rappelle qu'elle tourne, et si elle est descellée
+$S stop                      # détruit conteneur + volume
+```
+
+`up` sans `--unseal` est le bon réflexe : on monte d'abord, on sort les parts du coffre physique
+seulement si on en a vraiment besoin. `--replace` écrase l'instance en place, à ne taper qu'en
+sachant ce qu'on jette.
+
+⚠️ Une instance descellée sert **tous les secrets du homelab en clair** sur `127.0.0.1:8210`.
+`status` la signale à chaque appel, précisément pour qu'elle ne s'oublie pas.
+
 ## Prérequis
 
 | Quoi | Pourquoi |

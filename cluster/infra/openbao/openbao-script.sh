@@ -34,6 +34,9 @@
 #   cluster/infra/openbao/openbao-script.sh fetch <réf> [-o fichier]
 #   cluster/infra/openbao/openbao-script.sh check <réf>
 #   cluster/infra/openbao/openbao-script.sh verify <réf> [--unseal] [--keep]
+#   cluster/infra/openbao/openbao-script.sh up <réf> [--unseal] [--replace]
+#   cluster/infra/openbao/openbao-script.sh unseal
+#   cluster/infra/openbao/openbao-script.sh bao <args…>
 #   cluster/infra/openbao/openbao-script.sh stop
 #   cluster/infra/openbao/openbao-script.sh restore <réf> [--no-pre-snapshot]
 #
@@ -99,16 +102,28 @@ Gestion des sauvegardes openbao. Le coffre est la seule chose du homelab absente
       Contrôle structurel hors ligne : archive, empreintes SHA256, méta raft. Aucun conteneur.
 
   openbao-script.sh verify <réf> [--unseal] [--keep]
-      LE test réel. Remonte un OpenBao jetable en Docker et y restaure le snapshot.
-      Sans option : vérifie que l'instance adopte la config de seal de la prod (5/3).
-                    NE DEMANDE AUCUNE CLÉ. C'est le contrôle à automatiser.
+      LE test réel. Remonte un OpenBao jetable en Docker et y restaure le snapshot, puis
+      DÉTRUIT tout. Sans option : vérifie que l'instance adopte la config de seal de la
+      prod (5/3). NE DEMANDE AUCUNE CLÉ. C'est le contrôle à automatiser.
           --unseal  va jusqu'au bout : descellement avec les parts de PROD (saisie masquée),
                     puis contrôle du contenu — chemins KV dérivés des ExternalSecret du
                     cluster, mounts d'auth, policies. Demande aussi le token root.
-          --keep    laisse l'instance en vie après le test (penser à `stop`).
+          --keep    laisse l'instance en vie à la fin (comme `up`).
+
+  openbao-script.sh up <réf> [--unseal] [--replace]
+      Même montage que `verify`, mais l'instance SURVIT à la commande. Pour fouiller un
+      coffre d'hier sans toucher la prod. Conteneur au nom FIXE, UNE SEULE à la fois :
+      remonter un autre snapshot exige `stop` (ou --replace).
+
+  openbao-script.sh unseal
+      Descelle après coup l'instance montée par `up` (saisie masquée).
+
+  openbao-script.sh bao <args…>
+      Passe-plat vers l'instance locale, jamais vers la prod.
+      Ex. : openbao-script.sh bao kv get -mount=kv homelab/argocd
 
   openbao-script.sh stop
-      Détruit l'instance jetable et son volume. À lancer après un Ctrl-C ou un --keep.
+      Détruit l'instance locale et son volume. Après un `up`, un `--keep` ou un Ctrl-C.
 
   openbao-script.sh restore <réf> [--no-pre-snapshot]
       ⚠ RESTAURE LA PROD. Écrase l'intégralité du raft d'openbao-0. Prend d'abord un
@@ -288,6 +303,24 @@ cmd_status() {
     ok "Sauvegarde à jour."
   fi
   echo "    Vérifier qu'elle est RESTAURABLE (aucune clé requise) : $(basename "$0") verify latest"
+
+  # Une instance locale descellée contient tous les secrets du homelab en clair. Elle doit se voir
+  # ici, sinon elle s'oublie — c'est le seul état de cette procédure qui traîne dans le temps.
+  if command -v docker >/dev/null && drill_exists; then
+    echo
+    log "Instance locale"
+    if drill_running; then
+      printf '    conteneur     : %s (en cours, http://%s)\n' "$DRILL_NAME" "$DRILL_PORT"
+      if drill_sealed; then
+        printf '    état          : scellée — parts/seuil %s\n' "$(drill_seal_config)"
+      else
+        warn "DESCELLÉE : tous les secrets du homelab y sont lisibles en clair."
+      fi
+    else
+      printf '    conteneur     : %s (arrêté)\n' "$DRILL_NAME"
+    fi
+    echo "    la détruire   : $(basename "$0") stop"
+  fi
 }
 
 # --- list -------------------------------------------------------------------------------------
@@ -473,6 +506,7 @@ cmd_check() {
 # --- Instance jetable -------------------------------------------------------------------------
 
 drill_running() { docker inspect -f '{{.State.Running}}' "$DRILL_NAME" 2>/dev/null | grep -qx true; }
+drill_exists()  { docker inspect "$DRILL_NAME" >/dev/null 2>&1; }
 
 # Enveloppe `bao` dans l'instance jetable. $1.. = arguments de bao. Le token courant est passé par
 # l'environnement (DRILL_TOKEN) et jamais en argument : la ligne de commande est lisible par tout
@@ -490,6 +524,18 @@ drill_stop() {
 drill_start() {
   local image="$1" snapdir="$2" cfg="$WORKDIR/drill-config.hcl"
 
+  # UNE SEULE INSTANCE À LA FOIS, et le nom est fixe : c'est ce qui permet à `stop` de nettoyer
+  # sans rien avoir à retenir, et ce qui évite qu'un `up` distrait écrase une instance déjà
+  # descellée — celle où l'on est peut-être en train de chercher quelque chose. L'écrasement reste
+  # possible, mais il faut le demander.
+  if drill_exists; then
+    [[ -n "${DRILL_REPLACE:-}" ]] || die "Une instance locale « $DRILL_NAME » existe déjà — une seule à la fois.
+       L'inspecter : $(basename "$0") status
+       La détruire : $(basename "$0") stop
+       L'écraser   : rappeler la même commande avec --replace"
+    warn "--replace : l'instance existante et son volume sont détruits."
+  fi
+  # Inconditionnel : rattrape aussi un volume resté seul après un `docker rm` fait à la main.
   drill_stop
   mkdir -p "$WORKDIR"; chmod 700 "$WORKDIR"
 
@@ -499,6 +545,11 @@ drill_start() {
   #   - le fichier est monté hors de /openbao/config, sans quoi l'entrypoint le déclare en double
   #     et l'ignore.
   cat >"$cfg" <<EOF
+# UI servie sur le port du listener. Sans cette ligne, /ui rend 404 — et l'UI est justement ce
+# qu'on veut après un \`up\` : parcourir un coffre d'hier au clic plutôt qu'en \`bao kv get\`.
+# Aucun risque d'exposition : DRILL_PORT publie sur 127.0.0.1 uniquement.
+ui = true
+
 api_addr     = "http://127.0.0.1:8200"
 cluster_addr = "http://127.0.0.1:8201"
 
@@ -571,57 +622,57 @@ drill_restart() {
   drill_wait_ready
 }
 
-# --- verify -----------------------------------------------------------------------------------
+# --- Montage local d'un snapshot (socle de `verify` et de `up`) --------------------------------
 
-cmd_verify() {
-  local ref="" do_unseal=0 keep=0
-  while (( $# )); do
-    case "$1" in
-      --unseal)  do_unseal=1; shift ;;
-      --keep)    keep=1; shift ;;
-      -h|--help) usage 0 ;;
-      -*)        die "Option inconnue : $1" ;;
-      *)         [[ -z "$ref" ]] || die "Un seul snapshot à la fois."; ref="$1"; shift ;;
-    esac
-  done
-  [[ -n "$ref" ]] || usage
-  require_bins docker tar jq
+# Image et configuration de seal ATTENDUE, prises sur la prod. Renseigne les globales DRILL_IMAGE,
+# DRILL_EXPECT et DRILL_PROD_OK. Sans cluster joignable, le montage reste possible mais plus rien
+# ne permet de CONCLURE : l'appelant sort alors en 2 plutôt que d'annoncer une vérification.
+# Garde-fou d'instance unique, appelé AVANT tout travail : sans lui, un second `up` télécharge un
+# snapshot (donc pose un secret sur le disque) et démarre un conteneur avant de découvrir qu'il
+# doit renoncer.
+drill_guard_single() {
+  drill_exists || return 0
+  [[ -n "${DRILL_REPLACE:-}" ]] && return 0
+  die "Une instance locale « $DRILL_NAME » existe déjà — une seule à la fois.
+       L'inspecter : $(basename "$0") status
+       La détruire : $(basename "$0") stop
+       L'écraser   : rappeler la même commande avec --replace"
+}
 
-  local path; path="$(resolve_ref "$ref")"
+DRILL_IMAGE=""; DRILL_EXPECT=""; DRILL_PROD_OK=0
+drill_reference() {
+  local st=""
+  DRILL_IMAGE=""; DRILL_EXPECT=""; DRILL_PROD_OK=0
+  if cluster_reachable; then
+    st="$(prod_status_json)"
+    DRILL_IMAGE="$(kubectl -n "$NAMESPACE" get sts openbao -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+    [[ -n "$st" ]] && DRILL_EXPECT="$(jq -r '"\(.n)/\(.t)"' <<<"$st" 2>/dev/null || true)"
+    [[ -n "$DRILL_EXPECT" && "$DRILL_EXPECT" != "null/null" ]] && DRILL_PROD_OK=1
+  fi
+  DRILL_IMAGE="${OPENBAO_IMAGE:-${DRILL_IMAGE:-quay.io/openbao/openbao:2.6.1}}"
+  (( DRILL_PROD_OK )) || warn "Configuration de seal de la prod illisible : la comparaison sera indicative."
+}
+
+# Monte le snapshot dans l'instance locale et rend le verdict de barrière. Renseigne DRILL_BEFORE
+# et DRILL_AFTER. Sort en échec si le snapshot n'a pas été chargé : tout ce qui suit (descellement,
+# lecture) n'aurait alors aucun sens.
+DRILL_BEFORE=""; DRILL_AFTER=""
+drill_mount_snapshot() {
+  local path="$1"
   local snapdir; snapdir="$(cd -- "$(dirname -- "$path")" && pwd)"
   local snapfile; snapfile="$(basename "$path")"
 
-  # --- Référence de comparaison, prise sur la PROD. Sans cluster joignable, le test tourne quand
-  # même mais ne peut plus conclure : il sort en 2 plutôt que de prétendre avoir vérifié.
-  local image="" expect="" prod_ok=0
-  if cluster_reachable; then
-    local st; st="$(prod_status_json)"
-    image="$(kubectl -n "$NAMESPACE" get sts openbao -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
-    [[ -n "$st" ]] && expect="$(jq -r '"\(.n)/\(.t)"' <<<"$st" 2>/dev/null || true)"
-    [[ -n "$expect" && "$expect" != "null/null" ]] && prod_ok=1
-  fi
-  image="${OPENBAO_IMAGE:-${image:-quay.io/openbao/openbao:2.6.1}}"
-  (( prod_ok )) || warn "Configuration de seal de la prod illisible : la comparaison finale sera indicative."
-
-  if [[ -n "${DRY_RUN:-}" ]]; then
-    log "DRY_RUN : ce qui serait fait (rien n'est lancé)"
-    printf '  snapshot : %s\n  image    : %s\n  attendu  : %s\n' "$path" "$image" "${expect:-?}"
-    exit 0
-  fi
-
-  (( keep )) || trap drill_stop EXIT
-
-  log "Instance jetable ($image) — la prod n'est pas touchée"
-  drill_start "$image" "$snapdir"
+  log "Instance locale ($DRILL_IMAGE) — la prod n'est pas touchée"
+  drill_start "$DRILL_IMAGE" "$snapdir"
 
   # --- Init jetable. On ne restaure pas dans un coffre non initialisé. Ces clés meurent au
-  # restore : une seule part suffit, et elle n'est jamais écrite sur disque hors du WORKDIR.
-  local init before after
+  # restore : une seule part suffit, et elle n'est jamais écrite sur disque.
+  local init
   init="$(bao_drill operator init -key-shares=1 -key-threshold=1 -format=json)"
   bao_drill operator unseal "$(jq -r '.unseal_keys_b64[0]' <<<"$init")" >/dev/null
   DRILL_TOKEN="$(jq -r '.root_token' <<<"$init")"
-  before="$(drill_seal_config)"
-  log "Instance initialisée avec des clés jetables — parts/seuil : $before"
+  DRILL_BEFORE="$(drill_seal_config)"
+  log "Instance initialisée avec des clés jetables — parts/seuil : $DRILL_BEFORE"
 
   # --- Restore. `-force` est OBLIGATOIRE : la config de seal du snapshot diffère forcément de
   # celle qu'on vient de créer. Le message « Error properly closing policy file » est cosmétique
@@ -641,26 +692,26 @@ cmd_verify() {
   # Voir drill_restart : sans ce redémarrage, la mesure suivante lit une valeur périmée.
   log "Redémarrage de l'instance (obligatoire pour relire la configuration de seal restaurée)…"
   drill_restart
-  after="$(drill_seal_config)"
+  DRILL_AFTER="$(drill_seal_config)"
 
   echo
   log "Résultat"
-  printf '    parts/seuil avant restore : %s (instance jetable)\n' "$before"
-  printf '    parts/seuil après restore : %s\n' "$after"
-  (( prod_ok )) && printf '    parts/seuil de la prod    : %s\n' "$expect"
+  printf '    parts/seuil avant restore : %s (instance jetable)\n' "$DRILL_BEFORE"
+  printf '    parts/seuil après restore : %s\n' "$DRILL_AFTER"
+  (( DRILL_PROD_OK )) && printf '    parts/seuil de la prod    : %s\n' "$DRILL_EXPECT"
 
-  if [[ "$after" == "$before" ]]; then
+  if [[ "$DRILL_AFTER" == "$DRILL_BEFORE" ]]; then
     ko "La configuration de seal n'a pas changé : le restore n'a RIEN fait."
     ko "Le snapshot n'a pas été chargé — sauvegarde inexploitable."
     exit 1
   fi
 
-  if (( prod_ok )); then
-    if [[ "$after" == "$expect" ]]; then
+  if (( DRILL_PROD_OK )); then
+    if [[ "$DRILL_AFTER" == "$DRILL_EXPECT" ]]; then
       ok "L'instance a adopté la configuration de seal de la prod : le keyring du snapshot a été"
       ok "ouvert et vérifié. state.bin est intègre et le coffre est restaurable."
     else
-      ko "Configuration de seal inattendue ($after au lieu de $expect)."
+      ko "Configuration de seal inattendue ($DRILL_AFTER au lieu de $DRILL_EXPECT)."
       ko "Le snapshot vient d'un autre coffre, ou les clés de la prod ont été régénérées depuis."
       exit 1
     fi
@@ -668,24 +719,16 @@ cmd_verify() {
     ok "Le keyring du snapshot a été chargé (parts/seuil modifiés)."
     warn "Comparaison avec la prod impossible : contrôle partiel."
   fi
+}
 
-  if (( ! do_unseal )); then
-    echo
-    echo "    Test sans clé terminé. Pour aller jusqu'au contenu (parts de PROD + token root) :"
-    echo "      $(basename "$0") verify $ref --unseal"
-    (( prod_ok )) || exit 2
-    return 0
-  fi
-
-  # --- Descellement avec les parts de PROD. C'est ici, et seulement ici, que le test prouve que
-  # les parts EN TA POSSESSION ouvrent CETTE sauvegarde. Saisie masquée, jamais en argument :
-  # un `bao operator unseal <part>` sur la ligne de commande finit dans l'historique du shell.
-  echo
-  local threshold; threshold="${after#*/}"
-  log "Descellement — $threshold parts de PROD attendues (saisie masquée, rien n'est écrit sur disque)"
+# Descellement interactif de l'instance locale, avec les parts du coffre SOURCE. Saisie masquée et
+# jamais en argument : un `bao operator unseal <part>` sur la ligne de commande finit dans
+# l'historique du shell et dans la table des processus.
+drill_unseal_interactive() {
+  local threshold="$1" i part
   [[ -t 0 ]] || die "Descellement interactif impossible : l'entrée standard n'est pas un terminal."
 
-  local i part
+  log "Descellement — $threshold parts attendues (saisie masquée, rien n'est écrit sur disque)"
   for (( i = 1; i <= threshold; i++ )); do
     printf '    part %d/%s : ' "$i" "$threshold"
     read -r -s part; echo
@@ -700,15 +743,172 @@ cmd_verify() {
     ko "Toujours scellé après $threshold parts."
     exit 1
   fi
-  ok "Coffre DESCELLÉ avec les parts de prod."
+  ok "Coffre DESCELLÉ."
+}
 
-  printf '    token root de prod : '
+# Demande le token root du coffre RESTAURÉ (celui de la prod, pas celui de l'instance jetable :
+# le restore a remplacé la barrière, donc aussi les identités).
+drill_ask_token() {
+  [[ -t 0 ]] || die "Token requis mais l'entrée standard n'est pas un terminal."
+  printf '    token root du coffre restauré : '
   read -r -s DRILL_TOKEN; echo
   [[ -n "$DRILL_TOKEN" ]] || die "Token vide — abandon."
   bao_drill token lookup >/dev/null 2>&1 || die "Token refusé par le coffre restauré."
-  ok "Token root accepté."
+  ok "Token accepté."
+}
 
+# Rappel d'usage d'une instance laissée en vie. Toujours affiché au même endroit : c'est le seul
+# moment où l'on sait si elle est scellée ou non.
+drill_hints() {
+  local self; self="$(basename "$0")"
+  echo
+  log "Instance locale « $DRILL_NAME » LAISSÉE EN VIE"
+  printf '    API           : http://%s\n' "$DRILL_PORT"
+  printf '    UI            : http://%s/ui\n' "$DRILL_PORT"
+  if drill_sealed; then
+    printf '    état          : SCELLÉE — %s parts nécessaires\n' "${DRILL_AFTER#*/}"
+    echo   "    desceller     : $self unseal"
+  else
+    printf '    état          : descellée\n'
+  fi
+  echo   "    interroger    : $self bao kv list -mount=kv homelab"
+  echo   "    détruire      : $self stop"
+  warn "Une fois descellée, elle sert TOUS les secrets du homelab en clair. Ne pas l'oublier."
+}
+
+# --- verify -----------------------------------------------------------------------------------
+
+cmd_verify() {
+  local ref="" do_unseal=0 keep=0
+  while (( $# )); do
+    case "$1" in
+      --unseal)  do_unseal=1; shift ;;
+      --keep)    keep=1; shift ;;
+      --replace) DRILL_REPLACE=1; shift ;;
+      -h|--help) usage 0 ;;
+      -*)        die "Option inconnue : $1" ;;
+      *)         [[ -z "$ref" ]] || die "Un seul snapshot à la fois."; ref="$1"; shift ;;
+    esac
+  done
+  [[ -n "$ref" ]] || usage
+  require_bins docker tar jq
+  drill_guard_single
+
+  local path; path="$(resolve_ref "$ref")"
+  drill_reference
+
+  if [[ -n "${DRY_RUN:-}" ]]; then
+    log "DRY_RUN : ce qui serait fait (rien n'est lancé)"
+    printf '  snapshot : %s\n  image    : %s\n  attendu  : %s\n' "$path" "$DRILL_IMAGE" "${DRILL_EXPECT:-?}"
+    exit 0
+  fi
+
+  # `verify` est un TEST : il ne laisse rien derrière lui, sauf demande explicite. C'est la
+  # différence de contrat avec `up`, qui lui garde l'instance.
+  (( keep )) || trap drill_stop EXIT
+
+  drill_mount_snapshot "$path"
+
+  if (( ! do_unseal )); then
+    echo
+    echo "    Test sans clé terminé. Pour aller jusqu'au contenu (parts + token root) :"
+    echo "      $(basename "$0") verify $ref --unseal"
+    echo "    Pour garder une instance locale interrogeable :"
+    echo "      $(basename "$0") up $ref --unseal"
+    (( keep )) && drill_hints
+    (( DRILL_PROD_OK )) || exit 2
+    return 0
+  fi
+
+  echo
+  drill_unseal_interactive "${DRILL_AFTER#*/}"
+  drill_ask_token
   verify_contents
+  (( keep )) && drill_hints
+  return 0
+}
+
+# --- up ---------------------------------------------------------------------------------------
+
+# Même socle que `verify`, contrat inverse : l'instance SURVIT à la commande. Sert à fouiller un
+# coffre d'hier — comparer une valeur, récupérer un secret perdu, vérifier ce qui a changé — sans
+# jamais toucher à la prod. Nom de conteneur FIXE et instance unique : `stop` sait quoi détruire,
+# et on ne se retrouve pas avec trois coffres locaux dont on ne sait plus lequel contient quoi.
+cmd_up() {
+  local ref="" do_unseal=0
+  while (( $# )); do
+    case "$1" in
+      --unseal)  do_unseal=1; shift ;;
+      --replace) DRILL_REPLACE=1; shift ;;
+      -h|--help) usage 0 ;;
+      -*)        die "Option inconnue : $1" ;;
+      *)         [[ -z "$ref" ]] || die "Un seul snapshot à la fois."; ref="$1"; shift ;;
+    esac
+  done
+  [[ -n "$ref" ]] || usage
+  require_bins docker tar jq
+  drill_guard_single
+
+  local path; path="$(resolve_ref "$ref")"
+  drill_reference
+
+  if [[ -n "${DRY_RUN:-}" ]]; then
+    log "DRY_RUN : ce qui serait fait (rien n'est lancé)"
+    printf '  snapshot  : %s\n  image     : %s\n  conteneur : %s sur %s\n' \
+      "$path" "$DRILL_IMAGE" "$DRILL_NAME" "$DRILL_PORT"
+    exit 0
+  fi
+
+  # Pas de `trap drill_stop` ici, c'est tout l'intérêt. En contrepartie, une interruption au
+  # milieu laisse un conteneur à moitié monté : `stop` le rattrape, et le garde-fou d'instance
+  # unique force à passer par lui.
+  drill_mount_snapshot "$path"
+
+  if (( do_unseal )); then
+    echo
+    drill_unseal_interactive "${DRILL_AFTER#*/}"
+    drill_ask_token
+  fi
+
+  drill_hints
+}
+
+# --- unseal -----------------------------------------------------------------------------------
+
+# Desceller APRÈS COUP une instance montée par `up`. Existe parce qu'un `up` sans `--unseal` est le
+# bon réflexe (on monte d'abord, on décide ensuite si on sort les parts du coffre physique).
+cmd_unseal() {
+  require_bins docker jq
+  drill_running || die "Aucune instance locale en cours. La monter : $(basename "$0") up latest"
+
+  if ! drill_sealed; then
+    log "L'instance locale est déjà descellée."
+    return 0
+  fi
+  DRILL_AFTER="$(drill_seal_config)"
+  drill_unseal_interactive "${DRILL_AFTER#*/}"
+  drill_hints
+}
+
+# --- bao --------------------------------------------------------------------------------------
+
+# Passe-plat vers l'instance locale : `openbao-script.sh bao kv get -mount=kv homelab/argocd`.
+# Évite de retaper `docker exec -e BAO_ADDR=… openbao-drill bao …` à chaque fois, et surtout évite
+# de le retaper DE TRAVERS vers le coffre de prod.
+cmd_bao() {
+  require_bins docker
+  (( $# )) || die "Rien à exécuter. Exemple : $(basename "$0") bao kv list -mount=kv homelab"
+  drill_running || die "Aucune instance locale en cours. La monter : $(basename "$0") up latest"
+
+  if drill_sealed; then
+    warn "Instance SCELLÉE : la plupart des commandes vont échouer. Desceller : $(basename "$0") unseal"
+  fi
+  # -ti seulement si l'on est sur un terminal, sinon `docker exec` refuse.
+  local tty=(); [[ -t 0 && -t 1 ]] && tty=(-ti)
+  # Le token n'est PAS conservé entre deux appels : chaque invocation le redemande si nécessaire.
+  # C'est volontaire — un token root de prod ne se stocke pas dans un fichier de session.
+  docker exec "${tty[@]}" -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN="${BAO_TOKEN:-}" \
+    "$DRILL_NAME" bao "$@"
 }
 
 # Contrôle du contenu. La liste des chemins n'est PAS écrite ici : elle est dérivée des
@@ -794,11 +994,13 @@ verify_contents() {
 
 cmd_stop() {
   require_bins docker
-  if drill_running || docker inspect "$DRILL_NAME" >/dev/null 2>&1; then
+  if drill_exists; then
+    # Pas de confirmation : détruire cette instance est l'opération SÛRE. Ce qu'elle contient est
+    # une copie d'un snapshot qui, lui, est toujours dans le bucket — remontable en une commande.
     drill_stop
-    log "Instance jetable détruite (conteneur + volume)."
+    log "Instance locale « $DRILL_NAME » détruite (conteneur + volume)."
   else
-    log "Aucune instance jetable en cours."
+    log "Aucune instance locale en cours."
   fi
   # Le volume survit au conteneur et contient l'état restauré : le rappeler même quand il n'y a
   # rien à faire, parce que c'est exactement l'oubli qui laisse traîner tous les secrets.
@@ -910,6 +1112,9 @@ case "${1:-}" in
   fetch)    shift; cmd_fetch "$@" ;;
   check)    shift; cmd_check "$@" ;;
   verify)   shift; cmd_verify "$@" ;;
+  up)       shift; cmd_up "$@" ;;
+  unseal)   shift; cmd_unseal "$@" ;;
+  bao)      shift; cmd_bao "$@" ;;
   stop)     shift; cmd_stop "$@" ;;
   restore)  shift; cmd_restore "$@" ;;
   -h|--help|help) usage 0 ;;
