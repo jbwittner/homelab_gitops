@@ -6,6 +6,9 @@ resources:
   - grafana-httproute.yaml
   - grafana-oidc.externalsecret.yaml
   - grafana-admin.externalsecret.yaml
+  # Décommenter en même temps que le bloc alertmanager.config de helm-values.yaml, et seulement
+  # après avoir écrit la clé homelab/alertmanager/smtp dans le coffre (README § Notification mail).
+  # - alertmanager-smtp.externalsecret.yaml
   - dashboard-talos-nodes.yaml
   - dashboard-argocd.yaml
   - dashboard-ressources-cluster.yaml
@@ -15,4 +18,5 @@ resources:
   - dashboard-ressources-volumes.yaml
   - dashboard-logs.yaml
   - dashboard-velero.yaml
+  - dashboard-alertes.yaml
   - servicemonitors-argocd.yaml

@@ -31,6 +31,15 @@ spec:
         # `absent(up{...} == 1)` et non `up == 0` : un coffre scellé n'a pas de leader, donc le
         # Service `openbao-active` perd son endpoint et la série `up` DISPARAÎT au lieu de passer
         # à 0. Cette forme couvre les deux cas d'un coup — série absente ET série à 0.
+        #
+        # Les deux branches ne disent PAS la même chose, et la description le reflète :
+        #   - série absente ⇒ plus de cible du tout ⇒ coffre scellé / pod absent / raft sans leader
+        #   - série à 0     ⇒ cible présente mais scrape en échec ⇒ coffre debout, métriques KO
+        # Le second cas s'est produit (12→15/08/2026) : `unauthenticated_metrics_access` ajouté
+        # dans la ConfigMap 14 min APRÈS le démarrage du pod, et OpenBao ne relit pas sa config à
+        # chaud — trois jours de 403 sur /v1/sys/metrics, coffre parfaitement descellé pendant ce
+        # temps. Desceller un coffre déjà descellé ne donne aucun signal d'erreur : sans la
+        # distinction ci-dessous, l'alerte oriente vers la mauvaise action.
         - alert: OpenBaoNoActiveNode
           expr: absent(up{job="openbao-active"} == 1)
           for: 15m
@@ -38,7 +47,7 @@ spec:
             severity: warning
           annotations:
             summary: "OpenBao : aucun nœud actif"
-            description: "Coffre scellé (cas le plus courant, après tout redémarrage de pod), en panne, ou raft sans leader. Les Secret déjà matérialisés survivent (deletionPolicy: Retain) mais AUCUN secret ne se rafraîchit plus. Action : desceller, cf. le README d'openbao."
+            description: "Aucune cible `up == 1` pour le Service openbao-active. DÉPARTAGER LES DEUX CAS AVANT D'AGIR, avec `kubectl -n openbao exec openbao-0 -- bao status` : (1) `Sealed true` ⇒ coffre scellé, cas le plus courant, après tout redémarrage de pod — desceller, cf. le README d'openbao ; (2) `Sealed false` ⇒ le coffre tourne et c'est le SCRAPE qui échoue — lire `lastError` de la cible (Prometheus > Status > Targets, ou Grafana). 403 sur /v1/sys/metrics ⇒ la config chargée par le process n'a pas `unauthenticated_metrics_access`, la ConfigMap n'étant pas relue à chaud : redémarrer le pod (`kubectl -n openbao delete pod openbao-0`, puis desceller). Cible absente ⇒ vérifier le label `openbao-active=true` sur le pod. Dans le cas (1) seulement, aucun secret ne se rafraîchit plus — les Secret déjà matérialisés survivent (deletionPolicy: Retain)."
 
         # Même condition, horizon différent : passé ce délai, ce n'est plus un redémarrage en
         # cours, c'est un descellement que personne n'a fait.
@@ -49,7 +58,7 @@ spec:
             severity: critical
           annotations:
             summary: "OpenBao inactif depuis 3 h"
-            description: "Le coffre n'a pas de nœud actif depuis 3 heures. Toute rotation de secret au coffre est ignorée depuis, et le prochain renouvellement Let's Encrypt (solver DNS-01, token servi par openbao) échouera si l'état persiste."
+            description: "Le coffre n'a pas de nœud actif depuis 3 heures. Même diagnostic en deux cas que OpenBaoNoActiveNode, à faire d'abord : `bao status` scellé ⇒ desceller ; descellé ⇒ le coffre va bien et c'est la supervision qui est cassée (lire `lastError` de la cible), rien d'urgent côté secrets. Si le coffre est bien scellé : toute rotation de secret au coffre est ignorée depuis, et le prochain renouvellement Let's Encrypt (solver DNS-01, token servi par openbao) échouera si l'état persiste."
 
     - name: openbao.backup.rules
       rules:

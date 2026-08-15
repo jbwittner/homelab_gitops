@@ -1,0 +1,503 @@
+# cluster/app/kube-prometheus-stack/manifests/dashboard-alertes.yaml
+# Dashboard Grafana « Alertes — cluster »
+# Chargé automatiquement par le sidecar de kube-prometheus-stack via le label
+# grafana_dashboard: "1", rangé dans le dossier Wittnerlab par l'annotation grafana_folder.
+#
+# Source : `ALERTS` et `ALERTS_FOR_STATE`, deux séries que PROMETHEUS LUI-MÊME synthétise pour
+# chaque règle d'alerte évaluée. Aucune métrique d'application, aucune datasource supplémentaire —
+# c'est ce qui rend ce dashboard indépendant du reste : il continue de fonctionner même quand le
+# composant surveillé est mort, ce qui est précisément le moment où on l'ouvre.
+#
+# Pourquoi PAS le panneau « Alert list » de Grafana : il lit l'API d'un Alertmanager, or aucune
+# datasource de ce type n'est déclarée dans helm-values.yaml (seule `Loki` l'est). Tant que ce
+# câblage n'existe pas, les alertes se lisent via ALERTS — ce qui a l'avantage de donner
+# l'HISTORIQUE (le panneau Alert list ne montre que l'instant présent).
+#
+# Trois pièges, tous vérifiés contre le Prometheus du cluster :
+#
+#   1. `ALERTS_FOR_STATE` N'A PAS le label `alertstate`, `ALERTS` l'a. La jointure du tableau est
+#      donc `and ignoring(alertstate)` — sur `on(alertname)` deux instances d'une même règle se
+#      mélangeraient, et sans `ignoring` la jointure ne matche jamais rien (panneau vide, aucune
+#      erreur affichée).
+#
+#   2. `count(...)` sur un vecteur vide ne renvoie pas 0 : il ne renvoie RIEN, et les tuiles
+#      afficheraient « No data » là où « 0 alerte » est l'information voulue. D'où le
+#      `or vector(0)` sur les trois stats — zéro alerte critique doit se lire comme un état sain,
+#      pas comme une panne de dashboard.
+#
+#   3. LES LABELS NE SONT PAS LES MÊMES D'UNE RÈGLE À L'AUTRE, et c'est structurel : `absent(...)`
+#      ne peut porter que les labels écrits dans ses matchers. `OpenBaoNoActiveNode` sort donc
+#      avec `job="openbao-active"` et SANS `namespace`, tandis que `OpenBaoSnapshotTooOld` sort
+#      avec `namespace` et `cronjob`. Conséquence directe : le filtre de ce dashboard porte sur
+#      `alertname` (préfixe du composant), jamais sur `namespace` — un filtre par namespace
+#      masquerait silencieusement la moitié des alertes du coffre.
+#
+# Rétention : `ALERTS` n'existe que TANT QUE l'alerte est active. Une alerte résolue disparaît des
+# graphes au-delà de la fenêtre où elle a sonné, et tout disparaît à 15 j (rétention Prometheus).
+# Ce dashboard montre l'état et l'historique récent — il ne remplace pas un journal d'incidents.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-alertes
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: Wittnerlab
+data:
+  alertes.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "description": "État et historique des alertes Prometheus (openbao, velero, openebs, règles du chart). Source : séries ALERTS / ALERTS_FOR_STATE.",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "id": 100,
+          "panels": [],
+          "title": "État courant",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Alertes en severity=critical actuellement firing. `or vector(0)` obligatoire : sans lui, aucune alerte ⇒ « No data » au lieu de 0.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 1 },
+          "id": 1,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "13.1.3",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "count(ALERTS{alertstate=\"firing\", severity=\"critical\", alertname=~\"$composant\"}) or vector(0)",
+              "instant": true,
+              "legendFormat": "critiques",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Critiques",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Alertes en severity=warning actuellement firing.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 1 }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 1 },
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "13.1.3",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "count(ALERTS{alertstate=\"firing\", severity=\"warning\", alertname=~\"$composant\"}) or vector(0)",
+              "instant": true,
+              "legendFormat": "warnings",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Warnings",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Alertes `pending` : la condition est vraie mais le `for:` n'est pas écoulé. Rien à faire — c'est l'anti-rebond qui travaille. Une pending qui ne bascule jamais en firing est un `for:` bien calibré, pas un raté.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "text", "value": null },
+                  { "color": "yellow", "value": 1 }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
+          "id": 3,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "13.1.3",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "count(ALERTS{alertstate=\"pending\", alertname=~\"$composant\"}) or vector(0)",
+              "instant": true,
+              "legendFormat": "pending",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "En attente (pending)",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Une ligne par alerte firing, la plus ancienne en haut. « Depuis » vient de ALERTS_FOR_STATE, qui porte l'instant où la règle est devenue active — donc AVANT l'écoulement du `for:`, pas l'instant du passage en firing. Les colonnes job / namespace / cronjob sont vides pour les règles bâties sur `absent()` qui ne les déclarent pas dans leurs matchers : c'est normal, cf. l'en-tête du fichier. `Watchdog` (severity=none) est TOUJOURS présente, par construction : c'est le deadman switch du chart, une alerte qui sonne en permanence pour prouver que la chaîne d'alerting fonctionne. Sa disparition de ce tableau est le seul cas où elle veut dire quelque chose.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "custom": {
+                "align": "auto",
+                "cellOptions": { "type": "auto" },
+                "filterable": true,
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "text", "value": null }]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Value" },
+                "properties": [
+                  { "id": "displayName", "value": "Depuis" },
+                  { "id": "unit", "value": "s" },
+                  { "id": "custom.width", "value": 120 }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "severity" },
+                "properties": [
+                  { "id": "displayName", "value": "Sévérité" },
+                  { "id": "custom.width", "value": 110 },
+                  { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "critical": { "color": "red", "index": 0, "text": "critical" },
+                          "warning": { "color": "orange", "index": 1, "text": "warning" }
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "alertname" },
+                "properties": [
+                  { "id": "displayName", "value": "Alerte" },
+                  { "id": "custom.width", "value": 260 }
+                ]
+              }
+            ]
+          },
+          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 5 },
+          "id": 10,
+          "options": {
+            "cellHeight": "sm",
+            "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+            "showHeader": true,
+            "sortBy": [{ "desc": true, "displayName": "Depuis" }]
+          },
+          "pluginVersion": "13.1.3",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "time() - (ALERTS_FOR_STATE{alertname=~\"$composant\", severity=~\"$severity\"} and ignoring(alertstate) ALERTS{alertstate=\"firing\"})",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Alertes actives",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": { "Time": true, "__name__": true },
+                "includeByName": {},
+                "indexByName": {
+                  "alertname": 0,
+                  "severity": 1,
+                  "Value": 2,
+                  "namespace": 3,
+                  "job": 4
+                },
+                "renameByName": {}
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+          "id": 101,
+          "panels": [],
+          "title": "Historique",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Une bande par alerte : elle n'existe QUE pendant que l'alerte sonne. Un trou n'est donc pas une absence de données, c'est le retour à la normale — d'où `insertNulls: false` et l'absence de valeur « OK » dans la légende.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "custom": {
+                "fillOpacity": 85,
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineWidth": 0,
+                "spanNulls": false
+              },
+              "mappings": [
+                {
+                  "options": { "1": { "color": "red", "index": 0, "text": "firing" } },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "red", "value": null }]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 15 },
+          "id": 11,
+          "options": {
+            "alignValue": "left",
+            "legend": { "displayMode": "list", "placement": "right", "showLegend": true },
+            "mergeValues": true,
+            "rowHeight": 0.9,
+            "showValue": "never",
+            "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+          },
+          "pluginVersion": "13.1.3",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "ALERTS{alertstate=\"firing\", alertname=~\"$composant\", severity=~\"$severity\"}",
+              "legendFormat": "{{alertname}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Quand chaque alerte a sonné",
+          "type": "state-timeline"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Nombre d'alertes firing par sévérité. Sert à distinguer une panne franche (marche d'escalier) d'une alerte qui bat (dents de scie) — la seconde appelle un ajustement du `for:`, pas une intervention.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": { "type": "linear" },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": { "group": "A", "mode": "none" },
+                "thresholdsStyle": { "mode": "off" }
+              },
+              "decimals": 0,
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "critical" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "warning" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+              }
+            ]
+          },
+          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 25 },
+          "id": 12,
+          "options": {
+            "legend": {
+              "calcs": ["max"],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+          },
+          "pluginVersion": "13.1.3",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "sum by (severity) (ALERTS{alertstate=\"firing\", alertname=~\"$composant\", severity=~\"$severity\"})",
+              "legendFormat": "{{severity}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Alertes firing dans le temps",
+          "type": "timeseries"
+        }
+      ],
+      "preload": false,
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": ["wittnerlab", "alertes"],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "allValue": ".*",
+            "current": {},
+            "description": "Filtre par PRÉFIXE d'alertname, et non par namespace : les règles bâties sur absent() ne portent que les labels de leurs matchers, donc plusieurs alertes openbao n'ont aucun label namespace. Filtrer par namespace en masquerait la moitié sans le dire.",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Composant",
+            "multi": true,
+            "name": "composant",
+            "options": [],
+            "query": "OpenBao : OpenBao.*, Velero : Velero.*, OpenEBS : OpenEBS.*, Kubernetes (chart) : Kube.*",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          },
+          {
+            "allValue": ".+",
+            "current": {},
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "definition": "label_values(ALERTS, severity)",
+            "description": "Alimenté par les alertes RÉELLEMENT présentes dans Prometheus : une sévérité qui n'a jamais sonné n'apparaît pas dans la liste.",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Sévérité",
+            "multi": true,
+            "name": "severity",
+            "options": [],
+            "query": {
+              "qryType": 1,
+              "query": "label_values(ALERTS, severity)",
+              "refId": "severity"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": { "from": "now-2d", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Alertes — cluster",
+      "uid": "cluster-alertes",
+      "version": 1,
+      "weekStart": ""
+    }

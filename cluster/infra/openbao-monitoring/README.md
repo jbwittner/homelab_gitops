@@ -100,6 +100,36 @@ schéma que [openebs-monitoring](../openebs-monitoring/README.md).
   C'est la seule base saine pour ajouter une règle sur l'état du raft, les leases ou les tokens :
   copier le nom EXACT vu ici, puis vérifier l'expression dans l'onglet Graph de Prometheus avant
   de la committer.
-- **Alerte qui sonne alors que le coffre tourne** : vérifier d'abord que le pod porte bien
-  `openbao-active=true` (`kubectl -n openbao get pod openbao-0 --show-labels`) — sans
-  `service_registration`, le label n'est jamais posé et la cible n'existe pas.
+- **Alerte qui sonne alors que le coffre tourne.** `absent(up{...} == 1)` a deux branches et
+  elles n'appellent pas la même action — `bao status` d'abord, jamais `unseal` par réflexe :
+  ```bash
+  kubectl -n openbao exec openbao-0 -- bao status          # Sealed true ⇒ desceller, point.
+  ```
+  Si `Sealed false`, le coffre va bien et c'est le **scrape** qui échoue. Lire le motif :
+  ```bash
+  kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+  curl -s 'localhost:9090/api/v1/targets?state=any' | jq '.data.activeTargets[]
+    | select(.labels.job=="openbao-active") | {health, lastError}'
+  ```
+  - `403 Forbidden` sur `/v1/sys/metrics` ⇒ le process n'a pas
+    `unauthenticated_metrics_access` dans la config qu'il a **chargée**. OpenBao lit sa config au
+    démarrage et ne la relit pas à chaud (SIGHUP ne couvre que TLS et log level) : une ConfigMap
+    à jour dans Git et montée dans le pod ne prouve RIEN. Comparer les dates avant d'accuser
+    ArgoCD :
+    ```bash
+    kubectl -n openbao get pod openbao-0 -o jsonpath='{.status.startTime}{"\n"}'
+    kubectl -n openbao get cm openbao-config -o jsonpath='{.metadata.managedFields[*].time}{"\n"}'
+    ```
+    ConfigMap plus récente que le pod ⇒ `kubectl -n openbao delete pod openbao-0`, **puis
+    desceller** (`updateStrategy: OnDelete` sur le StatefulSet, choix du chart : pas de rollout
+    automatique justement parce que le descellement est manuel — `kubectl rollout status` est
+    inutilisable ici, il refuse tout ce qui n'est pas `RollingUpdate`).
+  - **cible absente** de la liste ⇒ vérifier le label `openbao-active=true`
+    (`kubectl -n openbao get pod openbao-0 --show-labels`) : sans `service_registration`, il
+    n'est jamais posé et le Service n'a pas d'endpoint.
+
+  Vécu le 12→15/08/2026 : `unauthenticated_metrics_access` committé 14 minutes après le
+  démarrage du pod, trois jours de 403 sur un coffre parfaitement descellé. `bao operator unseal`
+  sur un coffre déjà descellé répond `Sealed false` sans le moindre avertissement — c'est ce qui
+  rend ce cas coûteux à diagnostiquer, et pourquoi les descriptions des deux alertes portent
+  désormais le départage.

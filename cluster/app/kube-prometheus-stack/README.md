@@ -40,6 +40,12 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - `manifests/dashboard-logs.yaml` — dashboard « Logs — applications » (datasource
   [Loki](../loki/README.md)) : débit, niveaux, erreurs, conteneurs les plus bavards, journal
   filtrable
+- `manifests/dashboard-alertes.yaml` — dashboard « Alertes — cluster » : tuiles critiques /
+  warnings / pending, tableau des alertes actives avec leur ancienneté, historique par alerte,
+  courbe par sévérité. Variables Composant (openbao / velero / openebs / chart) et Sévérité
+- `manifests/alertmanager-smtp.externalsecret.yaml` — `ExternalSecret` `alertmanager-smtp`, clés
+  `username` / `password` du relais SMTP. **Non référencé dans `kustomization.yaml`** tant que la
+  clé n'est pas dans le coffre (cf. § Notification mail)
 - `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD
 - `manifests/kustomization.yaml` — assemblage
 
@@ -194,6 +200,88 @@ avant d'y toucher :
   d'où une variable `custom` et non un `label_values()`.
 - Le filtre **Niveau n'agit que sur le panneau Logs**, volontairement : appliqué partout, il
   ferait afficher zéro à la tuile « Erreurs/s » dès qu'on sélectionne `info`.
+
+### Dashboard « Alertes — cluster »
+
+Vue unique sur les règles de tous les composants — [openbao-monitoring](../../infra/openbao-monitoring/README.md),
+[velero-monitoring](../../infra/velero-monitoring/README.md),
+[openebs-monitoring](../../infra/openebs-monitoring/README.md) et celles du chart. Il ne lit
+**aucune** métrique d'application : uniquement `ALERTS` et `ALERTS_FOR_STATE`, synthétisées par
+Prometheus. C'est délibéré — il reste lisible quand le composant surveillé est mort, ce qui est le
+seul moment où on l'ouvre.
+
+- **Pas de panneau « Alert list »** : il interroge un Alertmanager, or aucune datasource de ce
+  type n'est déclarée dans `helm-values.yaml`. `ALERTS` s'en passe et donne en plus l'historique,
+  qu'Alert list ne montre pas. Ajouter la datasource reste utile pour les **silences**, absents
+  d'ici.
+- **Le filtre Composant porte sur `alertname`, jamais sur `namespace`**, et ce n'est pas un
+  raccourci : une règle bâtie sur `absent(...)` ne peut porter que les labels écrits dans ses
+  matchers. `OpenBaoNoActiveNode` sort avec `job` et sans `namespace`, `OpenBaoSnapshotTooOld`
+  avec `namespace` et `cronjob`. Un filtre par namespace masquerait la moitié des alertes du
+  coffre sans rien signaler.
+- **`ALERTS_FOR_STATE` n'a pas le label `alertstate`**, `ALERTS` l'a : d'où le
+  `and ignoring(alertstate)` du tableau. Une jointure `on(alertname)` mélangerait deux instances
+  d'une même règle ; sans `ignoring`, elle ne matche rien — tableau vide, aucune erreur.
+- **`count()` sur vecteur vide ne rend pas 0, il ne rend rien** : les trois tuiles portent
+  `or vector(0)`, sans quoi « aucune alerte » s'afficherait « No data ».
+- **`Watchdog` est toujours dans le tableau** (`severity=none`) : deadman switch du chart, une
+  alerte qui sonne en permanence pour prouver que la chaîne fonctionne. Sa **disparition** est le
+  seul événement qu'elle signale.
+- **`ALERTS` n'existe que pendant que l'alerte sonne** : une alerte résolue sort des graphes, et
+  tout disparaît à 15 j (rétention). Ce dashboard n'est pas un journal d'incidents.
+- **Il n'y a toujours aucune notification** : sans receiver Alertmanager, une alerte n'existe que
+  si quelqu'un ouvre cette page.
+
+### Notification mail des alertes critiques (livré, DÉSACTIVÉ)
+
+Tout est écrit — `manifests/alertmanager-smtp.externalsecret.yaml`, le bloc `alertmanager.config`
+de `helm-values.yaml` — mais **volontairement inactif** : `alertmanagerSpec.secrets` monte le
+Secret `alertmanager-smtp` comme volume, et un volume dont le Secret n'existe pas laisse le pod
+Alertmanager en `ContainerCreating` **indéfiniment**. Activer avant d'avoir la clé SMTP casserait
+donc l'alerting pour l'installer. Les trois morceaux se décommentent ensemble, dans cet ordre :
+
+1. **Créer la clé SMTP chez le relais** (Brevo, Mailjet, SMTP2GO — offre gratuite suffisante).
+   Relever le **login SMTP** (un identifiant dédié, `9xxxxx@smtp-brevo.com` chez Brevo, pas
+   l'adresse du compte) et la **clé**. Valider l'adresse d'expéditeur choisie pour `smtp_from`,
+   sinon le relais accepte les mails et les jette sans rien renvoyer à Alertmanager.
+2. **Écrire la paire dans le coffre**, coffre descellé :
+   ```bash
+   bao kv put kv/homelab/alertmanager/smtp username='9xxxxx@smtp-brevo.com' password='<clé SMTP>'
+   ```
+3. **Décommenter**, en une seule fois : la ligne `alertmanager-smtp.externalsecret.yaml` de
+   `manifests/kustomization.yaml`, le `secrets:` d'`alertmanagerSpec` et le bloc
+   `alertmanager.config` de `helm-values.yaml`. Y renseigner `smtp_auth_username` et `smtp_from`.
+   Commit → ArgoCD applique.
+4. **Vérifier**, dans l'ordre — chaque étape a son mode d'échec propre :
+   ```bash
+   kubectl -n monitoring get externalsecret alertmanager-smtp   # SecretSynced ?
+   kubectl -n monitoring get secret alertmanager-smtp           # matérialisé ?
+   kubectl -n monitoring get pod -l app.kubernetes.io/name=alertmanager   # Running, pas ContainerCreating
+   kubectl -n monitoring logs sts/alertmanager-kube-prometheus-stack-alertmanager -c alertmanager | grep -i smtp
+   ```
+   Puis un vrai mail, sans attendre une panne — router temporairement `Watchdog` vers
+   `email-critique` au lieu de `"null"`, commit, attendre le mail, remettre. Le deadman switch
+   sonne en permanence : c'est le seul générateur d'alerte fiable dont on dispose pour un test.
+
+Ce que ce câblage décide, et qui se relit dans les commentaires du bloc :
+
+- **`config` REMPLACE la configuration par défaut du chart, elle ne s'y ajoute pas.** Les
+  `inhibit_rules` recopiées sont celles du chart : sans elles, un composant en `critical` enverrait
+  aussi ses `warning` — plusieurs mails pour une seule panne.
+- **Seul `severity = critical` part en mail.** Les warnings restent dans Grafana. Un mail qu'on
+  finit par filtrer ne vaut pas mieux que pas de mail.
+- **`Watchdog` est explicitement routé vers `"null"`** : il sonne toujours, il produirait une
+  notification toutes les 4 h à vie. Sa valeur est de disparaître, ce qu'un mail ne peut pas dire —
+  seul un service externe (healthchecks.io et consorts) peut surveiller ce silence, **et rien ne le
+  fait aujourd'hui** : si Prometheus lui-même tombe, aucun mail ne partira jamais.
+- **`repeat_interval: 4h`** au lieu des 12 h du chart : une panne du soir ne doit pas attendre le
+  matin pour son premier rappel.
+- **`smtp_auth_password_file`, jamais `smtp_auth_password`** : le mot de passe vient du volume, ce
+  qui garde `helm-values.yaml` publiable. Le login, lui, est en clair — Alertmanager n'a pas de
+  `smtp_auth_username_file`.
+- **`tplConfig: false`** dans ce chart (vérifié en 88.2.0) : les `{{ }}` du `Subject` partent tels
+  quels vers Alertmanager. Si ce flag passait à `true`, Helm les interpréterait d'abord et le sujet
+  arriverait vide — il faudrait les échapper.
 
 ### Accès Prometheus / Alertmanager (non exposés)
 
