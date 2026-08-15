@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velero-volume-policies
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/part-of: homelab-gitops
+# Correctif de la contrepartie assumée du mode OPT-OUT (`defaultVolumesToFsBackup: true`,
+# helm-values.yaml) : « tout volume est sauvegardé sans annotation sur le pod » vaut aussi pour les
+# volumes qui n'ont, par construction, rien à sauvegarder. Un `emptyDir` naît vide au démarrage du
+# pod et meurt avec lui : le restaurer ne restaure rien, et le contenu capturé est au mieux du
+# scratch (`shm` et `scratch-data` de CNPG, `home` d'openbao).
+#
+# Ce n'est pas qu'une question de bruit : c'est aussi la cause de l'échec de
+# `velero-daily-20260815030017` (phase `PartiallyFailed`). Le CronJob `openbao-snapshot` tourne à
+# 03:00, la Schedule velero aussi ; velero crée un `podvolumebackup` sur le `snapshot-dir`
+# (emptyDir de transit du `bao operator raft snapshot save` avant upload s3cmd) du pod de Job, mais
+# kubelet a démonté le volume dès la fin du pod, avant que le node-agent ne l'ouvre :
+#
+#   error to expose PVB: error to get pod volume path: [...] expected one matching path:
+#   /host_pods/<uid>/volumes/*/snapshot-dir, got 0
+#
+# Course structurelle, pas transitoire : décaler les deux horaires ne la ferme pas, le CronJob
+# gardant ses pods terminés (`successfulJobsHistoryLimit`, non exposé par le chart openbao). La
+# voie annotation `backup.velero.io/backup-volumes-excludes` est fermée elle aussi : le chart
+# openbao-0.29.0 n'expose d'annotations que sur l'objet CronJob (`snapshotAgent.annotations`), pas
+# sur le `podTemplate` que lit velero. D'où le levier côté velero, qui a en plus le mérite d'être
+# une RÈGLE ET NON UNE EXCEPTION — elle vaut pour tout pod à venir, sans rien à retenir.
+#
+# Portée : `skip` ne concerne QUE la copie de données (fs-backup/kopia). Les objets Kubernetes
+# eux-mêmes (Pod, Job, ConfigMap…) restent sauvegardés, donc restaurables.
+data:
+  policies.yaml: |
+    version: v1
+    volumePolicies:
+      - conditions:
+          volumeTypes:
+            - emptyDir
+        action:
+          type: skip

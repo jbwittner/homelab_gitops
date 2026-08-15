@@ -13,7 +13,11 @@ le même mécanisme :
 Le second volet n'est pas optionnel ici : le stockage est
 [openebs](../openebs/README.md) LocalPV-**LVM**, dont les snapshots CSI sont *node-locaux* — ils
 disparaissent avec le nœud qui porte le LV, donc ne constituent pas une sauvegarde. C'est pourquoi
-`defaultVolumesToFsBackup` est activé et les snapshots de volume coupés.
+`defaultVolumesToFsBackup` est activé et les snapshots de volume coupés. Ce mode opt-out ramasse en
+retour des volumes sans contenu restaurable — un `emptyDir` naît vide avec le pod et meurt avec lui ;
+sur un pod de Job déjà terminé, kubelet l'a même démonté avant que le node-agent ne l'ouvre, ce qui
+fait échouer la sauvegarde entière (`PartiallyFailed`). Une politique de volumes les ignore donc :
+`manifests/volume-policies.yaml`.
 
 Ce composant ne remplace pas les sauvegardes applicatives natives : les snapshots raft
 d'[openbao](../openbao/README.md) et les backups CNPG restent la voie de restauration *cohérente*
@@ -27,6 +31,9 @@ d'une base ; velero est le filet de niveau cluster.
   schedule quotidienne, snapshots de volume et Job de CRDs coupés (chaque choix est commenté sur
   place)
 - `manifests/namespace.yaml` — ns `velero` (wave `-1`), labellisé **`privileged`**
+- `manifests/volume-policies.yaml` — ConfigMap `velero-volume-policies`, garde-fou du mode opt-out :
+  ignore la copie des `emptyDir`. Référencée par la Schedule (`template.resourcePolicy`,
+  `helm-values.yaml`) ; le raisonnement est commenté sur place
 - `velero-script.sh` — les gestes opérationnels : `list`, `show`, `backup`, `restore`, `delete`. Le
   périmètre y est toujours **dérivé** (d'une Schedule pour un backup, du Backup source pour un
   restore) et jamais retapé ; le nombre de volumes copiés est affiché partout. Ce n'est **pas** la

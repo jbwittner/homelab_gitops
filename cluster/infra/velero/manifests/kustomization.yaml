@@ -7,3 +7,6 @@ resources:
   # (velero-gcs, velero) : une rotation de la clé se refait passer par `kubeseal` et un commit
   # (README, section Opérations).
   - velero-gcs.sealed.yaml
+  # Politique de volumes consommée par la Schedule (`template.resourcePolicy`, helm-values.yaml) :
+  # neutralise la copie des `emptyDir` que le mode opt-out ramasserait sinon.
+  - volume-policies.yaml

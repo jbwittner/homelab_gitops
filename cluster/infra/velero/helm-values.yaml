@@ -144,3 +144,11 @@ schedules:
         - openbao
         - test-nginx
       snapshotVolumes: false   # cohérent avec snapshotsEnabled: false — les données passent par kopia
+      # Garde-fou du mode opt-out : ignore la copie des `emptyDir` (rien à restaurer par
+      # construction) et, au passage, ferme la course qui faisait échouer la sauvegarde sur le
+      # `snapshot-dir` du CronJob openbao. Le raisonnement complet est dans le ConfigMap lui-même,
+      # rendu par `manifests/volume-policies.yaml`. Référence NON validée à la création de la
+      # Schedule : un nom erroné n'échouerait qu'au premier backup déclenché.
+      resourcePolicy:
+        kind: configmap
+        name: velero-volume-policies
