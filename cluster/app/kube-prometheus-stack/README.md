@@ -41,8 +41,9 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   [Loki](../loki/README.md)) : débit, niveaux, erreurs, conteneurs les plus bavards, journal
   filtrable
 - `manifests/dashboard-alertes.yaml` — dashboard « Alertes — cluster » : tuiles critiques /
-  warnings / pending, tableau des alertes actives avec leur ancienneté, historique par alerte,
-  courbe par sévérité. Variables Composant (openbao / velero / openebs / chart) et Sévérité
+  warnings / pending / chaîne d'alerting, tableau des alertes **firing et pending** avec leur
+  ancienneté, historique par alerte, courbe par sévérité. Variables Composant (openbao / velero /
+  openebs / chart) et Sévérité
 - `manifests/alertmanager-smtp.externalsecret.yaml` — `ExternalSecret` `alertmanager-smtp`, clés
   `username` / `password` du relais SMTP. **Non référencé dans `kustomization.yaml`** tant que la
   clé n'est pas dans le coffre (cf. § Notification mail)
@@ -214,6 +215,24 @@ seul moment où on l'ouvre.
   type n'est déclarée dans `helm-values.yaml`. `ALERTS` s'en passe et donne en plus l'historique,
   qu'Alert list ne montre pas. Ajouter la datasource reste utile pour les **silences**, absents
   d'ici.
+- **Le tableau montre `pending` autant que `firing`**, et c'est le choix qui le rend utile. Une
+  règle passe `pending` dès que sa condition est vraie et n'atteint `firing` qu'après son `for:` —
+  15 min pour la plupart, 3 h pour `OpenBaoSealedTooLong`. Limité à `firing`, le tableau restait
+  vide pendant tout le quart d'heure suivant une panne, à côté d'une tuile affichant « 3 ».
+- **Récupérer l'état dans le tableau demande un `group_left`** : `ALERTS_FOR_STATE` porte l'âge
+  sans le label `alertstate`, `ALERTS` porte l'état sans l'âge. D'où
+  `(time() - ALERTS_FOR_STATE) * ignoring(alertstate) group_left(alertstate) ALERTS` — la
+  multiplication par 1 laisse l'âge intact et greffe le label.
+- **La timeline code l'état dans la VALEUR** (`* 2` sur la branche firing → 1 = pending,
+  2 = firing) : `ALERTS` vaut 1 dans les deux états, une bande unie ne distinguerait rien. Le
+  `max by (alertname)` retire `alertstate` des labels, sans quoi chaque alerte occuperait deux
+  lignes de l'axe Y.
+- **`Watchdog` est exclu de tous les panneaux et remplacé par la tuile « Chaîne d'alerting »**
+  (`absent(ALERTS{alertname="Watchdog"}) or vector(0)` → OK / MUETTE). Deadman switch du chart :
+  il sonne en permanence, donc il occupait la seule ligne du tableau en temps normal et ajoutait
+  aux graphes une série `severity=none` constamment à 1 qui décalait l'échelle. Son information
+  est sa **disparition** — la tuile au rouge veut dire que Prometheus n'évalue plus, et qu'aucune
+  autre tuile de la page n'est alors digne de confiance, y compris les vertes.
 - **Le filtre Composant porte sur `alertname`, jamais sur `namespace`**, et ce n'est pas un
   raccourci : une règle bâtie sur `absent(...)` ne peut porter que les labels écrits dans ses
   matchers. `OpenBaoNoActiveNode` sort avec `job` et sans `namespace`, `OpenBaoSnapshotTooOld`
@@ -222,11 +241,8 @@ seul moment où on l'ouvre.
 - **`ALERTS_FOR_STATE` n'a pas le label `alertstate`**, `ALERTS` l'a : d'où le
   `and ignoring(alertstate)` du tableau. Une jointure `on(alertname)` mélangerait deux instances
   d'une même règle ; sans `ignoring`, elle ne matche rien — tableau vide, aucune erreur.
-- **`count()` sur vecteur vide ne rend pas 0, il ne rend rien** : les trois tuiles portent
+- **`count()` sur vecteur vide ne rend pas 0, il ne rend rien** : les quatre tuiles portent
   `or vector(0)`, sans quoi « aucune alerte » s'afficherait « No data ».
-- **`Watchdog` est toujours dans le tableau** (`severity=none`) : deadman switch du chart, une
-  alerte qui sonne en permanence pour prouver que la chaîne fonctionne. Sa **disparition** est le
-  seul événement qu'elle signale.
 - **`ALERTS` n'existe que pendant que l'alerte sonne** : une alerte résolue sort des graphes, et
   tout disparaît à 15 j (rétention). Ce dashboard n'est pas un journal d'incidents.
 - **Il n'y a toujours aucune notification** : sans receiver Alertmanager, une alerte n'existe que

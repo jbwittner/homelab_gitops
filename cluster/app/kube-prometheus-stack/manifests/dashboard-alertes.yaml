@@ -13,24 +13,38 @@
 # câblage n'existe pas, les alertes se lisent via ALERTS — ce qui a l'avantage de donner
 # l'HISTORIQUE (le panneau Alert list ne montre que l'instant présent).
 #
-# Trois pièges, tous vérifiés contre le Prometheus du cluster :
+# Cinq pièges, tous constatés sur le Prometheus du cluster :
 #
-#   1. `ALERTS_FOR_STATE` N'A PAS le label `alertstate`, `ALERTS` l'a. La jointure du tableau est
-#      donc `and ignoring(alertstate)` — sur `on(alertname)` deux instances d'une même règle se
-#      mélangeraient, et sans `ignoring` la jointure ne matche jamais rien (panneau vide, aucune
-#      erreur affichée).
+#   1. LE TABLEAU MONTRE `pending` AUTANT QUE `firing`, et c'est le point le plus important de ce
+#      fichier. Une règle passe `pending` dès que sa condition est vraie, et n'arrive à `firing`
+#      qu'après son `for:` — 15 min pour la plupart, 3 h pour OpenBaoSealedTooLong. Un tableau
+#      limité à `firing` reste donc VIDE pendant tout le quart d'heure qui suit une panne, à côté
+#      d'une tuile qui affiche « 3 ». C'est l'état par lequel passe toute panne, celui qu'on
+#      regarde en premier, et l'omettre rendait le tableau inutile exactement quand il sert.
 #
-#   2. `count(...)` sur un vecteur vide ne renvoie pas 0 : il ne renvoie RIEN, et les tuiles
+#   2. Récupérer l'état DANS le tableau demande un `group_left` : `ALERTS_FOR_STATE` porte l'âge
+#      mais pas le label `alertstate`, `ALERTS` porte l'état mais pas l'âge. D'où
+#      `(time() - ALERTS_FOR_STATE) * ignoring(alertstate) group_left(alertstate) ALERTS` — la
+#      multiplication par 1 laisse l'âge intact et greffe le label. `on(alertname)` à la place
+#      d'`ignoring(alertstate)` mélangerait deux instances d'une même règle ; sans `ignoring`,
+#      rien ne matche et le tableau est vide sans erreur.
+#
+#   3. `count()` sur un vecteur vide ne renvoie pas 0 : il ne renvoie RIEN, et les tuiles
 #      afficheraient « No data » là où « 0 alerte » est l'information voulue. D'où le
-#      `or vector(0)` sur les trois stats — zéro alerte critique doit se lire comme un état sain,
-#      pas comme une panne de dashboard.
+#      `or vector(0)`, sur les tuiles comme sur la tuile Watchdog.
 #
-#   3. LES LABELS NE SONT PAS LES MÊMES D'UNE RÈGLE À L'AUTRE, et c'est structurel : `absent(...)`
+#   4. LES LABELS NE SONT PAS LES MÊMES D'UNE RÈGLE À L'AUTRE, et c'est structurel : `absent(...)`
 #      ne peut porter que les labels écrits dans ses matchers. `OpenBaoNoActiveNode` sort donc
 #      avec `job="openbao-active"` et SANS `namespace`, tandis que `OpenBaoSnapshotTooOld` sort
 #      avec `namespace` et `cronjob`. Conséquence directe : le filtre de ce dashboard porte sur
 #      `alertname` (préfixe du composant), jamais sur `namespace` — un filtre par namespace
 #      masquerait silencieusement la moitié des alertes du coffre.
+#
+#   5. `Watchdog` est exclu PARTOUT (`alertname!="Watchdog"`) et remplacé par une tuile dédiée.
+#      C'est le deadman switch du chart : il sonne en permanence, par construction. Laissé dans le
+#      tableau il en occupe la seule ligne en temps normal ; laissé dans les graphes il ajoute une
+#      série `severity=none` toujours à 1 qui écrase l'échelle. Son information n'est pas sa
+#      présence mais sa DISPARITION, ce qu'une tuile `absent(...)` dit mieux qu'une ligne de plus.
 #
 # Rétention : `ALERTS` n'existe que TANT QUE l'alerte est active. Une alerte résolue disparaît des
 # graphes au-delà de la fenêtre où elle a sonné, et tout disparaît à 15 j (rétention Prometheus).
@@ -79,7 +93,7 @@ data:
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Alertes en severity=critical actuellement firing. `or vector(0)` obligatoire : sans lui, aucune alerte ⇒ « No data » au lieu de 0.",
+          "description": "Alertes severity=critical actuellement firing, c'est-à-dire dont le `for:` est écoulé. Ce sont les seules qui partiraient en mail si la notification était activée.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -95,7 +109,7 @@ data:
             },
             "overrides": []
           },
-          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 1 },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
           "id": 1,
           "options": {
             "colorMode": "background",
@@ -117,12 +131,12 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Critiques",
+          "title": "Critiques (firing)",
           "type": "stat"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Alertes en severity=warning actuellement firing.",
+          "description": "Alertes severity=warning actuellement firing.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -138,7 +152,7 @@ data:
             },
             "overrides": []
           },
-          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 1 },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
           "id": 2,
           "options": {
             "colorMode": "background",
@@ -160,12 +174,12 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Warnings",
+          "title": "Warnings (firing)",
           "type": "stat"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Alertes `pending` : la condition est vraie mais le `for:` n'est pas écoulé. Rien à faire — c'est l'anti-rebond qui travaille. Une pending qui ne bascule jamais en firing est un `for:` bien calibré, pas un raté.",
+          "description": "Condition vraie, `for:` pas encore écoulé. Ces alertes sont dans le tableau ci-dessous avec l'état `pending` — c'est là qu'on voit une panne AVANT qu'elle ne devienne officielle. Bleu et non jaune : rien à faire à ce stade, l'anti-rebond travaille.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -174,14 +188,14 @@ data:
                 "mode": "absolute",
                 "steps": [
                   { "color": "text", "value": null },
-                  { "color": "yellow", "value": 1 }
+                  { "color": "blue", "value": 1 }
                 ]
               },
               "unit": "none"
             },
             "overrides": []
           },
-          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
           "id": 3,
           "options": {
             "colorMode": "background",
@@ -203,12 +217,63 @@ data:
               "refId": "A"
             }
           ],
-          "title": "En attente (pending)",
+          "title": "En incubation (pending)",
           "type": "stat"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Une ligne par alerte firing, la plus ancienne en haut. « Depuis » vient de ALERTS_FOR_STATE, qui porte l'instant où la règle est devenue active — donc AVANT l'écoulement du `for:`, pas l'instant du passage en firing. Les colonnes job / namespace / cronjob sont vides pour les règles bâties sur `absent()` qui ne les déclarent pas dans leurs matchers : c'est normal, cf. l'en-tête du fichier. `Watchdog` (severity=none) est TOUJOURS présente, par construction : c'est le deadman switch du chart, une alerte qui sonne en permanence pour prouver que la chaîne d'alerting fonctionne. Sa disparition de ce tableau est le seul cas où elle veut dire quelque chose.",
+          "description": "Watchdog est le deadman switch du chart : une alerte qui sonne EN PERMANENCE, dont la seule information est de s'arrêter. Tant qu'elle est là, la chaîne évaluation → règles → Prometheus fonctionne. Cette tuile au rouge signifie que Prometheus n'évalue plus — aucune autre alerte de ce dashboard n'est alors digne de confiance, y compris les trois tuiles vertes à gauche.",
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "mappings": [
+                {
+                  "options": {
+                    "0": { "color": "green", "index": 0, "text": "OK" },
+                    "1": { "color": "red", "index": 1, "text": "MUETTE" }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "id": 4,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "textMode": "auto"
+          },
+          "pluginVersion": "13.1.3",
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+              "editorMode": "code",
+              "expr": "absent(ALERTS{alertname=\"Watchdog\"}) or vector(0)",
+              "instant": true,
+              "legendFormat": "watchdog",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Chaîne d'alerting",
+          "type": "stat"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "description": "Alertes actives, `firing` en tête puis `pending`. « Depuis » vient de ALERTS_FOR_STATE : c'est l'instant où la condition est devenue vraie, donc AVANT l'écoulement du `for:` — une alerte pending depuis 20 min avec un `for: 3h` est normale. Les colonnes job / namespace / cronjob sont vides pour les règles bâties sur `absent()` qui ne les déclarent pas dans leurs matchers, cf. l'en-tête du fichier. Watchdog est exclu : il a sa tuile.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -230,7 +295,27 @@ data:
                 "properties": [
                   { "id": "displayName", "value": "Depuis" },
                   { "id": "unit", "value": "s" },
-                  { "id": "custom.width", "value": 120 }
+                  { "id": "custom.width", "value": 130 }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "alertstate" },
+                "properties": [
+                  { "id": "displayName", "value": "État" },
+                  { "id": "custom.width", "value": 110 },
+                  { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "firing": { "color": "red", "index": 0, "text": "firing" },
+                          "pending": { "color": "blue", "index": 1, "text": "pending" }
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  }
                 ]
               },
               {
@@ -257,32 +342,32 @@ data:
                 "matcher": { "id": "byName", "options": "alertname" },
                 "properties": [
                   { "id": "displayName", "value": "Alerte" },
-                  { "id": "custom.width", "value": 260 }
+                  { "id": "custom.width", "value": 280 }
                 ]
               }
             ]
           },
-          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 5 },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 5 },
           "id": 10,
           "options": {
             "cellHeight": "sm",
             "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
             "showHeader": true,
-            "sortBy": [{ "desc": true, "displayName": "Depuis" }]
+            "sortBy": [{ "desc": false, "displayName": "État" }]
           },
           "pluginVersion": "13.1.3",
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "time() - (ALERTS_FOR_STATE{alertname=~\"$composant\", severity=~\"$severity\"} and ignoring(alertstate) ALERTS{alertstate=\"firing\"})",
+              "expr": "(time() - ALERTS_FOR_STATE{alertname=~\"$composant\", alertname!=\"Watchdog\", severity=~\"$severity\"}) * ignoring(alertstate) group_left(alertstate) ALERTS{alertstate=~\"firing|pending\", alertname!=\"Watchdog\"}",
               "format": "table",
               "instant": true,
               "range": false,
               "refId": "A"
             }
           ],
-          "title": "Alertes actives",
+          "title": "Alertes actives (firing + pending)",
           "transformations": [
             {
               "id": "organize",
@@ -291,10 +376,11 @@ data:
                 "includeByName": {},
                 "indexByName": {
                   "alertname": 0,
-                  "severity": 1,
-                  "Value": 2,
-                  "namespace": 3,
-                  "job": 4
+                  "alertstate": 1,
+                  "severity": 2,
+                  "Value": 3,
+                  "namespace": 4,
+                  "job": 5
                 },
                 "renameByName": {}
               }
@@ -304,7 +390,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
           "id": 101,
           "panels": [],
           "title": "Historique",
@@ -312,7 +398,7 @@ data:
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Une bande par alerte : elle n'existe QUE pendant que l'alerte sonne. Un trou n'est donc pas une absence de données, c'est le retour à la normale — d'où `insertNulls: false` et l'absence de valeur « OK » dans la légende.",
+          "description": "Une bande par alerte, ROUGE quand elle est firing et BLEUE quand elle est pending — la bande bleue à gauche de la rouge, c'est le `for:` qui s'écoule. `ALERTS` vaut 1 dans les DEUX états, donc rien ne les distinguerait à l'affichage : d'où le `* 2` sur la branche firing, et le codage 1 = pending / 2 = firing lu par les value mappings. Le `max by (alertname)` supprime le label alertstate, sans quoi la même alerte occuperait deux lignes de l'axe Y. La bande n'existe que pendant que l'alerte est active : un trou n'est pas une absence de données, c'est le retour à la normale. Pas de légende à droite : les noms sont déjà sur l'axe Y.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -325,22 +411,25 @@ data:
               },
               "mappings": [
                 {
-                  "options": { "1": { "color": "red", "index": 0, "text": "firing" } },
+                  "options": {
+                    "1": { "color": "blue", "index": 0, "text": "pending" },
+                    "2": { "color": "red", "index": 1, "text": "firing" }
+                  },
                   "type": "value"
                 }
               ],
               "thresholds": {
                 "mode": "absolute",
-                "steps": [{ "color": "red", "value": null }]
+                "steps": [{ "color": "text", "value": null }]
               }
             },
             "overrides": []
           },
-          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 15 },
+          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
           "id": 11,
           "options": {
             "alignValue": "left",
-            "legend": { "displayMode": "list", "placement": "right", "showLegend": true },
+            "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
             "mergeValues": true,
             "rowHeight": 0.9,
             "showValue": "never",
@@ -351,7 +440,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "ALERTS{alertstate=\"firing\", alertname=~\"$composant\", severity=~\"$severity\"}",
+              "expr": "max by (alertname) ((ALERTS{alertstate=\"firing\", alertname=~\"$composant\", alertname!=\"Watchdog\", severity=~\"$severity\"} * 2) or ALERTS{alertstate=\"pending\", alertname=~\"$composant\", alertname!=\"Watchdog\", severity=~\"$severity\"})",
               "legendFormat": "{{alertname}}",
               "range": true,
               "refId": "A"
@@ -362,7 +451,7 @@ data:
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Nombre d'alertes firing par sévérité. Sert à distinguer une panne franche (marche d'escalier) d'une alerte qui bat (dents de scie) — la seconde appelle un ajustement du `for:`, pas une intervention.",
+          "description": "Nombre d'alertes firing par sévérité, empilé. Watchdog (severity=none) est exclu : toujours à 1, il décalait toute la courbe d'un cran et écrasait l'échelle. Sert à distinguer une panne franche (marche d'escalier) d'une alerte qui bat (dents de scie) — la seconde appelle un ajustement du `for:`, pas une intervention.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "palette-classic" },
@@ -374,7 +463,7 @@ data:
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "drawStyle": "line",
-                "fillOpacity": 20,
+                "fillOpacity": 35,
                 "gradientMode": "none",
                 "hideFrom": { "legend": false, "tooltip": false, "viz": false },
                 "insertNulls": false,
@@ -384,7 +473,7 @@ data:
                 "scaleDistribution": { "type": "linear" },
                 "showPoints": "never",
                 "spanNulls": false,
-                "stacking": { "group": "A", "mode": "none" },
+                "stacking": { "group": "A", "mode": "normal" },
                 "thresholdsStyle": { "mode": "off" }
               },
               "decimals": 0,
@@ -407,7 +496,7 @@ data:
               }
             ]
           },
-          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 25 },
+          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 23 },
           "id": 12,
           "options": {
             "legend": {
@@ -423,7 +512,7 @@ data:
             {
               "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
               "editorMode": "code",
-              "expr": "sum by (severity) (ALERTS{alertstate=\"firing\", alertname=~\"$composant\", severity=~\"$severity\"})",
+              "expr": "sum by (severity) (ALERTS{alertstate=\"firing\", alertname=~\"$composant\", alertname!=\"Watchdog\", severity=~\"$severity\", severity!=\"none\"})",
               "legendFormat": "{{severity}}",
               "range": true,
               "refId": "A"
@@ -493,7 +582,7 @@ data:
           }
         ]
       },
-      "time": { "from": "now-2d", "to": "now" },
+      "time": { "from": "now-6h", "to": "now" },
       "timepicker": {},
       "timezone": "browser",
       "title": "Alertes — cluster",
