@@ -38,6 +38,10 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   [openbao-monitoring](../openbao-monitoring/README.md) (voir le commentaire du fichier)
 - `manifests/namespace.yaml` — ns `openbao` (wave -1), sans label PodSecurity
 - `manifests/openbao-httproute.yaml` — UI sur le listener `https-internal` de `shared-gw`
+- `openbao-script.sh` — gestion des sauvegardes : `status`, `list`, `snapshot`, `fetch`, `check`,
+  `verify`, `stop`, `restore`. Pas déployé, pas référencé par le `kustomization.yaml` : ce sont
+  des ÉVÉNEMENTS (un snapshot, un restore), pas des états désirés — committés, ArgoCD les
+  rejouerait sans fin. Même statut que `velero-script.sh` côté [velero](../velero/README.md)
 - `manifests/openbao-snapshot-s3.secret.yaml` — **clair, gitignoré** : template d'entrée de
   `kubeseal` pour les credentials S3 de la sauvegarde (`AWS_ACCESS_KEY_ID`,
   `AWS_SECRET_ACCESS_KEY`). Le produit scellé, `openbao-snapshot-s3.sealed.yaml`, est le seul des
@@ -265,6 +269,23 @@ Trois pièges, tous vérifiés à la connexion :
   kubectl -n openbao cp ./openbao.snap openbao-0:/tmp/openbao.snap
   kubectl -n openbao exec -ti openbao-0 -- bao operator raft snapshot restore /tmp/openbao.snap
   ```
+- **Gérer et TESTER les sauvegardes** — tout passe par `openbao-script.sh` :
+  ```bash
+  cluster/infra/openbao/openbao-script.sh status            # coffre, CronJob, âge du dernier snapshot
+  cluster/infra/openbao/openbao-script.sh list              # snapshots du bucket + Jobs
+  cluster/infra/openbao/openbao-script.sh snapshot          # sauvegarde manuelle (Job dérivé du CronJob)
+  cluster/infra/openbao/openbao-script.sh verify latest     # RESTORE réel en Docker — aucune clé requise
+  cluster/infra/openbao/openbao-script.sh verify oldest --unseal   # + descellement et contenu
+  ```
+  La présence d'un objet dans le bucket ne prouve rien. `verify` remonte le snapshot dans un
+  OpenBao jetable, l'y restaure, et vérifie que l'instance adopte la configuration de seal de la
+  prod (`5 / 3`) : si c'est le cas, le keyring du snapshot a été ouvert et `state.bin` est intègre.
+  Ce contrôle ne demande **aucune part de descellement** — c'est celui à passer régulièrement.
+  `--unseal` va plus loin (parts de prod + token root) et compare le contenu au contrat dérivé des
+  `ExternalSecret` du cluster. Procédure manuelle et pièges détaillés :
+  [`doc/openbao-restore-local.md`](../../../doc/openbao-restore-local.md).
+  ⚠️ Ne jamais tester un restore sur `openbao-0` : `snapshot restore` écrase tout le raft. C'est
+  précisément ce que fait `openbao-script.sh restore`, réservé à une vraie reprise.
 - **Configurer le coffre** — c'est le **repo Terraform** qui pose l'auth `kubernetes`, le
   moteur KV, la policy et le role `external-secrets` (contrat détaillé en Contraintes). Les
   commandes ci-dessous ne servent qu'à **vérifier** l'état obtenu, en lecture :
