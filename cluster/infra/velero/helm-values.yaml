@@ -134,21 +134,37 @@ schedules:
       # namespace n'est pas ajouté à cette liste, et rien ne le signale.
       #
       # Périmètre de départ volontairement réduit à un namespace JETABLE : il sert à prouver la
-      # chaîne complète (BSL → kopia → restauration) sans mettre le coffre ni les bases dans la
-      # boucle. Élargir ensuite, un namespace à la fois, en vérifiant à chaque ajout la présence
-      # des `podvolumebackups` attendus :
-      #   - openbao    (PVC raft 5Gi, chiffré — inutile sans les clés de descellement)
+      # chaîne complète (BSL → kopia → restauration) sans mettre les bases dans la boucle. Élargir
+      # ensuite, un namespace à la fois, en vérifiant à chaque ajout la présence des
+      # `podvolumebackups` attendus :
       #   - authentik  (PVC Postgres CNPG 5Gi — copie cohérente-crash, cf. README)
       #   - monitoring (27Gi dont 20Gi de TSDB Prometheus, reconstructible)
+      #
+      # ⚠️ `openbao` N'EST PAS UN CANDIDAT : il a été mis dans cette liste, puis retiré, et le
+      # remettre serait revenir en arrière sur une décision motivée. Le coffre a sa propre chaîne —
+      # snapshot raft quotidien vers un bucket GCS distinct, avec des credentials distincts — et
+      # elle est MEILLEURE que ce que velero sait en faire : `bao operator raft snapshot save`
+      # produit une copie cohérente-transaction, là où kopia ne peut copier le PVC que de façon
+      # cohérente-crash. Elle est aussi la seule des deux à être testée pour de bon, l'instance
+      # jetable d'`openbao-script.sh verify` restaurant le snapshot et vérifiant son contenu contre
+      # le contrat dérivé des ExternalSecret du cluster.
+      #
+      # Ce que velero apportait malgré tout, et qu'il fallait remplacer AVANT de retirer openbao
+      # d'ici : un second domaine de panne, et surtout une détection passive d'une chaîne de
+      # sauvegarde morte en silence. C'est le rôle de `OpenBaoSnapshotTooOld` / `OpenBaoSnapshotMissing`
+      # (openbao-monitoring/manifests/prometheusrule.yaml). Sans ces règles, l'exclusion n'est plus
+      # défendable — les deux décisions se tiennent ensemble.
+      #
+      # Reste hors de portée des deux : une lifecycle rule GCS qui purgerait le bucket de snapshots,
+      # qu'aucune métrique du cluster ne voit. Seul un `verify` périodique y répond, et il est manuel.
       includedNamespaces:
-        - openbao
         - test-nginx
       snapshotVolumes: false   # cohérent avec snapshotsEnabled: false — les données passent par kopia
       # Garde-fou du mode opt-out : ignore la copie des `emptyDir` (rien à restaurer par
-      # construction) et, au passage, ferme la course qui faisait échouer la sauvegarde sur le
-      # `snapshot-dir` du CronJob openbao. Le raisonnement complet est dans le ConfigMap lui-même,
-      # rendu par `manifests/volume-policies.yaml`. Référence NON validée à la création de la
-      # Schedule : un nom erroné n'échouerait qu'au premier backup déclenché.
+      # construction, et un pod terminé fait échouer la sauvegarde ENTIÈRE sur un volume déjà
+      # démonté par kubelet). Le raisonnement complet est dans le ConfigMap lui-même, rendu par
+      # `manifests/volume-policies.yaml`. Référence NON validée à la création de la Schedule : un
+      # nom erroné n'échouerait qu'au premier backup déclenché.
       resourcePolicy:
         kind: configmap
         name: velero-volume-policies

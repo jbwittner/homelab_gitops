@@ -10,23 +10,27 @@ metadata:
 # helm-values.yaml) : « tout volume est sauvegardé sans annotation sur le pod » vaut aussi pour les
 # volumes qui n'ont, par construction, rien à sauvegarder. Un `emptyDir` naît vide au démarrage du
 # pod et meurt avec lui : le restaurer ne restaure rien, et le contenu capturé est au mieux du
-# scratch (`shm` et `scratch-data` de CNPG, `home` d'openbao).
+# scratch (`shm` et `scratch-data` de CNPG).
 #
-# Ce n'est pas qu'une question de bruit : c'est aussi la cause de l'échec de
-# `velero-daily-20260815030017` (phase `PartiallyFailed`). Le CronJob `openbao-snapshot` tourne à
-# 03:00, la Schedule velero aussi ; velero crée un `podvolumebackup` sur le `snapshot-dir`
-# (emptyDir de transit du `bao operator raft snapshot save` avant upload s3cmd) du pod de Job, mais
-# kubelet a démonté le volume dès la fin du pod, avant que le node-agent ne l'ouvre :
+# Ce n'est pas qu'une question de bruit : UN SEUL emptyDir suffit à faire échouer la sauvegarde
+# entière. Sur un pod déjà terminé — pod de Job, `Completed` mais conservé par
+# `successfulJobsHistoryLimit` — kubelet a démonté le volume avant que le node-agent ne l'ouvre, et
+# le `podvolumebackup` part en `Failed`, ce qui fait passer tout le Backup en `PartiallyFailed` :
 #
 #   error to expose PVB: error to get pod volume path: [...] expected one matching path:
-#   /host_pods/<uid>/volumes/*/snapshot-dir, got 0
+#   /host_pods/<uid>/volumes/*/<volume>, got 0
 #
-# Course structurelle, pas transitoire : décaler les deux horaires ne la ferme pas, le CronJob
-# gardant ses pods terminés (`successfulJobsHistoryLimit`, non exposé par le chart openbao). La
-# voie annotation `backup.velero.io/backup-volumes-excludes` est fermée elle aussi : le chart
-# openbao-0.29.0 n'expose d'annotations que sur l'objet CronJob (`snapshotAgent.annotations`), pas
-# sur le `podTemplate` que lit velero. D'où le levier côté velero, qui a en plus le mérite d'être
-# une RÈGLE ET NON UNE EXCEPTION — elle vaut pour tout pod à venir, sans rien à retenir.
+# C'est une course STRUCTURELLE, pas transitoire : décaler les horaires ne la ferme pas, un pod de
+# Job terminé restant visible aussi longtemps que son historique le retient. Elle a été trouvée sur
+# le `snapshot-dir` du CronJob `openbao-snapshot` (`velero-daily-20260815030017`), namespace depuis
+# sorti du périmètre — mais la règle n'était pas un correctif pour lui : elle vaut pour tout pod à
+# venir, et le prochain CronJob ajouté à la liste blanche la déclencherait à l'identique.
+#
+# Écrit ici, côté velero, et non en annotation `backup.velero.io/backup-volumes-excludes` sur les
+# pods concernés : une RÈGLE plutôt qu'une exception à reposer à chaque nouveau composant, sans
+# rien à retenir. La voie annotation est de toute façon souvent fermée, un chart n'exposant pas
+# nécessairement d'annotations sur son `podTemplate` — c'était le cas d'openbao-0.29.0, qui n'en
+# expose que sur l'objet CronJob (`snapshotAgent.annotations`), pas sur le template que lit velero.
 #
 # Portée : `skip` ne concerne QUE la copie de données (fs-backup/kopia). Les objets Kubernetes
 # eux-mêmes (Pod, Job, ConfigMap…) restent sauvegardés, donc restaurables.
