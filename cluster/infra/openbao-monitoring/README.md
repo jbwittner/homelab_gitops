@@ -3,8 +3,8 @@
 ## Rôle
 
 Volet **post-bootstrap** d'[openbao](../openbao/README.md) : scrape de `/v1/sys/metrics` et
-alertes sur la disponibilité du coffre. Aucun de ces objets n'est nécessaire au bootstrap —
-c'est toute la raison de la séparation.
+alertes sur la disponibilité **et la sauvegarde** du coffre. Aucun de ces objets n'est nécessaire
+au bootstrap — c'est toute la raison de la séparation.
 
 ## Pourquoi ce composant existe
 
@@ -30,8 +30,9 @@ schéma que [openebs-monitoring](../openebs-monitoring/README.md).
   ns `openbao`
 - `manifests/servicemonitor.yaml` — scrape du Service `openbao-active`, `/v1/sys/metrics`,
   `format=prometheus`, 30 s
-- `manifests/prometheusrule.yaml` — `openbao.rules` : coffre sans nœud actif (15 min, warning) et
-  la même condition à 3 h (critical)
+- `manifests/prometheusrule.yaml` — deux groupes : `openbao.rules` (coffre sans nœud actif —
+  15 min warning, la même condition à 3 h critical) et `openbao.backup.rules` (snapshot raft plus
+  vieux que 26 h warning, 50 h critical)
 - `manifests/kustomization.yaml` — assemblage
 
 ## Contraintes
@@ -52,7 +53,24 @@ schéma que [openebs-monitoring](../openebs-monitoring/README.md).
 - **Aucune règle n'utilise de métrique interne d'OpenBao**, délibérément : les noms `bao_*` /
   `openbao_*` sont un héritage renommé du fork Vault et n'ont pas été vérifiés contre cette
   version. Une alerte écrite sur un nom inexistant ne lève jamais rien et ne le signale pas.
-  Procédure pour en ajouter : ci-dessous.
+  Les seules sources utilisées sont `up`, synthétisée par Prometheus, et
+  `kube_cronjob_status_last_successful_time`, servie par kube-state-metrics. Procédure pour en
+  ajouter : ci-dessous.
+- **`openbao.backup.rules` n'est pas un confort : c'est la contrepartie du retrait d'openbao du
+  périmètre [velero](../velero/README.md).** Le coffre n'a plus qu'une seule chaîne de sauvegarde,
+  le CronJob `openbao-snapshot` ; ces deux règles sont ce qui détecte qu'elle s'est arrêtée. Les
+  supprimer sans remettre `openbao` dans `includedNamespaces` laisserait le coffre sans sauvegarde
+  **et** sans alerte — les deux décisions se tiennent ensemble.
+- **Le `or absent(...)` des règles de sauvegarde est load-bearing.**
+  `kube_cronjob_status_last_successful_time` est portée par l'objet CronJob : le supprimer
+  (`snapshotAgent.enabled: false`, changement de chart) fait disparaître la série, et un
+  `time() - x > seuil` seul cesserait de lever quoi que ce soit. Même classe de faux négatif que
+  l'`absent(up{...} == 1)` du premier groupe, pour une raison différente. Corollaire au bootstrap :
+  un CronJob qui n'a jamais réussi n'a pas de `lastSuccessfulTime`, donc les deux alertes sonnent
+  jusqu'au premier snapshot — voulu.
+- **Les seuils 26 h / 50 h sont dérivés à la main du `schedule` du CronJob** (`0 3 * * *`, dans
+  `openbao/helm-values.yaml`) : un cycle manqué plus 2 h de marge, puis deux cycles. Rien ne relie
+  les deux fichiers ; changer le schedule sans changer les seuils passe inaperçu.
 - **`port: http`** est le nom du port 8200 du Service tant que `global.tlsDisable: true` (TLS
   terminé au Gateway). En https il se nommerait `https` : les deux champs `port` et `scheme` sont
   à changer ensemble.

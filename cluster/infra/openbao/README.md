@@ -109,6 +109,20 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 
   ⚠️ Le point 2 ne protège **pas** du point 1 — c'est le piège, parce qu'il en donne
   l'impression. Ne retirer ni l'un ni l'autre.
+- **Le CronJob `openbao-snapshot` est la SEULE sauvegarde du coffre.** Le namespace `openbao` est
+  hors du périmètre de [velero](../velero/README.md), délibérément : `bao operator raft snapshot
+  save` produit une copie *cohérente-transaction*, là où kopia ne copierait le PVC que de façon
+  *cohérente-crash*, et le snapshot est la seule des deux copies à être réellement testée
+  (`openbao-script.sh verify`, cf. Opérations). Il n'y a donc **pas de filet** derrière ce CronJob :
+  ce qui n'est pas dans le bucket de snapshots n'existe nulle part ailleurs. Deux conséquences à ne
+  pas défaire :
+  1. Les alertes `OpenBaoSnapshotTooOld` (26 h) et `OpenBaoSnapshotMissing` (50 h) de
+     [openbao-monitoring](../openbao-monitoring/README.md) sont ce qui remplace la détection passive
+     qu'apportait velero. Elles portent un `or absent(...)` : sans lui, supprimer le CronJob
+     éteindrait l'alerte au lieu de la déclencher.
+  2. Aucune métrique du cluster ne voit le **contenu du bucket**. Une lifecycle rule GCS qui le
+     purgerait passerait inaperçue, le CronJob continuant de réussir. Seul un `verify` périodique y
+     répond, et il est manuel.
 - **L'HTTPRoute pointe sur le Service `openbao`, pas `openbao-active`.** Ce dernier ne sélectionne
   que les pods labellisés `openbao-active: "true"`, label posé une fois le nœud descellé et
   leader : un OpenBao scellé n'y a aucun endpoint, et l'UI serait injoignable exactement quand on

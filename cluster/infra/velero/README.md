@@ -21,7 +21,9 @@ fait échouer la sauvegarde entière (`PartiallyFailed`). Une politique de volum
 
 Ce composant ne remplace pas les sauvegardes applicatives natives : les snapshots raft
 d'[openbao](../openbao/README.md) et les backups CNPG restent la voie de restauration *cohérente*
-d'une base ; velero est le filet de niveau cluster.
+d'une base ; velero est le filet de niveau cluster. Poussé à sa conclusion, ce raisonnement a sorti
+le namespace `openbao` du périmètre : quand la sauvegarde native est meilleure ET testée, le filet
+n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
 
 ## Fichiers
 
@@ -88,9 +90,20 @@ d'une base ; velero est le filet de niveau cluster.
   `velero-repo-credentials` dans son namespace ; sans elle, les dépôts kopia du bucket sont
   illisibles. Or le namespace `velero` est **exclu** des sauvegardes : ce Secret doit donc être
   conservé **hors cluster**, au coffre, comme les clés de descellement d'openbao.
-- **Restaurer openbao ne le déscelle pas.** velero restaure le PVC raft, dont le contenu est
-  chiffré : les clés de descellement et le token root restent la seule façon de le rouvrir, et ils
-  ne sont dans aucune sauvegarde (cf. [openbao](../openbao/README.md)).
+- **velero ne sauvegarde PAS openbao, et c'est délibéré.** Le namespace a été dans la liste
+  blanche, puis en a été retiré : le coffre a sa propre chaîne — snapshot raft quotidien vers un
+  bucket GCS distinct — et elle est meilleure que ce que velero sait produire, `bao operator raft
+  snapshot save` donnant une copie *cohérente-transaction* là où kopia ne copie le PVC que de façon
+  *cohérente-crash*. Elle est aussi la seule des deux à être réellement testée
+  (`openbao-script.sh verify`). Ce que le retrait a coûté — un second domaine de panne, et la
+  détection passive d'une chaîne morte en silence — est remplacé par les alertes
+  `OpenBaoSnapshotTooOld` / `OpenBaoSnapshotMissing`
+  ([openbao-monitoring](../openbao-monitoring/README.md)). **Les deux décisions se tiennent
+  ensemble** : supprimer ces alertes rend l'exclusion indéfendable, remettre `openbao` dans la
+  liste blanche revient sur une décision motivée. Corollaire à ne pas perdre : restaurer le PVC
+  raft n'aurait de toute façon pas descellé le coffre — son contenu est chiffré, et les clés de
+  descellement comme le token root ne sont dans **aucune** sauvegarde
+  (cf. [openbao](../openbao/README.md)).
 - **Restaurer un namespace géré par ArgoCD entre en concurrence avec `selfHeal`.** Les objets
   déclarés dans Git y sont reposés par ArgoCD ; ce que velero apporte d'utile, ce sont les
   **données** (PV/PVC) et les objets qui n'existent pas dans Git. Restaurer un namespace entier
@@ -103,10 +116,10 @@ d'une base ; velero est le filet de niveau cluster.
 - **La schedule fonctionne en liste blanche : ce qui n'est pas listé n'est pas sauvegardé, sans le
   dire.** `includedNamespaces` ne contient aujourd'hui que `test-nginx` — périmètre de mise en
   route, choisi jetable pour éprouver la chaîne complète (BSL → kopia → restauration) sans engager
-  le coffre ni les bases. **Ajouter un composant au cluster ne l'ajoute pas aux sauvegardes** :
-  c'est un geste explicite dans `helm-values.yaml`. Candidats connus, à ouvrir un par un :
-  `openbao` (raft 5Gi), `authentik` (Postgres CNPG 5Gi), `monitoring` (27Gi, dont 20Gi de TSDB
-  Prometheus reconstructible).
+  les bases. **Ajouter un composant au cluster ne l'ajoute pas aux sauvegardes** : c'est un geste
+  explicite dans `helm-values.yaml`. Candidats connus, à ouvrir un par un : `authentik` (Postgres
+  CNPG 5Gi), `monitoring` (27Gi, dont 20Gi de TSDB Prometheus reconstructible). `openbao` n'en est
+  **pas** un — exclusion motivée, cf. la contrainte plus haut.
 - **Le TTL de 30 jours est une fenêtre de récupération, pas un réglage de taille.** Le raccourcir
   rend peu d'espace : kopia déduplique et ne stocke que des deltas, donc trente snapshots
   quotidiens d'une donnée stable ne pèsent pas trente fois un snapshot. Et l'espace d'un backup
@@ -116,9 +129,10 @@ d'une base ; velero est le filet de niveau cluster.
   n'est plus rattrapable. Pour un historique plus long, ajouter une schedule hebdomadaire à TTL
   long (grand-père/père/fils) plutôt qu'allonger la quotidienne.
 - **Une copie kopia d'une base vivante est cohérente-crash, pas cohérente-transaction.** Elle vaut
-  ce que vaut un `kill -9` suivi d'un redémarrage : Postgres rejoue son WAL, openbao son raft. Pour
-  une restauration *propre*, la voie reste le backup natif (CNPG, snapshot raft). Velero est le
-  filet, pas le premier recours.
+  ce que vaut un `kill -9` suivi d'un redémarrage : Postgres rejoue son WAL, un raft rejoue son
+  journal. Pour une restauration *propre*, la voie reste le backup natif (CNPG, snapshot raft).
+  Velero est le filet, pas le premier recours — et c'est l'argument qui a fini par sortir `openbao`
+  de la liste blanche.
 - **Le namespace `velero` ne se sauvegarde pas lui-même.** Sa configuration (BSL, schedule, RBAC)
   est déclarée dans Git ; la restaurer se battrait avec la sync ArgoCD. Même raison pour
   `kube-system`, reconstruit par Talos et le CNI. Avec une liste blanche, ils sont exclus de fait —

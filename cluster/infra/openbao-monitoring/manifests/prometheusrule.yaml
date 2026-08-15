@@ -1,15 +1,22 @@
 # Alertes du coffre.
 #
-# Elles ne reposent QUE sur `up`, la métrique synthétisée par Prometheus lui-même, et sur aucune
-# métrique interne d'OpenBao : les noms `bao_*` / `openbao_*` sont un héritage renommé du fork
-# Vault et n'ont pas été vérifiés contre l'endpoint réel de cette version. Une règle écrite sur
-# un nom de métrique inexistant ne lève jamais rien et ne le dit pas — c'est le pire des faux
-# négatifs pour un composant dont tout le reste du cluster dépend. La procédure pour en ajouter
-# à partir des métriques réellement servies est dans le README.
+# Elles ne reposent que sur `up`, la métrique synthétisée par Prometheus lui-même, et sur
+# `kube_cronjob_status_last_successful_time`, servie par kube-state-metrics. Sur AUCUNE métrique
+# interne d'OpenBao : les noms `bao_*` / `openbao_*` sont un héritage renommé du fork Vault et
+# n'ont pas été vérifiés contre l'endpoint réel de cette version. Une règle écrite sur un nom de
+# métrique inexistant ne lève jamais rien et ne le dit pas — c'est le pire des faux négatifs pour
+# un composant dont tout le reste du cluster dépend. La procédure pour en ajouter à partir des
+# métriques réellement servies est dans le README.
 #
 # Ce que `up` suffit à couvrir, grâce au ciblage du Service `openbao-active` (cf.
 # servicemonitor.yaml) : coffre scellé, pod absent, raft sans leader, endpoint injoignable — tous
 # se traduisent par « aucune cible active », et tous appellent la même action humaine.
+#
+# Le second groupe couvre la SAUVEGARDE, et non plus la disponibilité. Il n'est pas un confort :
+# le namespace `openbao` est délibérément hors du périmètre de [velero](../../velero/README.md), au
+# motif que le snapshot raft est une copie cohérente-transaction là où kopia n'en ferait qu'une
+# copie cohérente-crash. Ce choix retire au coffre son second domaine de panne — ces deux règles
+# sont ce qui le remplace, et les retirer déferait le raisonnement qui autorise l'exclusion.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -43,3 +50,44 @@ spec:
           annotations:
             summary: "OpenBao inactif depuis 3 h"
             description: "Le coffre n'a pas de nœud actif depuis 3 heures. Toute rotation de secret au coffre est ignorée depuis, et le prochain renouvellement Let's Encrypt (solver DNS-01, token servi par openbao) échouera si l'état persiste."
+
+    - name: openbao.backup.rules
+      rules:
+        # Le `or absent(...)` n'est PAS décoratif, et c'est le même piège que celui traité plus haut
+        # avec `absent(up{...} == 1)` : `kube_cronjob_status_last_successful_time` est portée par
+        # l'OBJET CronJob. Si le CronJob disparaît — `snapshotAgent.enabled: false`, changement de
+        # chart, suppression manuelle — la série s'évapore, et un `time() - x > seuil` seul cesse
+        # définitivement de lever quoi que ce soit. La sauvegarde serait alors arrêtée ET muette,
+        # exactement le scénario que ces règles existent pour interdire.
+        #
+        # Effet de bord assumé : un CronJob qui n'a JAMAIS réussi n'a pas de `lastSuccessfulTime`,
+        # donc pas de série non plus — les deux règles partent au bootstrap et ne se taisent qu'au
+        # premier snapshot réussi. C'est le comportement voulu : une chaîne de sauvegarde qui n'a
+        # jamais tourné est un problème, pas un état d'attente.
+        #
+        # Seuils dérivés du `schedule` du CronJob (`0 3 * * *`, helm-values.yaml d'openbao) : un
+        # cycle manqué plus 2 h de marge, puis deux cycles. Les changer si le schedule change —
+        # rien ne relie les deux automatiquement.
+        - alert: OpenBaoSnapshotTooOld
+          expr: |
+            (time() - kube_cronjob_status_last_successful_time{namespace="openbao", cronjob="openbao-snapshot"} > 26 * 3600)
+            or absent(kube_cronjob_status_last_successful_time{namespace="openbao", cronjob="openbao-snapshot"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "OpenBao : aucun snapshot depuis plus de 26 h"
+            description: "Le CronJob 'openbao-snapshot' (0 3 * * *) n'a pas réussi depuis plus d'un cycle, ou a disparu. Le namespace openbao étant hors du périmètre velero, ce CronJob est la SEULE sauvegarde du coffre. Action, depuis la racine du repo : cluster/infra/openbao/openbao-script.sh status, puis cluster/infra/openbao/openbao-script.sh snapshot."
+
+        # Même condition, horizon doublé : à ce stade ce n'est plus un cycle raté, c'est une chaîne
+        # de sauvegarde arrêtée.
+        - alert: OpenBaoSnapshotMissing
+          expr: |
+            (time() - kube_cronjob_status_last_successful_time{namespace="openbao", cronjob="openbao-snapshot"} > 50 * 3600)
+            or absent(kube_cronjob_status_last_successful_time{namespace="openbao", cronjob="openbao-snapshot"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "OpenBao sans sauvegarde depuis 2 jours"
+            description: "Deux cycles consécutifs manqués. Le coffre n'a plus de sauvegarde récente et aucun filet velero : une perte du PVC raft serait définitive au-delà du dernier snapshot présent dans le bucket. Action immédiate, depuis la racine du repo : cluster/infra/openbao/openbao-script.sh snapshot, puis cluster/infra/openbao/openbao-script.sh verify latest --unseal."
