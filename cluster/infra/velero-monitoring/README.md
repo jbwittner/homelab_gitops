@@ -56,6 +56,14 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
   toute requête doit viser `schedule="manuel"` et non `schedule=""`, et les échantillons **déjà
   stockés** gardent l'ancienne forme jusqu'à expiration de la rétention (le dashboard couvre cette
   période avec un `label_replace`, retirable ensuite).
+- **Le corollaire du point précédent : `manuel` doit être exclu des règles d'ancienneté.** Une
+  sauvegarde manuelle est one-shot — sa série ne sera plus jamais rafraîchie, donc elle franchit
+  fatalement n'importe quel seuil de fraîcheur et n'en redescend plus. `VeleroBackupTooOld` filtre
+  pour cette raison `schedule!="manuel"` en plus de `schedule!=""` (l'ancienne forme, encore
+  présente dans les échantillons antérieurs au relabeling). Le garde-fou d'origine ne portait que
+  sur la chaîne vide : le relabeling l'a rendu inopérant, et un backup manuel allumait une alerte
+  critique 36 h plus tard, définitivement. Les règles `increase(...)` sur les échecs, elles,
+  gardent `manuel` volontairement : un backup manuel qui échoue est un vrai échec.
 - **La liste des sauvegardes ne peut PAS venir des métriques de velero.** Elles sont agrégées par
   schedule et écrasées à chaque exécution : `velero_backup_tarball_size_bytes` ne décrit que la
   dernière, jamais l'historique. L'inventaire « une ligne par sauvegarde » vient de
