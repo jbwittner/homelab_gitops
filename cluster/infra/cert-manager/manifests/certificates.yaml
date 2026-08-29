@@ -3,6 +3,10 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
+  annotations:
+    # Après le chart (wave 0) : le webhook d'admission cert-manager doit répondre,
+    # sinon l'apply est rejeté en `failed calling webhook "webhook.cert-manager.io"`.
+    argocd.argoproj.io/sync-wave: "1"
   name: wildcard-public-tls
   namespace: gateway
 spec:
@@ -17,6 +21,10 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
+  annotations:
+    # Après le chart (wave 0) : le webhook d'admission cert-manager doit répondre,
+    # sinon l'apply est rejeté en `failed calling webhook "webhook.cert-manager.io"`.
+    argocd.argoproj.io/sync-wave: "1"
   name: wildcard-lan-tls
   namespace: gateway
 spec:

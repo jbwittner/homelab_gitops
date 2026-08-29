@@ -8,9 +8,9 @@ repo, aux côtés d'[openbao](../openbao/README.md) + [external-secrets](../exte
 critère de choix : [doc/regles-gitops.md](../../../doc/regles-gitops.md). Il porte les secrets qui
 doivent être lisibles **en amont du coffre** dans le graphe de bootstrap : le Secret de cluster du
 spoke (requis avant le tier-1) et le token DNS de
-[cert-manager-config](../cert-manager-config/README.md) (wave `-4`, donc bien avant le
-descellement manuel d'openbao en wave `1`). Wave **-8** : le contrôleur précède tout SealedSecret
-consommé plus tard.
+[cert-manager](../cert-manager/README.md) (wave `-5`, donc bien avant le descellement manuel
+d'openbao en wave `1`). Wave **-8** : le contrôleur précède tout SealedSecret consommé plus
+tard.
 
 ## Fichiers
 

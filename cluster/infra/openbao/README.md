@@ -23,7 +23,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 | `homelab/argocd/oidc` | `client-secret` | [argocd](../argocd/README.md) |
 | `homelab/argocd/notifications` | `grafana-api-key` | [argocd](../argocd/README.md) |
 | `homelab/authentik/secrets` | `secret-key` | [authentik](../../app/authentik/README.md) |
-| `homelab/cert-manager/cloudflare` | `api-token` | [cert-manager-config](../cert-manager-config/README.md) — solver DNS-01, consommé en wave `-4` (cf. Contraintes) |
+| `homelab/cert-manager/cloudflare` | `api-token` | ~~cert-manager~~ — **plus consommé** : le token DNS-01 est passé au canal [sealed-secrets](../sealed-secrets/README.md). Chemin conservé le temps de valider la bascule, à purger ensuite |
 | `homelab/grafana/admin` | `admin-user`, `admin-password` | [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) |
 | `homelab/grafana/oidc` | `client-secret` | [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) |
 | `homelab/renovate/github` | `token` | [renovate](../../app/renovate/README.md) |
@@ -72,7 +72,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   nœud qui a déjà un état raft les ignore.
 - **Un coffre scellé ne casse rien, mais teinte le mur en rouge.** Les `ExternalSecret` qui en
   dépendent passent `NotReady`, donc les Applications `argocd`, `authentik`,
-  `cert-manager-config`, `kube-prometheus-stack` et `renovate` passent `Degraded` — alors que
+  `kube-prometheus-stack` et `renovate` passent `Degraded` — alors que
   leurs charges tournent normalement, les `Secret` déjà matérialisés étant conservés
   (`deletionPolicy: Retain`). Ce n'est pas une panne applicative : c'est le signal que les
   secrets ne se rafraîchissent plus. Depuis
@@ -82,11 +82,11 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   Sans leader, le Service `openbao-active` perd son endpoint et la cible de scrape disparaît au
   lieu de tomber à zéro. Toute règle d'alerte sur ce composant doit être écrite en `absent(…)`,
   jamais en `up == 0` (cf. [openbao-monitoring](../openbao-monitoring/README.md)).
-- **Le coffre est désormais en amont de l'émission TLS, et il est en wave `1`.** Depuis la
-  migration du token Cloudflare, [cert-manager-config](../cert-manager-config/README.md)
-  (wave `-4`) tire son secret d'ici : au bootstrap à froid, **aucun certificat wildcard n'est
-  émis avant le descellement manuel**, donc aucun listener TLS de `shared-gw` n'est programmé.
-  L'ordre du runbook n'est pas modifié — mais ce qui attendait le coffre s'est élargi.
+- **Le coffre n'est plus en amont de l'émission TLS.** Il l'a été : le token Cloudflare de
+  [cert-manager](../cert-manager/README.md) en venait, et au bootstrap à froid aucun certificat
+  wildcard ne s'émettait avant le descellement manuel — donc aucun listener TLS de `shared-gw`
+  n'était programmé. Ce token est repassé au canal [sealed-secrets](../sealed-secrets/README.md)
+  (wave `-8`) : l'émission TLS ne dépend plus d'un geste humain.
 - **Wave `1`, après openebs.** Le coffre a un PVC : sans la StorageClass par défaut il reste
   `Pending`. Cet ordre n'existe que parce qu'openbao est un composant d'**infra** — les
   sync-waves ne s'ordonnent qu'à l'intérieur d'un même app-of-apps, donc `cluster/app/` et

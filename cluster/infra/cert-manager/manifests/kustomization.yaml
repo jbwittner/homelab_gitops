@@ -1,8 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# ClusterIssuer (cluster-scoped), Certificates (ns gateway), token Cloudflare (SealedSecret, ns cert-manager).
+# Objets métier de cert-manager, 3e source de l'Application `cert-manager` (archétype (b)) :
+# ClusterIssuer (cluster-scoped), Certificates (ns gateway), token Cloudflare (SealedSecret,
+# ns cert-manager). Le chart, lui, pose le moteur et les CRDs consommées ici.
+#
 # Chaque manifeste porte son propre namespace → pas de `namespace:` global ici.
+# Les ClusterIssuer et Certificate portent `sync-wave: "1"` : ils s'appliquent après le chart
+# (wave 0), une fois le webhook d'admission cert-manager joignable.
 resources:
   # Les deux ClusterIssuer coexistent : `certificates.yaml` choisit lequel émet. Staging sert à
   # valider une chaîne DNS-01 sans consommer les quotas Let's Encrypt production.
@@ -10,7 +15,7 @@ resources:
   - clusterissuer-prod.yaml
   - certificates.yaml
   # Token DNS-01 : canal sealed-secrets (le SealedSecret porte la valeur, pas un pointeur).
-  # Déchiffré par le contrôleur sealed-secrets (wave -8), donc bien avant cette app (wave -4).
+  # Déchiffré par le contrôleur sealed-secrets (wave -8), donc bien avant cette app (wave -5).
   # Rotation = kubeseal + commit (cf. README.md §Sceller le token).
   - cloudflare-api-token.sealed.yaml
   #

@@ -28,7 +28,7 @@ par le tier-1.
 - À la **première pose** des CRDs, le contrôleur Gateway de Cilium ne les voit qu'après un
   restart de `cilium-operator` (one-shot de bootstrap, cf. runbook).
 - Les secrets TLS vivent dans le ns `gateway` : ils sont produits par
-  [`cert-manager-config`](../cert-manager-config/README.md), pas ici.
+  [`cert-manager`](../cert-manager/README.md), pas ici.
 
 ## Opérations
 

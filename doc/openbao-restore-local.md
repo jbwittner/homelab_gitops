@@ -311,7 +311,7 @@ kubectl get externalsecrets -A -o json | jq -r '
 |---|---|---|
 | `homelab/argocd` | `grafana-api-key`, `oidc-client-secret` | argocd |
 | `homelab/authentik/secrets` | `secret-key` | authentik |
-| `homelab/cert-manager` | `cloudflare-api-token` | cert-manager-config |
+| `homelab/cert-manager` | `cloudflare-api-token` | ~~cert-manager~~ — plus consommé (passé à sealed-secrets) |
 | `homelab/grafana/admin` | `admin-user`, `admin-password` | kube-prometheus-stack |
 | `homelab/grafana/oidc` | `client-secret` | kube-prometheus-stack |
 | `homelab/renovate` | `github_token` | renovate |

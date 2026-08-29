@@ -4,7 +4,7 @@ metadata:
   name: cert-manager
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "-5"       # après les CRDs (-10), avant les consommateurs de certs
+    argocd.argoproj.io/sync-wave: "-5"       # après les CRDs Gateway API (-10), avant tout consommateur de certificat
   labels:
     app.kubernetes.io/name: cert-manager
     app.kubernetes.io/part-of: homelab-gitops
@@ -13,9 +13,21 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  # Contrôleur cert-manager (Jetstack). CRDs posées par la chart (crds.enabled).
-  # Émettra les certs Let's Encrypt via DNS-01 Cloudflare (ClusterIssuer + Certificate
-  # dans l'app cert-manager-config, wave -4). Token Cloudflare = SealedSecret.
+  # Moteur cert-manager (Jetstack) ET ses objets métier, dans UNE seule Application.
+  # Archétype (b) : chart Helm + `$values` + `manifests/`.
+  #   - helm-values.yaml : `crds.enabled` + `crds.keep` (les CRDs survivent à une désinstallation
+  #     du chart, donc les `Certificate` existants ne sont pas emportés).
+  #   - manifests/ : les deux ClusterIssuer Let's Encrypt, les Certificate wildcard (ns `gateway`)
+  #     et le SealedSecret du token Cloudflare (ns `cert-manager`).
+  #
+  # ⚠️ Pourquoi UNE app et pas deux. Le découpage moteur/config obligeait à tenir un ordre entre
+  # deux Applications (wave -5 puis -4) pour une raison purement technique : les CRDs
+  # `ClusterIssuer`/`Certificate` sont posées par le chart. Un composant activé sans l'autre
+  # échoue en `no matches for kind`, sans que rien dans le repo ne le signale. L'ordre est
+  # désormais INTERNE à l'app, porté par les sync-waves de ressources (cf. manifests/) : Argo
+  # applique le chart, attend qu'il soit Healthy — donc le webhook d'admission joignable — puis
+  # pose les objets métier. Même schéma que kube-prometheus-stack, dont le chart pose les CRDs
+  # que consomme son propre `manifests/servicemonitors-argocd.yaml`.
   sources:
     - repoURL: https://charts.jetstack.io
       chart: cert-manager
@@ -27,6 +39,9 @@ spec:
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: cluster/infra/cert-manager/manifests
   destination:
     name: bleu-kalecgos
     namespace: cert-manager
@@ -36,4 +51,4 @@ spec:
       prune: true
     syncOptions:
       - CreateNamespace=true
-      - ServerSideApply=true
+      - ServerSideApply=true       # CRDs cert-manager volumineuses, apply client-side refusé
