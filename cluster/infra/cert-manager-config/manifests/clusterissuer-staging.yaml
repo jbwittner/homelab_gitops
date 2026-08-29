@@ -11,7 +11,7 @@ spec:
     solvers:
       - dns01:
           cloudflare:
-            # Token API Cloudflare (Zone:DNS:Edit + Zone:Zone:Read). ExternalSecret (openbao), ns cert-manager.
+            # Token API Cloudflare (Zone:DNS:Edit + Zone:Zone:Read). SealedSecret, ns cert-manager.
             apiTokenSecretRef:
               name: cloudflare-api-token
               key: api-token

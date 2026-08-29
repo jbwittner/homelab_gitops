@@ -13,84 +13,98 @@ Les objets métier de cert-manager : `ClusterIssuer` Let's Encrypt (DNS-01 Cloud
   `dns01.cloudflare` → `apiTokenSecretRef` sur le Secret servi par openbao
 - `manifests/certificates.yaml` — les 3 `Certificate` wildcard (`*.wittner.tech`,
   `*.lan.wittner.tech`, `*.kalecgos.lan.wittner.tech`), **ns `gateway`**
-- `manifests/cloudflare-api-token.externalsecret.yaml` — `ExternalSecret` `cloudflare-api-token`
-  (ns `cert-manager`, clé `api-token`), servi par [openbao](../openbao/README.md) depuis
-  `kv/homelab/cert-manager/cloudflare`
+- `manifests/cloudflare-api-token.sealed.yaml` — `SealedSecret` `cloudflare-api-token`
+  (ns `cert-manager`, clé `api-token`), déchiffré en cluster par
+  [sealed-secrets](../sealed-secrets/README.md). **À sceller** : la ligne est commentée dans
+  `kustomization.yaml` tant que le fichier n'existe pas (cf. §Sceller le token)
+- `manifests/cloudflare-api-token.secret.yaml` — **clair, gitignoré** : template d'entrée de
+  `kubeseal`, à supprimer après scellement
 
 ## Contraintes
 
 - Chaque manifeste porte son propre namespace (ClusterIssuer cluster-scoped, Certificates dans
-  `gateway`, ExternalSecret dans `cert-manager`) → **pas** de `namespace:` global dans le
+  `gateway`, SealedSecret dans `cert-manager`) → **pas** de `namespace:` global dans le
   `kustomization.yaml`.
-- Les **trois** secrets TLS doivent exister, sinon les listeners correspondants de `shared-gw`
-  restent `ResolvedRefs=False`.
-- Le nom/namespace du `Secret` produit doivent matcher l'`apiTokenSecretRef` du ClusterIssuer :
-  c'est `spec.target.name` de l'`ExternalSecret` qui fait foi, pas son `metadata.name`.
-- **`deletionPolicy: Retain` est load-bearing ici plus qu'ailleurs.** OpenBao redémarre scellé à
-  chaque redémarrage de son pod (donc à chaque upgrade de son chart) ; sans `Retain`, le Secret
-  disparaîtrait et le renouvellement Let's Encrypt — silencieux, tous les 60 j — échouerait sur
-  un solver DNS-01 sans token. Ne jamais y toucher.
-- **Le composant est en wave `-4`, le coffre en wave `1` : au bootstrap à froid, cet
-  `ExternalSecret` est NotReady jusqu'au descellement manuel d'openbao.** Conséquence : les
-  `Certificate` wildcard ne s'émettent qu'après cette étape, donc les listeners TLS de `shared-gw`
-  restent `ResolvedRefs=False` pendant toute la première partie du bootstrap, et l'Application
-  passe `Degraded` en attendant. Rien ne se débloque tout seul : le descellement est un geste
-  humain. Même situation que l'Application `argocd` (wave `-1`), qui tire aussi ses secrets du
-  coffre.
-- **Un spoke qui consommerait ce coffre par `https://openbao.lan.wittner.tech` créerait un
-  cycle** : ce nom est servi par `shared-gw` avec un certificat wildcard… émis grâce à ce token.
-  Tant qu'ESO ne tourne que sur le hub (accès intra-cluster, cf.
-  [external-secrets](../external-secrets/README.md)), le cycle n'existe pas — il apparaîtrait au
-  premier spoke consommateur.
+- Les secrets TLS doivent exister, sinon les listeners correspondants de `shared-gw` restent
+  `ResolvedRefs=False`.
+- Le nom/namespace du `Secret` produit doivent matcher l'`apiTokenSecretRef` des ClusterIssuer :
+  c'est `spec.template.metadata` du `SealedSecret` qui fait foi.
+- **Le `SealedSecret` est chiffré pour le couple (`cloudflare-api-token`, `cert-manager`).** Le
+  déplacer d'un namespace ou le renommer le rend indéchiffrable — il faut le resceller.
+- **La clé privée du contrôleur sealed-secrets devient une dépendance de renouvellement TLS.**
+  Un contrôleur redémarré sans clé restaurée régénère une clé neuve : le token n'est plus
+  déchiffrable, et le renouvellement Let's Encrypt — silencieux, tous les 60 j — échoue sur un
+  solver DNS-01 sans token. Cf. l'encadré CAUTION de
+  [sealed-secrets](../sealed-secrets/README.md).
+- **Le composant est en wave `-4`, le contrôleur sealed-secrets en wave `-8`** : l'ordre est bon,
+  le `SealedSecret` se déchiffre dès la première sync. C'est le gain de ce canal par rapport au
+  coffre (wave `1`, descellement manuel) : plus d'attente d'un geste humain au bootstrap à froid
+  avant que les `Certificate` wildcard ne s'émettent.
+- **La rotation redevient un commit.** Contrairement au canal openbao, changer le token impose
+  `kubeseal` + commit + sync — c'est le coût assumé de ce canal (cf.
+  [doc/regles-gitops.md](../../../doc/regles-gitops.md)).
 
 ## Opérations
 
-### Poser le token API Cloudflare au coffre
+### Sceller le token API Cloudflare
 
 > Règle GitOps : aucun secret en clair au cluster ni dans Git
-> ([doc/regles-gitops.md](../../../doc/regles-gitops.md)). Le repo ne contient qu'un **pointeur**
-> ; la valeur vit dans openbao et n'y arrive par aucun commit.
+> ([doc/regles-gitops.md](../../../doc/regles-gitops.md)). Ici le repo porte la valeur, mais
+> **chiffrée** pour la clé publique du contrôleur : seul le cluster peut la relire.
 
 **Pré-requis** :
 
 1. Un **token API Cloudflare** avec `Zone : DNS : Edit` + `Zone : Zone : Read` sur la zone
    `wittner.tech` — https://dash.cloudflare.com/profile/api-tokens.
-2. OpenBao **descellé** : `kubectl -n openbao exec -ti openbao-0 -- bao status`.
+2. Le contrôleur **sealed-secrets** en place (wave `-8`) et sa clé restaurée.
 
 Commandes **depuis la racine du repo** :
 
 ```bash
-# La valeur se pose au coffre, pas dans Git. Aucun commit, aucun kubeseal.
-kubectl -n openbao exec -ti openbao-0 -- \
-  bao kv put kv/homelab/cert-manager/cloudflare api-token=…
+# 1. Renseigner la valeur dans le template en clair (gitignoré)
+$EDITOR cluster/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml
 
-# Vérifier ce que le coffre sert (versionné : `bao kv rollback` rattrape un écrasement)
-kubectl -n openbao exec -ti openbao-0 -- bao kv get kv/homelab/cert-manager/cloudflare
+# 2. Sceller
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml \
+  > cluster/infra/cert-manager-config/manifests/cloudflare-api-token.sealed.yaml
+
+# 3. Supprimer le clair, décommenter la ligne dans kustomization.yaml, committer les deux
+#    ensemble (une ligne référencée sans fichier casse `kustomize build`).
+rm cluster/infra/cert-manager-config/manifests/cloudflare-api-token.secret.yaml
 ```
 
-ESO lit le chemin → matérialise le `Secret` `cloudflare-api-token` (ns `cert-manager`) →
-cert-manager résout le DNS-01 → Let's Encrypt émet les wildcards → les `wildcard-*-tls` se
-remplissent → `shared-gw` passe `Programmed`.
+Le contrôleur déchiffre → `Secret` `cloudflare-api-token` (ns `cert-manager`) → cert-manager
+résout le DNS-01 → Let's Encrypt émet les wildcards → les `wildcard-*-tls` se remplissent →
+`shared-gw` passe `Programmed`.
 
-**Rotation** : régénérer le token côté Cloudflare, refaire le `bao kv put`. Ni commit, ni
-redéploiement — ESO reprend la valeur au prochain `refreshInterval` (1 h). Pour l'appliquer tout
-de suite :
+**Rotation** : régénérer le token côté Cloudflare, refaire les étapes 1→3, committer. Contrairement
+au canal openbao, la rotation demande un commit et une sync.
 
-```bash
-kubectl -n cert-manager annotate externalsecret cloudflare-api-token \
-  force-sync=$(date +%s) --overwrite
-```
-
-⚠️ **Ordre à respecter pour la migration elle-même** : poser la valeur au coffre **avant** de
-pousser la suppression du `SealedSecret`. Dans l'autre sens, le prune ArgoCD retire le `Secret`
-et le DNS-01 n'a plus de token — sans casse immédiate (les certificats déjà émis restent
-valides), mais le prochain renouvellement échoue.
+> [!WARNING]
+> **Migration depuis le canal openbao — le Secret résiduel bloque le contrôleur.** L'ancien
+> `ExternalSecret` était en `deletionPolicy: Retain` : le prune ArgoCD le retire, mais le `Secret`
+> `cloudflare-api-token` qu'il avait matérialisé **survit**. sealed-secrets refuse alors d'écrire
+> par-dessus un Secret dont il n'est pas propriétaire (`already exists and is not managed by
+> SealedSecret`). Avant la première sync du `SealedSecret`, faire l'un des deux :
+>
+> ```bash
+> # soit supprimer le résidu (les certificats déjà émis restent valides le temps du trou)
+> kubectl -n cert-manager delete secret cloudflare-api-token
+>
+> # soit le céder au contrôleur
+> kubectl -n cert-manager annotate secret cloudflare-api-token \
+>   sealedsecrets.bitnami.com/managed=true --overwrite
+> ```
+>
+> Et poser le `.sealed.yaml` **avant** de laisser le prune passer : dans l'autre sens le DNS-01
+> n'a plus de token — sans casse immédiate, mais le prochain renouvellement échoue.
 
 ### Vérifier
 
 ```bash
-kubectl -n cert-manager get externalsecret,secret | command grep cloudflare-api-token
-kubectl -n cert-manager describe externalsecret cloudflare-api-token   # SecretSynced attendu
+kubectl -n cert-manager get sealedsecret,secret | command grep cloudflare-api-token
+kubectl -n cert-manager describe sealedsecret cloudflare-api-token   # events : « no key could decrypt » = mauvaise clé
 kubectl -n gateway get certificate
 kubectl -n gateway describe certificate wildcard-lan-tls   # events DNS-01 / issuance
 kubectl get clusterissuer letsencrypt-prod -o wide

@@ -72,13 +72,14 @@ différences pour un spoke, toutes deux dues au fait que le coffre vit sur le hu
   que les charges tournent normalement. Signal correct, mais à savoir lire.
 - **La wave `-7` est de nouveau ordonnante.** Sous forme d'`ApplicationSet`, elle portait sur
   l'appset et non sur les Applications générées : la présence des CRDs avant le premier
-  `ExternalSecret` du repo (celui de `cert-manager-config`, wave `-4`) n'était qu'*éventuelle*.
+  `ExternalSecret` du repo (celui d'`argocd`, wave `-1`) n'était qu'*éventuelle*.
   Le tier-2 `infra` synchronisant désormais l'Application elle-même, l'ordre est **garanti**.
 - **Les CRDs arrivent avant le premier `ExternalSecret`, le coffre non.** La wave `-7` garantit
   que les manifestes se rendent, pas qu'ils se résolvent : openbao est en wave `1` et se descelle
-  à la main. Tout `ExternalSecret` posé en wave négative — `cert-manager-config` (`-4`),
-  `argocd` (`-1`) — est donc `NotReady` par construction au bootstrap à froid, jusqu'au
-  descellement.
+  à la main. Tout `ExternalSecret` posé en wave négative — `argocd` (`-1`) — est donc `NotReady`
+  par construction au bootstrap à froid, jusqu'au descellement. Le token DNS de
+  `cert-manager-config` (wave `-4`) échappait le plus mal à cette contrainte : il est passé au
+  canal [sealed-secrets](../sealed-secrets/README.md), déchiffrable dès la wave `-8`.
 - **La config du coffre n'est pas dans ce repo.** Le store suppose côté openbao un moteur KV
   v2 sur `kv`, le mount d'auth du cluster, un role `external-secrets` borné au ServiceAccount du
   même nom, et une policy en lecture sur `kv/data/homelab/*`. Ce contrat vit dans le repo

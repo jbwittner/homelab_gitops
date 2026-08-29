@@ -5,11 +5,12 @@
 Contrôleur [Bitnami sealed-secrets](https://github.com/bitnami/sealed-secrets) : déchiffre dans
 le cluster les `SealedSecret` committés dans Git. C'est l'un des **deux** canaux de secrets du
 repo, aux côtés d'[openbao](../openbao/README.md) + [external-secrets](../external-secrets/README.md) —
-critère de choix : [doc/regles-gitops.md](../../../doc/regles-gitops.md). Il ne porte plus qu'**un**
-secret, celui qui reste strictement en amont du coffre dans le graphe de bootstrap : le Secret de
-cluster du spoke, requis avant le tier-1 (le token DNS de `cert-manager-config` est passé au
-coffre, cf. [cert-manager-config](../cert-manager-config/README.md)). Wave **-8** : le contrôleur
-précède tout SealedSecret consommé plus tard.
+critère de choix : [doc/regles-gitops.md](../../../doc/regles-gitops.md). Il porte les secrets qui
+doivent être lisibles **en amont du coffre** dans le graphe de bootstrap : le Secret de cluster du
+spoke (requis avant le tier-1) et le token DNS de
+[cert-manager-config](../cert-manager-config/README.md) (wave `-4`, donc bien avant le
+descellement manuel d'openbao en wave `1`). Wave **-8** : le contrôleur précède tout SealedSecret
+consommé plus tard.
 
 ## Fichiers
 

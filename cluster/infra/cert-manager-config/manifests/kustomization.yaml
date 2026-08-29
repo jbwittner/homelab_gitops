@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# ClusterIssuer (cluster-scoped), Certificates (ns gateway), token Cloudflare (ExternalSecret, ns cert-manager).
+# ClusterIssuer (cluster-scoped), Certificates (ns gateway), token Cloudflare (SealedSecret, ns cert-manager).
 # Chaque manifeste porte son propre namespace → pas de `namespace:` global ici.
 resources:
   # Les deux ClusterIssuer coexistent : `certificates.yaml` choisit lequel émet. Staging sert à
@@ -9,6 +9,12 @@ resources:
   - clusterissuer-staging.yaml
   - clusterissuer-prod.yaml
   - certificates.yaml
-  # Prérequis : la valeur posée au coffre (cf. README.md). Le manifeste n'est qu'un pointeur, il
-  # se rend toujours — c'est l'ExternalSecret qui reste NotReady si le chemin KV est vide.
-  - cloudflare-api-token.externalsecret.yaml
+  # Token DNS-01 : canal sealed-secrets (le SealedSecret porte la valeur, pas un pointeur).
+  # ⚠️ Ligne COMMENTÉE tant que `cloudflare-api-token.sealed.yaml` n'est pas scellé et committé :
+  # un fichier référencé mais absent casse `kustomize build` et met l'Application en erreur.
+  # Décommenter dans le MÊME commit que le .sealed.yaml (cf. README.md §Sceller le token).
+  - cloudflare-api-token.sealed.yaml
+  #
+  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal openbao + external-secrets. ---
+  # Les deux ne peuvent pas coexister — ils visent le même Secret `cloudflare-api-token`.
+  # - cloudflare-api-token.externalsecret.yaml
