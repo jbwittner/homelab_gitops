@@ -12,9 +12,9 @@ par le tier-1.
 - `gateway-api.app.yaml` — Application (archétype (c), path → `manifests/`)
 - `manifests/kustomization.yaml` — install upstream **épinglé ici** (source unique de la version)
 - `manifests/namespace.yaml` — ns `gateway`
-- `manifests/gateway.yaml` — `shared-gw`, classe `cilium`, 3 listeners HTTPS :443
-  (`https-public`, `https-internal`, `https-internal-kalecgos`), TLS `Terminate`, secrets
-  `wildcard-*-tls`, `allowedRoutes.namespaces.from: All`
+- `manifests/gateway.yaml` — `shared-gw`, classe `cilium`, 2 listeners HTTPS :443
+  (`https-public` → `*.wittner.tech`, `https-internal` → `*.lan.wittner.tech`), TLS `Terminate`,
+  secrets `wildcard-*-tls` (ns `gateway`), `allowedRoutes.namespaces.from: All`
 
 ## Contraintes
 
