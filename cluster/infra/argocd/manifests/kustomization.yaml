@@ -33,10 +33,11 @@ patches:
     target:
       kind: ConfigMap
       name: argocd-cm
-  - path: argocd-rbac-cm.yaml
-    target:
-      kind: ConfigMap
-      name: argocd-rbac-cm
+  # --- DÉSACTIVÉ : authentik non déployé (le patch ne mappe qu'un groupe authentik). ---
+#   - path: argocd-rbac-cm.yaml
+#     target:
+#       kind: ConfigMap
+#       name: argocd-rbac-cm
   - path: argocd-notifications-cm.yaml
     target:
       kind: ConfigMap

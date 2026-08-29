@@ -21,17 +21,18 @@ data:
   # lui-même : une ressource créée par un contrôleur (PVC de STS, Secret d'opérateur, Job) ne la
   # porte pas, n'est jamais adoptée, donc jamais prunée.
   application.resourceTrackingMethod: annotation
-  # SSO OIDC via authentik. clientSecret référence la SealedSecret argocd-oidc
-  # (clé client-secret), pas argocd-secret managé par Argo. Le provider/application
-  # côté authentik est géré en Terraform (autre repo) — contrat : clientID=argocd,
-  # issuer + scopes ci-dessous doivent matcher.
-  oidc.config: |
-    name: Authentik
-    issuer: https://authentik.wittner.tech/application/o/argocd/
-    clientID: argocd
-    clientSecret: $argocd-oidc:client-secret
-    requestedScopes:
-      - openid
-      - profile
-      - email
-      - groups
+  # --- DÉSACTIVÉ : authentik non déployé. Décommenter pour rétablir le SSO OIDC. ---
+#   # SSO OIDC via authentik. clientSecret référence la SealedSecret argocd-oidc
+#   # (clé client-secret), pas argocd-secret managé par Argo. Le provider/application
+#   # côté authentik est géré en Terraform (autre repo) — contrat : clientID=argocd,
+#   # issuer + scopes ci-dessous doivent matcher.
+#   oidc.config: |
+#     name: Authentik
+#     issuer: https://authentik.wittner.tech/application/o/argocd/
+#     clientID: argocd
+#     clientSecret: $argocd-oidc:client-secret
+#     requestedScopes:
+#       - openid
+#       - profile
+#       - email
+#       - groups
