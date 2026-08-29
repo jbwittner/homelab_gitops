@@ -48,17 +48,25 @@ kubectl apply -f cluster/root.yaml
   triggers, souscriptions globales (cf. §Notifications)
 - `post-bootstrap/argocd-httproute.yaml` — UI via `shared-gw` (cf.
   [doc/reseau.md](../../../doc/reseau.md))
-- `post-bootstrap/argocd-oidc.externalsecret.yaml` — `ExternalSecret` `argocd-oidc`, clé
-  `client-secret` (OIDC), servi par openbao
-- `post-bootstrap/argocd-notifications.externalsecret.yaml` — `ExternalSecret`
-  `argocd-notifications-secret`, clé `grafana-api-key` (cf. §Notifications)
+- `manifests/argocd-notifications-secret.yaml` — patch qui pose
+  `sealedsecrets.bitnami.com/managed: "true"` sur le Secret livré **vide** par l'upstream, sans
+  quoi le contrôleur sealed-secrets refuse d'y écrire (cf. §Notifications)
+- `post-bootstrap/argocd-oidc.sealed.yaml` — `SealedSecret` `argocd-oidc`, clé `client-secret`
+  (OIDC). **Absent du repo tant qu'il n'est pas scellé** (cf. §SSO), ligne commentée dans le
+  `kustomization.yaml`
+- `post-bootstrap/argocd-notifications.sealed.yaml` — `SealedSecret`
+  `argocd-notifications-secret`, clé `grafana-api-key`. **Absent du repo tant qu'il n'est pas
+  scellé** (cf. §Notifications), ligne commentée dans le `kustomization.yaml`
 - `manifests/cluster-bleu-kalecgos.yaml` — Secret de cluster qui **nomme le cluster local**
   `bleu-kalecgos` (sans lui : entrée `in-cluster` codée en dur). Aucun credential dedans → clair,
   rien à sceller (cf. §Nommage du cluster local)
-- `manifests/cluster-bleu-arcanagos.sealed.yaml` — SealedSecret du cluster **spoke**
-  `bleu-arcanagos` (bearer token du SA `argocd-manager`, cf.
-  [argocd-manager](../argocd-manager/README.md)). **Le seul secret de ce composant qui reste
-  scellé** : il est requis à l'étape 2bis du bootstrap, donc avant qu'openbao existe.
+> [!NOTE]
+> **Tous les secrets de ce composant passent par [sealed-secrets](../sealed-secrets/README.md).**
+> Ils transitaient auparavant par openbao + external-secrets ; ces deux composants sont
+> désactivés (`*.noapp.yaml`), donc la CRD `ExternalSecret` n'existe plus dans le cluster et les
+> manifestes correspondants ne s'appliquaient plus. Les valeurs restent au coffre côté openbao si
+> celui-ci est relancé un jour, mais la source de vérité du cluster est le `.sealed.yaml`
+> committé ici.
 
 > [!IMPORTANT]
 > **Deux dossiers, et la séparation est load-bearing.** `manifests/` est aussi la cible de
@@ -69,7 +77,7 @@ kubectl apply -f cluster/root.yaml
 >
 > | Objet | CRD posée par | Wave |
 > |---|---|---|
-> | `ExternalSecret` (OIDC, notifications) | [external-secrets](../external-secrets/README.md) | `-7` |
+> | `SealedSecret` (OIDC, notifications) | [sealed-secrets](../sealed-secrets/README.md) | `-8` |
 > | `HTTPRoute` (UI) | [gateway-api](../gateway-api/README.md) | `-10` |
 >
 > Les deux arrivent donc **après** l'amorçage manuel, mais **avant** la wave `-1` où Argo
@@ -180,20 +188,24 @@ Compte local `admin` conservé en break-glass (`/auth/login`).
 **Câblage du client-secret** (après le `terraform apply`, avec l'output `client_secret`) —
 commandes **depuis la racine du repo** :
 
-Le secret vit dans openbao — **rien à committer**, l'`ExternalSecret` qui le pointe est déjà
-dans le repo :
-
 ```bash
-kubectl -n openbao exec -ti openbao-0 -- \
-  bao kv put kv/homelab/argocd/oidc client-secret=<output terraform client_secret>
+# 1. Renseigner le template en clair (gitignoré, déjà dans le repo de travail) :
+#    post-bootstrap/argocd-oidc.secret.yaml → remplacer REMPLACER par l'output terraform.
+
+# 2. Sceller (le label `app.kubernetes.io/part-of: argocd` du template est recopié par kubeseal
+#    dans le SealedSecret — sans lui ArgoCD ignore le secret et renvoie invalid_client).
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/infra/argocd/post-bootstrap/argocd-oidc.secret.yaml \
+  > cluster/infra/argocd/post-bootstrap/argocd-oidc.sealed.yaml
+
+# 3. Supprimer le clair, décommenter `argocd-oidc.sealed.yaml` dans
+#    post-bootstrap/kustomization.yaml (+ le bloc oidc.config d'argocd-cm.yaml), committer.
+rm cluster/infra/argocd/post-bootstrap/argocd-oidc.secret.yaml
 ```
 
-Rotation : régénérer le secret côté Terraform, refaire le `bao kv put`. ESO reprend la valeur au
-prochain `refreshInterval` (1 h) ; pour l'appliquer tout de suite :
-
-```bash
-kubectl -n argocd annotate externalsecret argocd-oidc force-sync=$(date +%s) --overwrite
-```
+Rotation : régénérer le secret côté Terraform, refaire les étapes 1-3. Le contrôleur
+sealed-secrets réécrit le Secret dès la sync de l'Application ; pour forcer :
+`argocd app sync argocd`.
 
 ## Notifications — annotations Grafana
 
@@ -205,21 +217,31 @@ les dashboards Grafana.
 
 Contrainte du contrôleur : il ne lit **que** le Secret `argocd-notifications-secret` du ns
 `argocd` (nom imposé, pas de `$autre-secret:clé` comme dans `argocd-cm`). Comme l'upstream livre
-déjà ce Secret **vide**, l'`ExternalSecret` qui le remplit est en `creationPolicy: Merge` : en
-`Owner`, ESO refuserait de s'approprier un objet qu'il n'a pas créé. C'est exactement le rôle que
-tenait l'annotation `sealedsecrets.bitnami.com/managed: "true"` du patch, désormais supprimé.
+déjà ce Secret **vide**, le contrôleur sealed-secrets refuserait d'écrire dedans (« Resource ...
+is not managed by SealedSecret ») : le patch `manifests/argocd-notifications-secret.yaml` y pose
+`sealedsecrets.bitnami.com/managed: "true"`, ce qui l'autorise à s'en approprier le contenu.
+L'annotation est portée par les deux objets — le Secret patché (pour la prise en main) et le
+template du SealedSecret (pour qu'une réécriture ne la perde pas).
 
 **Câblage du token** — il ne se provisionne pas en GitOps : création manuelle côté Grafana, puis
-dépôt au coffre.
+scellement.
 
 ```bash
 # 1. Grafana → Administration → Users and access → Service accounts
 #    Créer `argocd-notifications`, rôle Editor, puis « Add service account token »
 #    (le token glsa_… n'est affiché qu'une fois).
 
-# 2. Le déposer au coffre — rien à committer.
-kubectl -n openbao exec -ti openbao-0 -- \
-  bao kv put kv/homelab/argocd/notifications grafana-api-key=<glsa_…>
+# 2. Renseigner le template en clair (gitignoré, déjà dans le repo de travail) :
+#    post-bootstrap/argocd-notifications.secret.yaml → remplacer REMPLACER par le glsa_…
+
+# 3. Sceller.
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/infra/argocd/post-bootstrap/argocd-notifications.secret.yaml \
+  > cluster/infra/argocd/post-bootstrap/argocd-notifications.sealed.yaml
+
+# 4. Supprimer le clair, décommenter `argocd-notifications.sealed.yaml` dans
+#    post-bootstrap/kustomization.yaml, committer.
+rm cluster/infra/argocd/post-bootstrap/argocd-notifications.secret.yaml
 ```
 
 **Où les voir** : une annotation Grafana ne s'affiche **nulle part** par défaut — il faut qu'un
@@ -243,4 +265,6 @@ Debug : `kubectl logs -n argocd deploy/argocd-notifications-controller`. `TRIGGE
 `kubectl -n argocd get app <name> -o jsonpath='{.metadata.annotations}'` (le contrôleur y écrit
 son état `notified.notifications.argoproj.io`).
 
-Rotation du token : régénérer côté Grafana, re-renseigner le template, re-sceller (étape 3).
+Rotation du token : régénérer côté Grafana, re-renseigner le template, re-sceller (étapes 2-4).
+Un `SealedSecret` est chiffré **pour un couple (nom, namespace)** : le déplacer de namespace le
+rend indéchiffrable.

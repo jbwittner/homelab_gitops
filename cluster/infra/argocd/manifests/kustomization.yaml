@@ -42,3 +42,9 @@ patches:
     target:
       kind: ConfigMap
       name: argocd-notifications-cm
+  # Annotation `sealedsecrets.bitnami.com/managed` sur le Secret livré vide par l'upstream :
+  # sans elle le contrôleur sealed-secrets refuse d'y écrire la clé Grafana.
+  - path: argocd-notifications-secret.yaml
+    target:
+      kind: Secret
+      name: argocd-notifications-secret

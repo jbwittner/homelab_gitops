@@ -6,17 +6,26 @@ namespace: argocd
 # de l'`apply -k` manuel du bootstrap (étape 1 du README), exécuté quand seul ArgoCD existe.
 # Tout ce qui vit ici consomme une CRD posée PLUS TARD par le tier-1 — le geste d'amorçage
 # échouerait dessus sur `no matches for kind` :
-#   - `ExternalSecret`  → CRD posée en wave -7 par external-secrets
+#   - `SealedSecret`    → CRD posée en wave -8 par sealed-secrets
 #   - `HTTPRoute`       → CRD posée en wave -10 par gateway-api
 # Les deux dossiers sont deux `source` de la même Application `argocd`, qui les applique en
 # wave -1 : à ce moment-là les deux CRDs sont là depuis longtemps.
 #
 # Critère d'aiguillage : ce qui CASSE l'apply d'amorçage vient ici. Ce qui s'applique proprement
-# reste dans `manifests/`, même si c'est inutile à ce stade — les patchs RBAC (authentik) et
-# notifications (Grafana) sont dans ce cas : inertes tant que leur interlocuteur n'existe pas,
-# mais sans conséquence sur le démarrage d'Argo.
+# reste dans `manifests/`, même si c'est inutile à ce stade — les patchs RBAC (authentik),
+# notifications (Grafana) et l'annotation `managed` du Secret de notifications sont dans ce cas :
+# inertes tant que leur interlocuteur n'existe pas, mais sans conséquence sur le démarrage d'Argo.
 resources:
+  # --- À DÉCOMMENTER APRÈS SCELLEMENT. Les deux fichiers `.sealed.yaml` ne sont pas dans le
+  # repo : ils se produisent avec `kubeseal` depuis le cluster (procédures dans le README,
+  # §Notifications et §SSO). Une ligne pointant un fichier absent casse `kustomize build` et met
+  # l'Application self-managed en erreur — d'où les lignes commentées plutôt que des squelettes
+  # à faux chiffré, que le contrôleur rejetterait de toute façon.
+  #
+  # `argocd-notifications.sealed.yaml` : clé `grafana-api-key`. Sans lui, le
+  # notifications-controller tourne avec un Secret vide → aucune annotation Grafana (échec
+  # silencieux). Son consommateur (kube-prometheus-stack) est de toute façon en `.noapp.yaml`.
+#   - argocd-notifications.sealed.yaml
   # --- DÉSACTIVÉ : authentik non déployé. ---
-#   - argocd-oidc.externalsecret.yaml
-  - argocd-notifications.externalsecret.yaml
+#   - argocd-oidc.sealed.yaml
   - argocd-httproute.yaml

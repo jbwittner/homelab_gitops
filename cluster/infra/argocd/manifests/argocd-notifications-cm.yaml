@@ -8,10 +8,11 @@ data:
   # (POST /api/annotations) à chaque événement souscrit. Appel in-cluster —
   # inutile de repasser par shared-gw/TLS pour du trafic argocd → monitoring.
   # `$grafana-api-key` est résolu dans le Secret `argocd-notifications-secret`
-  # (alimenté depuis openbao par ../post-bootstrap/argocd-notifications.externalsecret.yaml,
-  # en `creationPolicy: Merge`) : le contrôleur ne lit QUE ce secret-là, d'où le nom
-  # imposé (contrairement à `$argocd-oidc:client-secret` dans argocd-cm, qui accepte
-  # n'importe quel secret).
+  # (alimenté par ../post-bootstrap/argocd-notifications.sealed.yaml ; le Secret étant livré
+  # VIDE par l'install.yaml upstream, l'annotation `sealedsecrets.bitnami.com/managed: "true"`
+  # posée par ./argocd-notifications-secret.yaml autorise le contrôleur à y écrire) : le
+  # contrôleur ne lit QUE ce secret-là, d'où le nom imposé (contrairement à
+  # `$argocd-oidc:client-secret` dans argocd-cm, qui accepte n'importe quel secret).
   service.grafana: |
     apiUrl: http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local/api
     apiKey: $grafana-api-key
