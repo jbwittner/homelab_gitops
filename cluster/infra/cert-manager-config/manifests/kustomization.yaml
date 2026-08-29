@@ -10,9 +10,8 @@ resources:
   - clusterissuer-prod.yaml
   - certificates.yaml
   # Token DNS-01 : canal sealed-secrets (le SealedSecret porte la valeur, pas un pointeur).
-  # ⚠️ Ligne COMMENTÉE tant que `cloudflare-api-token.sealed.yaml` n'est pas scellé et committé :
-  # un fichier référencé mais absent casse `kustomize build` et met l'Application en erreur.
-  # Décommenter dans le MÊME commit que le .sealed.yaml (cf. README.md §Sceller le token).
+  # Déchiffré par le contrôleur sealed-secrets (wave -8), donc bien avant cette app (wave -4).
+  # Rotation = kubeseal + commit (cf. README.md §Sceller le token).
   - cloudflare-api-token.sealed.yaml
   #
   # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal openbao + external-secrets. ---
