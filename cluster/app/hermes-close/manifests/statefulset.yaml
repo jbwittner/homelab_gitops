@@ -32,11 +32,20 @@ spec:
       securityContext:
         fsGroup: 10000
       initContainers:
-        # Pose le config.yaml de Git dans le volume avant que l'entrypoint ne sème le sien.
-        # Recopié à CHAQUE démarrage, sans condition : Git reste la source de vérité et toute
-        # dérive introduite dans le pod est écrasée. Le ConfigMap est généré avec un suffixe de
-        # hash (cf. kustomization.yaml), donc éditer `config/config.yaml` renomme le volume et
-        # déclenche le rollout — sans quoi la recopie n'aurait lieu à aucun moment.
+        # Pose le config.yaml et le SOUL.md de Git dans le volume avant que l'entrypoint ne sème
+        # les siens. Recopiés à CHAQUE démarrage, sans condition : Git reste la source de vérité
+        # et toute dérive introduite dans le pod est écrasée. Le ConfigMap est généré avec un
+        # suffixe de hash (cf. kustomization.yaml), donc éditer un de ces fichiers renomme le
+        # volume et déclenche le rollout — sans quoi la recopie n'aurait lieu à aucun moment.
+        #
+        # `/opt/data` est le HERMES_HOME de cette image, et `SOUL.md` n'est chargé QUE depuis là
+        # — Hermes ne le cherche jamais dans le répertoire de travail. C'est ce qui en fait le
+        # seul emplacement fiable ici : le cwd de l'agent n'est pas fixé par ce manifeste.
+        #
+        # Hermes sème un SOUL.md par défaut si le fichier est ABSENT, et ne réécrit jamais un
+        # fichier existant. Le poser ici avant le démarrage suffit donc à gagner ; l'écrasement
+        # inconditionnel est ce qui garantit qu'un `SOUL.md` modifié depuis le dashboard ne
+        # survit pas au redémarrage suivant.
         - name: seed-config
           image: busybox:1.37.0
           command:
@@ -45,6 +54,7 @@ spec:
             - |
               set -eu
               install -o 10000 -g 10000 -m 0600 /config/config.yaml /opt/data/config.yaml
+              install -o 10000 -g 10000 -m 0600 /config/SOUL.md /opt/data/SOUL.md
           volumeMounts:
             - { name: data, mountPath: /opt/data }
             - { name: config, mountPath: /config, readOnly: true }

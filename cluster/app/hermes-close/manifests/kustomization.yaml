@@ -29,6 +29,20 @@ configMapGenerator:
   - name: hermes-config
     files:
       - config/config.yaml
+      # Identité de l'agent, chargée par Hermes UNIQUEMENT depuis `$HERMES_HOME/SOUL.md`
+      # (= `/opt/data/SOUL.md` ici) et injectée verbatim en tête du system prompt. C'est ce qui
+      # apprend à l'agent qu'il est dans un réseau fermé — sans elle, il découvre la contrainte
+      # en enchaînant des timeouts qu'il interprète comme des pannes passagères, et réessaie.
+      #
+      # ⚠️ Le contenu passe par le scanner d'injection de prompt d'Hermes avant chargement. Il
+      # bloque le fichier ENTIER sur des motifs comme « ignore previous instructions », « do not
+      # tell the user », `cat .env` ou `curl ... $API_KEY` — y compris cités en exemple. Un
+      # fichier bloqué ne produit qu'une ligne `[BLOCKED: ...]` : l'agent démarre sans identité
+      # et rien d'autre ne le signale. Rester sur du descriptif.
+      #
+      # ⚠️ Ce fichier n'existe PAS côté `hermes` : c'est une SECONDE différence entre les deux
+      # arbres, en plus de la policy réseau. Cf. README §Ce que SOUL.md change à l'expérience.
+      - config/SOUL.md
       # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
       # la révision du secret entre dans le hash. Le Secret est produit par le contrôleur
       # sealed-secrets, pas par kustomize — son contenu ne peut donc pas influencer le pod

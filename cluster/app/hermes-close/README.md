@@ -28,6 +28,7 @@ Ce diff doit rester court. À la livraison, il contient exactement :
 | hostnames `hermes*.lan` → `hermes-close*.lan` | un Gateway, deux noms |
 | `public_url` et `API_SERVER_CORS_ORIGINS` | découlent des hostnames |
 | `hermes-egress.ciliumnetworkpolicy.yaml` | **absent chez `hermes`, présent ici — la variable** |
+| `config/SOUL.md` | **absent chez `hermes` — seconde variable, cf. ci-dessous** |
 | commentaires | pointent vers l'autre composant |
 
 Tout autre écart qui apparaît dans ce diff est un bug de l'expérience, pas une amélioration.
@@ -43,6 +44,31 @@ Changer le modèle, les ressources ou les toolsets d'un seul côté invalide la 
 > et npm des DEUX côtés et ne faire varier que les hosts de recherche. Cf. §Ajouter une
 > destination.
 
+## Ce que SOUL.md change à l'expérience
+
+`manifests/config/SOUL.md` dit à l'agent, dès le premier tour, qu'il est dans un réseau fermé :
+ce qui est joignable, comment les échecs se présentent (timeout DNS, pas refus explicite), et
+qu'il est inutile de réessayer.
+
+**C'est une seconde variable, et il faut en avoir conscience.** Le montage ne compare plus
+« agent en ligne » à « agent hors ligne », mais « agent en ligne » à « agent hors ligne **et
+informé** ». Les deux questions sont légitimes, ce ne sont pas les mêmes :
+
+| Sans SOUL.md | Avec SOUL.md |
+| --- | --- |
+| Mesure l'**adaptation** : l'agent découvre la contrainte en accumulant des timeouts | Mesure la **capacité résiduelle** : ce qu'il sait faire en sachant ce dont il dispose |
+| Une part des échecs vient de l'obstination à réessayer | Les échecs restants sont attribuables au manque d'information, pas au manque de contexte |
+| Coûte des tours et des jetons en tentatives vouées à expirer | Comparaison plus propre à budget de jetons égal |
+
+Pour mesurer l'adaptation plutôt que la capacité résiduelle : retirer `config/SOUL.md` du
+`configMapGenerator` **et** la ligne `install` correspondante de l'initContainer. Les deux
+ensemble — le fichier retiré du seul ConfigMap ferait échouer l'initContainer, et le pod
+bouclerait en `Init:Error`.
+
+Pour rétablir la symétrie dans l'autre sens, poser un `SOUL.md` côté `hermes` avec la même
+structure et une section réseau disant la vérité de cette instance-là. Attention : cela modifie
+le hash de son ConfigMap, donc **redémarre le pod `hermes` qui tourne**.
+
 ## Fichiers
 
 - `hermes-close.app.yaml` — Application (archétype (c), path → `manifests/`). Livré en
@@ -52,6 +78,8 @@ Changer le modèle, les ressources ou les toolsets d'un seul côté invalide la 
 - `manifests/hermes-env.sealed.yaml` — `SealedSecret` **propre à ce namespace** (cf. §Câblage
   des secrets)
 - `manifests/config/config.yaml` — identique à celui de `hermes`, au `public_url` près
+- `manifests/config/SOUL.md` — identité de l'agent : c'est ce qui lui apprend qu'il est dans un
+  réseau fermé (cf. §Ce que SOUL.md change à l'expérience)
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi, initContainer de semis
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
 - `manifests/hermes-httproute.yaml` — `hermes-close.lan.wittner.tech` → dashboard,
