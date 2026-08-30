@@ -13,11 +13,11 @@ metadata:
 data:
   config.yaml: |
     model:
-      provider: openai
+      provider: openai-codex
       # ⚠️ Identifiant à confirmer contre le compte OpenAI utilisé (`hermes model` liste ce que
       # l'endpoint expose réellement). Un id invalide fait échouer le premier tour d'agent, pas
       # le démarrage du pod.
-      name: "gpt-5.1"
+      name: gpt-5.6-terra
 
     terminal:
       # `local` = les commandes de l'agent s'exécutent DANS ce pod. Les backends `docker` et
