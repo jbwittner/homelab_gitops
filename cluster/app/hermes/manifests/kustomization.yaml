@@ -3,9 +3,8 @@ kind: Kustomization
 namespace: hermes
 resources:
   - namespace.yaml
-  # Décommenter APRÈS avoir produit hermes-env.sealed.yaml avec kubeseal (cf. README).
-  # Le StatefulSet ne démarrera pas sans : `envFrom` sur un Secret absent bloque le pod en
-  # CreateContainerConfigError.
+  # Produit par kubeseal (cf. README §Câblage des secrets). Le StatefulSet ne démarre pas sans :
+  # `envFrom` sur un Secret absent bloque le pod en CreateContainerConfigError.
   - hermes-env.sealed.yaml
   - hermes-config.configmap.yaml
   - statefulset.yaml

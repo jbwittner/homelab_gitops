@@ -65,6 +65,13 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   exposés.
 - **Pas d'exposition publique.** Les mêmes scanners ont aussi visé les serveurs d'API exposés.
   D'où `sectionName: https-internal` sur les deux routes.
+- **Un token de messagerie invalide fait sortir toute la gateway.** L'échec de connexion à la
+  plateforme est traité comme un conflit de démarrage non rejouable : le processus quitte, s6 le
+  relance en boucle, et le serveur d'API ne monte jamais — la `readinessProbe` sur 8642 laisse
+  alors le pod `NotReady` sans que rien ne pointe vers la messagerie. Pas de messagerie voulue =
+  retirer la variable, pas y laisser un placeholder.
+- **`API_SERVER_KEY` : 16 caractères minimum**, pas 8 comme l'annonce la doc amont. En dessous,
+  le hook de démarrage refuse de lancer `api_server`.
 - **`config.yaml` est recopié depuis le ConfigMap à chaque démarrage.** Un `hermes config set`
   fait à la main dans le pod est écrasé au redémarrage suivant — c'est le but. Corollaire :
   éditer le ConfigMap n'a d'effet qu'après un `rollout restart`, il n'y a pas de rechargement à
