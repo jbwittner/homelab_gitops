@@ -10,4 +10,4 @@ resources:
   - statefulset.yaml
   - service.yaml
   - hermes-httproute.yaml
-  - hermes-egress.ciliumnetworkpolicy.yaml
+  #- hermes-egress.ciliumnetworkpolicy.yaml
