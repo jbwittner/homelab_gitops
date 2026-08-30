@@ -36,9 +36,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
 - `manifests/hermes-httproute.yaml` — `hermes.lan.wittner.tech` → dashboard,
   `hermes-api.lan.wittner.tech` → API
-- `manifests/hermes-egress.ciliumnetworkpolicy.yaml` — egress défaut-refus : DNS + `api.openai.com`
-  + `api.telegram.org`, rien d'autre
-- `manifests/kustomization.yaml` — assemblage
+- `manifests/kustomization.yaml` — assemblage. **Aucune `CiliumNetworkPolicy`** : ce composant
+  est l'instance à sortie libre, cf. §Le jumeau contraint.
 
 ## Contraintes
 
@@ -47,8 +46,12 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 > `local` : ni Docker ni SSH ne sont joignables depuis un pod, l'agent shell donc dans son propre
 > conteneur. Deux garde-fous sont load-bearing et ne se retirent pas sans réfléchir :
 > `automountServiceAccountToken: false` (sans lui, une injection de prompt vaut un accès à l'API
-> kube) et l'absence de tout RBAC associé. Le troisième est la `CiliumNetworkPolicy` d'egress,
-> cf. §Egress — c'est la seule du repo, ne pas la prendre pour un reliquat copié d'ailleurs.
+> kube) et l'absence de tout RBAC associé.
+>
+> Il n'y en a **pas de troisième** : cette instance a un accès sortant libre. Le rayon d'action de
+> l'agent est donc le pod *et tout ce que le réseau lui laisse joindre*. C'est délibéré et c'est
+> le sujet de l'expérience (§Le jumeau contraint) — mais ça reste la raison pour laquelle son
+> dashboard et son API ne sortent pas du listener `https-internal`.
 
 - **Le conteneur démarre en root, et c'est voulu.** s6-overlay chown `/opt/data` au premier boot
   puis descend sur l'uid 10000 pour chaque service supervisé. Poser `runAsNonRoot: true` casse le
@@ -190,8 +193,10 @@ modifie ainsi sans repasser par kubeseal. Une valeur fausse y est sans danger : 
 alors tout le monde. **Ne pas lui substituer `DISCORD_ALLOW_ALL_USERS`**, que la doc amont réserve
 au développement.
 
-Pour une autre plateforme (`TELEGRAM_BOT_TOKEN`, `EMAIL_IMAP_*`/`EMAIL_SMTP_*`, …) : mêmes règles,
-et penser à ouvrir ses hosts dans la `CiliumNetworkPolicy` (cf. §Egress).
+Pour une autre plateforme (`TELEGRAM_BOT_TOKEN`, `EMAIL_IMAP_*`/`EMAIL_SMTP_*`, …) : mêmes règles.
+Rien à ouvrir côté réseau ici — mais si la même plateforme est activée sur
+[hermes-close](../hermes-close/README.md), ses hosts doivent y être ajoutés à `hermes-egress`,
+sinon la gateway y sortira en boucle au démarrage.
 
 ### Passer le dashboard sur OIDC
 
@@ -201,34 +206,37 @@ L'auth basic est le minimum viable pour un accès LAN. Pour brancher
 `HERMES_DASHBOARD_OIDC_CLIENT_ID` (le fournisseur `dashboard_auth/self_hosted` s'active à leur
 seule présence), et resceller.
 
-### Egress
+### Le jumeau contraint
 
-Le pod est en **défaut-refus sortant**. Trois sorties seulement :
+[hermes-close](../hermes-close/README.md) est une **copie conforme** de ce composant, à une
+différence près : il porte une `CiliumNetworkPolicy` d'egress en défaut-refus, qui ne laisse
+passer que le fournisseur LLM et Discord. Ce composant-ci, lui, n'a **aucune** policy — sortie
+libre.
 
-| Destination | Port | Pourquoi |
-| --- | --- | --- |
-| CoreDNS (`kube-system`) | 53 | et uniquement pour résoudre les noms ci-dessous |
-| `chatgpt.com` | 443 | inférence Codex (`DEFAULT_CODEX_BASE_URL`) |
-| `auth.openai.com` | 443 | rafraîchissement du jeton OAuth — son oubli ne casse rien avant l'expiration |
-| `discord.com`, `gateway.discord.gg` | 443 | REST et WebSocket de la passerelle |
-| `cdn.discordapp.com`, `media.discordapp.net` | 443 | pièces jointes ; sans eux le bot répond mais toute image échoue |
-
-Tout le reste tombe : GitHub, PyPI, npm, MCP distants, le reste du cluster. Les pulls d'image ne
-sont pas concernés (c'est le kubelet qui les fait, pas ce pod).
-
-**Ajouter une destination** = deux endroits dans le même fichier, jamais un seul : le `matchName`
-sous `rules.dns` **et** le `toFQDNs`. Le proxy DNS de Cilium ne débloque une IP que pour un nom
-qu'il a lui-même vu résoudre ; un `toFQDNs` orphelin ne matche rien et le symptôme est un timeout
-réseau, pas un refus explicite.
-
-La policy ne déclare **que** de l'egress, ce qui laisse l'ingress non appliqué — c'est ainsi que
-le `shared-gw` continue de joindre 8642/9119. Y ajouter un bloc `ingress:` couperait le Gateway.
+Le montage sert à mesurer ce qu'un agent perd quand on lui coupe internet. Il ne vaut que si une
+seule variable change :
 
 ```bash
-kubectl -n hermes get cnp hermes-egress
-cilium monitor --type drop -n hermes            # depuis un pod cilium, voir ce qui tombe
-kubectl -n hermes exec sts/hermes -- curl -sS -m5 https://api.openai.com/v1/models -o /dev/null -w '%{http_code}\n'
+diff -r cluster/app/hermes/manifests cluster/app/hermes-close/manifests
 ```
+
+Ce diff ne doit contenir que le namespace, les hostnames et ce qui en découle
+(`public_url`, `API_SERVER_CORS_ORIGINS`), plus le fichier de policy présent d'un seul côté. Tout
+le reste — modèle, ressources, toolsets, version d'image — doit rester identique. Modifier ce
+composant sans reporter le changement de l'autre côté invalide la comparaison sans que rien ne le
+signale.
+
+Le test qui vérifie que la variable est bien la variable :
+
+```bash
+kubectl -n hermes       exec sts/hermes -- curl -sS -m5 https://example.com -o /dev/null -w '%{http_code}\n'   # 200
+kubectl -n hermes-close exec sts/hermes -- curl -sS -m5 https://example.com -o /dev/null -w '%{http_code}\n'   # échec
+```
+
+Ce qui n'a **pas** été dupliqué : le `SealedSecret` (chiffré pour le couple nom+namespace, à
+resceller là-bas), le token Discord (une seconde application est nécessaire, sinon les deux bots
+répondent au même message) et l'auth OAuth du provider LLM (elle vit sur le PVC, deux flux device
+code à lancer).
 
 ### Sauvegarde
 

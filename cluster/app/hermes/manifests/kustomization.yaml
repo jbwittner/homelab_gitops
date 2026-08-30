@@ -9,8 +9,11 @@ resources:
   - statefulset.yaml
   - service.yaml
   - hermes-httproute.yaml
-  # Désactivé pour l'instant : la gateway n'a pas de messagerie, donc pas de trafic sortant
-  # - hermes-egress.ciliumnetworkpolicy.yaml
+  # ⚠️ AUCUNE CiliumNetworkPolicy ici, et c'est le sujet. Ce composant est l'instance à SORTIE
+  # LIBRE ; sa copie conforme [hermes-close](../../hermes-close/README.md) porte la policy
+  # d'egress, et c'est la seule différence entre les deux arbres. La `hermes-egress` qui vivait
+  # ici a été déplacée là-bas — ne pas en réintroduire une copie ici, ce serait supprimer le
+  # témoin de l'expérience.
 
 # `config.yaml` d'Hermes. C'est le canal de configuration NON secrète — les clés d'API passent
 # par le Secret `hermes-env`, jamais ici.

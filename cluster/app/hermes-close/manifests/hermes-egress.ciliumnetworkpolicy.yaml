@@ -2,6 +2,12 @@
 # `automountServiceAccountToken: false` / pas de RBAC : l'agent exécute du code décidé par un
 # LLM dans ce pod, cette policy borne ce que ce code peut joindre.
 #
+# ⚠️ CE FICHIER EST LA VARIABLE DE L'EXPÉRIENCE. `hermes-close` et [hermes](../../hermes/) sont
+# deux copies conformes de la même instance ; ce fichier n'existe que d'un seul côté. Y ajouter
+# une destination revient à déplacer la frontière qu'on mesure — le faire pour dépanner, puis
+# oublier de revenir en arrière, rend les deux instances indiscernables sans que rien ne le
+# signale.
+#
 # ⚠️ Poser une `CiliumNetworkPolicy` qui ne déclare QUE `egress` bascule l'endpoint en
 # défaut-refus **sur la seule direction sortante**. L'ingress reste non appliqué, donc le
 # `shared-gw` continue de joindre 8642/9119 sans règle supplémentaire. Ajouter un bloc
@@ -16,7 +22,7 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: hermes-egress
-  namespace: hermes
+  namespace: hermes-close
 spec:
   endpointSelector:
     matchLabels:

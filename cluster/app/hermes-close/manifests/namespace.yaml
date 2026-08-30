@@ -1,0 +1,17 @@
+# Namespace créé AVANT le StatefulSet (sync-wave -1). Copie conforme de celui de `hermes`, au
+# nom près.
+#
+# PAS de label PodSecurity restrictif, et ce n'est pas un oubli : l'image officielle démarre en
+# root pour laisser s6-overlay chown le volume `/opt/data` au premier boot, puis tombe sur
+# l'uid 10000 (`s6-setuidgid hermes`) pour chaque service supervisé. Démarrer directement
+# non-root casse le modèle de privilèges de l'image (elle refuse même `gateway run` en root sans
+# `HERMES_ALLOW_ROOT_GATEWAY=1`). `baseline` (défaut) convient.
+#
+# ⚠️ C'est le namespace de l'instance CONTRAINTE : `hermes-egress` y met la sortie en
+# défaut-refus, LLM et Discord exceptés — cf. README §Le point de l'expérience.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hermes-close
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

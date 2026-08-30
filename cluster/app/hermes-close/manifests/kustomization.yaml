@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: hermes-close
+resources:
+  - namespace.yaml
+  # Produit par kubeseal, POUR CE NAMESPACE (cf. README §Câblage des secrets). Le StatefulSet ne
+  # démarre pas sans : `envFrom` sur un Secret absent bloque le pod en
+  # CreateContainerConfigError.
+  # - hermes-env.sealed.yaml
+  - statefulset.yaml
+  - service.yaml
+  - hermes-httproute.yaml
+  # LA différence avec [hermes](../../hermes/README.md), qui est la copie conforme SANS policy.
+  # Les deux seules sorties de cette instance sont le fournisseur LLM et Discord.
+  # La retirer, ou y ajouter des destinations « juste pour dépanner », supprime le témoin de
+  # l'expérience — les deux instances deviennent la même.
+  - hermes-egress.ciliumnetworkpolicy.yaml
+
+# `config.yaml` d'Hermes. Canal de configuration NON secrète — les clés d'API passent par le
+# Secret `hermes-env`, jamais ici.
+#
+# Généré plutôt qu'écrit à la main pour le suffixe de hash : kustomize nomme le ConfigMap
+# `hermes-config-<hash du contenu>` et réécrit la référence dans le `volumes:` du StatefulSet.
+# Éditer `config/config.yaml` change donc le pod template, ce qui suffit à déclencher le rollout
+# — indispensable ici, parce que l'initContainer ne recopie le fichier dans le volume qu'au
+# démarrage du pod. Sans ce mécanisme, un ConfigMap mis à jour resterait sans effet jusqu'à un
+# `rollout restart` manuel, et rien ne le signalerait (ArgoCD `Synced`, aucun log).
+configMapGenerator:
+  - name: hermes-config
+    files:
+      - config/config.yaml
+      # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
+      # la révision du secret entre dans le hash. Le Secret est produit par le contrôleur
+      # sealed-secrets, pas par kustomize — son contenu ne peut donc pas influencer le pod
+      # template, et un `envFrom` dont le Secret change ne redémarre rien. Resceller change ce
+      # fichier (kubeseal régénère un nonce à chaque passe, même à valeurs égales), donc le
+      # hash, donc le nom du ConfigMap, donc le pod template : le rollout part avec le nouveau
+      # secret.
+      #
+      # ⚠️ À décommenter EN MÊME TEMPS que la ligne `resources:` ci-dessus — le
+      # configMapGenerator échoue sur un fichier absent, ce qui casse le rendu entier.
+      # - hermes-env.sealed.yaml
