@@ -28,8 +28,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   restrictif
 - `manifests/hermes-env.sealed.yaml` — `SealedSecret` : clé OpenAI, `API_SERVER_KEY`, identifiants
   du dashboard, token du bot. **À produire** (cf. §Câblage des secrets)
-- `manifests/hermes-config.configmap.yaml` — le `config.yaml` d'Hermes (modèle, backend terminal,
-  dashboard)
+- `manifests/config/config.yaml` — le `config.yaml` d'Hermes (modèle, backend terminal, plugins,
+  dashboard), assemblé en ConfigMap par le `configMapGenerator` du `kustomization.yaml`
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`,
   initContainer de semis du `config.yaml`
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
@@ -73,9 +73,13 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 - **`API_SERVER_KEY` : 16 caractères minimum**, pas 8 comme l'annonce la doc amont. En dessous,
   le hook de démarrage refuse de lancer `api_server`.
 - **`config.yaml` est recopié depuis le ConfigMap à chaque démarrage.** Un `hermes config set`
-  fait à la main dans le pod est écrasé au redémarrage suivant — c'est le but. Corollaire :
-  éditer le ConfigMap n'a d'effet qu'après un `rollout restart`, il n'y a pas de rechargement à
-  chaud.
+  fait à la main dans le pod est écrasé au redémarrage suivant — c'est le but.
+- **Le ConfigMap est généré avec un suffixe de hash**, et c'est load-bearing : Hermes ne relit
+  pas son `config.yaml` à chaud, et l'initContainer ne le recopie qu'au démarrage du pod. Sans
+  le hash, un ConfigMap mis à jour resterait sans effet jusqu'à un `rollout restart` manuel,
+  sans qu'aucun signal ne l'indique (ArgoCD `Synced`, aucun log). Avec, éditer
+  `config/config.yaml` renomme le ConfigMap, donc le `volumes:` du StatefulSet, donc le pod
+  template : le rollout part tout seul. Ne pas poser `generatorOptions.disableNameSuffixHash`.
 - **Le PVC est RWO** : le pod sortant doit mourir avant que le nouveau monte le volume. Les
   rollouts ne sont pas sans coupure.
 - **L'identifiant de modèle du ConfigMap (`gpt-5.1`) est à confirmer** contre le compte OpenAI

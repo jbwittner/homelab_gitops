@@ -6,8 +6,23 @@ resources:
   # Produit par kubeseal (cf. README §Câblage des secrets). Le StatefulSet ne démarre pas sans :
   # `envFrom` sur un Secret absent bloque le pod en CreateContainerConfigError.
   - hermes-env.sealed.yaml
-  - hermes-config.configmap.yaml
   - statefulset.yaml
   - service.yaml
   - hermes-httproute.yaml
-  #- hermes-egress.ciliumnetworkpolicy.yaml
+  - hermes-egress.ciliumnetworkpolicy.yaml
+
+# `config.yaml` d'Hermes. C'est le canal de configuration NON secrète — les clés d'API passent
+# par le Secret `hermes-env`, jamais ici.
+#
+# Généré plutôt qu'écrit à la main pour le suffixe de hash : kustomize nomme le ConfigMap
+# `hermes-config-<hash du contenu>` et réécrit la référence dans le `volumes:` du StatefulSet.
+# Éditer `config/config.yaml` change donc le pod template, ce qui suffit à déclencher le rollout
+# — indispensable ici, parce que l'initContainer ne recopie le fichier dans le volume qu'au
+# démarrage du pod. Sans ce mécanisme, un ConfigMap mis à jour restait sans effet jusqu'à un
+# `rollout restart` manuel, et rien ne le signalait (ArgoCD `Synced`, aucun log).
+#
+# L'ancien ConfigMap est supprimé par le `prune: true` de l'Application.
+configMapGenerator:
+  - name: hermes-config
+    files:
+      - config/config.yaml

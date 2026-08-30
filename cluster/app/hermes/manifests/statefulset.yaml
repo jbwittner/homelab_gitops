@@ -33,8 +33,10 @@ spec:
         fsGroup: 10000
       initContainers:
         # Pose le config.yaml de Git dans le volume avant que l'entrypoint ne sème le sien.
-        # Recopié à CHAQUE démarrage : Git reste la source de vérité. Éditer le ConfigMap
-        # n'a donc d'effet qu'après un `rollout restart` (aucun rechargement à chaud).
+        # Recopié à CHAQUE démarrage, sans condition : Git reste la source de vérité et toute
+        # dérive introduite dans le pod est écrasée. Le ConfigMap est généré avec un suffixe de
+        # hash (cf. kustomization.yaml), donc éditer `config/config.yaml` renomme le volume et
+        # déclenche le rollout — sans quoi la recopie n'aurait lieu à aucun moment.
         - name: seed-config
           image: busybox:1.37.0
           command:
