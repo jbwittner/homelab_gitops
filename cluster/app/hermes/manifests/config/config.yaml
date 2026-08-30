@@ -1,3 +1,21 @@
+# ⚠️ `_config_version` EN PREMIER, et il est load-bearing.
+#
+# Le script de migration du conteneur (`scripts/docker_config_migrate.py:70`) refuse tout
+# config.yaml dont la version lue est sous le plancher 12 — et une version ABSENTE est lue 0.
+# Il est plus strict que le chemin CLI (`config.py:2374`), qui, lui, épargne explicitement les
+# fichiers sans clé de version. Un fichier écrit à la main comme celui-ci tombe donc du mauvais
+# côté : migration refusée au boot, et les sessions ouvertes ensuite partent avec un modèle
+# VIDE — « Codex Responses request 'model' must be a non-empty string ».
+#
+# Le symptôme se répare tout seul dès qu'on passe par `hermes auth` ou le sélecteur de modèle :
+# ces commandes réécrivent le fichier via `save_config()`, qui y estampille la version. D'où
+# l'impression que la panne ne survient qu'« après un déploiement » — c'est l'initContainer qui
+# restaure la version de Git, non estampillée, à chaque démarrage.
+#
+# 39 = version courante de l'image v2026.8.27 (`config_defaults.py:3847`). À relire lors d'un
+# bump majeur de l'image : une valeur trop haute ferait sauter des migrations légitimes.
+_config_version: 39
+
 model:
   # `openai-codex` s'authentifie en OAuth (`auth_type: oauth_external`) : les jetons vivent
   # dans `/opt/data/auth.json`, PAS dans une variable d'environnement. Aucune clé d'API à
