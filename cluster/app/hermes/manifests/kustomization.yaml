@@ -27,3 +27,19 @@ configMapGenerator:
   - name: hermes-config
     files:
       - config/config.yaml
+      # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
+      # la révision du secret entre dans le hash. Le Secret `hermes-env` est produit par le
+      # contrôleur sealed-secrets, pas par kustomize — son contenu ne peut donc pas influencer
+      # le pod template, et un `envFrom` dont le Secret change ne redémarre rien. Resceller
+      # change ce fichier (kubeseal régénère un nonce à chaque passe, même à valeurs égales),
+      # donc le hash, donc le nom du ConfigMap, donc le pod template : le rollout part avec le
+      # nouveau secret.
+      #
+      # Le fichier atterrit dans le volume `config` monté en lecture seule sur /config, où
+      # l'initContainer ne recopie que `config.yaml` — il n'entre jamais dans `/opt/data`. Son
+      # contenu est chiffré et déjà public dans Git : rien de neuf n'est exposé.
+      #
+      # Alternative écartée : `replacements` copiant le nom d'un ConfigMap généré dans une
+      # annotation du pod template. Kustomize y résout le nom AVANT d'appliquer le suffixe de
+      # hash — l'annotation reçoit `hermes-env-revision` nu, constant, donc sans effet.
+      - hermes-env.sealed.yaml

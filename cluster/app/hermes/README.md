@@ -27,7 +27,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 - `manifests/namespace.yaml` — ns `hermes` (`sync-wave: -1`), **sans** label PodSecurity
   restrictif
 - `manifests/hermes-env.sealed.yaml` — `SealedSecret` : clé OpenAI, `API_SERVER_KEY`, identifiants
-  du dashboard, token du bot. **À produire** (cf. §Câblage des secrets)
+  du dashboard (cf. §Câblage des secrets). Également listé dans le `configMapGenerator`, pour la
+  seule raison expliquée en §Contraintes
 - `manifests/config/config.yaml` — le `config.yaml` d'Hermes (modèle, backend terminal, plugins,
   dashboard), assemblé en ConfigMap par le `configMapGenerator` du `kustomization.yaml`
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`,
@@ -80,6 +81,13 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   sans qu'aucun signal ne l'indique (ArgoCD `Synced`, aucun log). Avec, éditer
   `config/config.yaml` renomme le ConfigMap, donc le `volumes:` du StatefulSet, donc le pod
   template : le rollout part tout seul. Ne pas poser `generatorOptions.disableNameSuffixHash`.
+- **`hermes-env.sealed.yaml` est listé dans le `configMapGenerator` alors que ce n'est pas de la
+  configuration.** C'est le même mécanisme étendu au secret : le Secret `hermes-env` est produit
+  par le contrôleur sealed-secrets, hors de portée de kustomize, et un `envFrom` dont le Secret
+  change ne redémarre rien. Le faire entrer dans le hash rend le rollout automatique au
+  rescellement. Le fichier n'est monté que sur `/config`, l'initContainer ne recopie que
+  `config.yaml`, et son contenu est chiffré et déjà dans Git — le retirer de cette liste rendrait
+  silencieusement les rotations de secret sans effet jusqu'au prochain redémarrage.
 - **Le PVC est RWO** : le pod sortant doit mourir avant que le nouveau monte le volume. Les
   rollouts ne sont pas sans coupure.
 - **L'identifiant de modèle du ConfigMap (`gpt-5.1`) est à confirmer** contre le compte OpenAI
