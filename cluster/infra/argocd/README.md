@@ -19,7 +19,7 @@ kubectl apply -k cluster/infra/argocd/manifests --server-side --force-conflicts
 # 2. Attendre les pods
 kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
-# 3. Mot de passe admin initial
+# 3. Mot de passe admin initial (à changer ensuite, cf. §Compte admin local)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d ; echo
 
 # 4. Accès UI au bootstrap : la HTTPRoute n'est même pas posée à ce stade (elle est dans
@@ -176,6 +176,87 @@ kubectl -n argocd exec statefulset/argocd-application-controller -- \
 - **Diff / resync** : `argocd app diff <name>`, `argocd app sync <name>`.
 - **Logs** : `kubectl logs -n argocd deploy/argocd-repo-server`,
   `kubectl logs -n argocd statefulset/argocd-application-controller`.
+
+## Compte admin local — mot de passe
+
+Le mot de passe **n'est pas en Git** et n'a pas vocation à y être : c'est de l'état vivant du
+cluster, un hash **bcrypt** dans la clé `admin.password` du Secret `argocd-secret` (ns `argocd`).
+Le SSO authentik étant désactivé, ce compte est aujourd'hui le **seul** moyen d'entrer.
+
+### Changer le mot de passe — `kubectl` seul
+
+Aucune CLI `argocd` à installer, aucun login préalable : le hash bcrypt se calcule **dans le
+cluster**, avec le binaire déjà présent dans l'image argocd-server. `argocd account bcrypt` est un
+calcul purement local au binaire — il ne parle pas à l'API server d'Argo, il n'ouvre pas de
+session, il ne lit rien : c'est un `bcrypt()` en ligne de commande. Le geste marche donc même
+mot de passe courant perdu.
+
+```bash
+# 1. Produire le hash (coût 10). Sortie : $2a$10$…
+kubectl -n argocd exec deploy/argocd-server -- argocd account bcrypt --password '<nouveau>'
+
+# 2. L'écrire, en bumpant passwordMtime dans le MÊME patch (cf. encadré).
+kubectl -n argocd patch secret argocd-secret -p \
+  '{"stringData": {"admin.password": "<hash $2a$10$…>", "admin.passwordMtime": "'$(date -u +%FT%TZ)'"}}'
+
+# 3. Vérifier la prise en compte (le hash est relu à chaud, AUCUN redémarrage nécessaire).
+kubectl -n argocd get secret argocd-secret \
+  -o jsonpath='{.data.admin\.passwordMtime}' | base64 -d ; echo
+```
+
+> [!IMPORTANT]
+> **`admin.passwordMtime` fait partie du geste, ce n'est pas de la cosmétique.** ArgoCD rejette
+> tout JWT émis *avant* cette date : la bumper déconnecte les sessions ouvertes, ce qui est le
+> comportement attendu d'une rotation. L'oublier laisse une session volée valide jusqu'à son
+> expiration naturelle.
+>
+> Le format doit être du **RFC3339**, d'où le `date -u +%FT%TZ` (`2026-01-31T09:12:00Z`). Un
+> `date +%FT%T%Z` — la forme qui traîne dans la FAQ upstream — produit `…09:12:00UTC`, que Go ne
+> sait pas parser. Et le parse est fait en `if err == nil` (`util/settings/accounts.go`) : ArgoCD
+> **ignore l'erreur en silence**, l'invalidation ne se fait pas, rien ne le signale. Le champ
+> reste faux jusqu'au prochain démarrage d'`argocd-server`, qui le réécrit alors à l'heure
+> courante (`Initialized admin mtime` dans ses logs) — les sessions sautent donc à un moment
+> imprévisible plutôt qu'au moment de la rotation. La vérification de l'étape 3 relit ce qui a
+> réellement été écrit.
+
+Après le premier changement, supprimer le Secret d'amorçage — ArgoCD ne le fait pas tout seul et
+il contient le mot de passe initial **en clair** :
+
+```bash
+kubectl -n argocd delete secret argocd-initial-admin-secret --ignore-not-found
+```
+
+**Si l'`exec` n'est pas possible** (pod down, droits RBAC absents), le hash se calcule en local
+avec n'importe quelle implémentation bcrypt — l'étape 2 ne change pas :
+
+```bash
+htpasswd -bnBC 10 "" '<nouveau>' | tr -d ':\n' ; echo          # apache2-utils
+python3 -c 'import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(10)).decode())' '<nouveau>'
+```
+
+> [!TIP]
+> Avec la CLI `argocd` installée **et** une session ouverte, `argocd account update-password` fait
+> les deux étapes (hash + mtime) en une commande. C'est plus court, mais ça suppose de connaître
+> le mot de passe courant — la voie `kubectl` ci-dessus reste le geste de référence, et le seul
+> qui marche en break-glass.
+
+### Pourquoi le patch survit à la sync (et ce qu'il ne faut pas sceller)
+
+`argocd-secret` est livré **VIDE** par l'install.yaml upstream (`type: Opaque`, aucun champ
+`data`) — c'est exactement le cas d'`argocd-notifications-secret`. Argo l'applique en
+server-side apply sans jamais posséder la clé `admin.password` : `selfHeal: true` ne l'efface
+donc pas, et le mot de passe survit aux syncs comme aux redémarrages.
+
+> [!CAUTION]
+> **Ne pas mettre `argocd-secret` en `SealedSecret`.** Le Secret ne porte pas que le hash admin :
+> `argocd-server` y génère aussi `server.secretkey`, la clé de signature des JWT. Un
+> `SealedSecret` en prendrait la propriété et écraserait ce que le serveur y écrit — toutes les
+> sessions invalidées à chaque sync, et une valeur de rotation figée dans Git. Le mot de passe
+> admin est un secret **de break-glass**, il se gère à la main dans le cluster ; les seuls
+> secrets scellés de ce composant sont ceux listés en §Fichiers.
+
+Désactiver complètement le compte local (`admin.enabled: "false"` dans `argocd-cm`) n'a de sens
+qu'une fois le SSO rétabli — voir ci-dessous. En l'état ce serait se verrouiller dehors.
 
 ## SSO — authentik (OIDC)
 
