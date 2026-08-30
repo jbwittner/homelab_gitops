@@ -1,0 +1,62 @@
+# Egress par défaut-refus pour le pod Hermes. C'est le garde-fou qui manquait au triptyque
+# `automountServiceAccountToken: false` / pas de RBAC : l'agent exécute du code décidé par un
+# LLM dans ce pod, cette policy borne ce que ce code peut joindre.
+#
+# ⚠️ Poser une `CiliumNetworkPolicy` qui ne déclare QUE `egress` bascule l'endpoint en
+# défaut-refus **sur la seule direction sortante**. L'ingress reste non appliqué, donc le
+# `shared-gw` continue de joindre 8642/9119 sans règle supplémentaire. Ajouter un bloc
+# `ingress:` ici, même permissif, changerait ce comportement et couperait le Gateway.
+#
+# Les règles `toFQDNs` dépendent du proxy DNS L7 de Cilium : un nom n'est joignable que s'il a
+# d'abord été résolu via une requête DNS elle-même autorisée par la règle `rules.dns` ci-dessous.
+# Les deux listes doivent donc rester alignées — un `toFQDNs` sans `matchName` DNS correspondant
+# ne matche jamais rien. Le proxy L7 est actif parce que `gatewayAPI.enabled: true` dans les
+# values Cilium l'impose (cf. cluster/infra/cilium/helm-values.yaml).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hermes-egress
+  namespace: hermes
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: hermes
+  egress:
+    # 1. Résolution DNS — CoreDNS uniquement, et seulement pour les noms explicitement listés.
+    #    Tout autre nom échoue à la résolution : c'est le premier filet, avant même le filtre IP.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+          rules:
+            dns:
+              - matchName: "api.openai.com"
+              - matchName: "api.telegram.org"
+
+    # 2. Fournisseur LLM. Le seul host contacté par le transport OpenAI ; changer de fournisseur
+    #    (Anthropic, OpenRouter, endpoint auto-hébergé) impose d'ajouter le nom ICI **et** dans
+    #    la liste DNS ci-dessus, sinon les tours d'agent échouent en timeout réseau.
+    - toFQDNs:
+        - matchName: "api.openai.com"
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+
+    # 3. Passerelle messagerie. api.telegram.org porte à la fois l'API Bot (long polling) et le
+    #    téléchargement des fichiers. Pour Discord, remplacer par `discord.com` et
+    #    `gateway.discord.gg` (WebSocket).
+    - toFQDNs:
+        - matchName: "api.telegram.org"
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+
+  # Volontairement ABSENT du minimum : GitHub, PyPI, npm, registry.docker.io. L'image interdit
+  # les installs paresseux à l'exécution (`/opt/hermes` est en lecture seule pour l'uid 10000) et
+  # les pulls d'image sont faits par le kubelet, pas par ce pod — aucun des deux ne passe par
+  # cette policy. Les skills qui téléchargent quelque chose, la mise à jour d'Hermes depuis le
+  # pod, et le MCP distant échoueront tant que leur host n'est pas ajouté explicitement.

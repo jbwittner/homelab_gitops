@@ -1,0 +1,46 @@
+# `config.yaml` d'Hermes, servi en ConfigMap et recopié dans le volume par l'initContainer du
+# StatefulSet. C'est le canal de configuration NON secrète — les clés d'API passent par le
+# Secret `hermes-env` (cf. hermes-env.sealed.yaml), jamais ici.
+#
+# Le hook de démarrage de l'image sème un `config.yaml` par défaut au premier boot ; le
+# recopier à chaque démarrage garantit que Git reste la source de vérité (pas de dérive
+# introduite par un `hermes config set` fait à la main dans le pod).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hermes-config
+  namespace: hermes
+data:
+  config.yaml: |
+    model:
+      provider: openai
+      # ⚠️ Identifiant à confirmer contre le compte OpenAI utilisé (`hermes model` liste ce que
+      # l'endpoint expose réellement). Un id invalide fait échouer le premier tour d'agent, pas
+      # le démarrage du pod.
+      name: "gpt-5.1"
+
+    terminal:
+      # `local` = les commandes de l'agent s'exécutent DANS ce pod. Les backends `docker` et
+      # `ssh` supposent un daemon Docker ou un hôte SSH joignable, dont on n'a ni l'un ni
+      # l'autre ici. Conséquence directe : le blast radius de l'agent est le pod — d'où
+      # `automountServiceAccountToken: false` et l'absence de RBAC côté StatefulSet.
+      backend: local
+      timeout: 180
+      persistent_shell: true
+
+    dashboard:
+      # Sert à construire les URLs de redirection de la page de login.
+      public_url: "https://hermes.lan.wittner.tech"
+      # Le proxy est l'Envoy de Cilium, dont l'IP source n'est pas fixe. Renseigner le CIDR
+      # des pods ici SI la connexion au dashboard boucle sur le login (cookies sécurisés non
+      # posés faute de X-Forwarded-Proto de confiance). Hermes refuse les entrées non bornées
+      # (`*`, `0.0.0.0/0`).
+      # trusted_proxies:
+      #   - "10.0.0.0/8"
+
+    memory:
+      memory_enabled: true
+      user_profile_enabled: true
+
+    compression:
+      enabled: true

@@ -1,0 +1,107 @@
+# `StatefulSet` et pas `Deployment` : tout l'état d'Hermes (sessions, mémoires, skills, cron,
+# .env semé) vit dans un unique volume `/opt/data` en RWO. Un seul replica, et la garantie
+# d'ordre du StatefulSet évite deux pods qui montent le même PVC pendant un rollout.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hermes
+  namespace: hermes
+  labels:
+    app.kubernetes.io/name: hermes
+spec:
+  serviceName: hermes
+  replicas: 1
+  # Le PVC est RWO : le pod sortant doit être terminé avant que le nouveau monte le volume.
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hermes
+    spec:
+      # L'agent exécute du code arbitraire décidé par un LLM, dans CE pod. Aucun token de
+      # ServiceAccount ne doit traîner dans son système de fichiers : sans ça, une injection de
+      # prompt donne un accès à l'API kube avec les droits du SA.
+      automountServiceAccountToken: false
+      # PAS de `runAsNonRoot: true` ni de `runAsUser` : l'entrypoint s6-overlay doit démarrer en
+      # root pour chown le volume, puis descend lui-même sur l'uid 10000. Cf. namespace.yaml.
+      securityContext:
+        fsGroup: 10000
+      initContainers:
+        # Pose le config.yaml de Git dans le volume avant que l'entrypoint ne sème le sien.
+        # Recopié à CHAQUE démarrage : Git reste la source de vérité. Éditer le ConfigMap
+        # n'a donc d'effet qu'après un `rollout restart` (aucun rechargement à chaud).
+        - name: seed-config
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              install -o 10000 -g 10000 -m 0600 /config/config.yaml /opt/data/config.yaml
+          volumeMounts:
+            - { name: data, mountPath: /opt/data }
+            - { name: config, mountPath: /config, readOnly: true }
+      containers:
+        - name: hermes
+          image: nousresearch/hermes-agent:v2026.8.27
+          # PAS de `command:` — l'ENTRYPOINT de l'image est le dispatcher qui lance s6-overlay.
+          # L'écraser fait sauter la supervision (dashboard, redémarrage auto de la gateway) et
+          # le drop de privilèges. Seuls les arguments changent.
+          args: ["gateway", "run"]
+          env:
+            # --- API OpenAI-compatible ---
+            - { name: API_SERVER_ENABLED, value: "true" }
+            # Sans 0.0.0.0 le serveur reste sur la loopback du conteneur et le Service ne joint
+            # rien. La clé (API_SERVER_KEY, dans hermes-env) est ce qui le protège.
+            - { name: API_SERVER_HOST, value: "0.0.0.0" }
+            - { name: API_SERVER_CORS_ORIGINS, value: "https://hermes.lan.wittner.tech" }
+            # --- Dashboard ---
+            - { name: HERMES_DASHBOARD, value: "1" }
+            - { name: HERMES_DASHBOARD_HOST, value: "0.0.0.0" }
+            - { name: HERMES_DASHBOARD_PORT, value: "9119" }
+          envFrom:
+            - secretRef:
+                name: hermes-env
+          ports:
+            - { name: api, containerPort: 8642, protocol: TCP }
+            - { name: dashboard, containerPort: 9119, protocol: TCP }
+          # Sondes TCP et non HTTP : les deux endpoints sont derrière une auth (clé d'API,
+          # gate de login), une sonde HTTP se ferait renvoyer un 401 lu comme un échec.
+          startupProbe:
+            tcpSocket: { port: dashboard }
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket: { port: dashboard }
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket: { port: api }
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - { name: data, mountPath: /opt/data }
+      volumes:
+        - name: config
+          configMap:
+            name: hermes-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        storageClassName: openebs-lvm-thin
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi

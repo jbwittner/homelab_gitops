@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: hermes
+resources:
+  - namespace.yaml
+  # Décommenter APRÈS avoir produit hermes-env.sealed.yaml avec kubeseal (cf. README).
+  # Le StatefulSet ne démarrera pas sans : `envFrom` sur un Secret absent bloque le pod en
+  # CreateContainerConfigError.
+  # - hermes-env.sealed.yaml
+  - hermes-config.configmap.yaml
+  - statefulset.yaml
+  - service.yaml
+  - hermes-httproute.yaml
+  - hermes-egress.ciliumnetworkpolicy.yaml
