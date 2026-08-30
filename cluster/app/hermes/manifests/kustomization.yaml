@@ -9,7 +9,8 @@ resources:
   - statefulset.yaml
   - service.yaml
   - hermes-httproute.yaml
-  - hermes-egress.ciliumnetworkpolicy.yaml
+  # Désactivé pour l'instant : la gateway n'a pas de messagerie, donc pas de trafic sortant
+  # - hermes-egress.ciliumnetworkpolicy.yaml
 
 # `config.yaml` d'Hermes. C'est le canal de configuration NON secrète — les clés d'API passent
 # par le Secret `hermes-env`, jamais ici.
