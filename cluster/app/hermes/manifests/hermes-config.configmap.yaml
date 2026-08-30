@@ -29,15 +29,12 @@ data:
       persistent_shell: true
 
     plugins:
-      # ⚠️ Les plugins Hermes sont OPT-IN : `_get_enabled_plugins()` renvoie un ensemble vide
-      # quand la clé est absente, et tout ce qui n'est pas un plugin `platform` bundlé est
-      # alors ignoré. Le provider d'auth basic du dashboard est un `kind: backend` — sans
-      # cette ligne il n'est jamais chargé, aucun fournisseur d'auth ne s'enregistre, et le
-      # dashboard refuse de binder 0.0.0.0 (« no auth providers are registered »). Les
-      # variables HERMES_DASHBOARD_BASIC_AUTH_* du Secret n'y changent rien : elles sont lues
-      # PAR le plugin, elles ne le chargent pas.
-      # La clé est dérivée du chemin (`plugins/dashboard_auth/basic/`) ; le nom court `basic`
-      # est aussi accepté.
+      # Allow-list des plugins. Les plugins bundlés de `kind: backend` — dont le provider
+      # d'auth basic du dashboard — s'auto-chargent AVANT ce filtre (plugins.py:4297), la
+      # ligne ci-dessous n'est donc pas ce qui les active. Elle est là pour ce qu'elle borne :
+      # tout plugin standalone ou installé dans `$HERMES_HOME/plugins` reste ignoré tant qu'il
+      # n'est pas listé ici. Sur un agent qui peut s'écrire des plugins tout seul, c'est le
+      # garde-fou qui compte.
       enabled:
         - dashboard_auth/basic
 

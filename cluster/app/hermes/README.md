@@ -87,6 +87,12 @@ supprimer le clair, puis décommenter la ligne correspondante du `kustomization.
 # 1. Remplir les valeurs REMPLACER du template
 #    API_SERVER_KEY / mot de passe et secret de session du dashboard :
 openssl rand -hex 32
+#
+#    ⚠️ HERMES_DASHBOARD_BASIC_AUTH_SECRET : minimum 16 octets DÉCODÉS. En dessous, le
+#    provider d'auth lève à la construction, ne s'enregistre pas, et le dashboard échoue avec
+#    « no auth providers are registered » — message qui pointe vers une auth non configurée
+#    alors que le vrai problème est une clé trop courte. Laisser la variable absente est plus
+#    sûr qu'y mettre une valeur courte (Hermes génère alors une clé par processus).
 
 # 2. Sceller
 kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
