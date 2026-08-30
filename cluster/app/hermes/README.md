@@ -79,6 +79,17 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   device code.
 - **`API_SERVER_KEY` : 16 caractères minimum**, pas 8 comme l'annonce la doc amont. En dessous,
   le hook de démarrage refuse de lancer `api_server`.
+- **Le modèle se déclare sous `model.default`, jamais `model.name`.** `load_config()` normalise
+  les deux, mais un chemin du runtime lit la config brute (`read_raw_config()`) où l'alias n'est
+  pas résolu : la session démarre alors avec un modèle vide et chaque tour échoue en « Codex
+  Responses request 'model' must be a non-empty string ». Symptôme trompeur — le corriger dans
+  l'interface répare le pod courant, puis la panne revient au déploiement suivant, quand
+  l'initContainer restaure le fichier de Git.
+- **`_config_version` doit figurer dans le fichier.** Le script de migration du conteneur
+  (`scripts/docker_config_migrate.py:70`) lit une version absente comme `0` et refuse tout ce qui
+  est sous le plancher 12, là où le chemin CLI épargne explicitement les fichiers sans clé de
+  version. Sans le stamp, chaque boot journalise « This config predates version 12 » et la
+  migration ne tourne pas.
 - **`config.yaml` est recopié depuis le ConfigMap à chaque démarrage.** Un `hermes config set`
   fait à la main dans le pod est écrasé au redémarrage suivant — c'est le but.
 - **Le ConfigMap est généré avec un suffixe de hash**, et c'est load-bearing : Hermes ne relit

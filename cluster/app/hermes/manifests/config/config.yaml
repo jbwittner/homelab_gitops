@@ -21,10 +21,20 @@ model:
   # dans `/opt/data/auth.json`, PAS dans une variable d'environnement. Aucune clé d'API à
   # sceller pour ce provider — `OPENAI_API_KEY` ne sert qu'au provider `openai-api`.
   provider: openai-codex
-  # ⚠️ Identifiant à confirmer contre le compte OpenAI utilisé (`hermes model` liste ce que
-  # l'endpoint expose réellement). Un id invalide fait échouer le premier tour d'agent, pas
-  # le démarrage du pod.
-  name: gpt-5.6-terra
+  # ⚠️ La clé est `default`, PAS `name`. `load_config()` normalise pourtant les deux vers la
+  # même chose — mais un chemin du runtime lit la config BRUTE (`read_raw_config()`), où `name`
+  # reste `name` : `model.default` y est absent, la session démarre avec un modèle vide et
+  # chaque tour échoue en « Codex Responses request 'model' must be a non-empty string ».
+  # `default` est la forme que l'application écrit elle-même (`auth.py:8016`,
+  # `_save_model_choice`) ; `name` n'est qu'un alias du setter CLI. Ne pas « corriger » vers
+  # `name` en lisant la doc amont, qui documente cette dernière forme.
+  #
+  # Corriger le modèle dans l'interface répare le pod COURANT et rien d'autre : l'initContainer
+  # restaure ce fichier à chaque démarrage, la panne revient au déploiement suivant.
+  #
+  # L'identifiant lui-même est à confirmer contre l'abonnement utilisé (`hermes model` liste ce
+  # que l'endpoint expose). Un id invalide fait échouer le premier tour d'agent, pas le boot.
+  default: gpt-5.6-terra
 
 terminal:
   # `local` = les commandes de l'agent s'exécutent DANS ce pod. Les backends `docker` et
