@@ -158,11 +158,29 @@ Si la connexion au dashboard boucle sur la page de login, c'est le cookie sécur
 `dashboard.trusted_proxies` dans le ConfigMap avec le CIDR des pods (Hermes refuse les entrées non
 bornées type `0.0.0.0/0`).
 
-### Changer de plateforme de messagerie
+### Activer Discord
 
-Le choix se fait par la variable présente dans le Secret : `TELEGRAM_BOT_TOKEN`,
-`DISCORD_BOT_TOKEN` (+ `DISCORD_CHANNEL_ID`), `EMAIL_IMAP_*`/`EMAIL_SMTP_*`. Éditer le template en
-clair, resceller, committer.
+Le plugin de l'image fait foi sur la doc générique (`plugins/platforms/discord/plugin.yaml`) :
+celle-ci annonce un `DISCORD_CHANNEL_ID` qui n'existe pas.
+
+| Variable | Où | Rôle |
+| --- | --- | --- |
+| `DISCORD_BOT_TOKEN` | SealedSecret | requis — [portail développeur](https://discord.com/developers/applications) |
+| `DISCORD_HOME_CHANNEL` | SealedSecret | ID du salon de livraison des cron et notifications |
+| `DISCORD_HOME_CHANNEL_NAME` | SealedSecret | nom d'affichage de ce salon |
+| `DISCORD_ALLOWED_USERS` | `env:` du StatefulSet | IDs autorisés, séparés par des virgules |
+
+Les trois premières sont **commentées** dans le template en clair, et doivent le rester tant que
+le vrai token n'est pas en main : un token invalide fait sortir la gateway au démarrage (conflit
+non rejouable), ce qui emporte aussi le serveur d'API et laisse le pod `NotReady`.
+
+`DISCORD_ALLOWED_USERS` est hors du Secret — ce sont des identifiants publics, et l'allow-list se
+modifie ainsi sans repasser par kubeseal. Une valeur fausse y est sans danger : le plugin refuse
+alors tout le monde. **Ne pas lui substituer `DISCORD_ALLOW_ALL_USERS`**, que la doc amont réserve
+au développement.
+
+Pour une autre plateforme (`TELEGRAM_BOT_TOKEN`, `EMAIL_IMAP_*`/`EMAIL_SMTP_*`, …) : mêmes règles,
+et penser à ouvrir ses hosts dans la `CiliumNetworkPolicy` (cf. §Egress).
 
 ### Passer le dashboard sur OIDC
 
@@ -178,9 +196,11 @@ Le pod est en **défaut-refus sortant**. Trois sorties seulement :
 
 | Destination | Port | Pourquoi |
 | --- | --- | --- |
-| CoreDNS (`kube-system`) | 53 | et uniquement pour résoudre les deux noms ci-dessous |
-| `api.openai.com` | 443 | fournisseur LLM |
-| `api.telegram.org` | 443 | API Bot + téléchargement de fichiers |
+| CoreDNS (`kube-system`) | 53 | et uniquement pour résoudre les noms ci-dessous |
+| `chatgpt.com` | 443 | inférence Codex (`DEFAULT_CODEX_BASE_URL`) |
+| `auth.openai.com` | 443 | rafraîchissement du jeton OAuth — son oubli ne casse rien avant l'expiration |
+| `discord.com`, `gateway.discord.gg` | 443 | REST et WebSocket de la passerelle |
+| `cdn.discordapp.com`, `media.discordapp.net` | 443 | pièces jointes ; sans eux le bot répond mais toute image échoue |
 
 Tout le reste tombe : GitHub, PyPI, npm, MCP distants, le reste du cluster. Les pulls d'image ne
 sont pas concernés (c'est le kubelet qui les fait, pas ce pod).

@@ -34,23 +34,39 @@ spec:
             - { port: "53", protocol: TCP }
           rules:
             dns:
-              - matchName: "api.openai.com"
-              - matchName: "api.telegram.org"
+              - matchName: "chatgpt.com"
+              - matchName: "auth.openai.com"
+              # Discord : REST sur discord.com, WebSocket temps réel sur gateway.discord.gg,
+              # pièces jointes sur les deux CDN. Les quatre sont nécessaires — sans le CDN, le
+              # bot répond mais toute image reçue échoue au téléchargement.
+              - matchName: "discord.com"
+              - matchName: "gateway.discord.gg"
+              - matchName: "cdn.discordapp.com"
+              - matchName: "media.discordapp.net"
 
-    # 2. Fournisseur LLM. Le seul host contacté par le transport OpenAI ; changer de fournisseur
-    #    (Anthropic, OpenRouter, endpoint auto-hébergé) impose d'ajouter le nom ICI **et** dans
-    #    la liste DNS ci-dessus, sinon les tours d'agent échouent en timeout réseau.
+    # 2. Fournisseur LLM. Deux hosts, relevés dans `hermes_cli/auth.py` :
+    #      chatgpt.com      inférence  (DEFAULT_CODEX_BASE_URL = https://chatgpt.com/backend-api/codex)
+    #      auth.openai.com  OAuth      (CODEX_OAUTH_TOKEN_URL, rafraîchissement du jeton)
+    #    Oublier le second ne casse rien au démarrage : l'agent tourne jusqu'à l'expiration du
+    #    jeton, puis échoue sans que le réseau soit suspecté. `api.openai.com` n'est PAS utilisé
+    #    par ce provider — il ne servirait qu'à un repli sur `openai-api`, qui exigerait une clé
+    #    d'API et une bascule dans config.yaml.
+    #    Changer de fournisseur impose d'ajouter le nom ICI **et** dans la liste DNS ci-dessus.
     - toFQDNs:
-        - matchName: "api.openai.com"
+        - matchName: "chatgpt.com"
+        - matchName: "auth.openai.com"
       toPorts:
         - ports:
             - { port: "443", protocol: TCP }
 
-    # 3. Passerelle messagerie. api.telegram.org porte à la fois l'API Bot (long polling) et le
-    #    téléchargement des fichiers. Pour Discord, remplacer par `discord.com` et
-    #    `gateway.discord.gg` (WebSocket).
+    # 3. Passerelle messagerie : Discord. Ouvert même tant que `DISCORD_BOT_TOKEN` reste
+    #    commenté — une FQDN autorisée que personne ne contacte ne coûte rien, alors qu'un
+    #    oubli ici se manifeste par des timeouts sans rapport apparent avec le réseau.
     - toFQDNs:
-        - matchName: "api.telegram.org"
+        - matchName: "discord.com"
+        - matchName: "gateway.discord.gg"
+        - matchName: "cdn.discordapp.com"
+        - matchName: "media.discordapp.net"
       toPorts:
         - ports:
             - { port: "443", protocol: TCP }
