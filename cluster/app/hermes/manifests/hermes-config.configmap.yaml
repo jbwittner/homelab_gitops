@@ -28,8 +28,24 @@ data:
       timeout: 180
       persistent_shell: true
 
+    plugins:
+      # ⚠️ Les plugins Hermes sont OPT-IN : `_get_enabled_plugins()` renvoie un ensemble vide
+      # quand la clé est absente, et tout ce qui n'est pas un plugin `platform` bundlé est
+      # alors ignoré. Le provider d'auth basic du dashboard est un `kind: backend` — sans
+      # cette ligne il n'est jamais chargé, aucun fournisseur d'auth ne s'enregistre, et le
+      # dashboard refuse de binder 0.0.0.0 (« no auth providers are registered »). Les
+      # variables HERMES_DASHBOARD_BASIC_AUTH_* du Secret n'y changent rien : elles sont lues
+      # PAR le plugin, elles ne le chargent pas.
+      # La clé est dérivée du chemin (`plugins/dashboard_auth/basic/`) ; le nom court `basic`
+      # est aussi accepté.
+      enabled:
+        - dashboard_auth/basic
+
     dashboard:
       # Sert à construire les URLs de redirection de la page de login.
+      # L'identifiant, le mot de passe et le secret de session viennent des variables
+      # HERMES_DASHBOARD_BASIC_AUTH_* (Secret scellé) : l'env l'emporte sur config.yaml, ce qui
+      # garde le hash scrypt hors de Git.
       public_url: "https://hermes.lan.wittner.tech"
       # Le proxy est l'Envoy de Cilium, dont l'IP source n'est pas fixe. Renseigner le CIDR
       # des pods ici SI la connexion au dashboard boucle sur le login (cookies sécurisés non
