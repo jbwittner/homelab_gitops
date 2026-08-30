@@ -26,8 +26,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   renommé (cf. §Activation).
 - `manifests/namespace.yaml` — ns `hermes` (`sync-wave: -1`), **sans** label PodSecurity
   restrictif
-- `manifests/hermes-env.sealed.yaml` — `SealedSecret` : clé OpenAI, `API_SERVER_KEY`, identifiants
-  du dashboard (cf. §Câblage des secrets). Également listé dans le `configMapGenerator`, pour la
+- `manifests/hermes-env.sealed.yaml` — `SealedSecret` : `API_SERVER_KEY` et identifiants du
+  dashboard (cf. §Câblage des secrets). Également listé dans le `configMapGenerator`, pour la
   seule raison expliquée en §Contraintes
 - `manifests/config/config.yaml` — le `config.yaml` d'Hermes (modèle, backend terminal, plugins,
   dashboard), assemblé en ConfigMap par le `configMapGenerator` du `kustomization.yaml`
@@ -71,6 +71,12 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   relance en boucle, et le serveur d'API ne monte jamais — la `readinessProbe` sur 8642 laisse
   alors le pod `NotReady` sans que rien ne pointe vers la messagerie. Pas de messagerie voulue =
   retirer la variable, pas y laisser un placeholder.
+- **L'authentification au fournisseur LLM n'est pas dans Git.** Le provider `openai-codex` est
+  en `auth_type: oauth_external` : ses jetons vivent dans `/opt/data/auth.json`, écrits par un
+  flux device code lancé à la main. Aucune clé d'API à sceller — `OPENAI_API_KEY` ne concerne
+  que le provider `openai-api`, et n'a rien à voir avec `API_SERVER_KEY`. Contrepartie : c'est
+  le seul état du composant que Git ne reconstruit pas. Perdre le PVC impose de refaire le
+  device code.
 - **`API_SERVER_KEY` : 16 caractères minimum**, pas 8 comme l'annonce la doc amont. En dessous,
   le hook de démarrage refuse de lancer `api_server`.
 - **`config.yaml` est recopié depuis le ConfigMap à chaque démarrage.** Un `hermes config set`

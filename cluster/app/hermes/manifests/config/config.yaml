@@ -1,4 +1,7 @@
 model:
+  # `openai-codex` s'authentifie en OAuth (`auth_type: oauth_external`) : les jetons vivent
+  # dans `/opt/data/auth.json`, PAS dans une variable d'environnement. Aucune clé d'API à
+  # sceller pour ce provider — `OPENAI_API_KEY` ne sert qu'au provider `openai-api`.
   provider: openai-codex
   # ⚠️ Identifiant à confirmer contre le compte OpenAI utilisé (`hermes model` liste ce que
   # l'endpoint expose réellement). Un id invalide fait échouer le premier tour d'agent, pas
