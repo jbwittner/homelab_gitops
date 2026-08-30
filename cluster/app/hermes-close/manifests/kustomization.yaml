@@ -6,7 +6,7 @@ resources:
   # Produit par kubeseal, POUR CE NAMESPACE (cf. README §Câblage des secrets). Le StatefulSet ne
   # démarre pas sans : `envFrom` sur un Secret absent bloque le pod en
   # CreateContainerConfigError.
-  # - hermes-env.sealed.yaml
+  - hermes-env.sealed.yaml
   - statefulset.yaml
   - service.yaml
   - hermes-httproute.yaml
