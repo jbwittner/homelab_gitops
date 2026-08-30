@@ -1,6 +1,6 @@
 # helm-values — kube-prometheus-stack (Prometheus + Alertmanager + Grafana + operator + exporters)
 
-# --- Grafana : SSO Authentik (OIDC) + login local conservé ---
+# --- Grafana : compte admin local uniquement (SSO authentik commenté, cf. plus bas) ---
 grafana:
   # Dashboards maison regroupés dans un dossier Grafana « Wittnerlab », au lieu d'être
   # noyés parmi la trentaine de dashboards du chart : la page Dashboards liste les dossiers
@@ -19,15 +19,25 @@ grafana:
   # avant le nouveau, sinon double-mount RWO au rollout ("device already mounted").
   deploymentStrategy:
     type: Recreate
-  # client-secret OIDC injecté en env → Grafana surcharge automatiquement
-  # [auth.generic_oauth] client_secret. Jamais écrit en clair dans grafana.ini.
-  envValueFrom:
-    GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
-      secretKeyRef:
-        name: grafana-oidc
-        key: client-secret
-  # Compte admin local (break-glass) depuis SealedSecret. Le formulaire login reste
-  # actif : on ne met JAMAIS disable_login_form: true.
+  ## SSO AUTHENTIK — livré mais DÉSACTIVÉ. Même convention que le bloc alertmanager plus
+  ## bas : `##` = documentation, elle reste commentée pour toujours ; `#` seul = la
+  ## configuration à décommenter le jour de la réactivation.
+  ## Trois morceaux se décommentent ENSEMBLE, sinon Grafana démarre en erreur :
+  ## ce bloc `envValueFrom`, le bloc `auth.generic_oauth` de grafana.ini ci-dessous, et la
+  ## ligne `grafana-oidc.externalsecret.yaml` de `manifests/kustomization.yaml`.
+  ##
+  ## client-secret OIDC injecté en env → Grafana surcharge automatiquement
+  ## [auth.generic_oauth] client_secret. Jamais écrit en clair dans grafana.ini.
+  # envValueFrom:
+  #   GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+  #     secretKeyRef:
+  #       name: grafana-oidc
+  #       key: client-secret
+
+  # Compte admin local. SSO commenté ⇒ c'est le SEUL moyen de se connecter à Grafana :
+  # perdre ce mot de passe, c'est perdre l'accès. Il est porté par le SealedSecret
+  # `manifests/grafana-admin.sealed.yaml` (rotation : cf. README §Compte admin).
+  # Le formulaire login reste actif : on ne met JAMAIS disable_login_form: true.
   admin:
     existingSecret: grafana-admin
     userKey: admin-user
@@ -35,17 +45,19 @@ grafana:
   grafana.ini:
     server:
       root_url: https://grafana.lan.wittner.tech
-    auth.generic_oauth:
-      enabled: true
-      name: Authentik
-      client_id: grafana
-      scopes: "openid profile email groups"
-      auth_url: https://authentik.wittner.tech/application/o/authorize/
-      token_url: https://authentik.wittner.tech/application/o/token/
-      api_url: https://authentik.wittner.tech/application/o/userinfo/
-      # Mapping groupe authentik → rôle Grafana via le claim `groups` (défaut Viewer).
-      role_attribute_path: "contains(groups[*], 'app-grafana-admin') && 'Admin' || contains(groups[*], 'app-grafana-viewer') && 'Viewer' || 'Viewer'"
-      role_attribute_strict: false
+    ## SSO authentik DÉSACTIVÉ — se décommente avec le bloc `envValueFrom` plus haut.
+    ## Seul, il ferait démarrer Grafana avec un provider OIDC sans client_secret.
+    # auth.generic_oauth:
+    #   enabled: true
+    #   name: Authentik
+    #   client_id: grafana
+    #   scopes: "openid profile email groups"
+    #   auth_url: https://authentik.wittner.tech/application/o/authorize/
+    #   token_url: https://authentik.wittner.tech/application/o/token/
+    #   api_url: https://authentik.wittner.tech/application/o/userinfo/
+    #   # Mapping groupe authentik → rôle Grafana via le claim `groups` (défaut Viewer).
+    #   role_attribute_path: "contains(groups[*], 'app-grafana-admin') && 'Admin' || contains(groups[*], 'app-grafana-viewer') && 'Viewer' || 'Viewer'"
+    #   role_attribute_strict: false
   persistence:
     enabled: true
     size: 5Gi            # StorageClass par défaut du cluster = openebs-lvm-thin

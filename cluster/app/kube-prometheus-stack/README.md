@@ -5,8 +5,9 @@
 Stack d'observabilité du cluster : Prometheus + Alertmanager + Grafana + prometheus-operator
 (CRDs ServiceMonitor/PodMonitor) + node-exporter + kube-state-metrics. Grafana est exposé sur
 `https://grafana.lan.wittner.tech` via `shared-gw` (listener `https-internal-kalecgos`),
-en **SSO authentik (OIDC)** avec **login local conservé** en break-glass. Prometheus et
-Alertmanager restent internes (non exposés).
+authentifié par un **compte admin local** dont le mot de passe est porté par un
+**SealedSecret**. Le **SSO authentik (OIDC)** reste écrit mais **commenté** (cf. § SSO).
+Prometheus et Alertmanager restent internes (non exposés).
 
 Ce composant porte aussi tout le **câblage Grafana des composants tiers** : datasource
 [Loki](../loki/README.md), dashboards maison, ServiceMonitors ArgoCD.
@@ -15,16 +16,19 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 
 - `kube-prometheus-stack.app.yaml` — Application (archétype (b) : chart + `$values` +
   `manifests/`). `ServerSideApply=true` (CRDs volumineuses).
-- `helm-values.yaml` — OIDC Grafana (`auth.generic_oauth`), mapping groupe → rôle, admin local
-  via `existingSecret`, PVCs (Prometheus / Alertmanager / Grafana), rétention Prometheus,
-  datasource Loki (`additionalDataSources`), dossier Grafana des dashboards maison, relabeling
+- `helm-values.yaml` — admin local via `existingSecret`, blocs OIDC Grafana (`envValueFrom` +
+  `auth.generic_oauth`) **commentés**, PVCs (Prometheus / Alertmanager / Grafana),
+  rétention Prometheus, datasource Loki (`additionalDataSources`), dossier Grafana des dashboards maison, relabeling
   `instance` du node-exporter, scrapes control-plane désactivés
 - `manifests/namespace.yaml` — ns `monitoring`
 - `manifests/grafana-httproute.yaml` — HTTPRoute Grafana → `shared-gw`
+- `manifests/grafana-admin.sealed.yaml` — `SealedSecret` `grafana-admin`, clés `admin-user` /
+  `admin-password` : le **seul** identifiant d'accès à Grafana
 - `manifests/grafana-oidc.externalsecret.yaml` — `ExternalSecret` `grafana-oidc`, clé `client-secret`,
-  servi par [openbao](../../infra/openbao/README.md)
-- `manifests/grafana-admin.externalsecret.yaml` — `ExternalSecret` `grafana-admin`, clés `admin-user` /
-  `admin-password` (break-glass)
+  servi par [openbao](../../infra/openbao/README.md). **Non référencé dans `kustomization.yaml`**
+  tant que le SSO est commenté (cf. § SSO)
+- `manifests/grafana-admin.externalsecret.yaml` — ancien canal openbao du compte admin,
+  **non référencé** : remplacé par le `SealedSecret` ci-dessus, les deux visent le même `Secret`
 - `manifests/dashboard-talos-nodes.yaml` — dashboard « Système — nœuds Talos » (sidecar, label
   `grafana_dashboard: "1"`) ; porte la couche d'annotations « Déploiements ArgoCD » (tags
   `argocd` + `deployed`, cf. [argocd](../../infra/argocd/README.md))
@@ -54,9 +58,10 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 
 - Un fichier référencé mais absent casse `kustomize build` et met toute l'Application en erreur :
   garder la ligne **commentée** tant que le secret n'existe pas.
-- **Le compte admin est le break-glass du SSO** : il repose sur `deletionPolicy: Retain` de son
-  `ExternalSecret`. Coffre scellé, l'objet passe `NotReady` (donc l'Application `Degraded`) mais
-  le `Secret` reste en place et le login local continue de marcher. Ne jamais passer en `Delete`.
+- **Le compte admin est le seul accès à Grafana** tant que le SSO est commenté : perdre son mot
+  de passe, c'est perdre l'interface. Il vient du `SealedSecret`, donc de Git — il ne dépend plus
+  de l'état d'openbao, mais il dépend de la clé privée du contrôleur
+  [sealed-secrets](../../infra/sealed-secrets/README.md), seul état non reconstructible du cluster.
 - Tout ServiceMonitor destiné à ce Prometheus doit porter le label
   `release: kube-prometheus-stack` (`serviceMonitorSelectorNilUsesHelmValues`) — vaut aussi pour
   [loki](../loki/README.md), [alloy](../alloy/README.md),
@@ -64,12 +69,70 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   [openbao-monitoring](../../infra/openbao-monitoring/README.md).
 - Grafana est en `deploymentStrategy: Recreate` : son PVC est RWO node-local, un rollout en
   rolling update produirait un double-mount.
-- Ne pas mettre `disable_login_form: true` : le formulaire local est le break-glass si authentik
-  est indisponible.
+- Ne pas mettre `disable_login_form: true` : le formulaire local est aujourd'hui le seul moyen
+  de se connecter, et il resterait le break-glass même si le SSO était réactivé.
+- Les trois morceaux du SSO (`envValueFrom`, `auth.generic_oauth`, la ligne
+  `grafana-oidc.externalsecret.yaml` du `kustomization.yaml`) se décommentent **ensemble** :
+  un provider OIDC sans `client_secret` fait démarrer Grafana en erreur.
 
 ## Opérations
 
-### SSO — authentik (OIDC)
+### Compte admin Grafana
+
+Identifiant unique de l'interface : utilisateur **`admin`**, mot de passe porté par le
+`SealedSecret` `grafana-admin` (`manifests/grafana-admin.sealed.yaml`), consommé par
+`grafana.admin.existingSecret` dans `helm-values.yaml`.
+
+Le canal est **sealed-secrets** et non openbao : le mot de passe voyage dans Git sous forme
+chiffrée, il ne dépend donc pas d'un coffre descellé — ce qui compte pour la seule porte d'entrée
+d'un outil qu'on ouvre justement quand le reste va mal.
+
+Création / rotation, **depuis la racine du repo** (le `.secret.yaml` est gitignoré) :
+
+```bash
+# 1. Cert public du contrôleur (une fois ; pub-cert.pem est gitignoré)
+kubeseal --fetch-cert --controller-name=sealed-secrets --controller-namespace=sealed-secrets \
+  > pub-cert.pem
+
+# 2. Template en clair — le mot de passe généré est celui qu'on tape ensuite dans Grafana
+cat > cluster/app/kube-prometheus-stack/manifests/grafana-admin.secret.yaml <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-admin
+  namespace: monitoring
+type: Opaque
+stringData:
+  admin-user: admin
+  admin-password: "$(openssl rand -base64 30)"
+EOF
+
+# 3. Sceller, supprimer le clair, committer
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/app/kube-prometheus-stack/manifests/grafana-admin.secret.yaml \
+  > cluster/app/kube-prometheus-stack/manifests/grafana-admin.sealed.yaml
+rm cluster/app/kube-prometheus-stack/manifests/grafana-admin.secret.yaml
+```
+
+Deux pièges :
+
+- **Le `SealedSecret` est chiffré pour le couple (`grafana-admin`, `monitoring`)** : le renommer
+  ou le déplacer le rend indéchiffrable, il faut le resceller.
+- **Changer le `Secret` ne change pas le compte déjà créé en base.** Grafana lit
+  `admin-password` au **premier** démarrage ; ensuite le mot de passe vit dans sa base SQLite,
+  sur le PVC. Après rotation, redémarrer ne suffit pas — forcer la valeur :
+  ```bash
+  kubectl -n monitoring exec deploy/kube-prometheus-stack-grafana -c grafana -- \
+    grafana cli admin reset-admin-password "<nouveau mot de passe>"
+  ```
+
+### SSO — authentik (OIDC), DÉSACTIVÉ
+
+Tout est écrit et **commenté** : le bloc `envValueFrom` et le bloc `auth.generic_oauth` de
+`helm-values.yaml`, plus la ligne `grafana-oidc.externalsecret.yaml` de
+`manifests/kustomization.yaml`. Les trois se décommentent **ensemble** — un provider OIDC sans
+`client_secret` fait démarrer Grafana en erreur, et `envValueFrom` seul monte un `Secret`
+inexistant.
 
 Le Provider / Application / groupes côté authentik sont gérés en **Terraform** (autre repo).
 Contrat : `clientID=grafana`, issuer `https://authentik.wittner.tech/application/o/grafana/`,
@@ -78,25 +141,15 @@ scopes `openid profile email groups`, redirect URI
 
 Mapping des groupes (claim `groups`, cf. `role_attribute_path` dans `helm-values.yaml`) :
 **`app-grafana-admin`** → rôle Admin, **`app-grafana-viewer`** → rôle Viewer, défaut Viewer.
-Compte local `admin` (secret `grafana-admin`) conservé en break-glass.
 
-### Câblage des secrets
-
-Les deux secrets vivent dans openbao — **rien à committer**, les `ExternalSecret` qui les
-pointent sont déjà dans le repo :
+Réactivation : décommenter les trois morceaux, puis remettre le client-secret dans le coffre —
+c'est l'`ExternalSecret` `grafana-oidc` qui le sert.
 
 ```bash
 kubectl -n openbao exec -ti openbao-0 -- \
   bao kv put kv/homelab/grafana/oidc client-secret=<output terraform client_secret>
 
-kubectl -n openbao exec -ti openbao-0 -- \
-  bao kv put kv/homelab/grafana/admin admin-user=admin admin-password="$(openssl rand -base64 30)"
-```
-
-Rotation : régénérer côté Terraform (OIDC) ou `openssl` (admin), refaire le `bao kv put`. ESO
-reprend la valeur au prochain `refreshInterval` (1 h) ; pour l'appliquer tout de suite :
-
-```bash
+# ESO reprend la valeur au prochain refreshInterval (1 h) ; pour l'appliquer tout de suite :
 kubectl -n monitoring annotate externalsecret grafana-oidc force-sync=$(date +%s) --overwrite
 ```
 

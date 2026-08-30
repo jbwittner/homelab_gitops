@@ -4,8 +4,19 @@ namespace: monitoring
 resources:
   - namespace.yaml
   - grafana-httproute.yaml
-  - grafana-oidc.externalsecret.yaml
-  - grafana-admin.externalsecret.yaml
+  # Compte admin local Grafana : canal sealed-secrets (le SealedSecret porte la valeur, pas
+  # un pointeur). Déchiffré par le contrôleur sealed-secrets (wave -8), donc bien avant cette
+  # app. Rotation = kubeseal + commit (cf. README.md §Compte admin Grafana).
+  - grafana-admin.sealed.yaml
+  #
+  # --- SSO authentik DÉSACTIVÉ : à décommenter avec les blocs `envValueFrom` et
+  # `auth.generic_oauth` de helm-values.yaml (les trois vont ensemble). ---
+  # - grafana-oidc.externalsecret.yaml
+  #
+  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal openbao + external-secrets.
+  # Les deux ne peuvent pas coexister — ils visent le même Secret `grafana-admin`. ---
+  # - grafana-admin.externalsecret.yaml
+  #
   # Décommenter en même temps que le bloc alertmanager.config de helm-values.yaml, et seulement
   # après avoir écrit la clé homelab/alertmanager/smtp dans le coffre (README § Notification mail).
   # - alertmanager-smtp.externalsecret.yaml

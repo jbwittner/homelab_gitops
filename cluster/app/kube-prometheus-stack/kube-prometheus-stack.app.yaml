@@ -20,7 +20,7 @@ spec:
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
-    # Ressources annexes : namespace, SealedSecrets (OIDC + admin), HTTPRoute.
+    # Ressources annexes : namespace, SealedSecret du compte admin Grafana, HTTPRoute.
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/app/kube-prometheus-stack/manifests
