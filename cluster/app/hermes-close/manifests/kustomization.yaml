@@ -43,6 +43,11 @@ configMapGenerator:
       # ⚠️ Ce fichier n'existe PAS côté `hermes` : c'est une SECONDE différence entre les deux
       # arbres, en plus de la policy réseau. Cf. README §Ce que SOUL.md change à l'expérience.
       - config/SOUL.md
+      # Semé en /opt/data/home/.profile. Rétablit /opt/hermes/bin dans le PATH des shells de
+      # login de l'outil terminal, que /etc/profile écrase. Le fichier documente le détail.
+      # Doit rester IDENTIQUE à celui de hermes : c'est un correctif d'environnement, pas une
+      # variable de l'expérience.
+      - config/profile
       # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
       # la révision du secret entre dans le hash. Le Secret est produit par le contrôleur
       # sealed-secrets, pas par kustomize — son contenu ne peut donc pas influencer le pod

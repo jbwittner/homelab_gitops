@@ -45,6 +45,13 @@ spec:
             - |
               set -eu
               install -o 10000 -g 10000 -m 0600 /config/config.yaml /opt/data/config.yaml
+              # HOME des sous-processus lancés par l'outil terminal. Créé seulement s'il manque :
+              # le répertoire existant porte un bit setgid qu'un `install -d` inconditionnel
+              # effacerait.
+              [ -d /opt/data/home ] || install -d -o 10000 -g 10000 -m 0755 /opt/data/home
+              # Rétablit /opt/hermes/bin dans le PATH des shells de login — cf. config/profile,
+              # qui documente pourquoi /etc/profile l'en retire.
+              install -o 10000 -g 10000 -m 0644 /config/profile /opt/data/home/.profile
           volumeMounts:
             - { name: data, mountPath: /opt/data }
             - { name: config, mountPath: /config, readOnly: true }
