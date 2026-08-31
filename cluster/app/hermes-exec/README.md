@@ -182,9 +182,16 @@ Ce qui est **délibérément laissé à câbler à la main**, après revue.
 
 ### 1. Destinations egress (miroir Git interne, Artifactory)
 
-**Non renseignées.** `manifests/netpol-egress-allow.yaml` ship avec une liste `rules.dns` vide et
-aucune destination : les tâches peuvent joindre le port 53 de CoreDNS, et rien d'autre. Aucun nom
-n'est résolvable.
+**Non renseignées.** `manifests/netpol-egress-allow.yaml` n'autorise que les noms internes au
+cluster (`*.cluster.local`) et aucune destination : les tâches peuvent joindre le port 53 de
+CoreDNS, résoudre un Service du cluster, et rien d'autre.
+
+> [!CAUTION]
+> **Ne jamais réduire `rules.dns` à une liste vide.** `dns: []` ne veut pas dire « rien n'est
+> autorisé » : Cilium y lit « aucune restriction L7 » et laisse passer **toute** résolution, noms
+> externes compris — soit un canal d'exfiltration par DNS. L'objet est accepté, la policy
+> s'affiche `Valid: True`, et rien ne signale le trou. C'est le contrôle n°5 de la démo qui l'a
+> levé, pas la revue du manifeste. La liste doit rester non vide.
 
 À câbler : les deux listes du fichier, **ensemble**. Un `toFQDNs` sans `matchName` DNS
 correspondant ne matche jamais rien et se diagnostique en timeout, pas en refus. Les trois formes

@@ -27,9 +27,15 @@ spec:
     # explicitement listés. Tout autre nom échoue à la résolution : c'est le premier filet, avant
     # même le filtre IP.
     #
-    # En l'état la liste `rules.dns` est VIDE : aucun nom n'est résolvable. C'est l'état attendu
-    # tant que les destinations de la section 2 ne sont pas renseignées. Un exécuteur peut
-    # joindre le port 53, et rien d'autre.
+    # ⚠️ NE JAMAIS LAISSER `dns: []`. Une liste de règles L7 VIDE ne veut pas dire « rien n'est
+    # autorisé » : Cilium y lit « aucune restriction L7 » et laisse passer TOUTE résolution, y
+    # compris les noms externes. L'objet est accepté, la policy s'affiche `Valid: True`, et le
+    # trou ne se voit nulle part. Constaté à l'exécution — c'est le contrôle n°5 de
+    # ../templates/demo-task-job.yaml qui l'a levé, pas la revue du manifeste.
+    #
+    # La liste doit donc rester NON VIDE. En l'état elle n'autorise que les noms internes au
+    # cluster : tout nom externe est refusé par le proxy DNS. Un exécuteur peut joindre le port
+    # 53 de CoreDNS, résoudre un Service du cluster, et rien d'autre.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
@@ -39,10 +45,13 @@ spec:
             - { port: "53", protocol: UDP }
             - { port: "53", protocol: TCP }
           rules:
-            dns: []
-              # POINT D'EXTENSION — décommenter et compléter EN MÊME TEMPS que la section 2.
-              # Un nom ici sans `toFQDNs` correspondant permet de le résoudre sans pouvoir le
-              # joindre ; l'inverse ne matche rien du tout.
+            dns:
+              # Noms internes au cluster. Nécessaire pour la forme (a) de la section 2
+              # (destination `toEndpoints` jointe par son nom de Service).
+              - matchPattern: "*.cluster.local"
+              # POINT D'EXTENSION — un `matchName` par nom EXTERNE autorisé, à compléter EN MÊME
+              # TEMPS que la section 2. Un nom ici sans `toFQDNs` correspondant permet de le
+              # résoudre sans pouvoir le joindre ; l'inverse ne matche rien du tout.
               # - matchName: "<miroir-git-interne>"
               # - matchName: "<artifactory-interne>"
 
