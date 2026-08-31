@@ -31,8 +31,8 @@ le supprime. Le TTL et le GitOps se battraient sans qu'aucun log ne le signale (
   `automountServiceAccountToken: false` ; neutralise aussi le SA `default` du namespace
 - `manifests/netpol-default-deny.yaml` — `CiliumNetworkPolicy` de refus par défaut, **ingress et
   egress**, sur le label de rôle
-- `manifests/netpol-egress-allow.yaml` — les seules sorties autorisées. **Livré avec une liste de
-  destinations VIDE** (cf. §Points d'extension)
+- `manifests/netpol-egress-allow.yaml` — **NON APPLIQUÉ** : absent des `resources:` du
+  kustomization. Conservé comme point d'extension (cf. §Points d'extension)
 - `manifests/resourcequota.yaml` — plafond du namespace, **dimensionné pour 5 tâches
   concurrentes** ; `persistentvolumeclaims: 0`
 - `manifests/limitrange.yaml` — défauts et maxima par conteneur. **Se revoit avec le quota** :
@@ -54,8 +54,9 @@ Cinq couches, indépendantes. Aucune n'est décorative.
 3. **securityContext.** non-root (uid 65532), `readOnlyRootFilesystem: true`, toutes capabilities
    droppées, `seccompProfile: RuntimeDefault`. Écriture uniquement dans `/work` et `/tmp`, deux
    `emptyDir` qui meurent avec le pod.
-4. **Réseau.** Défaut-refus ingress + egress sur le label `hermes.wittner.tech/role=task-runner`.
-   Aucune sortie internet, sous aucun prétexte.
+4. **Réseau.** Défaut-refus ingress + egress sur le label `hermes.wittner.tech/role=task-runner`,
+   et **rien ne le contredit** : la policy d'autorisation n'est pas appliquée. Aucune sortie
+   réseau du tout — pas d'internet, pas de LAN, **pas même la résolution DNS**.
 5. **Plafonds.** `ResourceQuota` + `LimitRange` : un orchestrateur qui boucle sur la création de
    tâches se fait refuser la création avec un message explicite, il n'évince pas le cluster.
    Calés sur le POC (5 tâches concurrentes, 4 CPU / 6 Gi de limites pour tout le namespace), pas
@@ -182,9 +183,20 @@ Ce qui est **délibérément laissé à câbler à la main**, après revue.
 
 ### 1. Destinations egress (miroir Git interne, Artifactory)
 
-**Non renseignées.** `manifests/netpol-egress-allow.yaml` n'autorise que les noms internes au
-cluster (`*.cluster.local`) et aucune destination : les tâches peuvent joindre le port 53 de
-CoreDNS, résoudre un Service du cluster, et rien d'autre.
+**Aucune sortie réseau, décision explicite.** `manifests/netpol-egress-allow.yaml` existe mais
+n'est **pas listé** dans `manifests/kustomization.yaml` : la CNP n'est pas créée, seul le
+défaut-refus s'applique. Les exécuteurs ne peuvent même pas résoudre un nom.
+
+Pour ouvrir, le jour venu — **les deux gestes, dans cet ordre** :
+
+1. compléter les deux listes du fichier (`rules.dns` **et** la section 2) — elles doivent rester
+   alignées, un `toFQDNs` sans `matchName` DNS correspondant ne matche jamais rien et se
+   diagnostique en timeout, pas en refus ;
+2. ajouter `- netpol-egress-allow.yaml` aux `resources:` du kustomization.
+
+C'est le geste 2 qui ouvre réellement le réseau. Un fichier présent mais non listé n'est pas
+appliqué, et **rien dans le cluster ne le signale** — vérifier par
+`kubectl -n hermes-exec get cnp`, jamais par la présence du fichier.
 
 > [!CAUTION]
 > **Ne jamais réduire `rules.dns` à une liste vide.** `dns: []` ne veut pas dire « rien n'est
@@ -193,16 +205,12 @@ CoreDNS, résoudre un Service du cluster, et rien d'autre.
 > s'affiche `Valid: True`, et rien ne signale le trou. C'est le contrôle n°5 de la démo qui l'a
 > levé, pas la revue du manifeste. La liste doit rester non vide.
 
-À câbler : les deux listes du fichier, **ensemble**. Un `toFQDNs` sans `matchName` DNS
-correspondant ne matche jamais rien et se diagnostique en timeout, pas en refus. Les trois formes
-(service in-cluster, FQDN LAN, CIDR) sont documentées dans le fichier avec leur squelette.
-
-⚠️ Un hostname en `*.lan.wittner.tech` doit **aussi** être déclaré sur le reverse proxy LAN
+⚠️ Un hostname en `*.lan.wittner.tech` devra **aussi** être déclaré sur le reverse proxy LAN
 (`192.168.1.50`), sinon la résolution aboutit et la requête finit en 404 alors que la policy est
 saine.
 
 ⚠️ **Aucune sortie internet ne doit être ajoutée**, même temporairement pour installer un paquet.
-Ce qu'une tâche doit avoir, elle l'a dans son image ou dans le miroir interne.
+Ce qu'une tâche doit avoir, elle l'a dans son image.
 
 ### 2. Secrets et accès (SSH, Git, Artifactory)
 

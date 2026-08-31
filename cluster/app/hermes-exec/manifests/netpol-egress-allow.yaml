@@ -1,5 +1,13 @@
-# Les SEULES sorties autorisées aux exécuteurs jetables. Tout le reste tombe sur le défaut-refus
-# de netpol-default-deny.yaml.
+# ⚠️ CE FICHIER N'EST PAS APPLIQUÉ. Il n'est pas listé dans kustomization.yaml — décision
+# explicite : les exécuteurs n'ont AUCUNE sortie réseau pour l'instant, résolution DNS comprise.
+# Seule netpol-default-deny.yaml est active.
+#
+# Il est conservé comme point d'extension : le jour où une destination interne devient
+# nécessaire, la compléter ci-dessous PUIS l'ajouter aux `resources:` du kustomization. Les deux
+# gestes sont nécessaires ; le second est celui qui ouvre réellement le réseau.
+#
+# Les SEULES sorties autorisées aux exécuteurs jetables, une fois ce fichier activé. Tout le
+# reste tombe sur le défaut-refus de netpol-default-deny.yaml.
 #
 # ⚠️ AUCUNE SORTIE INTERNET. Pas de PyPI, pas de npm, pas de GitHub public, pas de registry.
 # Un exécuteur qui a besoin d'un paquet doit le trouver dans son image ou dans le miroir interne.

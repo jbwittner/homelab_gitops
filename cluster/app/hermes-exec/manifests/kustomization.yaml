@@ -7,7 +7,18 @@ resources:
   - resourcequota.yaml
   - limitrange.yaml
   - netpol-default-deny.yaml
-  - netpol-egress-allow.yaml
+  # netpol-egress-allow.yaml — DÉLIBÉRÉMENT ABSENT DE CETTE LISTE.
+  #
+  # Décision : les exécuteurs n'ont AUCUNE sortie réseau, pas même la résolution DNS. Seule
+  # netpol-default-deny.yaml s'applique, donc le refus par défaut n'est contredit par rien.
+  #
+  # Le fichier reste dans ce dossier comme POINT D'EXTENSION documenté (il porte les trois
+  # formes de destination et le piège du `dns: []`). Le référencer ici est le geste unique qui
+  # ouvre le réseau — c'est pourquoi il est laissé décommentable plutôt que supprimé.
+  #
+  # ⚠️ Un fichier présent mais non listé N'EST PAS APPLIQUÉ. Rien dans le cluster ne le
+  # signale : la CNP n'existe simplement pas. Vérifier par
+  # `kubectl -n hermes-exec get cnp` et non par la présence du fichier.
 
 # ⚠️ AUCUN Job ici, et c'est structurel. Ce composant décrit le CADRE (namespace, identité sans
 # droits, policies, plafonds) — pas les tâches.
