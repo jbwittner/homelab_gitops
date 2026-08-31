@@ -154,6 +154,55 @@ git mv cluster/app/hermes-close/hermes-close.noapp.yaml \
 
 Ne le faire qu'une fois le `SealedSecret` en place.
 
+Le composant a déjà été activé puis mis hors service une fois (cf. §Décommissionnement). Une
+réactivation repart d'un **PVC vide** : l'`hermes auth` ci-dessous est à refaire, et le
+`SOUL.md` est re-semé depuis Git.
+
+### Décommissionnement
+
+Inverse de l'activation, mais **en deux commits séparés, dans cet ordre**. Le fichier
+`hermes-close.noapp.yaml` porte déjà le finalizer nécessaire — si ce n'était pas le cas :
+
+```bash
+# Commit 1 — poser le finalizer, et RIEN d'autre. Ne change rien au déployé.
+#   metadata.finalizers: [resources-finalizer.argocd.argoproj.io]
+
+# Attendre la réconciliation par l'app-of-apps, et la VÉRIFIER avant d'aller plus loin :
+kubectl -n argocd get app hermes-close -o jsonpath='{.metadata.finalizers}'
+#   doit afficher ["resources-finalizer.argocd.argoproj.io"] — compter ~2 min
+
+# Commit 2 — sortir le fichier du glob du bootstrap
+git mv cluster/app/hermes-close/hermes-close.app.yaml \
+       cluster/app/hermes-close/hermes-close.noapp.yaml
+```
+
+Sans finalizer, l'app-of-apps prune l'`Application` et **orpheline tout ce qu'elle gère** :
+namespace, StatefulSet, PVC, HTTPRoute et policy restent dans le cluster sans réconciliation.
+Avec, la suppression cascade sur les ressources gérées — dont `namespace.yaml`, dont la
+disparition emporte le PVC. Ce PVC vient d'un `volumeClaimTemplates` : il n'est pas dans Git,
+donc rien d'autre ne le prunerait.
+
+Les deux étapes dans un seul commit reproduisent exactement l'orphelinage qu'on cherche à éviter
+— le fichier peut quitter le glob avant que le finalizer n'ait été appliqué.
+
+**Le PVC est détruit.** La `StorageClass` est en `reclaimPolicy: Delete` (cf.
+[openebs](../../infra/openebs/README.md)) : le LV est supprimé et l'espace rendu au VG. Sessions,
+mémoires, cron et un `SOUL.md` modifié depuis le dashboard n'existent nulle part ailleurs.
+
+À faire à la main, hors Git — retirer les deux hostnames du reverse proxy LAN `192.168.1.50`,
+sinon ils continuent d'y pointer dans le vide :
+
+- `hermes-close.lan.wittner.tech`
+- `hermes-close-api.lan.wittner.tech`
+
+Si le namespace reste bloqué en `Terminating` :
+
+```bash
+kubectl get ns hermes-close -o jsonpath='{.status.conditions}'
+kubectl -n hermes-close api-resources --verbs=list -o name \
+  | xargs -n1 kubectl -n hermes-close get --show-kind --ignore-not-found
+```
+
 ### Auth LLM
 
 À faire une fois le pod `Running`, et à refaire si le PVC est perdu :

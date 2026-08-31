@@ -7,13 +7,14 @@ metadata:
     app.kubernetes.io/name: hermes-close
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: agent
-  # DÉCOMMISSIONNEMENT EN COURS — posé AVANT de renommer ce fichier en `.noapp.yaml`.
+  # NE PAS RETIRER, même si le composant est inactif — c'est ce qui rend la mise hors service
+  # propre, et il doit être en place AVANT le renommage, pas pendant.
   # Sans ce finalizer, l'app-of-apps qui prune cette `Application` supprime l'objet et ORPHELINE
   # tout ce qu'il gère : namespace, StatefulSet, PVC, HTTPRoute, CiliumNetworkPolicy restent dans
   # le cluster sans personne pour les réconcilier. Avec, la suppression cascade sur les ressources
   # gérées — dont `namespace.yaml`, dont la disparition emporte le PVC (issu d'un
   # `volumeClaimTemplates`, il n'est pas dans Git et ne serait pruné par rien d'autre).
-  # L'ordre est le point entier : ce finalizer doit être PRÉSENT SUR L'OBJET VIVANT avant que le
+  # L'ordre est le point entier : le finalizer doit être PRÉSENT SUR L'OBJET VIVANT avant que ce
   # fichier ne quitte le glob du bootstrap. Les deux dans un même commit = orphelinage.
   # Cf. README §Décommissionnement.
   finalizers:
