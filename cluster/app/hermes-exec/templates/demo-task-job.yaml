@@ -1,0 +1,120 @@
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+# Tâche de DÉMONSTRATION — inoffensive, sans aucun accès réel.
+#
+# Instance concrète de task-job.yaml (aucun paramètre à substituer). Elle vérifie les trois
+# propriétés du cadre et s'arrête :
+#   1. le volume de travail /work est écrivable      → écrit un fichier, le relit
+#   2. la racine est en lecture seule                 → une écriture dans / DOIT échouer
+#   3. l'egress est en défaut-refus                   → résolution DNS et sortie IP DOIVENT échouer
+#
+# Les points 2 et 3 sont des tests NÉGATIFS : le Job réussit quand ils échouent. Un `Completed`
+# ici veut dire « l'isolation tient ». Un échec du Job veut dire qu'un garde-fou manque.
+#
+# Aucun secret, aucun accès Git/Artifactory, aucune connexion sortante réussie. L'image est
+# tirée par le kubelet, pas par le pod — le pull ne passe pas par la CiliumNetworkPolicy et
+# n'ouvre rien.
+#
+#   kubectl create -f templates/demo-task-job.yaml
+# ─────────────────────────────────────────────────────────────────────────────────────────────
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hermes-task-demo
+  namespace: hermes-exec
+  labels:
+    app.kubernetes.io/name: hermes-exec
+    hermes.wittner.tech/role: task-runner
+    hermes.wittner.tech/task: "demo"
+spec:
+  ttlSecondsAfterFinished: 600
+  activeDeadlineSeconds: 300
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hermes-exec
+        hermes.wittner.tech/role: task-runner
+        hermes.wittner.tech/task: "demo"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: hermes-exec-runner
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # TODO — runtimeClassName: gvisor  (aucune RuntimeClass sur ce cluster, cf. task-job.yaml)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: task
+          image: busybox:1.37.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "== identite =="
+              id
+              # Doit être 65532. Un 0 ici veut dire que le securityContext n'a pas été appliqué.
+              [ "$(id -u)" -ne 0 ] || { echo "ECHEC: le conteneur tourne en root"; exit 1; }
+
+              echo "== token de ServiceAccount =="
+              if [ -e /var/run/secrets/kubernetes.io/serviceaccount ]; then
+                echo "ECHEC: un token de ServiceAccount est monte"; exit 1
+              fi
+              echo "OK: aucun token monte"
+
+              echo "== volume de travail =="
+              echo "tache demo" > /work/resultat.txt
+              cat /work/resultat.txt
+
+              echo "== racine en lecture seule =="
+              if echo x > /doit-echouer 2>/dev/null; then
+                echo "ECHEC: la racine est ecrivable"; exit 1
+              fi
+              echo "OK: racine en lecture seule"
+
+              echo "== egress: resolution DNS d'un nom externe =="
+              # La liste rules.dns de la policy est vide : aucun nom n'est resolvable.
+              if nslookup example.com >/dev/null 2>&1; then
+                echo "ECHEC: la resolution DNS externe a abouti"; exit 1
+              fi
+              echo "OK: resolution refusee"
+
+              echo "== egress: sortie IP directe =="
+              # Contourne le DNS pour verifier que le filtre n'est pas seulement au niveau des noms.
+              if wget -q -T 5 -O /dev/null http://1.1.1.1/ 2>/dev/null; then
+                echo "ECHEC: sortie internet directe possible"; exit 1
+              fi
+              echo "OK: sortie IP refusee"
+
+              echo "== TOUS LES CONTROLES PASSENT =="
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: "50m"
+              memory: 64Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: "200m"
+              memory: 128Mi
+              ephemeral-storage: 256Mi
+          volumeMounts:
+            - { name: work, mountPath: /work }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

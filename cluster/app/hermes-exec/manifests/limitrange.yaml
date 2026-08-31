@@ -1,0 +1,34 @@
+# Filet sous le quota : un conteneur sans `resources` explicites se verrait attribuer une request
+# nulle et une limite infinie, et consommerait tout le quota du namespace à lui seul.
+#
+# `default` / `defaultRequest` ne DISPENSENT PAS d'écrire les resources dans le manifeste de
+# tâche — ils rattrapent l'oubli. Le template ../templates/task-job.yaml les déclare
+# explicitement, comme demandé.
+#
+# `max` est la vraie contrainte : il fait ÉCHOUER la création d'un pod qui demanderait plus.
+#
+# Dimensionné pour une tâche de POC (build/test court), pas pour une compilation lourde. Le
+# tableau de correspondance avec resourcequota.yaml est dans ce fichier — les deux se revoient
+# ensemble.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: hermes-exec-limits
+  namespace: hermes-exec
+  labels:
+    app.kubernetes.io/name: hermes-exec
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: 512Mi
+        ephemeral-storage: 1Gi
+      defaultRequest:
+        cpu: "100m"
+        memory: 256Mi
+        ephemeral-storage: 256Mi
+      max:
+        cpu: "2"
+        memory: 2Gi
+        ephemeral-storage: 4Gi

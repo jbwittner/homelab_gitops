@@ -1,0 +1,37 @@
+# Défaut-refus TOTAL sur les exécuteurs jetables — ingress ET egress.
+#
+# Cilium est en `policy-enforcement-mode: default` (relevé sur le cluster) : un endpoint n'est
+# en défaut-refus que sur les directions couvertes par une policy qui le sélectionne. Cette
+# policy est donc ce qui fait basculer les exécuteurs en refus par défaut ; sans elle, ils
+# auraient une sortie internet complète.
+#
+# La forme `- {}` est l'exemple deny-all documenté par Cilium : une règle vide active le
+# défaut-refus sur la direction sans y autoriser quoi que ce soit. Ne pas la « nettoyer » en
+# supprimant la liste — retirer le bloc `egress:` rend la direction NON APPLIQUÉE, donc
+# entièrement ouverte. Le manifeste passerait la revue en paraissant plus propre.
+#
+# Les autorisations vivent dans netpol-egress-allow.yaml. Cilium fait l'UNION des règles allow
+# de toutes les policies qui sélectionnent l'endpoint : ce fichier-ci n'a jamais à être modifié
+# pour ouvrir quoi que ce soit.
+#
+# ⚠️ INGRESS aussi en refus : un exécuteur jetable ne sert rien, personne ne doit le joindre.
+# C'est l'inverse du choix fait pour `hermes`/`hermes-close`, dont l'ingress reste non appliqué
+# pour que le shared-gw atteigne le dashboard. Ici il n'y a ni Service ni HTTPRoute.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hermes-exec-default-deny
+  namespace: hermes-exec
+  labels:
+    app.kubernetes.io/name: hermes-exec
+spec:
+  # Sélectionne par le label de RÔLE, pas par l'id de tâche : toute tâche présente ou future est
+  # couverte dès sa création, sans policy à générer par tâche. Le label est posé par le template
+  # de tâche (cf. ../templates/task-job.yaml) et est le contrat entre les deux fichiers.
+  endpointSelector:
+    matchLabels:
+      hermes.wittner.tech/role: task-runner
+  ingress:
+    - {}
+  egress:
+    - {}

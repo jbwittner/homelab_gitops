@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: hermes-exec
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - resourcequota.yaml
+  - limitrange.yaml
+  - netpol-default-deny.yaml
+  - netpol-egress-allow.yaml
+
+# ⚠️ AUCUN Job ici, et c'est structurel. Ce composant décrit le CADRE (namespace, identité sans
+# droits, policies, plafonds) — pas les tâches.
+#
+# Un Job de tâche déposé dans ce dossier serait recréé en boucle par ArgoCD : `selfHeal: true`
+# le réapplique dès que son `ttlSecondsAfterFinished` l'a supprimé. Le TTL et le GitOps se
+# battraient, et la boucle ne se verrait dans aucun log — ArgoCD resterait `Synced`.
+#
+# Les tâches vivent donc dans ../templates/, HORS du chemin de l'Application, et sont créées à la
+# demande par `kubectl create` (cf. README §Lancer un environnement de test). Ce sont des objets
+# éphémères, pas de l'état désiré.
+#
+# Pas de Secret, pas de configMapGenerator : ce composant ne porte aucune donnée sensible.
+# Cf. README §Points d'extension pour ce qui reste à câbler.

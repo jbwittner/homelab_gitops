@@ -1,0 +1,79 @@
+# Les SEULES sorties autorisées aux exécuteurs jetables. Tout le reste tombe sur le défaut-refus
+# de netpol-default-deny.yaml.
+#
+# ⚠️ AUCUNE SORTIE INTERNET. Pas de PyPI, pas de npm, pas de GitHub public, pas de registry.
+# Un exécuteur qui a besoin d'un paquet doit le trouver dans son image ou dans le miroir interne.
+# « juste le temps d'installer une dépendance » est exactement le trou qu'on refuse d'ouvrir ici.
+#
+# Rappel de mécanique Cilium (relevé en phase 1 : `enable-l7-proxy: true`) : une règle `toFQDNs`
+# ne matche un nom QUE s'il a d'abord été résolu par une requête DNS elle-même autorisée par le
+# bloc `rules.dns` ci-dessous. Les deux listes doivent rester alignées — un `toFQDNs` sans
+# `matchName` DNS correspondant ne matche jamais rien, et se diagnostique en timeout, pas en
+# refus.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hermes-exec-egress-allow
+  namespace: hermes-exec
+  labels:
+    app.kubernetes.io/name: hermes-exec
+spec:
+  endpointSelector:
+    matchLabels:
+      hermes.wittner.tech/role: task-runner
+  egress:
+    # ── 1. Résolution DNS interne ────────────────────────────────────────────────────────────
+    # CoreDNS uniquement (`kube-system/kube-dns`, relevé en phase 1), et seulement pour les noms
+    # explicitement listés. Tout autre nom échoue à la résolution : c'est le premier filet, avant
+    # même le filtre IP.
+    #
+    # En l'état la liste `rules.dns` est VIDE : aucun nom n'est résolvable. C'est l'état attendu
+    # tant que les destinations de la section 2 ne sont pas renseignées. Un exécuteur peut
+    # joindre le port 53, et rien d'autre.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+          rules:
+            dns: []
+              # POINT D'EXTENSION — décommenter et compléter EN MÊME TEMPS que la section 2.
+              # Un nom ici sans `toFQDNs` correspondant permet de le résoudre sans pouvoir le
+              # joindre ; l'inverse ne matche rien du tout.
+              # - matchName: "<miroir-git-interne>"
+              # - matchName: "<artifactory-interne>"
+
+    # ── 2. POINT D'EXTENSION — destinations internes autorisées ──────────────────────────────
+    # DÉLIBÉRÉMENT VIDE. Aucune IP, aucun hôte deviné : les valeurs doivent venir de toi.
+    #
+    # Choisir la forme selon où vit la destination :
+    #
+    #   (a) service DANS le cluster → `toEndpoints`, pas de DNS L7 nécessaire pour l'IP, mais
+    #       le nom doit quand même être autorisé en section 1 si le client résout par nom :
+    #
+    #       - toEndpoints:
+    #           - matchLabels:
+    #               io.kubernetes.pod.namespace: <ns>
+    #               app.kubernetes.io/name: <nom>
+    #         toPorts:
+    #           - ports: [{ port: "443", protocol: TCP }]
+    #
+    #   (b) hôte HORS cluster, sur le LAN → `toFQDNs` (+ le `matchName` en section 1) :
+    #
+    #       - toFQDNs:
+    #           - matchName: "<artifactory>.lan.wittner.tech"
+    #         toPorts:
+    #           - ports: [{ port: "443", protocol: TCP }]
+    #
+    #       ⚠️ Un hostname en `*.lan.wittner.tech` doit AUSSI être déclaré sur le reverse proxy
+    #       LAN (192.168.1.50), sinon la résolution aboutit et la requête finit en 404 alors que
+    #       la policy, elle, est correcte.
+    #
+    #   (c) adresse IP fixe sans nom → `toCIDRSet` avec un /32. À éviter : illisible et non
+    #       renouvelable. Ne l'employer que si la destination n'a réellement pas de nom.
+    #
+    # Tant que cette section reste vide, les exécuteurs n'ont AUCUNE sortie réseau utile. C'est
+    # un état sain et fonctionnel : le pod de démonstration ne fait aucun accès réseau.

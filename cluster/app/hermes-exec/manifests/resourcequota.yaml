@@ -1,0 +1,44 @@
+# Plafond du namespace entier. La phase 1 n'a trouvé AUCUN ResourceQuota ni LimitRange sur ce
+# cluster : sans ce fichier, un orchestrateur qui boucle sur la création de tâches peut consommer
+# les 3 nœuds. Le quota est le seul frein qui ne dépend pas du bon comportement de l'agent.
+#
+# DIMENSIONNEMENT — calé sur le POC : **5 tâches concurrentes**, pas sur la capacité du cluster.
+# Un quota large ne protège de rien ; celui-ci doit gêner avant que le cluster ne souffre.
+# Les valeurs se lisent contre limitrange.yaml, qui fixe le coût d'UNE tâche :
+#
+#   par conteneur (LimitRange)      × 5 pods      quota ici    qui borne en premier
+#   request  100m / 256Mi / 256Mi   500m/1.25Gi   2 / 3Gi      le LimitRange (marge pour une
+#                                                              tâche qui demande plus)
+#   limit    500m / 512Mi / 1Gi     2.5 / 2.5Gi   4 / 6Gi      idem
+#   max      2   / 2Gi   / 4Gi      10 / 10Gi     4 / 6Gi      LE QUOTA — c'est voulu : 5 tâches
+#                                                              au maximum du LimitRange ne
+#                                                              passent pas, il faut choisir
+#
+# Revoir CES DEUX FICHIERS ENSEMBLE. Augmenter le max du LimitRange sans toucher au quota rend
+# simplement les grosses tâches impossibles à ordonnancer, sans message clair.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: hermes-exec-quota
+  namespace: hermes-exec
+  labels:
+    app.kubernetes.io/name: hermes-exec
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 3Gi
+    requests.ephemeral-storage: 4Gi
+    limits.cpu: "4"
+    limits.memory: 6Gi
+    limits.ephemeral-storage: 12Gi
+    # Borne le parallélisme. Un dépassement fait échouer la CRÉATION du Job avec un message
+    # explicite ("exceeded quota"), pas un pod qui se fait évincer plus tard sans raison lisible.
+    pods: "5"
+    count/jobs.batch: "5"
+    # ZÉRO stockage persistant : « jetable » veut dire que rien ne survit au pod. Un PVC dans ce
+    # namespace serait un canal de persistance entre deux tâches, donc entre deux contextes
+    # d'exécution qui ne doivent rien partager. Le volume de travail est un emptyDir.
+    persistentvolumeclaims: "0"
+    # Rien n'est joignable ici (l'ingress est en défaut-refus de toute façon) : interdire les
+    # Services évite qu'on rende un exécuteur adressable par erreur.
+    services: "0"
