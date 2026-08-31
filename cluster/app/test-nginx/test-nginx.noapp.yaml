@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/name: test-nginx
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: test
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:

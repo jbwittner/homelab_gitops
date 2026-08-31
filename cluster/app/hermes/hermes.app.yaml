@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/name: hermes
     app.kubernetes.io/part-of: homelab-gitops
     app.kubernetes.io/component: agent
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:

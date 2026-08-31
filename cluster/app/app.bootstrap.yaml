@@ -25,6 +25,23 @@ spec:
   destination:
     name: bleu-kalecgos     # le HUB : ce tier ne produit que des Application/ApplicationSet
     namespace: argocd
+  # ⚠️ CONVENTION — toute `Application` découverte ici DOIT porter le finalizer
+  # `resources-finalizer.argocd.argoproj.io`. Le `prune: true` ci-dessous supprime l'objet
+  # `Application` dès que son fichier quitte le glob (renommage en `.noapp.yaml`, suppression du
+  # dossier). Sans finalizer, cette suppression est immédiate et n'entraîne RIEN : namespace,
+  # StatefulSet, PVC, HTTPRoute et policies restent dans le cluster, vivants et plus réconciliés
+  # par personne. Avec, le contrôleur supprime d'abord les ressources gérées, attend qu'elles
+  # soient parties, puis relâche l'`Application`.
+  #
+  # Deux étages à ne pas confondre : `prune` décide du sort de l'`Application`, le finalizer
+  # décide du sort de ce qu'elle gère. Les deux sont nécessaires.
+  #
+  # Le finalizer est inerte tant que rien ne demande de suppression : l'ajouter ne coûte rien et
+  # ne change rien au déployé. Mais il doit être présent SUR L'OBJET VIVANT avant que la
+  # suppression n'arrive — le poser et sortir le fichier du glob dans le même commit ne protège
+  # de rien, le fichier peut disparaître avant que le finalizer n'ait été appliqué. D'où la
+  # procédure en deux commits documentée en
+  # [hermes-close](hermes-close/README.md#décommissionnement).
   syncPolicy:
     automated:
       selfHeal: true
