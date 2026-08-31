@@ -1,11 +1,19 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: hermes
+namespace: hermes-poc
 resources:
   - namespace.yaml
-  # Produit par kubeseal (cf. README §Câblage des secrets). Le StatefulSet ne démarre pas sans :
-  # `envFrom` sur un Secret absent bloque le pod en CreateContainerConfigError.
-  - hermes-env.sealed.yaml
+  # ⚠️ ABSENT, et c'est la raison pour laquelle ce composant est livré désactivé.
+  #
+  # Un `SealedSecret` est chiffré pour le couple (nom du Secret, NAMESPACE). Celui de `hermes`
+  # ne se déchiffre donc PAS ici : le contrôleur le refuserait sans produire de Secret, et le
+  # pod resterait en `CreateContainerConfigError` sur son `envFrom` — un échec qui ressemble à
+  # un bug de déploiement alors que c'est le scellement qui est en cause. Le recopier tel quel
+  # aurait été pire que l'omettre : le manifeste aurait eu l'air complet.
+  #
+  # À produire pour ce namespace avant activation (cf. README §Câblage des secrets), puis
+  # décommenter ici ET dans le configMapGenerator plus bas :
+  # - hermes-env.sealed.yaml
   - statefulset.yaml
   - service.yaml
   - hermes-httproute.yaml
@@ -32,6 +40,10 @@ configMapGenerator:
       # Semé en /opt/data/home/.profile. Rétablit /opt/hermes/bin dans le PATH des shells de
       # login de l'outil terminal, que /etc/profile écrase. Le fichier documente le détail.
       - config/profile
+      # ⚠️ `- hermes-env.sealed.yaml` est retiré d'ici aussi, le fichier n'existant pas encore
+      # (`kustomize build` échouerait). À remettre en même temps que l'entrée des `resources:`.
+      # La note d'origine, qui explique pourquoi ce fichier figure dans un configMapGenerator :
+      #
       # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
       # la révision du secret entre dans le hash. Le Secret `hermes-env` est produit par le
       # contrôleur sealed-secrets, pas par kustomize — son contenu ne peut donc pas influencer
@@ -47,7 +59,6 @@ configMapGenerator:
       # Alternative écartée : `replacements` copiant le nom d'un ConfigMap généré dans une
       # annotation du pod template. Kustomize y résout le nom AVANT d'appliquer le suffixe de
       # hash — l'annotation reçoit `hermes-env-revision` nu, constant, donc sans effet.
-      - hermes-env.sealed.yaml
 
   # Variables d'environnement NON secrètes du conteneur, injectées par `envFrom` (cf.
   # statefulset.yaml). `envs:` et non `files:` : kustomize parse le KEY=VALUE et produit une clé

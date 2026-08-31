@@ -1,0 +1,27 @@
+# Semé depuis Git par l'initContainer du StatefulSet vers /opt/data/home/.profile.
+# Recopié à CHAQUE démarrage : toute modification faite dans le pod est écrasée.
+#
+# POURQUOI CE FICHIER EXISTE
+#
+# L'outil terminal de l'agent lance un shell de LOGIN. Un shell de login source
+# /etc/profile, dont la ligne 7 (branche non-root) fait un REMPLACEMENT et non un ajout :
+#
+#     PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games"
+#
+# /opt/hermes/bin disparaît donc du PATH, et un `hermes` nu répond `command not found`.
+# L'agent en conclut que le binaire n'est pas installé — il l'est, en /opt/hermes/bin/hermes.
+# Le PATH du conteneur, lui, est correct : c'est /etc/profile qui l'écrase, ce qui rend le
+# symptôme invisible à un `kubectl exec` (qui, lui, ne passe pas par /etc/profile).
+#
+# ~/.profile est sourcé APRÈS /etc/profile. C'est le seul point de reprise sans modifier
+# l'image ni écraser l'ENTRYPOINT.
+#
+# ⚠️ bash préfère ~/.bash_profile, puis ~/.bash_login, à ~/.profile — et s'arrête au premier
+# trouvé. Aucun des deux n'existe dans /opt/data/home ; en créer un ferait ignorer ce fichier
+# silencieusement, sans message.
+#
+# ⚠️ Ne rien ajouter ici qui coûte du temps ou attende un TTY. Ce shell est NON INTERACTIF et
+# l'agent en ouvre un par commande : un rc file lent ou bloquant ralentit ou fige chaque appel
+# de l'outil terminal. Un export de PATH est bon marché, le reste ne l'est pas.
+
+export PATH="/opt/hermes/bin:/opt/hermes/.venv/bin:$PATH"

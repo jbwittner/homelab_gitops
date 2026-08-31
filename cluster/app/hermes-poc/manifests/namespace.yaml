@@ -1,0 +1,13 @@
+# Namespace créé AVANT le StatefulSet (sync-wave -1).
+#
+# PAS de label PodSecurity `restricted` ici, et ce n'est pas un oubli : l'image officielle
+# démarre en root pour laisser s6-overlay chown le volume `/opt/data` au premier boot, puis
+# tombe sur l'uid 10000 (`s6-setuidgid hermes`) pour chaque service supervisé. Démarrer
+# directement non-root casse le modèle de privilèges de l'image (elle refuse même
+# `gateway run` en root sans `HERMES_ALLOW_ROOT_GATEWAY=1`). `baseline` (défaut) convient.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hermes-poc
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

@@ -1,4 +1,17 @@
-# hermes
+# hermes-poc
+
+> [!NOTE]
+> **Bac à essai.** Copie de [hermes](../hermes/README.md) destinée aux tests : ce composant peut
+> diverger librement de l'original, c'est sa raison d'être. Aucun invariant ne le lie à lui — ne
+> rien y valider qu'on ne soit prêt à jeter, et ne pas s'en servir comme référence.
+>
+> Ce qui NE se copie pas et doit être refait pour ce namespace, avant activation :
+> le `SealedSecret` (§Câblage des secrets), le token de messagerie (une seconde application
+> Discord, sinon les deux bots répondent au même message) et l'authentification OAuth du
+> fournisseur LLM (elle vit sur le PVC, un second flux device code à lancer).
+>
+> Le hostname `hermes-poc.lan.wittner.tech` doit aussi être déclaré sur le reverse proxy LAN
+> (`192.168.1.50`), sinon la route répond 404 malgré un `HTTPRoute` sain.
 
 ## Rôle
 
@@ -21,14 +34,16 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 
 ## Fichiers
 
-- `hermes.app.yaml` — Application (archétype (c), path → `manifests/`). Livré en
+- `hermes-poc.app.yaml` — Application (archétype (c), path → `manifests/`). Livré en
   **`.noapp.yaml`** : le glob de `app.bootstrap.yaml` ne le ramasse pas tant qu'il n'est pas
   renommé (cf. §Activation).
-- `manifests/namespace.yaml` — ns `hermes` (`sync-wave: -1`), **sans** label PodSecurity
+- `manifests/namespace.yaml` — ns `hermes-poc` (`sync-wave: -1`), **sans** label PodSecurity
   restrictif
-- `manifests/hermes-env.sealed.yaml` — `SealedSecret` : `API_SERVER_KEY` et identifiants du
-  dashboard (cf. §Câblage des secrets). Également listé dans le `configMapGenerator`, pour la
-  seule raison expliquée en §Contraintes
+- `manifests/hermes-env.sealed.yaml` — **ABSENT, à produire**. Un `SealedSecret` est chiffré
+  pour le couple (nom du Secret, namespace) : celui de `hermes` ne se déchiffre pas ici. Le
+  recopier aurait donné un manifeste d'apparence complète et un pod bloqué en
+  `CreateContainerConfigError`. Cf. §Câblage des secrets ; les deux entrées correspondantes du
+  `kustomization.yaml` sont commentées et à rétablir ensemble
 - `manifests/config/config.yaml` — le `config.yaml` d'Hermes (modèle, backend terminal, plugins,
   dashboard), assemblé en ConfigMap par le `configMapGenerator` du `kustomization.yaml`
 - `manifests/config/hermes.env` — variables d'environnement **non secrètes** du conteneur
@@ -36,8 +51,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`,
   initContainer de semis du `config.yaml`
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
-- `manifests/hermes-httproute.yaml` — `hermes.lan.wittner.tech` → dashboard,
-  `hermes-api.lan.wittner.tech` → API
+- `manifests/hermes-httproute.yaml` — `hermes-poc.lan.wittner.tech` → dashboard,
+  `hermes-poc-api.lan.wittner.tech` → API
 - `manifests/kustomization.yaml` — assemblage. **Aucune `CiliumNetworkPolicy`** : ce composant
   est l'instance à sortie libre, cf. §Le jumeau contraint.
 
@@ -137,14 +152,14 @@ openssl rand -hex 32
 
 # 2. Sceller
 kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-  < cluster/app/hermes/manifests/hermes-env.secret.yaml \
-  > cluster/app/hermes/manifests/hermes-env.sealed.yaml
+  < cluster/app/hermes-poc/manifests/hermes-env.secret.yaml \
+  > cluster/app/hermes-poc/manifests/hermes-env.sealed.yaml
 
 # 3. Jeter le clair, décommenter hermes-env.sealed.yaml dans kustomization.yaml, committer
-rm cluster/app/hermes/manifests/hermes-env.secret.yaml
+rm cluster/app/hermes-poc/manifests/hermes-env.secret.yaml
 ```
 
-Le `SealedSecret` est chiffré pour le couple (`hermes-env`, `hermes`) : le renommer ou le déplacer
+Le `SealedSecret` est chiffré pour le couple (`hermes-env`, `hermes-poc`) : le renommer ou le déplacer
 de namespace exige de le resceller.
 
 ### Activation
@@ -152,7 +167,7 @@ de namespace exige de le resceller.
 Le composant est livré désactivé. Pour qu'ArgoCD le ramasse :
 
 ```bash
-git mv cluster/app/hermes/hermes.noapp.yaml cluster/app/hermes/hermes.app.yaml
+git mv cluster/app/hermes-poc/hermes.noapp.yaml cluster/app/hermes-poc/hermes.app.yaml
 ```
 
 Ne le faire qu'une fois `hermes-env.sealed.yaml` en place, sinon le pod reste en
@@ -161,13 +176,13 @@ Ne le faire qu'une fois `hermes-env.sealed.yaml` en place, sinon le pod reste en
 ### État & accès
 
 ```bash
-kubectl -n hermes get statefulset,pod,pvc
-kubectl -n hermes logs sts/hermes -f          # gateway et dashboard sont interleavés
-kubectl -n hermes get httproute
+kubectl -n hermes-poc get statefulset,pod,pvc
+kubectl -n hermes-poc logs sts/hermes -f          # gateway et dashboard sont interleavés
+kubectl -n hermes-poc get httproute
 ```
 
-- Dashboard : <https://hermes.lan.wittner.tech> (login basic, identifiants du SealedSecret)
-- API : `https://hermes-api.lan.wittner.tech/v1/...`, en-tête d'autorisation portant
+- Dashboard : <https://hermes-poc.lan.wittner.tech> (login basic, identifiants du SealedSecret)
+- API : `https://hermes-poc-api.lan.wittner.tech/v1/...`, en-tête d'autorisation portant
   `API_SERVER_KEY`
 
 Si la connexion au dashboard boucle sur la page de login, c'est le cookie sécurisé : renseigner

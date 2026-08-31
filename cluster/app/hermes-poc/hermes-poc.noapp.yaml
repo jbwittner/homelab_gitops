@@ -1,0 +1,32 @@
+# Bac à essai. Copie de [hermes](../hermes/README.md) destinée aux tests : ce composant peut
+# diverger librement de l'original, c'est sa raison d'être. Ne rien y valider qu'on ne soit prêt
+# à jeter.
+#
+# Livré DÉSACTIVÉ : le glob de ../app.bootstrap.yaml n'accepte que `*.app.yaml` / `*.appset.yaml`.
+# Tant que ce fichier porte le suffixe `.noapp.yaml`, ArgoCD ne le voit pas. Ne l'activer qu'une
+# fois le SealedSecret scellé pour le namespace `hermes-poc` (cf. README §Câblage des secrets),
+# sinon le pod reste en CreateContainerConfigError.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hermes-poc
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: hermes-poc
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: agent
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/hermes-poc/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: hermes-poc
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
