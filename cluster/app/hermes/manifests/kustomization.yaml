@@ -3,7 +3,6 @@ kind: Kustomization
 namespace: hermes
 resources:
   - namespace.yaml
-  - serviceaccount.yaml
   # Produit par kubeseal (cf. README §Câblage des secrets). Le StatefulSet ne démarre pas sans :
   # `envFrom` sur un Secret absent bloque le pod en CreateContainerConfigError.
   - hermes-env.sealed.yaml
@@ -36,13 +35,6 @@ configMapGenerator:
       # Doit rester IDENTIQUE à celui de hermes-close : c'est un correctif d'environnement,
       # pas une variable de l'expérience.
       - config/profile
-      # Lanceur de tâches jetables. Dans CE ConfigMap (et pas un autre) pour la même
-      # raison que le reste : l'éditer change le hash, donc le nom du ConfigMap, donc
-      # le pod template — l'initContainer le recopie au redémarrage qui suit.
-      - config/exec/hermes-exec-run
-      # Skill qui décrit le lanceur à l'agent. Sans elle, l'outil existe et n'est jamais
-      # utilisé — le modèle n'a aucune raison de deviner qu'une commande est disponible.
-      - config/exec/SKILL.md
       # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
       # la révision du secret entre dans le hash. Le Secret `hermes-env` est produit par le
       # contrôleur sealed-secrets, pas par kustomize — son contenu ne peut donc pas influencer

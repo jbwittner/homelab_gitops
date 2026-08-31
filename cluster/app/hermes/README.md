@@ -26,12 +26,6 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   renommé (cf. §Activation).
 - `manifests/namespace.yaml` — ns `hermes` (`sync-wave: -1`), **sans** label PodSecurity
   restrictif
-- `manifests/serviceaccount.yaml` — SA `hermes` : identité kube de l'agent, dont les droits
-  vivent dans [hermes-exec](../hermes-exec/manifests/rbac-hermes.yaml)
-- `manifests/config/exec/hermes-exec-run` — lanceur de tâches jetables, semé dans le PATH de
-  l'agent par l'initContainer
-- `manifests/config/exec/SKILL.md` — la skill qui décrit ce lanceur à l'agent. Sans elle, l'outil
-  existe et n'est jamais utilisé
 - `manifests/hermes-env.sealed.yaml` — `SealedSecret` : `API_SERVER_KEY` et identifiants du
   dashboard (cf. §Câblage des secrets). Également listé dans le `configMapGenerator`, pour la
   seule raison expliquée en §Contraintes
@@ -52,18 +46,11 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 > [!CAUTION]
 > **L'agent exécute du code arbitraire décidé par un LLM, dans le pod.** `terminal.backend` est
 > `local` : ni Docker ni SSH ne sont joignables depuis un pod, l'agent shell donc dans son propre
-> conteneur.
+> conteneur. Deux garde-fous sont load-bearing et ne se retirent pas sans réfléchir :
+> `automountServiceAccountToken: false` (sans lui, une injection de prompt vaut un accès à l'API
+> kube) et l'absence de tout RBAC associé.
 >
-> **Depuis le câblage de [hermes-exec](../hermes-exec/README.md), l'agent porte une identité kube.**
-> L'affirmation « aucun RBAC associé » qui figurait ici n'est plus vraie. Ce qui la remplace :
-> `automountServiceAccountToken: false` reste posé, mais un token projeté est monté dans le seul
-> conteneur `hermes`, et le `Role` associé ne couvre que `jobs` / `pods` / `pods/log` dans le
-> namespace `hermes-exec` — sans `exec`, sans `portforward`, sans aucun verbe sur les
-> `Role`/`RoleBinding`. Le raisonnement de sûreté n'est donc plus « aucun accès à l'API » mais
-> « un accès dont la portée est entièrement contenue ». Ce qui est refusé, et pourquoi, est
-> documenté dans [`rbac-hermes.yaml`](../hermes-exec/manifests/rbac-hermes.yaml).
->
-> Le garde-fou restant est que cette instance a un accès sortant libre. Le rayon d'action de
+> Il n'y en a **pas de troisième** : cette instance a un accès sortant libre. Le rayon d'action de
 > l'agent est donc le pod *et tout ce que le réseau lui laisse joindre*. C'est délibéré et c'est
 > le sujet de l'expérience (§Le jumeau contraint) — mais ça reste la raison pour laquelle son
 > dashboard et son API ne sortent pas du listener `https-internal`.
@@ -187,45 +174,6 @@ Si la connexion au dashboard boucle sur la page de login, c'est le cookie sécur
 `dashboard.trusted_proxies` dans le ConfigMap avec le CIDR des pods (Hermes refuse les entrées non
 bornées type `0.0.0.0/0`).
 
-### Lancer des tâches jetables
-
-L'agent dispose de `hermes-exec-run` dans son PATH (semé par l'initContainer depuis le ConfigMap,
-cf. [hermes-exec](../hermes-exec/README.md)) :
-
-```bash
-hermes-exec-run <task-id> '<commande sh>' [--image busybox|python] [--ttl N] [--deadline N] [--keep]
-hermes-exec-run --list
-```
-
-Le script construit le Job à partir d'un gabarit durci et **n'expose pas** le manifeste à
-l'appelant. C'est délibéré : plusieurs champs échouent en silence s'ils sont mal posés — au
-premier rang le label `hermes.wittner.tech/role: task-runner`, qui est le sélecteur des
-`CiliumNetworkPolicy`. Cilium tourne en enforcement `default` : un pod de tâche sans ce label
-n'est sélectionné par aucune policy et obtient une **sortie réseau complète**, sans erreur ni
-log. Laisser un LLM écrire ce manifeste reviendrait à faire dépendre l'isolation réseau de sa
-prochaine complétion.
-
-L'image est prise dans une liste blanche (`IMAGES` dans le script) : le pull est fait par le
-kubelet, hors de portée des NetworkPolicy. En ajouter une = éditer le fichier, committer,
-attendre le rollout.
-
-**Ce qui rend l'agent conscient de l'outil** est la skill `config/exec/SKILL.md`, semée dans
-`/opt/data/skills/devops/disposable-exec/`. Les skills sont découvertes par `rglob` de `SKILL.md`
-et `prompt_builder` injecte leur `description:` dans le prompt système. Sans ce fichier, le
-lanceur est dans le PATH et n'est jamais appelé — le modèle n'a aucune raison de deviner qu'une
-commande existe. Le sous-dossier `devops/` n'est que de l'organisation.
-
-La skill dit aussi à l'agent ce que le bac à sable **ne** donne pas (aucun réseau, aucun
-credential, aucune persistance, 2 tâches maximum) et lui interdit explicitement de se rabattre sur
-son propre conteneur quand une tâche échoue — c'est le contournement naturel, et c'est exactement
-ce que le dispositif cherche à empêcher.
-
-Vérifier depuis le pod que l'identité est bien celle attendue :
-
-```bash
-kubectl -n hermes exec sts/hermes -c hermes -- hermes-exec-run --list
-```
-
 ### Activer Discord
 
 Le plugin de l'image fait foi sur la doc générique (`plugins/platforms/discord/plugin.yaml`) :
@@ -274,17 +222,7 @@ seule variable change :
 diff -r cluster/app/hermes/manifests cluster/app/hermes-close/manifests
 ```
 
-> [!WARNING]
-> **L'invariant est rompu depuis le câblage de hermes-exec.** Ce composant porte désormais un
-> `ServiceAccount`, un token projeté, le lanceur `config/exec/hermes-exec-run` et une ligne de
-> `PATH` en plus dans `config/profile` — `hermes-close` n'a rien de tout ça. La comparaison ne
-> mesure donc plus une seule variable : ce côté-ci peut lancer des tâches, l'autre non.
-> Décision assumée, cf. [hermes-exec](../hermes-exec/README.md) §Points d'extension. Pour la
-> rétablir : câbler l'accès des deux côtés (il faudra alors une règle vers
-> `kubernetes.default.svc` dans la `CiliumNetworkPolicy` de `hermes-close`, sinon son accès
-> tombe en timeout), ou décommissionner le jumeau.
-
-Hors cet écart, ce diff ne doit contenir que le namespace, les hostnames et ce qui en découle
+Ce diff ne doit contenir que le namespace, les hostnames et ce qui en découle
 (`public_url`, `API_SERVER_CORS_ORIGINS`), plus le fichier de policy présent d'un seul côté. Tout
 le reste — modèle, ressources, toolsets, version d'image — doit rester identique. Modifier ce
 composant sans reporter le changement de l'autre côté invalide la comparaison sans que rien ne le

@@ -24,7 +24,4 @@
 # l'agent en ouvre un par commande : un rc file lent ou bloquant ralentit ou fige chaque appel
 # de l'outil terminal. Un export de PATH est bon marché, le reste ne l'est pas.
 
-# /opt/data/bin porte le lanceur de tâches jetables `hermes-exec-run`, semé par
-# l'initContainer. ⚠️ Ce fichier n'est PLUS identique à celui de hermes-close :
-# le jumeau n'a pas d'accès à hermes-exec. Cf. les deux README.
-export PATH="/opt/data/bin:/opt/hermes/bin:/opt/hermes/.venv/bin:$PATH"
+export PATH="/opt/hermes/bin:/opt/hermes/.venv/bin:$PATH"
