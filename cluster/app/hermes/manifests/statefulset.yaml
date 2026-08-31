@@ -62,26 +62,14 @@ spec:
           # L'écraser fait sauter la supervision (dashboard, redémarrage auto de la gateway) et
           # le drop de privilèges. Seuls les arguments changent.
           args: ["gateway", "run"]
-          env:
-            # --- API OpenAI-compatible ---
-            - { name: API_SERVER_ENABLED, value: "true" }
-            # Sans 0.0.0.0 le serveur reste sur la loopback du conteneur et le Service ne joint
-            # rien. La clé (API_SERVER_KEY, dans hermes-env) est ce qui le protège.
-            - { name: API_SERVER_HOST, value: "0.0.0.0" }
-            - { name: API_SERVER_CORS_ORIGINS, value: "https://hermes.lan.wittner.tech" }
-            # --- Dashboard ---
-            - { name: HERMES_DASHBOARD, value: "1" }
-            - { name: HERMES_DASHBOARD_HOST, value: "0.0.0.0" }
-            - { name: HERMES_DASHBOARD_PORT, value: "9119" }
-            # --- Discord ---
-            # IDs Discord autorisés à parler au bot, séparés par des virgules. Pas un secret :
-            # ce sont des identifiants publics, et les garder hors du SealedSecret permet de
-            # modifier l'allow-list sans repasser par kubeseal.
-            # Contrairement au token, une valeur fausse est SANS danger : le plugin refuse alors
-            # tout le monde. Ne jamais lui substituer `DISCORD_ALLOW_ALL_USERS` — la doc amont
-            # le réserve au développement.
-            - { name: DISCORD_ALLOWED_USERS, value: "148029630308155392" }
+          # Toutes les variables NON secrètes vivent dans config/hermes.env, généré en ConfigMap
+          # `hermes-vars` avec un suffixe de hash — l'éditer change le pod template et déclenche
+          # donc le rollout, comme pour `hermes-config`.
+          # ORDRE SIGNIFICATIF : le dernier `envFrom` l'emporte. `hermes-env` peut donc écraser
+          # une valeur de `hermes-vars`, jamais l'inverse. Ne pas permuter les deux entrées.
           envFrom:
+            - configMapRef:
+                name: hermes-vars
             - secretRef:
                 name: hermes-env
           ports:

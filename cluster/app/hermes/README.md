@@ -31,6 +31,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   seule raison expliquée en §Contraintes
 - `manifests/config/config.yaml` — le `config.yaml` d'Hermes (modèle, backend terminal, plugins,
   dashboard), assemblé en ConfigMap par le `configMapGenerator` du `kustomization.yaml`
+- `manifests/config/hermes.env` — variables d'environnement **non secrètes** du conteneur
+  (`KEY=value`), assemblées en ConfigMap `hermes-vars` et injectées par `envFrom`
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`,
   initContainer de semis du `config.yaml`
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
@@ -182,7 +184,7 @@ celle-ci annonce un `DISCORD_CHANNEL_ID` qui n'existe pas.
 | `DISCORD_BOT_TOKEN` | SealedSecret | requis — [portail développeur](https://discord.com/developers/applications) |
 | `DISCORD_HOME_CHANNEL` | SealedSecret | ID du salon de livraison des cron et notifications |
 | `DISCORD_HOME_CHANNEL_NAME` | SealedSecret | nom d'affichage de ce salon |
-| `DISCORD_ALLOWED_USERS` | `env:` du StatefulSet | IDs autorisés, séparés par des virgules |
+| `DISCORD_ALLOWED_USERS` | `manifests/config/hermes.env` | IDs autorisés, séparés par des virgules |
 
 Les trois premières sont **commentées** dans le template en clair, et doivent le rester tant que
 le vrai token n'est pas en main : un token invalide fait sortir la gateway au démarrage (conflit

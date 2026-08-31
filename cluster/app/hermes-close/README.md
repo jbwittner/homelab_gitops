@@ -80,6 +80,9 @@ le hash de son ConfigMap, donc **redémarre le pod `hermes` qui tourne**.
 - `manifests/config/config.yaml` — identique à celui de `hermes`, au `public_url` près
 - `manifests/config/SOUL.md` — identité de l'agent : c'est ce qui lui apprend qu'il est dans un
   réseau fermé (cf. §Ce que SOUL.md change à l'expérience)
+- `manifests/config/hermes.env` — variables d'environnement **non secrètes** du conteneur,
+  assemblées en ConfigMap `hermes-vars`. Identique à celui de `hermes` au
+  `API_SERVER_CORS_ORIGINS` près
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi, initContainer de semis
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
 - `manifests/hermes-httproute.yaml` — `hermes-close.lan.wittner.tech` → dashboard,

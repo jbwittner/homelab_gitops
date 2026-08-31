@@ -51,3 +51,19 @@ configMapGenerator:
       # annotation du pod template. Kustomize y résout le nom AVANT d'appliquer le suffixe de
       # hash — l'annotation reçoit `hermes-env-revision` nu, constant, donc sans effet.
       - hermes-env.sealed.yaml
+
+  # Variables d'environnement NON secrètes du conteneur, injectées par `envFrom` (cf.
+  # statefulset.yaml). `envs:` et non `files:` : kustomize parse le KEY=VALUE et produit une clé
+  # de ConfigMap par variable, ce que `envFrom` sait exporter.
+  #
+  # ConfigMap SÉPARÉ de `hermes-config`, et pas une entrée de plus dans celui-ci : `hermes-config`
+  # est monté comme volume et ses clés sont des noms de FICHIERS (`config.yaml`, `profile`). Un
+  # `envFrom` dessus tenterait d'en faire des noms de variables — un point est interdit, le kubelet
+  # les rejette avec un event et sans autre signal.
+  #
+  # Même bénéfice de hash que `hermes-config` : éditer `config/hermes.env` renomme le ConfigMap,
+  # kustomize réécrit le `configMapRef` du StatefulSet, le rollout part. Pas de `rollout restart`
+  # manuel.
+  - name: hermes-vars
+    envs:
+      - config/hermes.env
