@@ -1,0 +1,264 @@
+#!/opt/hermes/.venv/bin/python3
+"""Lance une tâche dans un environnement d'exécution jetable (namespace hermes-exec).
+
+    hermes-exec-run <task-id> <commande sh> [--image IMG] [--ttl N] [--deadline N] [--keep]
+
+Construit le Job à partir du gabarit DURCI ci-dessous, l'envoie à l'API kube avec le token
+projeté du pod, attend la fin, rend les logs, puis supprime le Job.
+
+POURQUOI CE SCRIPT PLUTÔT QUE `kubectl`
+---------------------------------------
+Un client kube généraliste laisserait l'appelant écrire le manifeste. Or plusieurs champs de ce
+manifeste sont load-bearing et échouent EN SILENCE s'ils sont mal posés :
+
+  - `hermes.wittner.tech/role: task-runner` est le sélecteur des CiliumNetworkPolicy. Cilium
+    tourne en enforcement `default` : un pod sans ce label n'est sélectionné par AUCUNE policy,
+    et se retrouve donc avec une sortie réseau COMPLÈTE au lieu d'un défaut-refus. Aucune
+    erreur, aucun log — le réseau s'ouvre, c'est tout.
+  - `automountServiceAccountToken: false` : sans lui le pod de tâche reçoit un token.
+  - `ttlSecondsAfterFinished` + `activeDeadlineSeconds` : sans le second, une tâche qui boucle
+    n'atteint jamais l'état « terminé », donc le TTL ne se déclenche jamais et le Job reste.
+
+Ici l'appelant ne fournit que l'identifiant, la commande, et une image PRISE DANS UNE LISTE.
+Le reste n'est pas négociable. C'est le seul moyen de garantir ces propriétés quand ce qui
+appelle est un LLM.
+
+Ce script ne détient aucun secret. Le token vient du volume projeté monté par le kubelet, et le
+Role associé ne porte que jobs/pods/pods-log dans hermes-exec (cf. rbac-hermes.yaml).
+"""
+import json
+import os
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.request
+
+NAMESPACE = "hermes-exec"
+SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+
+# Liste blanche d'images. Le pull est fait par le KUBELET, hors de portée des NetworkPolicy :
+# sans cette liste, une injection de prompt pourrait faire tirer n'importe quelle image publique.
+# Elle démarrerait sans réseau et en non-root, donc le dégât reste borné — mais il n'y a aucune
+# raison de laisser cette porte ouverte.
+#
+# Pour en ajouter une : la mettre ici, committer, et attendre le rollout (le ConfigMap est
+# généré avec un suffixe de hash, cf. kustomization.yaml — le pod redémarre tout seul).
+IMAGES = {
+    "busybox": "busybox:1.37.0",
+    "python": "python:3.13-slim",
+}
+DEFAULT_IMAGE = "busybox"
+
+
+def job_manifest(task_id, command, image, ttl, deadline):
+    """Gabarit durci. Doit rester aligné sur cluster/app/hermes-exec/templates/task-job.yaml."""
+    labels = {
+        "app.kubernetes.io/name": "hermes-exec",
+        "hermes.wittner.tech/role": "task-runner",   # ← sélecteur des policies, cf. docstring
+        "hermes.wittner.tech/task": task_id,
+        "hermes.wittner.tech/origin": "agent",       # trace : lancé par l'agent, pas à la main
+    }
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {"name": "hermes-task-" + task_id, "namespace": NAMESPACE, "labels": labels},
+        "spec": {
+            "ttlSecondsAfterFinished": ttl,
+            "activeDeadlineSeconds": deadline,
+            "backoffLimit": 0,
+            "template": {
+                "metadata": {"labels": labels},
+                "spec": {
+                    "restartPolicy": "Never",
+                    "serviceAccountName": "hermes-exec-runner",
+                    "automountServiceAccountToken": False,
+                    "enableServiceLinks": False,
+                    # TODO runtimeClassName : aucune RuntimeClass sur ce cluster (ni gVisor ni
+                    # Kata). Cf. cluster/app/hermes-exec/README.md §Points d'extension.
+                    "securityContext": {
+                        "runAsNonRoot": True,
+                        "runAsUser": 65532,
+                        "runAsGroup": 65532,
+                        "fsGroup": 65532,
+                        "seccompProfile": {"type": "RuntimeDefault"},
+                    },
+                    "containers": [{
+                        "name": "task",
+                        "image": image,
+                        "command": ["/bin/sh", "-c"],
+                        "args": [command],
+                        "securityContext": {
+                            "allowPrivilegeEscalation": False,
+                            "privileged": False,
+                            "readOnlyRootFilesystem": True,
+                            "capabilities": {"drop": ["ALL"]},
+                            "seccompProfile": {"type": "RuntimeDefault"},
+                        },
+                        # Alignés sur le quota : 2 tâches concurrentes au maximum, et le `max`
+                        # du LimitRange vaut exactement ces limites. Les changer ici sans
+                        # changer les deux autres fichiers casse la lisibilité du refus.
+                        "resources": {
+                            "requests": {"cpu": "100m", "memory": "256Mi", "ephemeral-storage": "256Mi"},
+                            "limits": {"cpu": "1", "memory": "1Gi", "ephemeral-storage": "2Gi"},
+                        },
+                        "volumeMounts": [
+                            {"name": "work", "mountPath": "/work"},
+                            {"name": "tmp", "mountPath": "/tmp"},
+                        ],
+                    }],
+                    "volumes": [
+                        {"name": "work", "emptyDir": {"sizeLimit": "1Gi"}},
+                        {"name": "tmp", "emptyDir": {"sizeLimit": "256Mi"}},
+                    ],
+                },
+            },
+        },
+    }
+
+
+class Api:
+    def __init__(self):
+        host = os.environ.get("KUBERNETES_SERVICE_HOST")
+        port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+        if not host:
+            die("KUBERNETES_SERVICE_HOST absent — `enableServiceLinks` est-il désactivé "
+                "sur le pod hermes ?")
+        self.base = "https://%s:%s" % (host, port)
+        try:
+            with open(SA_DIR + "/token") as f:
+                self.token = f.read().strip()
+        except OSError:
+            die("aucun token de ServiceAccount monté. Le volume projeté `kube-api-token` "
+                "est-il bien monté dans CE conteneur ? (cf. statefulset.yaml)")
+        self.ctx = ssl.create_default_context(cafile=SA_DIR + "/ca.crt")
+
+    def call(self, method, path, body=None):
+        req = urllib.request.Request(self.base + path, method=method)
+        req.add_header("Authorization", "Bearer " + self.token)
+        req.add_header("Accept", "application/json")
+        data = None
+        if body is not None:
+            data = json.dumps(body).encode()
+            req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, data, context=self.ctx, timeout=30) as r:
+                raw = r.read().decode()
+                return json.loads(raw) if raw.startswith(("{", "[")) else raw
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode()
+            try:
+                detail = json.loads(detail).get("message", detail)
+            except ValueError:
+                pass
+            # Le refus de quota est le cas NORMAL quand 2 tâches tournent déjà : le dire
+            # clairement plutôt que de rendre un 403 brut.
+            if e.code == 403 and "exceeded quota" in detail:
+                die("plafond atteint : 2 tâches tournent déjà. Attendre, ou\n"
+                    "  hermes-exec-run --list   puis supprimer une tâche terminée.\n"
+                    "  detail: " + detail)
+            die("API %s %s -> %s: %s" % (method, path, e.code, detail))
+        except urllib.error.URLError as e:
+            die("API injoignable (%s). Le pod hermes a-t-il un chemin vers "
+                "kubernetes.default.svc ?" % e.reason)
+
+
+def die(msg):
+    sys.stderr.write("hermes-exec-run: " + msg + "\n")
+    sys.exit(1)
+
+
+def main(argv):
+    if argv and argv[0] == "--list":
+        api = Api()
+        jobs = api.call("GET", "/apis/batch/v1/namespaces/%s/jobs" % NAMESPACE)
+        for j in jobs.get("items", []):
+            st = j.get("status", {})
+            state = ("Complete" if st.get("succeeded") else
+                     "Failed" if st.get("failed") else "Running")
+            print("%-40s %s" % (j["metadata"]["name"], state))
+        return 0
+
+    if len(argv) < 2:
+        sys.stderr.write(__doc__.split("\n\n")[1].strip() + "\n")
+        sys.stderr.write("\nimages disponibles : " + ", ".join(sorted(IMAGES)) + "\n")
+        return 2
+
+    task_id, command, rest = argv[0], argv[1], argv[2:]
+    image_key, ttl, deadline, keep = DEFAULT_IMAGE, 300, 900, False
+    i = 0
+    while i < len(rest):
+        a = rest[i]
+        if a == "--keep":
+            keep = True
+        elif a == "--image" and i + 1 < len(rest):
+            i += 1
+            image_key = rest[i]
+        elif a == "--ttl" and i + 1 < len(rest):
+            i += 1
+            ttl = int(rest[i])
+        elif a == "--deadline" and i + 1 < len(rest):
+            i += 1
+            deadline = int(rest[i])
+        else:
+            die("argument inconnu : " + a)
+        i += 1
+
+    # DNS-1123. Sans cette garde, l'échec parle du LABEL et non de l'argument fautif.
+    ok = task_id and all(c.islower() or c.isdigit() or c == "-" for c in task_id)
+    if not ok or task_id[0] == "-" or task_id[-1] == "-" or len(task_id) > 40:
+        die("task-id invalide (a-z 0-9 -, 40 max, ni début ni fin par '-') : " + task_id)
+    if image_key not in IMAGES:
+        die("image hors liste blanche : %s\n  disponibles : %s\n"
+            "  en ajouter une = éditer IMAGES dans ce fichier, committer, attendre le rollout."
+            % (image_key, ", ".join(sorted(IMAGES))))
+
+    api = Api()
+    manifest = job_manifest(task_id, command, IMAGES[image_key], ttl, deadline)
+    api.call("POST", "/apis/batch/v1/namespaces/%s/jobs" % NAMESPACE, manifest)
+    name = manifest["metadata"]["name"]
+    print("tache %s lancee (image %s, deadline %ss)" % (name, IMAGES[image_key], deadline))
+
+    # Attente. Borne locale = deadline + marge : au-delà, activeDeadlineSeconds a tué le pod.
+    pod, deadline_wall = None, time.time() + deadline + 30
+    while time.time() < deadline_wall:
+        pods = api.call("GET", "/api/v1/namespaces/%s/pods?labelSelector=%s"
+                        % (NAMESPACE, "hermes.wittner.tech%2Ftask%3D" + task_id))
+        items = pods.get("items", [])
+        if items:
+            pod = items[0]
+            phase = pod.get("status", {}).get("phase")
+            if phase in ("Succeeded", "Failed"):
+                break
+        else:
+            # Pas de pod alors que le Job existe = quota par pod épuisé. Le Job reste
+            # `Running 0/1` et le motif n'existe QUE dans les events — le dire ici évite une
+            # attente muette jusqu'à activeDeadlineSeconds.
+            job = api.call("GET", "/apis/batch/v1/namespaces/%s/jobs/%s" % (NAMESPACE, name))
+            if (job.get("status", {}).get("active", 0) == 0
+                    and time.time() > deadline_wall - deadline + 20):
+                die("aucun pod créé après 20s. Quota par pod probablement épuisé — voir\n"
+                    "  kubectl -n %s get events --field-selector reason=FailedCreate" % NAMESPACE)
+        time.sleep(2)
+
+    if pod is None:
+        die("aucun pod n'est apparu pour la tache " + task_id)
+
+    phase = pod.get("status", {}).get("phase")
+    logs = api.call("GET", "/api/v1/namespaces/%s/pods/%s/log"
+                    % (NAMESPACE, pod["metadata"]["name"]))
+    print("--- logs (%s) ---" % phase)
+    print(logs if isinstance(logs, str) else json.dumps(logs))
+
+    if not keep:
+        api.call("DELETE", "/apis/batch/v1/namespaces/%s/jobs/%s?propagationPolicy=Background"
+                 % (NAMESPACE, name))
+        print("--- tache supprimee ---")
+    else:
+        print("--- tache conservee (--keep), TTL %ss ---" % ttl)
+
+    return 0 if phase == "Succeeded" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

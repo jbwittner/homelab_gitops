@@ -23,9 +23,17 @@ spec:
       labels:
         app.kubernetes.io/name: hermes
     spec:
-      # L'agent exécute du code arbitraire décidé par un LLM, dans CE pod. Aucun token de
-      # ServiceAccount ne doit traîner dans son système de fichiers : sans ça, une injection de
-      # prompt donne un accès à l'API kube avec les droits du SA.
+      serviceAccountName: hermes
+      # RESTE À `false`, et ce n'est pas contradictoire avec le volume projeté plus bas.
+      # L'automount poserait le token dans TOUS les conteneurs du pod, initContainer compris.
+      # Le volume projeté le pose dans le seul conteneur `hermes`. La surface est la même pour
+      # l'agent, plus petite pour le reste.
+      #
+      # ⚠️ Ce pod exécute du code décidé par un LLM. Depuis qu'il porte une identité kube, le
+      # raisonnement de sûreté n'est plus « aucun accès à l'API » mais « un accès dont la portée
+      # est entièrement contenue » : le Role ne couvre que jobs/pods/pods-log dans hermes-exec,
+      # sans exec ni portforward, et sans aucun verbe sur les Role/RoleBinding. Cf.
+      # ../../hermes-exec/manifests/rbac-hermes.yaml, qui documente ce qui est refusé et pourquoi.
       automountServiceAccountToken: false
       # PAS de `runAsNonRoot: true` ni de `runAsUser` : l'entrypoint s6-overlay doit démarrer en
       # root pour chown le volume, puis descend lui-même sur l'uid 10000. Cf. namespace.yaml.
@@ -52,6 +60,11 @@ spec:
               # Rétablit /opt/hermes/bin dans le PATH des shells de login — cf. config/profile,
               # qui documente pourquoi /etc/profile l'en retire.
               install -o 10000 -g 10000 -m 0644 /config/profile /opt/data/home/.profile
+              # Lanceur de tâches jetables, rendu exécutable et posé dans le PATH des shells de
+              # login (cf. config/profile). Recopié à chaque démarrage comme le reste : Git
+              # reste la source de vérité, une modification faite dans le pod est écrasée.
+              [ -d /opt/data/bin ] || install -d -o 10000 -g 10000 -m 0755 /opt/data/bin
+              install -o 10000 -g 10000 -m 0755 /config/hermes-exec-run /opt/data/bin/hermes-exec-run
           volumeMounts:
             - { name: data, mountPath: /opt/data }
             - { name: config, mountPath: /config, readOnly: true }
@@ -97,10 +110,33 @@ spec:
               memory: 4Gi
           volumeMounts:
             - { name: data, mountPath: /opt/data }
+            # Monté ICI et nulle part ailleurs. Le chemin est celui de l'automount standard :
+            # c'est ce qui permet au lanceur (et à tout client kube) de trouver token, ca.crt et
+            # namespace sans configuration. Le déplacer casserait la détection in-cluster.
+            - { name: kube-api-token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
       volumes:
         - name: config
           configMap:
             name: hermes-config
+        # Reproduit exactement ce que fait l'automount, mais en explicite et montable par
+        # conteneur. Les trois sources sont nécessaires : sans `ca.crt` la vérification TLS
+        # échoue, sans `namespace` la détection in-cluster de certains clients échoue.
+        # Le token est à durée limitée et renouvelé par le kubelet — il ne vit pas dans un Secret.
+        - name: kube-api-token
+          projected:
+            defaultMode: 0444
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - { key: ca.crt, path: ca.crt }
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef: { fieldPath: metadata.namespace }
   volumeClaimTemplates:
     - metadata:
         name: data

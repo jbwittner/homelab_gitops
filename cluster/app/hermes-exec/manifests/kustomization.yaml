@@ -7,6 +7,7 @@ resources:
   - resourcequota.yaml
   - limitrange.yaml
   - netpol-default-deny.yaml
+  - rbac-hermes.yaml
   # netpol-egress-allow.yaml — DÉLIBÉRÉMENT ABSENT DE CETTE LISTE.
   #
   # Décision : les exécuteurs n'ont AUCUNE sortie réseau, pas même la résolution DNS. Seule

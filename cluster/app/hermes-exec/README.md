@@ -31,6 +31,8 @@ le supprime. Le TTL et le GitOps se battraient sans qu'aucun log ne le signale (
   `automountServiceAccountToken: false` ; neutralise aussi le SA `default` du namespace
 - `manifests/netpol-default-deny.yaml` — `CiliumNetworkPolicy` de refus par défaut, **ingress et
   egress**, sur le label de rôle
+- `manifests/rbac-hermes.yaml` — `Role` + `RoleBinding` : les seuls droits de l'agent Hermes ici.
+  Le fichier documente ce qui est **refusé** et pourquoi
 - `manifests/netpol-egress-allow.yaml` — **NON APPLIQUÉ** : absent des `resources:` du
   kustomization. Conservé comme point d'extension (cf. §Points d'extension)
 - `manifests/resourcequota.yaml` — plafond du namespace, **dimensionné pour 2 tâches
@@ -296,15 +298,35 @@ C'est ce qui justifie que ce soit une revue séparée et pas une ligne de plus d
 
 Tant que ce n'est pas fait, l'isolation est celle d'un conteneur durci : noyau partagé.
 
-### 4. L'agent orchestrateur
+### 4. L'agent orchestrateur — **CÂBLÉ**
 
-Non déployé, non connecté. Hermes ne sait pas que ce namespace existe, et n'a aucun droit pour y
-créer quoi que ce soit — son pod tourne avec `automountServiceAccountToken: false` et sans RBAC
-(cf. [hermes](../hermes/README.md)).
+Ce point n'est plus ouvert. [hermes](../hermes/README.md) porte désormais un `ServiceAccount` et
+un token projeté ; `manifests/rbac-hermes.yaml` lui accorde `jobs` create/get/list/delete,
+`pods` get/list et `pods/log` get **dans ce namespace uniquement**.
 
-Lui donner la capacité de créer des Jobs ici demandera un `Role` (`jobs`, `pods/log`) dans
-`hermes-exec` et un `RoleBinding` vers le SA d'Hermes — **c'est-à-dire donner à un LLM le droit de
-créer des pods**. À traiter comme une revue à part entière, pas comme un détail de plomberie.
+L'agent lance ses tâches par `hermes-exec-run`, semé dans son PATH :
+
+```bash
+hermes-exec-run <task-id> '<commande sh>' [--image busybox|python] [--ttl N] [--deadline N] [--keep]
+hermes-exec-run --list
+```
+
+**Ce qui n'est pas accordé, et pourquoi**, est écrit en tête de `rbac-hermes.yaml` — en résumé :
+pas de `pods/exec` ni `pods/portforward` (contournerait le gabarit), pas de `roles`/`rolebindings`
+(verrou anti-escalade), pas de `resourcequotas`/`limitranges`/`ciliumnetworkpolicies` (les
+plafonds et l'isolation ne doivent pas pouvoir se retirer eux-mêmes).
+
+**Ce que ça change au modèle de menace.** Une injection de prompt dans Hermes permet désormais de
+créer des pods ici. Ce qu'elle ne permet toujours pas : sortir sur le réseau depuis ces pods
+(aucune sortie, donc rien à exfiltrer), obtenir une identité utilisable (les deux SA du namespace
+n'ont aucun droit), monter un `hostPath` ou tourner en privilégié (PSA `restricted` refuse),
+dépasser 2 pods, ou atteindre quoi que ce soit hors de `hermes-exec`.
+
+**Résidu assumé.** Le pull d'image est fait par le kubelet, hors de portée des NetworkPolicy — la
+liste blanche `IMAGES` du lanceur est ce qui borne le choix. L'élargir élargit le résidu.
+
+**Le jumeau est rompu.** `hermes-close` n'a pas cet accès : la comparaison des deux instances ne
+mesure plus une seule variable. Décision assumée, documentée dans les deux README.
 
 ## Écarts entre la phase 1 et ce modèle
 

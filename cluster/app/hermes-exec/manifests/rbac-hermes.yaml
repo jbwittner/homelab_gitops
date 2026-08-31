@@ -1,0 +1,68 @@
+# Droits accordés à l'agent Hermes sur CE namespace, et à rien d'autre.
+#
+# ⚠️ C'est la seule pièce du dispositif qui donne un pouvoir à un LLM. Tout ce qui est écrit
+# ici est atteignable par une injection de prompt dans Hermes — le raisonnement de sûreté ne
+# porte donc pas sur « l'agent est bien intentionné », mais sur « ce que ces verbes permettent
+# au pire ».
+#
+# Ce que ces verbes permettent au pire : créer des pods DANS hermes-exec. Ces pods n'ont aucune
+# sortie réseau, aucune identité utilisable (les deux SA du namespace n'ont aucun droit), une
+# racine en lecture seule, PodSecurity `restricted`, un plafond de 2 et un TTL obligatoire.
+# Le rayon d'action s'arrête à ce namespace.
+#
+# CE QUI N'EST DÉLIBÉRÉMENT PAS ACCORDÉ, et pourquoi :
+#   - `pods/exec`, `pods/attach`, `pods/portforward` : donneraient un shell dans un pod de tâche,
+#     donc un contournement du gabarit — l'agent pourrait exécuter autre chose que ce que le
+#     lanceur a construit ;
+#   - `secrets` : il n'y en a pas ici, et l'absence de verbe garantit que ça reste vrai ;
+#   - `roles`, `rolebindings`, `serviceaccounts` : sans quoi l'agent peut s'accorder des droits.
+#     C'est le verrou anti-escalade, il n'y en a pas d'autre ;
+#   - `deployments`, `statefulsets`, `cronjobs` : un objet qui se recrée seul échappe au TTL ;
+#   - `resourcequotas`, `limitranges` : sinon les plafonds ne sont plus des plafonds ;
+#   - `ciliumnetworkpolicies` : sinon l'isolation réseau se retire elle-même.
+#
+# Un `Role` (namespacé), jamais un `ClusterRole`.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hermes-task-launcher
+  namespace: hermes-exec
+  labels:
+    app.kubernetes.io/name: hermes-exec
+rules:
+  # Cycle de vie des tâches. `delete` sert au nettoyage immédiat par le lanceur ; le TTL reste
+  # le filet si le lanceur meurt en cours de route.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "delete"]
+  # Lecture de l'état et des logs. `pods/log` est un sous-verbe distinct : `get` sur `pods` ne
+  # suffit pas à lire les logs.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+# Le RoleBinding vit dans hermes-exec (le namespace des ressources) et cible un ServiceAccount
+# du namespace `hermes` (celui du sujet). Ce croisement est permis dans ce sens : un Role est
+# toujours évalué dans SON namespace, quel que soit l'endroit d'où vient le sujet.
+#
+# Nommer le namespace du sujet est OBLIGATOIRE. Sans `namespace:` sous le subject, l'API le
+# résout dans hermes-exec, où ce SA n'existe pas — le binding est accepté sans erreur et
+# n'accorde rien. L'échec se voit alors comme un 403 côté agent, sans rapport apparent.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hermes-task-launcher
+  namespace: hermes-exec
+  labels:
+    app.kubernetes.io/name: hermes-exec
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hermes-task-launcher
+subjects:
+  - kind: ServiceAccount
+    name: hermes
+    namespace: hermes
