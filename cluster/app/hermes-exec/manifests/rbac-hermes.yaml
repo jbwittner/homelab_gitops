@@ -11,9 +11,10 @@
 # Le rayon d'action s'arrête à ce namespace.
 #
 # CE QUI N'EST DÉLIBÉRÉMENT PAS ACCORDÉ, et pourquoi :
-#   - `pods/exec`, `pods/attach`, `pods/portforward` : donneraient un shell dans un pod de tâche,
-#     donc un contournement du gabarit — l'agent pourrait exécuter autre chose que ce que le
-#     lanceur a construit ;
+#   - `pods/attach` : se branche sur le process 1 — celui du `sleep` d'une session, pas sur un
+#     shell utile — et permet d'écrire sur son stdin. Aucun usage ici, donc pas de raison ;
+#   - `pods/portforward` : ouvre un tunnel réseau vers le pod depuis l'extérieur. C'est
+#     exactement la sortie que le défaut-refus interdit, contournée par l'API ;
 #   - `secrets` : il n'y en a pas ici, et l'absence de verbe garantit que ça reste vrai ;
 #   - `roles`, `rolebindings`, `serviceaccounts` : sans quoi l'agent peut s'accorder des droits.
 #     C'est le verrou anti-escalade, il n'y en a pas d'autre ;
@@ -43,6 +44,21 @@ rules:
   - apiGroups: [""]
     resources: ["pods/log"]
     verbs: ["get"]
+  # SESSIONS : plusieurs commandes successives dans un même pod. Sans ce verbe, chaque commande
+  # est un Job neuf qui repart d'un /work vide — impossible d'éditer un fichier puis de le
+  # tester, donc impossible de développer.
+  #
+  # ⚠️ Ce verbe a d'abord été REFUSÉ ici, au motif qu'il permettrait « d'exécuter autre chose que
+  # ce que le lanceur a construit ». Analyse fausse : le confinement d'un pod de tâche est
+  # STRUCTUREL — aucune sortie réseau, uid 65532, racine en lecture seule, capabilities droppées,
+  # quota, `activeDeadlineSeconds` — et ne dépend pas de la commande qui tourne dedans. Une
+  # seconde commande dans un pod déjà durci n'ouvre rien que la première n'ouvrait pas.
+  #
+  # Ce que le gabarit protège reste protégé : `exec` ne permet pas de CRÉER un pod hors gabarit,
+  # et tout pod de ce namespace vient du lanceur.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
 ---
 # Le RoleBinding vit dans hermes-exec (le namespace des ressources) et cible un ServiceAccount
 # du namespace `hermes` (celui du sujet). Ce croisement est permis dans ce sens : un Role est

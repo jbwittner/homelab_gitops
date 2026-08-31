@@ -31,12 +31,46 @@ one-liners that only touch your own workspace. Those belong in your own terminal
 
 ## How to Run
 
+There are two modes. **Pick the right one before you start** — switching later means losing
+whatever you built.
+
+### One-shot — a single self-contained command
+
 ```
 hermes-exec-run <task-id> '<shell command>' [--image busybox|python] [--ttl N] [--deadline N] [--keep]
 hermes-exec-run --list
 ```
 
-The command blocks until the task finishes, then prints its logs and deletes it.
+Blocks until the task finishes, prints its logs, deletes it. Each call is a **fresh pod with an
+empty `/work`**. Nothing carries over between two calls.
+
+### Session — several commands that build on each other
+
+Use this whenever the work has more than one step: write a file then run it, run a test then fix
+and re-run, inspect output then act on it.
+
+```
+hermes-exec-run session start <id> [--image busybox|python] [--deadline N]
+hermes-exec-run session run   <id> '<shell command>'
+hermes-exec-run session stop  <id>
+hermes-exec-run session list
+```
+
+The pod stays alive between `run` calls and `/work` keeps its contents. Exit codes are returned,
+stdout and stderr are separated.
+
+```
+hermes-exec-run session start build
+hermes-exec-run session run build 'cat > /work/app.py <<EOF
+print(sum(range(10)))
+EOF'
+hermes-exec-run session run build 'python3 /work/app.py'
+hermes-exec-run session stop build
+```
+
+**Always `session stop` when done.** A session pod never finishes on its own, so the normal TTL
+cleanup does not apply to it — only its `--deadline` (1 hour by default) will eventually kill it.
+Until then it holds one of the two available slots.
 
 - `task-id` — lowercase letters, digits and `-`, 40 characters max. Pick something that names the
   task, not a random string; it appears in the pod name and in the logs.
@@ -68,8 +102,9 @@ Read this before writing the command, because these failures look like bugs and 
   with, and nothing to leak.
 - **No persistence.** `/work` is destroyed with the pod. If a result matters, print it to stdout —
   the logs come back to you.
-- **At most two tasks at a time.** A third is refused with `exceeded quota`. Wait, or use
-  `hermes-exec-run --list` and let the running ones finish.
+- **At most two pods at a time**, sessions included. A third is refused with `exceeded quota`.
+  A forgotten session holds a slot for a full hour — `hermes-exec-run session list` shows them,
+  `session stop` frees them.
 
 ## Do Not Try To Work Around This
 

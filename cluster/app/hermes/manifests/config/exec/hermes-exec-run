@@ -2,6 +2,11 @@
 """Lance une tâche dans un environnement d'exécution jetable (namespace hermes-exec).
 
     hermes-exec-run <task-id> <commande sh> [--image IMG] [--ttl N] [--deadline N] [--keep]
+    hermes-exec-run --list
+    hermes-exec-run session start <id> [--image IMG] [--deadline N]
+    hermes-exec-run session run   <id> <commande sh>
+    hermes-exec-run session stop  <id>
+    hermes-exec-run session list
 
 Construit le Job à partir du gabarit DURCI ci-dessous, l'envoie à l'API kube avec le token
 projeté du pod, attend la fin, rend les logs, puis supprime le Job.
@@ -24,7 +29,8 @@ Le reste n'est pas négociable. C'est le seul moyen de garantir ces propriétés
 appelle est un LLM.
 
 Ce script ne détient aucun secret. Le token vient du volume projeté monté par le kubelet, et le
-Role associé ne porte que jobs/pods/pods-log dans hermes-exec (cf. rbac-hermes.yaml).
+Role associé ne porte que jobs / pods / pods-log / pods-exec dans hermes-exec, sans
+`attach` ni `portforward` (cf. rbac-hermes.yaml, qui documente ce qui est refusé et pourquoi).
 """
 import json
 import os
@@ -32,6 +38,7 @@ import ssl
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 NAMESPACE = "hermes-exec"
@@ -168,7 +175,177 @@ def die(msg):
     sys.exit(1)
 
 
+def valid_id(task_id):
+    """DNS-1123. Sans cette garde, l'échec parle du LABEL et non de l'argument fautif."""
+    if not task_id or len(task_id) > 40:
+        return False
+    if task_id[0] == "-" or task_id[-1] == "-":
+        return False
+    return all(c.islower() or c.isdigit() or c == "-" for c in task_id)
+
+
+def find_pod(api, sid):
+    pods = api.call("GET", "/api/v1/namespaces/%s/pods?labelSelector=%s"
+                    % (NAMESPACE, "hermes.wittner.tech%2Ftask%3D" + sid))
+    items = pods.get("items", [])
+    return items[0] if items else None
+
+
+def ws_exec(api, pod_name, command):
+    """Exécute une commande dans un pod EXISTANT, via pods/exec.
+
+    Protocole `v4.channel.k8s.io` : chaque trame binaire commence par un octet de canal —
+    0 stdin, 1 stdout, 2 stderr, 3 statut de fin (JSON). Le code de sortie n'arrive QUE par le
+    canal 3 ; sans le lire, un échec de commande passe pour un succès.
+    """
+    from websockets.exceptions import ConnectionClosed
+    from websockets.sync.client import connect
+
+    qs = urllib.parse.urlencode([
+        ("container", "task"), ("stdout", "true"), ("stderr", "true"),
+        ("command", "/bin/sh"), ("command", "-c"), ("command", command),
+    ])
+    uri = api.base.replace("https://", "wss://", 1) + \
+        "/api/v1/namespaces/%s/pods/%s/exec?%s" % (NAMESPACE, pod_name, qs)
+
+    out, err, status = [], [], None
+    try:
+        with connect(uri,
+                     additional_headers={"Authorization": "Bearer " + api.token},
+                     ssl=api.ctx,
+                     subprotocols=["v4.channel.k8s.io"],
+                     max_size=None, open_timeout=30) as ws:
+            while True:
+                try:
+                    msg = ws.recv()
+                except ConnectionClosed:
+                    break
+                if isinstance(msg, str):
+                    msg = msg.encode()
+                if not msg:
+                    continue
+                channel, payload = msg[0], msg[1:]
+                if channel == 1:
+                    out.append(payload)
+                elif channel == 2:
+                    err.append(payload)
+                elif channel == 3:
+                    status = payload
+    except Exception as e:  # handshake refusé, pod disparu, TLS…
+        die("exec impossible sur %s : %s" % (pod_name, e))
+
+    code = 0
+    if status:
+        try:
+            st = json.loads(status.decode())
+            if st.get("status") != "Success":
+                code = 1
+                for cause in st.get("details", {}).get("causes", []):
+                    if cause.get("reason") == "ExitCode":
+                        code = int(cause.get("message", 1))
+        except (ValueError, TypeError):
+            code = 1
+    return b"".join(out).decode(errors="replace"), b"".join(err).decode(errors="replace"), code
+
+
+def cmd_session(argv):
+    """Sessions : plusieurs commandes dans un même pod, /work conservé entre elles.
+
+    Un Job one-shot par commande repart d'un /work vide à chaque fois — éditer un fichier puis
+    le tester est alors impossible. La session garde le pod vivant (`sleep`) et exécute dedans.
+    """
+    if not argv:
+        sys.stderr.write(
+            "usage: hermes-exec-run session start <id> [--image busybox|python] [--deadline N]\n"
+            "       hermes-exec-run session run   <id> '<commande sh>'\n"
+            "       hermes-exec-run session stop  <id>\n"
+            "       hermes-exec-run session list\n")
+        return 2
+    sub, rest = argv[0], argv[1:]
+    api = Api()
+
+    if sub == "list":
+        jobs = api.call("GET", "/apis/batch/v1/namespaces/%s/jobs?labelSelector=%s"
+                        % (NAMESPACE, "hermes.wittner.tech%2Fmode%3Dsession"))
+        for j in jobs.get("items", []):
+            sid = j["metadata"]["labels"].get("hermes.wittner.tech/task", "?")
+            pod = find_pod(api, sid)
+            phase = pod.get("status", {}).get("phase") if pod else "aucun pod"
+            print("%-24s %s" % (sid, phase))
+        return 0
+
+    if not rest or not valid_id(rest[0]):
+        die("id de session invalide (a-z 0-9 -, 40 max) : " + (rest[0] if rest else "<vide>"))
+    sid = rest[0]
+
+    if sub == "start":
+        image_key, deadline = DEFAULT_IMAGE, 3600
+        i = 1
+        while i < len(rest):
+            if rest[i] == "--image" and i + 1 < len(rest):
+                i += 1
+                image_key = rest[i]
+            elif rest[i] == "--deadline" and i + 1 < len(rest):
+                i += 1
+                deadline = int(rest[i])
+            else:
+                die("argument inconnu : " + rest[i])
+            i += 1
+        if image_key not in IMAGES:
+            die("image hors liste blanche : %s (disponibles : %s)"
+                % (image_key, ", ".join(sorted(IMAGES))))
+
+        # Le pod dort au lieu de finir. Conséquence : le Job n'atteint JAMAIS l'état « terminé »,
+        # donc `ttlSecondsAfterFinished` ne se déclenche pas. `activeDeadlineSeconds` est le seul
+        # mécanisme qui met fin à une session — d'où une valeur par défaut courte (1 h) et un
+        # `session stop` explicite.
+        m = job_manifest(sid, "sleep %d" % deadline, IMAGES[image_key], 60, deadline)
+        for meta in (m["metadata"], m["spec"]["template"]["metadata"]):
+            meta["labels"]["hermes.wittner.tech/mode"] = "session"
+        api.call("POST", "/apis/batch/v1/namespaces/%s/jobs" % NAMESPACE, m)
+
+        limit = time.time() + 90
+        while time.time() < limit:
+            pod = find_pod(api, sid)
+            if pod and pod.get("status", {}).get("phase") == "Running":
+                print("session %s prete (image %s, expire dans %ss)"
+                      % (sid, IMAGES[image_key], deadline))
+                return 0
+            time.sleep(2)
+        die("la session %s n'est pas montee en 90s. Quota par pod epuise ? voir\n"
+            "  hermes-exec-run session list" % sid)
+
+    if sub == "run":
+        if len(rest) < 2:
+            die("usage: hermes-exec-run session run <id> '<commande sh>'")
+        pod = find_pod(api, sid)
+        if pod is None:
+            die("aucune session '%s'. La demarrer avec :\n"
+                "  hermes-exec-run session start %s" % (sid, sid))
+        phase = pod.get("status", {}).get("phase")
+        if phase != "Running":
+            die("la session '%s' est en '%s', pas Running. Son activeDeadlineSeconds "
+                "l'a peut-etre expiree." % (sid, phase))
+        out, err, code = ws_exec(api, pod["metadata"]["name"], rest[1])
+        if out:
+            sys.stdout.write(out if out.endswith("\n") else out + "\n")
+        if err:
+            sys.stderr.write(err if err.endswith("\n") else err + "\n")
+        return code
+
+    if sub == "stop":
+        api.call("DELETE", "/apis/batch/v1/namespaces/%s/jobs/hermes-task-%s"
+                 "?propagationPolicy=Background" % (NAMESPACE, sid))
+        print("session %s supprimee" % sid)
+        return 0
+
+    die("sous-commande inconnue : " + sub)
+
+
 def main(argv):
+    if argv and argv[0] == "session":
+        return cmd_session(argv[1:])
+
     if argv and argv[0] == "--list":
         api = Api()
         jobs = api.call("GET", "/apis/batch/v1/namespaces/%s/jobs" % NAMESPACE)
@@ -204,9 +381,7 @@ def main(argv):
             die("argument inconnu : " + a)
         i += 1
 
-    # DNS-1123. Sans cette garde, l'échec parle du LABEL et non de l'argument fautif.
-    ok = task_id and all(c.islower() or c.isdigit() or c == "-" for c in task_id)
-    if not ok or task_id[0] == "-" or task_id[-1] == "-" or len(task_id) > 40:
+    if not valid_id(task_id):
         die("task-id invalide (a-z 0-9 -, 40 max, ni début ni fin par '-') : " + task_id)
     if image_key not in IMAGES:
         die("image hors liste blanche : %s\n  disponibles : %s\n"
