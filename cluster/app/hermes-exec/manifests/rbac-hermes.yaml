@@ -56,9 +56,17 @@ rules:
   #
   # Ce que le gabarit protège reste protégé : `exec` ne permet pas de CRÉER un pod hors gabarit,
   # et tout pod de ce namespace vient du lanceur.
+  #
+  # ⚠️ `get` EN PLUS de `create`, et ce n'est pas une largesse. RBAC dérive le verbe de la
+  # méthode HTTP : POST → `create`, GET → `get`. `kubectl exec` négocie en SPDY et émet un POST,
+  # mais un client WebSocket (`v4.channel.k8s.io`, ce qu'utilise le lanceur) émet un **GET** avec
+  # des en-têtes d'Upgrade. Avec `create` seul, la poignée de main est refusée en
+  # « server rejected WebSocket connection: HTTP 403 » — un message qui ne mentionne ni RBAC ni
+  # le verbe manquant, et qui se cherche longtemps.
+  # Les deux verbes désignent la même capacité : ouvrir un flux d'exécution dans un pod.
   - apiGroups: [""]
     resources: ["pods/exec"]
-    verbs: ["create"]
+    verbs: ["create", "get"]
 ---
 # Le RoleBinding vit dans hermes-exec (le namespace des ressources) et cible un ServiceAccount
 # du namespace `hermes` (celui du sujet). Ce croisement est permis dans ce sens : un Role est
