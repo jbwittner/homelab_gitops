@@ -40,6 +40,9 @@ configMapGenerator:
       # raison que le reste : l'éditer change le hash, donc le nom du ConfigMap, donc
       # le pod template — l'initContainer le recopie au redémarrage qui suit.
       - config/exec/hermes-exec-run
+      # Skill qui décrit le lanceur à l'agent. Sans elle, l'outil existe et n'est jamais
+      # utilisé — le modèle n'a aucune raison de deviner qu'une commande est disponible.
+      - config/exec/SKILL.md
       # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
       # la révision du secret entre dans le hash. Le Secret `hermes-env` est produit par le
       # contrôleur sealed-secrets, pas par kustomize — son contenu ne peut donc pas influencer

@@ -30,6 +30,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   vivent dans [hermes-exec](../hermes-exec/manifests/rbac-hermes.yaml)
 - `manifests/config/exec/hermes-exec-run` — lanceur de tâches jetables, semé dans le PATH de
   l'agent par l'initContainer
+- `manifests/config/exec/SKILL.md` — la skill qui décrit ce lanceur à l'agent. Sans elle, l'outil
+  existe et n'est jamais utilisé
 - `manifests/hermes-env.sealed.yaml` — `SealedSecret` : `API_SERVER_KEY` et identifiants du
   dashboard (cf. §Câblage des secrets). Également listé dans le `configMapGenerator`, pour la
   seule raison expliquée en §Contraintes
@@ -206,6 +208,17 @@ prochaine complétion.
 L'image est prise dans une liste blanche (`IMAGES` dans le script) : le pull est fait par le
 kubelet, hors de portée des NetworkPolicy. En ajouter une = éditer le fichier, committer,
 attendre le rollout.
+
+**Ce qui rend l'agent conscient de l'outil** est la skill `config/exec/SKILL.md`, semée dans
+`/opt/data/skills/devops/disposable-exec/`. Les skills sont découvertes par `rglob` de `SKILL.md`
+et `prompt_builder` injecte leur `description:` dans le prompt système. Sans ce fichier, le
+lanceur est dans le PATH et n'est jamais appelé — le modèle n'a aucune raison de deviner qu'une
+commande existe. Le sous-dossier `devops/` n'est que de l'organisation.
+
+La skill dit aussi à l'agent ce que le bac à sable **ne** donne pas (aucun réseau, aucun
+credential, aucune persistance, 2 tâches maximum) et lui interdit explicitement de se rabattre sur
+son propre conteneur quand une tâche échoue — c'est le contournement naturel, et c'est exactement
+ce que le dispositif cherche à empêcher.
 
 Vérifier depuis le pod que l'identité est bien celle attendue :
 

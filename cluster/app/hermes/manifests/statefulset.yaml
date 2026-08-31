@@ -65,6 +65,16 @@ spec:
               # reste la source de vérité, une modification faite dans le pod est écrasée.
               [ -d /opt/data/bin ] || install -d -o 10000 -g 10000 -m 0755 /opt/data/bin
               install -o 10000 -g 10000 -m 0755 /config/hermes-exec-run /opt/data/bin/hermes-exec-run
+              # Skill décrivant l'outil ci-dessus. C'est ce qui rend l'agent CONSCIENT qu'il
+              # existe : `prompt_builder` injecte le `description:` du frontmatter dans le prompt
+              # système, et le corps est chargé quand la skill est retenue. Sans ce fichier, le
+              # binaire est présent dans le PATH et n'est jamais appelé.
+              # Les skills sont découvertes par rglob de SKILL.md sous /opt/data/skills ; le
+              # sous-dossier de catégorie n'est que de l'organisation.
+              [ -d /opt/data/skills/devops/disposable-exec ] \
+                || install -d -o 10000 -g 10000 -m 0755 /opt/data/skills/devops/disposable-exec
+              install -o 10000 -g 10000 -m 0644 /config/SKILL.md \
+                /opt/data/skills/devops/disposable-exec/SKILL.md
           volumeMounts:
             - { name: data, mountPath: /opt/data }
             - { name: config, mountPath: /config, readOnly: true }
