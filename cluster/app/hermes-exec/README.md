@@ -38,6 +38,7 @@ le supprime. Le TTL et le GitOps se battraient sans qu'aucun log ne le signale (
 - `manifests/limitrange.yaml` — défauts et maxima par conteneur. **Se revoit avec le quota** :
   le tableau de correspondance est en tête de `resourcequota.yaml`
 - `manifests/kustomization.yaml` — assemblage
+- `templates/run-task.sh` — lanceur : substitue les paramètres et injecte la commande
 - `templates/task-job.yaml` — **le modèle** de tâche, paramétrable
 - `templates/demo-task-job.yaml` — tâche de démonstration inoffensive (cf. §Démonstration)
 
@@ -141,11 +142,37 @@ argocd app diff hermes-exec        # si le CLI est installé
 
 ## Lancer un environnement de tâche
 
-`envsubst` n'est pas installé sur le poste (gettext absent) — `sed` fait le travail.
+### Le lanceur (recommandé)
 
 ```bash
 cd cluster/app/hermes-exec/templates
 
+./run-task.sh build-42 'echo "resultat" > /work/out.txt
+cat /work/out.txt'
+```
+
+```
+job.batch/hermes-task-build-42 created
+```
+
+Variables optionnelles : `TASK_IMAGE` (défaut `busybox:1.37.0`), `TASK_TTL` (600),
+`TASK_DEADLINE` (1800), `DRY_RUN=1` pour afficher le manifeste sans le créer.
+
+```bash
+TASK_IMAGE=python:3.13-slim ./run-task.sh calc 'python -c "print(6*7)"'
+DRY_RUN=1 ./run-task.sh inspect 'id'
+```
+
+Le script valide le task-id en DNS-1123 avant tout appel à l'API : un identifiant invalide
+échouerait sinon sur un message parlant du *label*, pas de l'argument.
+
+### À la main
+
+`envsubst` n'est pas installé sur le poste (gettext absent) — `sed` fait le travail, mais ne
+remplace que les paramètres : le corps de la tâche reste le placeholder du template
+(`echo start` / `echo done`).
+
+```bash
 sed -e 's|${TASK_ID}|ma-tache|g' \
     -e 's|${TASK_IMAGE}|<image>|g' \
     -e 's|${TASK_TTL}|600|g' \
