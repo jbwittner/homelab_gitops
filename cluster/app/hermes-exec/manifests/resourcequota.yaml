@@ -6,26 +6,37 @@
 # Un quota large ne protège de rien ; celui-ci doit gêner avant que le cluster ne souffre.
 # Les valeurs se lisent contre limitrange.yaml, qui fixe le coût d'UNE tâche :
 #
-# Le dimensionnement se lit contre DEUX choses : limitrange.yaml (coût plancher/plafond d'un
-# conteneur) et les `resources` de ../templates/task-job.yaml (coût d'une tâche STANDARD).
+# Le dimensionnement se lit contre DEUX choses : limitrange.yaml (plafond d'un conteneur) et les
+# `resources` de ../templates/task-job.yaml (coût d'une tâche STANDARD).
 #
-#   source                       × 5 tâches     quota ici
-#   task-job.yaml  limits  1 / 1Gi / 2Gi        5 / 5Gi / 10Gi   5 / 6Gi / 12Gi   ← tient juste
-#   task-job.yaml  requests 100m/256Mi/256Mi    500m/1.25Gi      2 / 3Gi          ← marge
-#   LimitRange     max     2 / 2Gi / 4Gi        10 / 10Gi        5 / 6Gi          ← le quota borne
+# N = 2 tâches concurrentes.
 #
-# `limits.cpu: 5` et pas 4 : à 4, la 5ᵉ tâche STANDARD passait la création du Job puis voyait
-# son pod refusé indéfiniment. Symptôme observé : Job `Running 0/1` sans aucun pod, boucle de
-# `FailedCreate` visible NULLE PART ailleurs que dans les events, jusqu'à ce que
-# `activeDeadlineSeconds` le tue. `backoffLimit: 0` ne l'arrête pas — il compte les pods en
-# échec, pas les créations refusées.
+#   source                        × 2 tâches      quota ici
+#   task-job.yaml  limits  1 / 1Gi / 2Gi          2 / 2Gi / 4Gi    2 / 2Gi / 4Gi   ← exact
+#   task-job.yaml  requests 100m / 256Mi / 256Mi  200m / 512Mi     1 / 1Gi / 2Gi   ← marge
+#   LimitRange     max     1 / 1Gi / 2Gi          2 / 2Gi / 4Gi    2 / 2Gi / 4Gi   ← exact
 #
-# D'où la règle de dimensionnement : les dimensions par POD (cpu/mémoire/stockage/pods) doivent
-# permettre exactement autant de tâches standard que `count/jobs.batch`. Sinon la saturation se
-# manifeste par la voie muette (event sur le Job) au lieu de la voie lisible (refus à la
-# création du Job, message `exceeded quota` rendu à l'appelant).
+# Les dimensions par POD valent EXACTEMENT N × le coût d'une tâche standard, et le `max` du
+# LimitRange vaut exactement ce coût. Conséquence voulue : aucune tâche ne peut être plus grosse
+# que la standard, donc N tâches tiennent toujours, et la seule voie de saturation est
+# `count/jobs.batch`.
 #
-# Revoir CES TROIS FICHIERS ENSEMBLE : quota, LimitRange, et les resources du template.
+# C'est ce qui rend le refus LISIBLE. Les deux voies de refus du quota ne se valent pas :
+#   - `count/jobs.batch` épuisé      → la création du JOB est refusée, `exceeded quota` rendu
+#                                      à l'appelant. Voie lisible.
+#   - une dimension par POD épuisée  → le Job se crée, son pod est refusé en boucle. Le Job
+#                                      reste `Running 0/1` sans aucun pod et le motif n'existe
+#                                      que dans les events. `backoffLimit: 0` ne l'arrête pas
+#                                      (il compte les pods en échec, pas les créations
+#                                      refusées) ; seul `activeDeadlineSeconds` y met fin.
+#                                      Voie muette — observée avant correction.
+#
+# POUR SCALER : multiplier les six dimensions par le nouveau N, et `pods` = `count/jobs.batch`
+# = N. Pour autoriser des tâches PLUS GROSSES, il faut en plus relever le `max` du LimitRange
+# ET les `resources` du template — mais alors la garantie ci-dessus tombe et la voie muette
+# redevient atteignable.
+#
+# Revoir CES TROIS FICHIERS ENSEMBLE : quota, LimitRange, resources du template.
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -35,16 +46,16 @@ metadata:
     app.kubernetes.io/name: hermes-exec
 spec:
   hard:
-    requests.cpu: "2"
-    requests.memory: 3Gi
-    requests.ephemeral-storage: 4Gi
-    limits.cpu: "5"
-    limits.memory: 6Gi
-    limits.ephemeral-storage: 12Gi
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    requests.ephemeral-storage: 2Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
+    limits.ephemeral-storage: 4Gi
     # Borne le parallélisme. Un dépassement fait échouer la CRÉATION du Job avec un message
     # explicite ("exceeded quota"), pas un pod qui se fait évincer plus tard sans raison lisible.
-    pods: "5"
-    count/jobs.batch: "5"
+    pods: "2"
+    count/jobs.batch: "2"
     # ZÉRO stockage persistant : « jetable » veut dire que rien ne survit au pod. Un PVC dans ce
     # namespace serait un canal de persistance entre deux tâches, donc entre deux contextes
     # d'exécution qui ne doivent rien partager. Le volume de travail est un emptyDir.

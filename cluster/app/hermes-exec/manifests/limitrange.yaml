@@ -8,8 +8,8 @@
 # `max` est la vraie contrainte : il fait ÉCHOUER la création d'un pod qui demanderait plus.
 #
 # Dimensionné pour une tâche de POC (build/test court), pas pour une compilation lourde. Le
-# tableau de correspondance avec resourcequota.yaml est dans ce fichier — les deux se revoient
-# ensemble.
+# tableau de correspondance avec resourcequota.yaml est en tête de CE fichier-là — les trois
+# (quota, LimitRange, resources du template) se revoient ensemble.
 apiVersion: v1
 kind: LimitRange
 metadata:
@@ -28,7 +28,12 @@ spec:
         cpu: "100m"
         memory: 256Mi
         ephemeral-storage: 256Mi
+      # ALIGNÉ SUR LA TÂCHE STANDARD (resources de ../templates/task-job.yaml), pas au-dessus.
+      # Aucune tâche ne peut donc être plus grosse que la standard — c'est ce qui garantit que
+      # N tâches tiennent toujours dans le quota, et donc que la saturation passe par
+      # `count/jobs.batch`, la seule voie de refus lisible. Relever ce `max` sans relever le
+      # quota rend la voie muette à nouveau atteignable.
       max:
-        cpu: "2"
-        memory: 2Gi
-        ephemeral-storage: 4Gi
+        cpu: "1"
+        memory: 1Gi
+        ephemeral-storage: 2Gi

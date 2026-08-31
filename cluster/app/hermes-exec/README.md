@@ -33,7 +33,7 @@ le supprime. Le TTL et le GitOps se battraient sans qu'aucun log ne le signale (
   egress**, sur le label de rôle
 - `manifests/netpol-egress-allow.yaml` — **NON APPLIQUÉ** : absent des `resources:` du
   kustomization. Conservé comme point d'extension (cf. §Points d'extension)
-- `manifests/resourcequota.yaml` — plafond du namespace, **dimensionné pour 5 tâches
+- `manifests/resourcequota.yaml` — plafond du namespace, **dimensionné pour 2 tâches
   concurrentes** ; `persistentvolumeclaims: 0`
 - `manifests/limitrange.yaml` — défauts et maxima par conteneur. **Se revoit avec le quota** :
   le tableau de correspondance est en tête de `resourcequota.yaml`
@@ -59,8 +59,8 @@ Cinq couches, indépendantes. Aucune n'est décorative.
    réseau du tout — pas d'internet, pas de LAN, **pas même la résolution DNS**.
 5. **Plafonds.** `ResourceQuota` + `LimitRange` : un orchestrateur qui boucle sur la création de
    tâches se fait refuser la création avec un message explicite, il n'évince pas le cluster.
-   Calés sur le POC (5 tâches concurrentes, 5 CPU / 6 Gi de limites pour tout le namespace), pas
-   sur la capacité du cluster — un quota large ne protège de rien.
+   Calés sur le POC (**2 tâches concurrentes**, 2 CPU / 2 Gi de limites pour tout le namespace),
+   pas sur la capacité du cluster — un quota large ne protège de rien.
 
 > [!IMPORTANT]
 > **Le quota a deux voies de refus, et une seule est lisible.** `count/jobs.batch` épuisé refuse
@@ -70,9 +70,26 @@ Cinq couches, indépendantes. Aucune n'est décorative.
 > `kubectl -n hermes-exec get events`. `backoffLimit: 0` ne l'arrête pas (il compte les pods en
 > échec, pas les créations refusées) ; seul `activeDeadlineSeconds` y met fin.
 >
-> D'où la règle : les dimensions par pod doivent permettre **exactement** autant de tâches
-> standard que `count/jobs.batch`. Constaté à l'exécution avec 6 tâches concurrentes — le quota
-> initial (`limits.cpu: 4`) faisait échouer la 5ᵉ par la voie muette.
+> D'où la règle : les dimensions par pod valent **exactement** N × le coût d'une tâche standard,
+> et le `max` du LimitRange vaut exactement ce coût. Aucune tâche ne peut alors être plus grosse
+> que la standard, N tiennent toujours, et la seule voie de saturation est `count/jobs.batch`.
+> Constaté à l'exécution avec 6 tâches concurrentes : un quota mal aligné (`limits.cpu: 4` pour
+> `pods: 5`) faisait échouer la 5ᵉ par la voie muette.
+
+### Scaler
+
+Multiplier les six dimensions par pod du quota par le nouveau N, avec `pods` = `count/jobs.batch`
+= N. Le LimitRange ne bouge pas sur cet axe.
+
+Pour autoriser des tâches **plus grosses**, il faut les trois : les `resources` du template, le
+`max` du LimitRange, puis recalculer le quota. La garantie ci-dessus tombe alors — une tâche
+au-dessus de la standard peut à elle seule épuiser une dimension par pod, et la voie muette
+redevient atteignable.
+
+Le matériel n'est pas la contrainte : ce sont les **requests** qui s'ordonnancent (100 m / 256 Mi
+par tâche standard), pour ~47,8 CPU et ~76 Gi allouables dont ~4 % engagés. Au-delà de la
+capacité les pods passent `Pending` — ils ne sont pas refusés, encore un symptôme muet, distinct
+du quota.
 
 > [!CAUTION]
 > **La 6ᵉ couche attendue est absente : il n'y a pas de runtime d'isolation renforcée.**
@@ -269,5 +286,5 @@ créer des pods**. À traiter comme une revue à part entière, pas comme un dé
 | Runtime d'isolation renforcée | Aucune `RuntimeClass` | Isolation conteneur seulement. TODO commenté, non contourné |
 | PodSecurity `restricted` applicable | `hermes` ne peut pas l'être (image root) | D'où un **namespace séparé** `hermes-exec`, qui, lui, le porte |
 | CNI appliquant les NetworkPolicy | Cilium v1.20.0, `enable-l7-proxy: true` | ✅ `toFQDNs` utilisable. Enforcement `default` → le label de rôle est load-bearing |
-| Plafonds de ressources | Aucun quota ni LimitRange sur le cluster | Ajoutés au namespace, calés sur 5 tâches concurrentes |
+| Plafonds de ressources | Aucun quota ni LimitRange sur le cluster | Ajoutés au namespace, calés sur 2 tâches concurrentes |
 | Stockage | `openebs-lvm-thin` (défaut), local-node | Sans objet : `persistentvolumeclaims: 0`, tout est `emptyDir` |
