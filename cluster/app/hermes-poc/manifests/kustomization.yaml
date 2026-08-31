@@ -13,7 +13,7 @@ resources:
   #
   # À produire pour ce namespace avant activation (cf. README §Câblage des secrets), puis
   # décommenter ici ET dans le configMapGenerator plus bas :
-  # - hermes-env.sealed.yaml
+  - hermes-env.sealed.yaml
   - statefulset.yaml
   - service.yaml
   - hermes-httproute.yaml
