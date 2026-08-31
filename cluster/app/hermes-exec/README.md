@@ -304,17 +304,51 @@ Ce point n'est plus ouvert. [hermes](../hermes/README.md) porte désormais un `S
 un token projeté ; `manifests/rbac-hermes.yaml` lui accorde `jobs` create/get/list/delete,
 `pods` get/list et `pods/log` get **dans ce namespace uniquement**.
 
-L'agent lance ses tâches par `hermes-exec-run`, semé dans son PATH :
+L'agent lance ses tâches par `hermes-exec-run`, semé dans son PATH. **Deux modes**, et le choix
+compte :
 
 ```bash
+# one-shot : une commande, un pod neuf, /work vide. Le pod meurt avec la commande.
 hermes-exec-run <task-id> '<commande sh>' [--image busybox|python] [--ttl N] [--deadline N] [--keep]
 hermes-exec-run --list
+
+# session : le pod RESTE, /work est conservé entre les commandes.
+hermes-exec-run session start <id> [--image busybox|python] [--deadline N]
+hermes-exec-run session run   <id> '<commande sh>'
+hermes-exec-run session stop  <id>
+hermes-exec-run session list
 ```
 
+Le mode one-shot seul rendait le développement impossible : écrire un fichier puis l'exécuter
+demande deux commandes, et la seconde repartait d'un `/work` vide. La session résout ça en gardant
+le pod vivant (`sleep`) et en exécutant dedans via `pods/exec`.
+
+> [!IMPORTANT]
+> **Un pod de session ne finit jamais**, donc `ttlSecondsAfterFinished` ne s'y applique pas : seul
+> `activeDeadlineSeconds` (1 h par défaut) y met fin. Une session oubliée tient un des deux
+> emplacements pendant une heure. `session stop` est la bonne pratique, pas une politesse.
+
+> [!NOTE]
+> L'exec passe par le protocole WebSocket `v4.channel.k8s.io`. Deux détails qui ont coûté un
+> aller-retour chacun :
+> - le code de sortie n'arrive **que** par le canal 3 (statut JSON) — sans le lire, un échec de
+>   commande passe pour un succès ;
+> - un client WebSocket émet un **GET** avec en-têtes d'Upgrade, là où `kubectl exec` en SPDY
+>   émet un POST. RBAC dérivant le verbe de la méthode HTTP, `pods/exec` a besoin de `get` **et**
+>   de `create`. Avec `create` seul : `server rejected WebSocket connection: HTTP 403`, message
+>   qui ne mentionne ni RBAC ni le verbe manquant.
+
 **Ce qui n'est pas accordé, et pourquoi**, est écrit en tête de `rbac-hermes.yaml` — en résumé :
-pas de `pods/exec` ni `pods/portforward` (contournerait le gabarit), pas de `roles`/`rolebindings`
-(verrou anti-escalade), pas de `resourcequotas`/`limitranges`/`ciliumnetworkpolicies` (les
-plafonds et l'isolation ne doivent pas pouvoir se retirer eux-mêmes).
+pas de `pods/attach` ni `pods/portforward` (le second ouvrirait un tunnel réseau vers le pod,
+soit exactement la sortie que le défaut-refus interdit), pas de `roles`/`rolebindings` (verrou
+anti-escalade), pas de `resourcequotas`/`limitranges`/`ciliumnetworkpolicies` (les plafonds et
+l'isolation ne doivent pas pouvoir se retirer eux-mêmes).
+
+`pods/exec` **est** accordé, après avoir été refusé une première fois au motif qu'il
+« contournerait le gabarit ». L'analyse était fausse : le confinement d'un pod de tâche est
+structurel — aucune sortie réseau, uid 65532, racine en lecture seule, capabilities droppées,
+quota, `activeDeadlineSeconds` — et ne dépend pas de la commande qui tourne dedans. `exec` ne
+permet pas de créer un pod hors gabarit, et tout pod de ce namespace vient du lanceur.
 
 **Ce que ça change au modèle de menace.** Une injection de prompt dans Hermes permet désormais de
 créer des pods ici. Ce qu'elle ne permet toujours pas : sortir sur le réseau depuis ces pods
