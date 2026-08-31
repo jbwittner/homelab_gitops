@@ -59,8 +59,20 @@ Cinq couches, indépendantes. Aucune n'est décorative.
    réseau du tout — pas d'internet, pas de LAN, **pas même la résolution DNS**.
 5. **Plafonds.** `ResourceQuota` + `LimitRange` : un orchestrateur qui boucle sur la création de
    tâches se fait refuser la création avec un message explicite, il n'évince pas le cluster.
-   Calés sur le POC (5 tâches concurrentes, 4 CPU / 6 Gi de limites pour tout le namespace), pas
+   Calés sur le POC (5 tâches concurrentes, 5 CPU / 6 Gi de limites pour tout le namespace), pas
    sur la capacité du cluster — un quota large ne protège de rien.
+
+> [!IMPORTANT]
+> **Le quota a deux voies de refus, et une seule est lisible.** `count/jobs.batch` épuisé refuse
+> la création du **Job** : l'appelant reçoit `exceeded quota` immédiatement. Une dimension par
+> **pod** épuisée (`pods`, `limits.cpu`, …) laisse le Job se créer, puis son pod est refusé en
+> boucle — le Job reste `Running 0/1` sans aucun pod, et le motif n'apparaît que dans
+> `kubectl -n hermes-exec get events`. `backoffLimit: 0` ne l'arrête pas (il compte les pods en
+> échec, pas les créations refusées) ; seul `activeDeadlineSeconds` y met fin.
+>
+> D'où la règle : les dimensions par pod doivent permettre **exactement** autant de tâches
+> standard que `count/jobs.batch`. Constaté à l'exécution avec 6 tâches concurrentes — le quota
+> initial (`limits.cpu: 4`) faisait échouer la 5ᵉ par la voie muette.
 
 > [!CAUTION]
 > **La 6ᵉ couche attendue est absente : il n'y a pas de runtime d'isolation renforcée.**
