@@ -1,0 +1,9 @@
+# Créé avant le reste (sync-wave -1) : le chart, le `Cluster` CNPG et le `SealedSecret` y
+# atterrissent tous, et le PVC `forgejo-data` ne doit pas partir en `Pending` sur un namespace
+# absent le temps d'une reconciliation.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgejo
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

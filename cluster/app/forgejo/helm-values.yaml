@@ -1,0 +1,251 @@
+# Forge Git du homelab. Chart `code.forgejo.org/forgejo-helm/forgejo` (voir forgejo.app.yaml).
+#
+# ⚠️ Depuis la v14 du chart, les sous-charts PostgreSQL, PostgreSQL-HA, Valkey et Valkey-Cluster
+# ont été RETIRÉS (conséquence de l'arrêt des images Bitnami gratuites). Il n'y a plus de bascule
+# `postgresql.enabled: false` à poser comme chez authentik : sans configuration de base externe,
+# le chart retombe sur SQLite. La base est donc fournie ici par le `Cluster` CNPG `forgejo-db`
+# de `manifests/`, et c'est un choix explicite, pas une désactivation.
+
+# --- Image ---
+image:
+  # Défaut du chart, explicité car LOAD-BEARING pour tout le bloc SSH plus bas : en rootless, le
+  # serveur SSH interne de Forgejo ne peut pas se lier au port 22 (privilégié) et écoute sur 2222.
+  # Le port ANNONCÉ dans les URLs de clone (`SSH_PORT`) et le port ÉCOUTÉ (`SSH_LISTEN_PORT`) sont
+  # alors deux choses différentes ; le Service fait la traduction 22 → 2222.
+  rootless: true
+
+# Forgejo n'est pas HA-ready : le chart lui-même refuse plusieurs configurations au-delà de 1
+# replica (indexeur bleve, GC par cron, accessMode RWO). Un seul pod, stratégie `Recreate`
+# (défaut du chart) — le volume est RWO sur du stockage node-local, deux pods ne peuvent pas
+# se chevaucher pendant un rollout.
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    # Pas de limite CPU : un `git gc` ou une indexation qui se fait throttler allonge la
+    # transaction sans rien protéger. La limite mémoire, elle, borne le coût des adaptateurs
+    # `memory` de session/cache (cf. plus bas).
+    memory: 2Gi
+
+# --- Exposition HTTP ---
+# Les deux mécanismes d'exposition du chart restent coupés (`ingress` par défaut, `httpRoute`
+# explicitement) : la route vit dans `manifests/forgejo-httproute.yaml` comme pour tous les
+# composants du repo. Un seul endroit où lire un hostname, et les manifestes annexes sont déjà
+# la source des `group`/`kind`/`weight` que le CRD Gateway réinjecte.
+#
+# Conséquence directe : le chart ne peut PLUS dériver `DOMAIN` / `ROOT_URL` / `SSH_DOMAIN` de
+# l'ingress (il retomberait sur `git.example.com`). Ils sont donc écrits à la main dans
+# `gitea.config.server` — les oublier ne casse rien au démarrage mais produit des URLs de clone
+# et des liens de mail pointant vers `git.example.com`.
+ingress:
+  enabled: false
+httpRoute:
+  enabled: false
+
+# --- Services ---
+service:
+  http:
+    type: ClusterIP
+    port: 3000
+  ssh:
+    # SSH ne passe PAS par `shared-gw` : le Gateway n'a que des listeners HTTPS, et Gateway API ne
+    # route pas du TCP brut sans `TCPRoute` + un listener TCP dédié. Le chart sait poser un
+    # `TCPRoute` (`tcpRoute.enabled`), mais il faudrait alors ajouter un listener `ssh` au Gateway
+    # partagé — modifier un composant d'infra commun pour un seul consommateur. Un Service
+    # LoadBalancer sur le pool Cilium fait le même travail, localement.
+    type: LoadBalancer
+    # Port ANNONCÉ et écouté côté LAN. Le Service cible le port nommé `ssh` du pod, soit 2222.
+    port: 22
+    annotations:
+      # IP fixe prise dans `CiliumLoadBalancerIPPool` bleu-kalecgos-pool (192.168.1.80-89,
+      # cf. infra/cilium/manifests/ip-pool.yaml), annoncée en L2 sur le LAN.
+      #
+      # ⚠️ Elle est FIXE parce qu'un enregistrement DNS la vise : `forgejo.lan.wittner.tech`
+      # (cf. `SSH_DOMAIN`). Une IP laissée à l'allocateur changerait au premier recréage du
+      # Service et casserait tous les remotes `git@…` en silence.
+      #
+      # ⚠️ Cette IP est DISTINCTE de celle de `shared-gw` : le trafic web et le trafic SSH
+      # n'atterrissent pas au même endroit, d'où deux hostnames (cf. README §Réseau).
+      #
+      # `lbipam.cilium.io/ips` et non le champ `spec.loadBalancerIP` (déprécié côté Kubernetes)
+      # ni l'ancien `io.cilium/lb-ipam-ips` (déprécié côté Cilium depuis la 1.16).
+      lbipam.cilium.io/ips: 192.168.1.85
+
+# --- Stockage ---
+# Le PVC porte TOUT l'état non-SQL. Le `[storage]` de Forgejo est en `local` par défaut et
+# enracine HUIT sous-systèmes sous `APP_DATA_PATH` (= /data) — y compris ceux qui grossissent
+# sans qu'on les surveille :
+#   /data/git/gitea-repositories   dépôts Git
+#   /data/gitea/lfs                objets LFS
+#   /data/gitea/packages           REGISTRE DE PAQUETS (conteneurs, npm, maven, PyPI…)
+#   /data/gitea/actions_artifacts  artefacts de builds Actions (rétention 90 j par défaut)
+#   /data/gitea/actions_log        logs de jobs Actions (rétention 365 j, compressés zstd)
+#   /data/gitea/attachments        pièces jointes d'issues et de releases
+#   /data/gitea/repo-archive       archives .zip/.tar.gz générées à la demande
+#   /data/gitea/avatars, repo-avatars, indexers/  avatars et index bleve
+# et surtout `/data/gitea/conf/app.ini` — donc les 4 secrets générés au premier démarrage
+# (SECRET_KEY, INTERNAL_TOKEN, JWT_SECRET, LFS_JWT_SECRET). Voir README §Contraintes : le perdre
+# n'est pas « repartir d'une base vide », c'est perdre de quoi déchiffrer ce qui reste en base.
+#
+# ⚠️ Dimensionnement : ces 20Gi ne bornent RIEN. Le registre de paquets et Actions sont actifs par
+# défaut côté Forgejo, `[quota] ENABLED` vaut `false`, et la StorageClass est en `thinProvision:
+# "no"` — le LV est donc réservé en entier dans le VG dès la création, mais rien n'empêche de le
+# remplir. Volume plein = écritures en échec, pas de dégradation progressive. Voir README
+# §Dimensionnement du volume pour les trois leviers.
+persistence:
+  enabled: true
+  create: true
+  claimName: forgejo-data
+  size: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  # StorageClass laissée vide → `openebs-lvm-thin`, classe par défaut du cluster
+  # (`volumeBindingMode: WaitForFirstConsumer` : le PVC reste `Pending` tant que le pod n'est pas
+  # schedulé, c'est normal).
+  storageClass:
+  annotations:
+    # Défaut du chart, conservé pour un `helm uninstall` — INOPÉRANT sous ArgoCD, qui ne lit pas
+    # les annotations Helm. C'est la ligne suivante qui protège réellement ce volume.
+    helm.sh/resource-policy: keep
+    # ⚠️ LOAD-BEARING. `Prune=false` : le PVC survit s'il sort de l'ensemble désiré (bump de chart
+    # qui renommerait la ressource, valeur `persistence.create` basculée par erreur).
+    # `Delete=false` : il survit aussi à la suppression de l'`Application` elle-même, que le
+    # finalizer `resources-finalizer.argocd.argoproj.io` propagerait sinon jusqu'ici.
+    # Le repo a déjà perdu un PVC de cette façon (cf. `application.resourceTrackingMethod` dans
+    # infra/argocd/manifests/argocd-cm.yaml) ; la StorageClass étant en `reclaimPolicy: Delete`,
+    # la suppression du PVC détruit le LV dans la foulée. Décommissionner Forgejo demande donc un
+    # `kubectl delete pvc forgejo-data` explicite — c'est voulu.
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+
+# Pod de test `wget` livré par le chart. Coupé : son annotation `helm.sh/hook: test` ne fait pas
+# partie des hooks qu'ArgoCD sait traduire, il ne serait donc pas traité comme un hook mais comme
+# une ressource ordinaire — un Pod `Completed` permanent dans l'arbre de l'Application.
+test:
+  enabled: false
+
+gitea:
+  # --- Compte d'administration ---
+  admin:
+    # `SealedSecret` `forgejo-admin` (manifests/forgejo-admin.sealed.yaml), clés `username` et
+    # `password`. Sans lui, le pod reste bloqué en CreateContainerConfigError : le `secretKeyRef`
+    # est monté en variable d'environnement de l'init-container `configure-gitea`.
+    existingSecret: forgejo-admin
+    email: jeanbaptiste.wittner@outlook.com
+    # `keepUpdated` (défaut) : à CHAQUE démarrage de pod, le mot de passe du compte admin est
+    # réaligné sur la valeur du Secret. C'est ce qu'on veut d'un secret géré en GitOps — le
+    # `SealedSecret` de Git est la source de vérité ; une rotation se fait en rescellant PUIS en
+    # redémarrant le pod (le commit seul ne change rien au compte déjà créé).
+    # Contrepartie assumée : un changement de mot de passe fait DEPUIS L'UI est écrasé au prochain
+    # redémarrage, sans avertissement. Les alternatives (`initialOnlyNoReset`,
+    # `initialOnlyRequireReset`) ne posent le mot de passe qu'à la création du compte.
+    passwordMode: keepUpdated
+
+  # Endpoint Prometheus `/metrics` : laissé COUPÉ (défaut du chart), et c'est une décision.
+  # Il est servi sur le port HTTP applicatif, donc derrière le même HTTPRoute que l'UI — sur un
+  # hostname PUBLIC. Sans `[metrics] TOKEN`, il serait lisible par n'importe qui sur Internet
+  # (noms de dépôts, volumétrie, comptes). L'activer proprement demande un token scellé ET un
+  # ServiceMonitor écrit à la main (celui du chart ne sait pas porter d'`authorization`) :
+  # cf. README §Métriques.
+  metrics:
+    enabled: false
+
+  # --- app.ini ---
+  # Chaque clé de ce bloc devient une entrée d'`app.ini`. Le nom de section est en minuscules,
+  # les clés en MAJUSCULES (cf. config-cheat-sheet amont).
+  config:
+    APP_NAME: 'Forgejo — wittner.tech'
+
+    server:
+      # Réécrits à la main : `ingress`/`httpRoute` du chart étant coupés, le chart n'a rien d'où
+      # les dériver et retomberait sur `git.example.com`.
+      DOMAIN: forgejo.wittner.tech
+      ROOT_URL: https://forgejo.wittner.tech/
+      # ⚠️ `PROTOCOL` (http) et `ROOT_URL` (https) divergent VOLONTAIREMENT : TLS est terminé au
+      # Gateway, le backend parle en clair dans le cluster. C'est `ROOT_URL` qui gouverne les URLs
+      # émises (liens de mails, redirections OAuth2, flag `Secure` des cookies de session) ;
+      # `PROTOCOL` ne décrit que la socket d'écoute. Mettre `https` ici ferait attendre à Forgejo
+      # un certificat qu'il n'a pas.
+      HTTP_PORT: 3000
+
+      # Hostname SSH DIFFÉRENT du hostname web, parce que les deux ne pointent pas sur la même IP :
+      # le web arrive par `shared-gw`, le SSH par le Service LoadBalancer ci-dessus. C'est la
+      # valeur affichée dans le bouton « Clone » de l'UI — une erreur ici ne casse rien côté
+      # serveur et rend juste toutes les commandes copiées inutilisables.
+      SSH_DOMAIN: forgejo.lan.wittner.tech
+      # Port ANNONCÉ dans les URLs de clone (celui du Service).
+      SSH_PORT: 22
+      # Port réellement ÉCOUTÉ dans le conteneur : 2222, imposé par l'image rootless. C'est le
+      # défaut que le chart poserait de toute façon ; explicité parce que le Service le cible.
+      SSH_LISTEN_PORT: 2222
+      # Serveur SSH interne (Go), pas un OpenSSH : pas de gestion de `authorized_keys` sur disque,
+      # Forgejo authentifie les clés depuis sa base. Défaut du chart en rootless.
+      START_SSH_SERVER: true
+
+    database:
+      DB_TYPE: postgres
+      # Service RW généré par l'opérateur pour le `Cluster` `forgejo-db`. Pointer le RW et non un
+      # RO : Forgejo écrit.
+      HOST: forgejo-db-rw:5432
+      # `app` / `app` : noms par défaut de la base et du rôle applicatif créés par CNPG quand le
+      # `Cluster` ne déclare pas de `bootstrap.initdb`. Le mot de passe n'est PAS ici, il vient du
+      # secret auto-généré `forgejo-db-app` (cf. `additionalConfigFromEnvs`).
+      NAME: app
+      USER: app
+      # Le pg_hba par défaut de CNPG accepte les connexions applicatives en clair depuis le
+      # cluster (ligne `host all all all scram-sha-256`) ; seuls la réplication et le pooler
+      # exigent TLS. Explicité pour que la valeur ne soit pas prise pour un oubli.
+      SSL_MODE: disable
+
+    service:
+      # Instance PUBLIQUE : sans ça, n'importe qui crée un compte. Les comptes se créent à la main
+      # depuis l'UI d'admin (ou par OIDC le jour où authentik revient, cf. README).
+      DISABLE_REGISTRATION: true
+
+    indexer:
+      # Recherche de code (et pas seulement de dépôts). Indexeur `bleve` par défaut, écrit sur le
+      # PVC — d'où le dimensionnement à 20Gi. C'est la configuration mono-pod recommandée par le
+      # chart ; elle interdit à elle seule de passer à plusieurs replicas.
+      REPO_INDEXER_ENABLED: true
+
+    # --- Plafond de stockage ---
+    # Garde-fou du volume : sans lui, rien ne borne la croissance du registre de paquets ni des
+    # artefacts Actions, et un PVC plein fait ÉCHOUER les écritures au lieu de dégrader
+    # (cf. README §Dimensionnement du volume). Le quota transforme cet `ENOSPC` en refus applicatif
+    # propre, avec un message à l'utilisateur.
+    #
+    # ⚠️ Quota « SOFT », et Forgejo le qualifie lui-même d'« early support » : la vérification a
+    # lieu AVANT l'opération, mais une opération déjà lancée va au bout. Un push peut donc dépasser
+    # le plafond — après quoi plus rien qui augmente la taille ne passe. Ce n'est pas une barrière
+    # dure, c'est ce qui empêche une dérive de remplir le volume.
+    quota:
+      ENABLED: true
+
+    # Section `[quota.default]` — écrite comme une clé littérale à point, comme le fait le chart
+    # pour `ssh.minimum_key_sizes` ou `email.incoming` : ce n'est PAS un sous-bloc de `quota`.
+    #
+    # ⚠️ Le plafond s'applique PAR UTILISATEUR (sujet `size:all`), pas à l'instance. 15G tient tant
+    # que l'instance reste à quelques comptes ; il est à revoir à la baisse, ou à répartir en
+    # groupes de quota via l'API, si le nombre de comptes augmente.
+    #
+    # 15G sur 20Gi de volume : les 5Gi de marge couvrent l'index bleve, les logs Actions et
+    # l'`app.ini`, qui ne sont pas décomptés du quota d'un utilisateur.
+    quota.default:
+      TOTAL: 15G
+
+  # --- Mot de passe de la base ---
+  # Injecté en VARIABLE D'ENVIRONNEMENT et non dans `gitea.config.database.PASSWD` : ce fichier est
+  # dans Git. Le préfixe `FORGEJO__<SECTION>__<CLÉ>` est lu par `environment-to-ini` au démarrage
+  # de l'init-container, qui l'écrit dans l'`app.ini` du volume. Les variables d'environnement ont
+  # la priorité la plus haute (au-dessus de `additionalConfigSources`, puis de `gitea.config`).
+  #
+  # Secret auto-généré par CNPG pour le `Cluster` `forgejo-db` : jamais scellé, jamais figé dans
+  # Git, régénéré avec la base.
+  additionalConfigFromEnvs:
+    - name: FORGEJO__DATABASE__PASSWD
+      valueFrom:
+        secretKeyRef:
+          name: forgejo-db-app
+          key: password

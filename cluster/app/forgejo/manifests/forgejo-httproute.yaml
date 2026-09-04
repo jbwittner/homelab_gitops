@@ -1,0 +1,39 @@
+# UI et API HTTP de Forgejo. Listener `https-public` (*.wittner.tech) : une forge n'a d'intérêt
+# que joignable de l'extérieur, et le clone HTTPS passe par cette même route.
+#
+# ⚠️ Le SSH n'est PAS ici et ne peut pas l'être : `shared-gw` n'a que des listeners HTTPS, et un
+# HTTPRoute ne transporte pas du TCP brut. Le SSH sort par le Service LoadBalancer
+# `forgejo-ssh` (192.168.1.85), sur le hostname `forgejo.lan.wittner.tech` — deux chemins
+# réseau, deux enregistrements DNS (cf. README §Réseau).
+#
+# ⚠️ Cette route expose TOUS les chemins, `/metrics` compris le jour où les métriques seront
+# activées. C'est la raison pour laquelle `gitea.metrics.enabled` reste à `false`.
+#
+# group/kind/weight/sectionName et matches explicites : le CRD les injecte comme défauts côté
+# live — sans eux, OutOfSync permanent dans ArgoCD.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: forgejo
+  namespace: forgejo
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: shared-gw
+      namespace: gateway
+      sectionName: https-public
+  hostnames:
+    - forgejo.wittner.tech
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          # Service posé par le chart : `<releaseName>-http`, soit `forgejo-http`.
+          name: forgejo-http
+          port: 3000
+          weight: 1

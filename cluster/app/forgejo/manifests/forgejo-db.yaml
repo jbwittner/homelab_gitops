@@ -1,0 +1,64 @@
+# Base PostgreSQL dédiée à Forgejo, portée par l'opérateur CNPG (composant `cnpg`, qui doit
+# tourner AVANT : sans la CRD `Cluster`, cet objet échoue en `no matches for kind`).
+#
+# L'opérateur en dérive lui-même, sans rien à déclarer ici :
+#   - le service `forgejo-db-rw` (référencé par `gitea.config.database.HOST`),
+#   - le secret `forgejo-db-app` (référencé par `additionalConfigFromEnvs`), qui contient le mot
+#     de passe du rôle applicatif `app` sur la base `app`.
+# Ce secret n'est ni scellé ni figé dans Git : il vit et meurt avec la base.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: forgejo-db
+spec:
+  # Mono-nœud, comme le reste du cluster. Un `instances: 2` ne serait de toute façon pas exploité :
+  # Forgejo ne tourne qu'en un seul replica.
+  instances: 1
+  storage:
+    # Métadonnées uniquement (issues, PR, comptes, sessions). Les dépôts Git, le LFS et les
+    # attachements sont sur le PVC `forgejo-data`, pas ici.
+    size: 10Gi
+
+  # --- Co-localisation avec Forgejo ---
+  #
+  # Ce n'est pas une optimisation de latence, c'est une réduction du domaine de panne. Le stockage
+  # du cluster est node-local et NON répliqué (`openebs-lvm-thin`, cf. infra/openebs/README.md) :
+  # le PV colle son pod à un nœud par `nodeAffinity`, et perdre le nœud rend le volume injoignable.
+  # Laisser le scheduler séparer la base et l'applicatif fait donc dépendre Forgejo de DEUX nœuds
+  # au lieu d'un, sans rien gagner en disponibilité — aucun des deux volumes n'a de copie
+  # ailleurs. Les réunir borne la casse à une seule machine, et supprime au passage un aller-retour
+  # réseau sur chaque requête SQL.
+  affinity:
+    # ⚠️ Règle en SENS UNIQUE : c'est la base qui suit Forgejo, jamais l'inverse. Deux règles
+    # `required` symétriques se bloqueraient mutuellement — une affinité de pod exige que la
+    # cible soit DÉJÀ schedulée, donc aucun des deux pods ne pourrait partir en premier.
+    #
+    # Ordre d'atterrissage attendu au premier déploiement : le pod Forgejo n'a aucune contrainte,
+    # il est schedulé et son PVC se lie (`WaitForFirstConsumer`) ; le pod CNPG reste `Pending`
+    # tant que ce pod n'existe pas, puis le rejoint. Entre les deux, l'init-container
+    # `configure-gitea` boucle sur `gitea migrate` faute de base — comportement prévu par le
+    # chart, qui journalise « Forgejo migrate might fail due to database connection ».
+    #
+    # ⚠️ À ne PAS ajouter après coup sur un déploiement vivant dont les deux volumes seraient
+    # déjà sur des nœuds différents : les PV épinglant chacun leur pod, la contrainte devient
+    # insatisfiable et le pod CNPG reste `Pending` indéfiniment. Il faudrait alors migrer un
+    # volume (sauvegarde, suppression du PVC, recréation) avant de poser la règle.
+    additionalPodAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        # Sélecteur des pods Forgejo (`gitea.selectorLabels` du chart). Pas de champ `namespaces` :
+        # une affinité de pod se limite par défaut au namespace du pod schedulé, soit `forgejo`.
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: forgejo
+              app.kubernetes.io/instance: forgejo
+          topologyKey: kubernetes.io/hostname
+
+    # Anti-affinité générée par l'opérateur : coupée. Elle n'écarte que les instances D'UN MÊME
+    # `Cluster` les unes des autres — avec `instances: 1` elle n'a aucun pair à écarter et ne
+    # produit qu'une règle morte. Elle est de toute façon `preferred` (un score, pas une
+    # contrainte) et ne pourrait pas contredire l'affinité `required` ci-dessus ; la couper rend
+    # simplement l'intention lisible dans le pod rendu.
+    #
+    # ⚠️ À REMETTRE À `true` le jour où `instances` passe à 2 ou plus : sans elle, deux instances
+    # de la même base peuvent atterrir sur le même nœud, ce qui annule la réplication.
+    enablePodAntiAffinity: false

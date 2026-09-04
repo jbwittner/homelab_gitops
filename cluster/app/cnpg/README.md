@@ -5,7 +5,8 @@
 Opérateur **CloudNativePG** : gestion déclarative de clusters PostgreSQL (CRD
 `postgresql.cnpg.io/Cluster`). Ne déploie **que l'opérateur** ; les instances PostgreSQL sont
 déclarées par les applications consommatrices — aujourd'hui
-[`authentik`](../authentik/README.md) et [`test-nginx`](../test-nginx/README.md).
+[`forgejo`](../forgejo/README.md), [`authentik`](../authentik/README.md) et
+[`test-nginx`](../test-nginx/README.md).
 
 ## Fichiers
 

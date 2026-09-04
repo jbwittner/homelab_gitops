@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: forgejo
+resources:
+  - namespace.yaml
+  - forgejo-db.yaml
+  # ⚠️ Ligne à DÉCOMMENTER une fois le SealedSecret produit (cf. README §Câblage des secrets).
+  # Elle est commentée et non simplement absente parce qu'un `resources:` qui pointe un fichier
+  # manquant fait échouer le `kustomize build` ENTIER : l'Application partirait en `ComparisonError`
+  # et ni le namespace ni la base ne seraient posés. Commentée, le composant se déploie et c'est
+  # seulement le pod Forgejo qui attend son secret (CreateContainerConfigError, `secretKeyRef`
+  # `forgejo-admin` introuvable) — un échec local et lisible.
+  - forgejo-admin.sealed.yaml
+  - forgejo-httproute.yaml

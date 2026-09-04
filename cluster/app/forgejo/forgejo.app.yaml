@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: forgejo
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: forge
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    # ⚠️ Dépôt OCI, PAS un dépôt Helm classique : le chart Forgejo n'est publié que sous forme
+    # d'artefact OCI (`helm install oci://code.forgejo.org/forgejo-helm/forgejo` en amont).
+    # ArgoCD attend l'URL SANS le schéma `oci://` — c'est l'absence de `://` qui lui dit qu'il
+    # s'agit d'un registre. Avec le préfixe, la source part en `repository not found`.
+    #
+    # Même critère côté Renovate (manager `argocd`) : sans `://`, il bascule sur la datasource
+    # `docker` et suit `code.forgejo.org/forgejo-helm/forgejo` comme un tag d'image. Écrire
+    # `oci://…` marcherait pour lui mais casserait ArgoCD ; la forme sans schéma satisfait les deux.
+    - repoURL: code.forgejo.org/forgejo-helm
+      chart: forgejo
+      targetRevision: 17.1.5
+      helm:
+        releaseName: forgejo
+        valueFiles:
+          - $values/cluster/app/forgejo/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    # Ressources annexes : namespace, Cluster CNPG, SealedSecret admin, HTTPRoute.
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: cluster/app/forgejo/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: forgejo
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

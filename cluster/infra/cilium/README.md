@@ -18,7 +18,7 @@ Composant **mono-cluster** (archétype (b) : chart + `$values` + `manifests/`), 
   `k8sServiceHost`/`k8sServicePort` (endpoint apiserver local du nœud), `cgroup.autoMount: false`
   (le cgroup est monté par l'hôte). Également passé au `helm install` de bootstrap.
 - `manifests/l2-policy.yaml` — `CiliumL2AnnouncementPolicy`, annonce L2 des IP de LB.
-- `manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool`, plage `192.168.1.80-84`
+- `manifests/ip-pool.yaml` — `CiliumLoadBalancerIPPool`, plage `192.168.1.80-89`
   (cf. [doc/reseau.md](../../../doc/reseau.md)).
 - `manifests/kustomization.yaml` — assemble les deux, applique le `namePrefix: bleu-kalecgos-`
   qui leur donne leurs noms finaux et pose les labels communs.
