@@ -1,0 +1,124 @@
+# Filtrage réseau du pod Forgejo. C'est la contrepartie infrastructurelle des réglages anti-SSRF
+# d'`app.ini` (`[migrations] ALLOW_LOCALNETWORKS`, `[webhook] ALLOWED_HOST_LIST`) : ceux-ci
+# refusent la cible, celui-ci refuse le paquet. Les deux couvrent le même risque, et aucun des
+# deux ne rend l'autre inutile — un contournement applicatif (redirection, DNS rebinding, sortie
+# non prévue d'une future fonctionnalité) ne passe pas la policy.
+#
+# ⚠️ Le mode d'application de Cilium est `default` : un endpoint devient default-deny DANS LA
+# DIRECTION où une policy le sélectionne. Ce fichier déclare `ingress` ET `egress` : à partir de
+# son application, tout ce qui n'est pas listé ici est REFUSÉ pour le pod Forgejo, dans les deux
+# sens. Le pod CNPG, lui, n'est sélectionné par aucune policy et reste ouvert.
+#
+# ⚠️ Le mode d'échec est un timeout, pas une erreur lisible. En cas de doute après le sync :
+#   kubectl -n forgejo delete ciliumnetworkpolicy forgejo     # rollback immédiat (ArgoCD le repose)
+#   cilium monitor --type drop -n forgejo                     # ce qui est effectivement jeté
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: forgejo
+  namespace: forgejo
+spec:
+  # `gitea.selectorLabels` du chart — les mêmes que ceux visés par l'affinité du Cluster CNPG
+  # (cf. forgejo-db.yaml). Ne sélectionne QUE le pod applicatif.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo
+      app.kubernetes.io/instance: forgejo
+
+  ingress:
+    # --- Web / clone HTTPS : uniquement par le Gateway ---
+    # `ingress` est l'identité réservée que Cilium attribue au trafic sortant de son propre Envoy
+    # (Ingress et Gateway API). `host` et `remote-node` sont là pour deux raisons distinctes, pas
+    # par précaution vague :
+    #   - les sondes liveness/readiness du kubelet partent du nœud, donc en identité `host` ;
+    #   - selon la façon dont Envoy est déployé (intégré à l'agent ou DaemonSet `cilium-envoy` en
+    #     hostNetwork), le trafic proxifié peut se présenter en `host`/`remote-node` plutôt qu'en
+    #     `ingress`.
+    # ⚠️ Conséquence assumée : un pod en hostNetwork sur un nœud du cluster peut joindre ce port.
+    # Ce qui compte ici est ce qui est FERMÉ — aucun autre pod du cluster n'atteint l'UI.
+    - fromEntities:
+        - ingress
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+
+    # --- Clone SSH : par le Service LoadBalancer ---
+    # Port 2222, celui que le conteneur rootless écoute réellement (le Service traduit 22 → 2222).
+    #
+    # ⚠️ La liste d'entités est volontairement LARGE, et le filtrage par source ne se fait PAS
+    # ici : avec l'`externalTrafficPolicy` par défaut (`Cluster`), un paquet reçu par un nœud puis
+    # relayé vers le nœud qui porte le pod est SNATé — l'identité vue par cette policy n'est alors
+    # plus `world` (le client) mais `remote-node`. Un filtre par CIDR à cet endroit refuserait donc
+    # du trafic légitime de façon intermittente, selon le nœud d'arrivée.
+    # La restriction au LAN est posée là où elle est fiable : `service.ssh.loadBalancerSourceRanges`
+    # dans helm-values.yaml, appliqué en eBPF sur le nœud d'entrée AVANT le DNAT.
+    - fromEntities:
+        - world
+        - cluster
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "2222"
+              protocol: TCP
+
+  egress:
+    # --- DNS ---
+    # Sans cette règle, plus rien ne résout : ni la base (`forgejo-db-rw`), ni le relais SMTP, ni
+    # les URLs de migration. C'est la règle dont l'absence se diagnostique le plus mal.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+
+    # --- Base de données ---
+    # Sélection par le label que l'opérateur pose sur les pods du `Cluster`, et non par le nom du
+    # Service : le kube-proxy replacement de Cilium traduit la ClusterIP en IP de pod AVANT
+    # l'évaluation de la policy, c'est donc l'identité du pod CNPG qui est comparée.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: forgejo
+            cnpg.io/cluster: forgejo-db
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+
+    # --- Internet, et rien que lui ---
+    # Forgejo a de vrais besoins sortants : cloner un dépôt distant lors d'une migration ou d'un
+    # miroir, livrer un webhook, joindre un relais SMTP. Ils sont ouverts — mais uniquement vers
+    # des adresses PUBLIQUES.
+    #
+    # ⚠️ `toEntities: [world]` ne conviendrait PAS : en Cilium, `world` désigne tout ce qui n'a pas
+    # d'identité connue du cluster, ce qui inclut les machines du LAN en 192.168.1.x. C'est
+    # exactement ce qu'il faut refuser ici. D'où un `toCIDRSet` 0.0.0.0/0 avec exceptions.
+    #
+    # Les règles CIDR ne s'appliquent qu'aux destinations sans identité de cluster : les pods et
+    # les nœuds gardent la leur et ne sont donc pas joignables par cette règle, même si leur IP
+    # tombait hors des exceptions.
+    #
+    # ⚠️ Un relais SMTP situé SUR LE LAN ne serait pas couvert : il faudrait alors une règle
+    # `toCIDR` explicite vers son IP et son port. Un relais externe (Brevo, SMTP2GO…) l'est déjà.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 169.254.0.0/16      # link-local, dont les endpoints de métadonnées cloud
+            - 127.0.0.0/8
+            - 100.64.0.0/10       # CGNAT
+
+    # ⚠️ AUCUNE règle vers `kube-apiserver`, et c'est délibéré : Forgejo ne parle jamais à l'API
+    # Kubernetes. Le pod n'a d'ailleurs plus de jeton à présenter
+    # (`serviceAccount.automountServiceAccountToken: false`, helm-values.yaml) — les deux
+    # garde-fous se tiennent, ne retirer ni l'un ni l'autre isolément.

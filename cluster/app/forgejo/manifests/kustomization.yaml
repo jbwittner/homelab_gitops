@@ -12,3 +12,15 @@ resources:
   # `forgejo-admin` introuvable) — un échec local et lisible.
   - forgejo-admin.sealed.yaml
   - forgejo-httproute.yaml
+  # Filtrage réseau du pod (ingress + egress). ⚠️ Le retirer ne « désactive » pas une protection
+  # au sens habituel : il rouvre au pod TOUT le LAN et TOUS les services du cluster.
+  - forgejo-netpol.yaml
+  # `robots.txt`. Inerte sans le montage déclaré dans helm-values.yaml (`extraVolumes` /
+  # `extraContainerVolumeMounts`) — les deux se déplacent ensemble.
+  # ⚠️ En revanche, retirer CE fichier en laissant le montage empêche le pod de démarrer : un
+  # volume `configMap` référençant un ConfigMap absent bloque le montage.
+  - forgejo-robots.yaml
+  # ⚠️ Il n'y a PAS d'autre ligne à ajouter pour les secrets cryptographiques ni pour le SMTP :
+  # les trois Secrets (`forgejo-admin`, `forgejo-secrets`, `forgejo-smtp`) sont scellés depuis un
+  # seul template multi-documents, et `forgejo-admin.sealed.yaml` ci-dessus les porte tous les
+  # trois. Cf. README §Câblage des secrets.

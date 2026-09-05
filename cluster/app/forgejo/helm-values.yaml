@@ -20,6 +20,55 @@ image:
 # se chevaucher pendant un rollout.
 replicaCount: 1
 
+# --- Compte de service ---
+# ⚠️ Le chart NE POSE PAS de `serviceAccountName` tant que `serviceAccount.create` et
+# `serviceAccount.name` sont tous deux vides — ce sont les défauts. Le pod retombe alors sur le
+# ServiceAccount `default` du namespace, dont le jeton EST monté dans les conteneurs
+# (`/var/run/secrets/kubernetes.io/serviceaccount/token`), et le chart ne pose aucun
+# `automountServiceAccountToken: false` sur le podTemplate pour compenser.
+#
+# Forgejo ne parle jamais à l'API Kubernetes. Sur une instance au hostname public, ce jeton
+# n'est donc qu'une primitive offerte à qui obtiendrait une exécution de code dans le pod.
+#
+# `create: true` fait poser un SA dédié `forgejo`, sur lequel le chart écrit
+# `automountServiceAccountToken` — c'est le SA, et non le podTemplate, qui porte la bascule
+# (cf. templates/gitea/serviceaccount.yaml). Aucun RBAC n'accompagne ce SA : il n'a aucun droit.
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+
+# --- Contextes de sécurité ---
+# ⚠️ Ne tient QU'AVEC l'image rootless (`image.rootless: true` plus haut) — le values.yaml amont
+# le dit lui-même : « Security context is only usable with rootless image due to image design ».
+# Repasser en rootful sans retirer ce bloc casse le démarrage.
+#
+# `containerSecurityContext` s'applique à TOUS les conteneurs, les trois init compris. Le chart
+# force déjà `runAsUser: 1000` sur `configure-gitea` quand la clé est absente ; elle est écrite
+# ici pour que les cinq conteneurs partagent le même contexte sans dépendre de ce repli.
+podSecurityContext:
+  # Défaut du chart, conservé : le PVC est monté en 1000:1000.
+  fsGroup: 1000
+  # Posé au niveau du POD, donc hérité par les init-containers ET le conteneur principal.
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  allowPrivilegeEscalation: false
+  privileged: false
+  capabilities:
+    drop:
+      - ALL
+  # ⚠️ PAS de `add: [SYS_CHROOT]` : la capability n'est nécessaire que sur les nœuds en CRI-O
+  # (cf. le commentaire du values.yaml amont et gitea/helm-chart#161). Ce cluster est en
+  # Talos/containerd. Symptôme si elle manquait vraiment : le serveur SSH répond qu'il ne peut
+  # pas lire le dépôt.
+  #
+  # ⚠️ PAS de `readOnlyRootFilesystem: true` : les scripts d'init du chart écrivent hors de
+  # /data et /tmp et rien ne l'a vérifié ici. À n'activer qu'après un essai conteneur par
+  # conteneur — le mode d'échec est un CrashLoopBackOff au démarrage, pas une dégradation.
+
 resources:
   requests:
     cpu: 100m
@@ -73,6 +122,19 @@ service:
       # `lbipam.cilium.io/ips` et non le champ `spec.loadBalancerIP` (déprécié côté Kubernetes)
       # ni l'ancien `io.cilium/lb-ipam-ips` (déprécié côté Cilium depuis la 1.16).
       lbipam.cilium.io/ips: 192.168.1.85
+    # ⚠️ Le SSH reste un service de LAN, pas d'Internet : `forgejo.lan.wittner.tech` est annoncé
+    # en ARP sur 192.168.1.0/24 et n'est de toute façon pas routable depuis l'extérieur. Cette
+    # liste l'écrit noir sur blanc plutôt que de s'en remettre à la topologie — Cilium applique
+    # le filtre en eBPF sur le nœud d'entrée, AVANT le DNAT vers le pod.
+    #
+    # C'est aussi ce qui rend acceptable la règle d'ingress large du port 2222 dans
+    # manifests/forgejo-netpol.yaml : en `externalTrafficPolicy` par défaut (`Cluster`), un
+    # paquet relayé d'un nœud à l'autre est SNATé, l'identité Cilium vue par la policy n'est
+    # alors plus `world` mais celle du nœud — le filtrage par source se fait donc ici, pas là-bas.
+    #
+    # ⚠️ Élargir cette plage est le SEUL geste qui exposerait le SSH ailleurs que sur le LAN.
+    loadBalancerSourceRanges:
+      - 192.168.1.0/24
 
 # --- Stockage ---
 # Le PVC porte TOUT l'état non-SQL. Le `[storage]` de Forgejo est en `local` par défaut et
@@ -130,6 +192,28 @@ persistence:
     # la suppression du PVC détruit le LV dans la foulée. Décommissionner Forgejo demande donc un
     # `kubectl delete pvc forgejo-data` explicite — c'est voulu.
     argocd.argoproj.io/sync-options: Prune=false,Delete=false
+
+# --- robots.txt ---
+# Forgejo ne sait servir un `robots.txt` que depuis un FICHIER de son `CUSTOM_PATH` (= /data/gitea
+# ici, cf. `GITEA_CUSTOM` posé par le chart) : il n'y a aucune clé d'`app.ini` pour ça. D'où ce
+# montage d'un ConfigMap (manifests/forgejo-robots.yaml) sur le chemin exact `/data/gitea/robots.txt`.
+#
+# ⚠️ `extraContainerVolumeMounts` et NON `extraVolumeMounts` (déprécié, qui monterait aussi dans
+# les init-containers) : le montage doit arriver APRÈS `init-directories`, qui crée `/data/gitea`.
+# Monté dans les init, kubelet créerait le point de montage lui-même, en root, dans le PVC — et
+# `configure-gitea`, qui tourne en 1000, ne pourrait plus écrire son `app.ini` à côté.
+#
+# ⚠️ Forgejo teste la présence du fichier UNE SEULE FOIS, au démarrage (`setting.HasRobotsTxt`).
+# Éditer le ConfigMap ne suffit donc pas : il faut un `kubectl -n forgejo rollout restart deploy/forgejo`.
+extraVolumes:
+  - name: robots
+    configMap:
+      name: forgejo-robots
+extraContainerVolumeMounts:
+  - name: robots
+    mountPath: /data/gitea/robots.txt
+    subPath: robots.txt
+    readOnly: true
 
 # Pod de test `wget` livré par le chart. Coupé : son annotation `helm.sh/hook: test` ne fait pas
 # partie des hooks qu'ArgoCD sait traduire, il ne serait donc pas traité comme un hook mais comme
@@ -210,10 +294,113 @@ gitea:
       # exigent TLS. Explicité pour que la valeur ne soit pas prise pour un oubli.
       SSL_MODE: disable
 
+    security:
+      # Le chart le pose DÉJÀ à `true` tout seul (`gitea.inline_configuration.defaults` :
+      # « if not .Values.gitea.config.security.INSTALL_LOCK → set true »). Explicité parce que
+      # c'est LE point de contrôle d'une exposition publique : sans lui, `/install` est servi à
+      # n'importe qui et permet de réécrire la configuration entière, base comprise. Laissé
+      # implicite, sa disparition dans un bump de chart ne se verrait dans aucune revue.
+      INSTALL_LOCK: true
+
     service:
       # Instance PUBLIQUE : sans ça, n'importe qui crée un compte. Les comptes se créent à la main
       # depuis l'UI d'admin (ou par OIDC le jour où authentik revient, cf. README).
       DISABLE_REGISTRATION: true
+      # ⚠️ `false` VOLONTAIREMENT, et ce n'est pas un oubli : c'est ce qui laisse un visiteur
+      # anonyme voir les dépôts PUBLICS. Les dépôts privés restent absents des listings, de la
+      # recherche et de l'API — c'est `DEFAULT_PRIVATE` plus bas qui décide de ce qui est public,
+      # pas ce réglage-ci. Le passer à `true` fermerait la forge entière derrière le login.
+      REQUIRE_SIGNIN_VIEW: false
+      # Les adresses mail ne sortent pas.
+      # ⚠️ Ne vaut que pour les comptes créés APRÈS ce réglage : un compte existant garde le
+      # choix enregistré dans son profil, à corriger à la main (Paramètres → Compte).
+      DEFAULT_KEEP_EMAIL_PRIVATE: true
+      # Domaine des adresses de substitution (`<user>@<NO_REPLY_ADDRESS>`) écrites dans les
+      # commits faits depuis l'UI quand l'utilisateur garde son mail privé.
+      # ⚠️ Sous-domaine DÉDIÉ et sans MX : ces adresses n'ont pas à recevoir de courrier, et un
+      # domaine réel ici transformerait chaque commit en fuite d'adresse valide.
+      NO_REPLY_ADDRESS: noreply.forgejo.wittner.tech
+
+    openid:
+      # ⚠️ Section `[openid]` et NON `[service]` : Forgejo lit ces deux clés dans `[openid]`
+      # (modules/setting/service.go). Les écrire sous `service:` ne produirait aucune erreur et
+      # n'aurait simplement aucun effet — le pire des deux mondes.
+      #
+      # Aucun fournisseur OpenID n'est câblé (cf. README §Non retenu) : laisser le formulaire
+      # ouvert n'ajoute qu'une surface d'authentification. `ENABLE_OPENID_SIGNUP` mérite d'être
+      # posé explicitement même s'il vaut déjà `false` : son défaut est `!DISABLE_REGISTRATION`,
+      # donc il SUIT l'inscription libre — la rouvrir un jour rouvrirait aussi l'inscription par
+      # OpenID, sans que rien ne le signale.
+      ENABLE_OPENID_SIGNIN: false
+      ENABLE_OPENID_SIGNUP: false
+
+    ui:
+      # Pas d'adresse mail sur les profils publics.
+      SHOW_USER_EMAIL: false
+
+    repository:
+      # Tout dépôt créé naît PRIVÉ. `private`, et non `last` (qui rejoue le dernier choix) ni
+      # `public` : sur une instance publique, l'oubli doit pencher du côté fermé. Rendre un dépôt
+      # public reste un geste explicite, dépôt par dépôt.
+      DEFAULT_PRIVATE: private
+      # Même logique pour un dépôt créé par un `git push` vers une URL inexistante — c'est le
+      # chemin par lequel un dépôt apparaît sans jamais passer par l'UI.
+      DEFAULT_PUSH_CREATE_PRIVATE: true
+
+    migrations:
+      # --- Anti-SSRF (1/2) : migrations ---
+      # Une migration est une requête HTTP émise PAR LE SERVEUR vers une URL fournie par
+      # l'utilisateur : la primitive SSRF classique. `false` interdit les cibles en 127.0.0.0/8,
+      # 10/8, 172.16/12, 192.168/16 et link-local — donc l'API Kubernetes, les services du
+      # cluster et le LAN. C'est le défaut amont, explicité parce qu'il est load-bearing, et
+      # doublé au niveau réseau par manifests/forgejo-netpol.yaml.
+      ALLOW_LOCALNETWORKS: false
+      # Liste BLANCHE de domaines migrables, plutôt qu'une liste noire toujours incomplète.
+      # Vide (défaut) = tout est autorisé ; renseignée, elle prime sur `BLOCKED_DOMAINS`.
+      # ⚠️ Le joker ne couvre qu'UN niveau : `*.github.com` ne matche pas `a.b.github.com`.
+      # ⚠️ Toute forge dont on veut importer un dépôt doit être ajoutée ici, sinon la migration
+      # échoue sur « migrate from %s is not allowed » — message qui ne désigne pas ce réglage.
+      ALLOWED_DOMAINS: 'github.com,*.github.com,gitlab.com,*.gitlab.com,codeberg.org,*.codeberg.org,git.sr.ht'
+
+    webhook:
+      # --- Anti-SSRF (2/2) : webhooks ---
+      # Même primitive que les migrations, déclenchée cette fois par un événement de dépôt.
+      # `external` est un mot-clé Forgejo : « toutes les adresses SAUF celles qui résolvent en
+      # loopback, privé ou link-local ». C'est l'inverse exact du défaut amont `*`, qui laisse
+      # un webhook viser `https://kubernetes.default.svc` ou `192.168.1.x`.
+      # ⚠️ Ne JAMAIS y ajouter de plage privée : c'est le dernier filet applicatif si la
+      # CiliumNetworkPolicy venait à sauter.
+      ALLOWED_HOST_LIST: external
+
+    api:
+      # La doc Swagger décrit toute la surface d'API et la version exacte du serveur, sur un
+      # hostname public et sans authentification. Rien ne la consomme ici.
+      ENABLE_SWAGGER: false
+
+    other:
+      # Version de Forgejo retirée du pied de page : c'est ce qui transforme une CVE publiée en
+      # cible désignée, sans rien apporter à un utilisateur.
+      SHOW_FOOTER_VERSION: false
+
+    # --- Mailer : NON configuré, et c'est un manque assumé ---
+    # ⚠️ Sans mailer, Forgejo ne peut envoyer NI réinitialisation de mot de passe, NI notification
+    # de connexion. Sur une instance publique à compte unique, la perte du mot de passe admin ne
+    # se répare alors que par `kubectl exec` (cf. README §Reste) — ce qui suppose de garder un
+    # accès au cluster, pas seulement à la forge.
+    #
+    # Le bloc reste COMMENTÉ parce qu'aucun relais n'est choisi : celui d'Alertmanager est encore
+    # un `REMPLACER` (cf. kube-prometheus-stack/helm-values.yaml). Activer `ENABLED: true` avec un
+    # `SMTP_ADDR` faux ferait échouer chaque envoi en silence, dans les logs seulement.
+    # Procédure complète : README §Mailer.
+    # mailer:
+    #   ENABLED: true
+    #   PROTOCOL: smtp+starttls
+    #   SMTP_ADDR: REMPLACER
+    #   SMTP_PORT: 587
+    #   FROM: forgejo@wittner.tech
+    #   USER: REMPLACER
+    #   # PASSWD n'est PAS ici — ce fichier est dans Git. Il arrive par
+    #   # `additionalConfigFromEnvs` (FORGEJO__MAILER__PASSWD), déjà câblé plus bas.
 
     indexer:
       # Recherche de code (et pas seulement de dépôts). Indexeur `bleve` par défaut, écrit sur le
@@ -229,9 +416,63 @@ gitea:
   #
   # Secret auto-généré par CNPG pour le `Cluster` `forgejo-db` : jamais scellé, jamais figé dans
   # Git, régénéré avec la base.
+  #
+  # --- Secrets cryptographiques : à sortir du volume ---
+  # ⚠️ Les quatre valeurs ci-dessous sont normalement GÉNÉRÉES au premier démarrage et écrites
+  # dans `/data/gitea/conf/app.ini`, sur le PVC (cf. README §Contraintes). Elles n'existent alors
+  # nulle part ailleurs : perdre le volume, ce n'est pas repartir d'une base vide, c'est perdre de
+  # quoi déchiffrer ce qui reste en base. Les injecter depuis un `SealedSecret` les met dans Git
+  # sous forme chiffrée et rend le PVC restaurable indépendamment.
+  #
+  # ⚠️ `optional: true` est LOAD-BEARING. Tant que le Secret `forgejo-secrets` n'existe pas, la
+  # variable n'est pas posée du tout, `environment-to-ini` n'écrit rien, et Forgejo garde les
+  # valeurs de son `app.ini`. Le câblage est donc INERTE aujourd'hui et s'active au seul
+  # scellement, sans nouvelle modification de ce fichier. Sans `optional`, le pod partirait en
+  # CreateContainerConfigError dès ce commit.
+  #
+  # ⚠️⚠️ NE PAS SCELLER DES VALEURS NEUVES SUR UNE INSTANCE DÉJÀ EN SERVICE. Il faut sceller
+  # celles qui sont DÉJÀ dans l'`app.ini` du volume : des valeurs neuves invalident d'un coup
+  # toutes les sessions, tous les jetons d'API et tous les objets LFS existants. Extraction puis
+  # scellement : README §Sceller les secrets cryptographiques.
   additionalConfigFromEnvs:
     - name: FORGEJO__DATABASE__PASSWD
       valueFrom:
         secretKeyRef:
           name: forgejo-db-app
           key: password
+    - name: FORGEJO__SECURITY__SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: forgejo-secrets
+          key: SECRET_KEY
+          optional: true
+    - name: FORGEJO__SECURITY__INTERNAL_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: forgejo-secrets
+          key: INTERNAL_TOKEN
+          optional: true
+    # ⚠️ Section `[oauth2]`, clé `JWT_SECRET` — pas `OAUTH2_JWT_SECRET`. Le nom de la clé du
+    # Secret, lui, est préfixé pour rester lisible à côté de `LFS_JWT_SECRET`.
+    - name: FORGEJO__OAUTH2__JWT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: forgejo-secrets
+          key: OAUTH2_JWT_SECRET
+          optional: true
+    # ⚠️ Section `[server]` et non `[lfs]`.
+    - name: FORGEJO__SERVER__LFS_JWT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: forgejo-secrets
+          key: LFS_JWT_SECRET
+          optional: true
+    # Mot de passe du relais SMTP. Doublement inerte aujourd'hui : le Secret n'existe pas, et le
+    # bloc `mailer` de `gitea.config` est commenté. Câblé d'avance pour que l'activation du
+    # mailer ne demande que de décommenter ce bloc et de sceller — README §Mailer.
+    - name: FORGEJO__MAILER__PASSWD
+      valueFrom:
+        secretKeyRef:
+          name: forgejo-smtp
+          key: PASSWD
+          optional: true

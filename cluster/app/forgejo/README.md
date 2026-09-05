@@ -24,11 +24,19 @@ Deux chemins d'accès, volontairement dissociés :
 - `manifests/forgejo-db.yaml` — `Cluster` CNPG (l'opérateur génère le service `forgejo-db-rw`
   et le secret `forgejo-db-app`), **co-localisé avec le pod Forgejo** par
   `affinity.additionalPodAffinity` — cf. §Placement
-- `manifests/forgejo-admin.secret.yaml` — template **en clair, gitignoré** (`*.secret.yaml`) du
-  Secret `forgejo-admin` (clés `username` / `password`) ; à sceller vers
-  `manifests/forgejo-admin.sealed.yaml`, canal
-  [sealed-secrets](../../infra/sealed-secrets/README.md) — cf. §Câblage des secrets
-- `manifests/forgejo-httproute.yaml` — HTTPRoute → `shared-gw`, listener `https-public`
+- `manifests/forgejo-admin.secret.yaml` — template **en clair, gitignoré** (`*.secret.yaml`) des
+  **trois** Secrets du composant, en trois documents YAML : `forgejo-admin`
+  (`username` / `password`, requis au démarrage), `forgejo-secrets` (les quatre secrets
+  cryptographiques) et `forgejo-smtp` (mot de passe du relais). `kubeseal` lisant un flux
+  multi-documents, les trois se scellent d'un coup vers `manifests/forgejo-admin.sealed.yaml`,
+  canal [sealed-secrets](../../infra/sealed-secrets/README.md) — cf. §Câblage des secrets
+- `manifests/forgejo-httproute.yaml` — HTTPRoute → `shared-gw`, listener `https-public`,
+  **plus les en-têtes de sécurité** (HSTS, `nosniff`, `Referrer-Policy`) posés par un filtre
+  `ResponseHeaderModifier` — cf. §Exposition publique
+- `manifests/forgejo-netpol.yaml` — `CiliumNetworkPolicy` ingress **et** egress du pod
+  applicatif — cf. §Exposition publique
+- `manifests/forgejo-robots.yaml` — ConfigMap du `robots.txt`, monté sur `/data/gitea/robots.txt`
+  par `extraVolumes` / `extraContainerVolumeMounts` — cf. §Exposition publique
 - `manifests/kustomization.yaml` — assemblage. La ligne `forgejo-admin.sealed.yaml` y est
   **commentée** tant que le scellement n'a pas eu lieu : un `resources:` pointant un fichier
   absent fait échouer le `kustomize build` entier, donc l'Application
@@ -201,6 +209,110 @@ lier à un port privilégié. `SSH_PORT` (annoncé dans les URLs de clone) et `S
 (réellement écouté) sont donc deux réglages distincts, tous deux explicites dans
 `helm-values.yaml`.
 
+## Exposition publique
+
+La forge est sur un hostname **public**. Cinq garde-fous se tiennent ensemble ; aucun ne remplace
+les autres, et chacun a un mode de panne différent.
+
+### Ce qui est fermé côté application (`gitea.config`)
+
+| Réglage | Section | Effet |
+| --- | --- | --- |
+| `DISABLE_REGISTRATION: true` | `[service]` | personne ne crée de compte depuis l'extérieur |
+| `INSTALL_LOCK: true` | `[security]` | `/install` ne réécrit plus la configuration (déjà forcé par le chart, explicité) |
+| `ENABLE_OPENID_SIGNIN/SIGNUP: false` | `[openid]` | pas de seconde porte d'authentification |
+| `DEFAULT_KEEP_EMAIL_PRIVATE: true` + `NO_REPLY_ADDRESS` | `[service]` | pas d'adresse mail dans les commits faits depuis l'UI |
+| `SHOW_USER_EMAIL: false` | `[ui]` | pas d'adresse mail sur les profils |
+| `DEFAULT_PRIVATE: private` + `DEFAULT_PUSH_CREATE_PRIVATE: true` | `[repository]` | un dépôt créé naît fermé, y compris par `git push` |
+| `REQUIRE_SIGNIN_VIEW: false` | `[service]` | **volontairement `false`** : c'est ce qui laisse voir les dépôts publics |
+| `ALLOW_LOCALNETWORKS: false` + `ALLOWED_DOMAINS` | `[migrations]` | anti-SSRF sur les imports |
+| `ALLOWED_HOST_LIST: external` | `[webhook]` | anti-SSRF sur les webhooks, **jamais `*`** |
+| `ENABLE_SWAGGER: false` | `[api]` | la surface d'API n'est pas documentée publiquement |
+| `SHOW_FOOTER_VERSION: false` | `[other]` | la version n'est pas affichée |
+
+> [!WARNING]
+> `DEFAULT_KEEP_EMAIL_PRIVATE` ne vaut que pour les comptes créés **après** ce réglage. Un compte
+> déjà existant garde le choix enregistré dans son profil : à vérifier à la main dans
+> Paramètres → Compte.
+
+`ALLOWED_DOMAINS` est une **liste blanche** : toute forge dont on veut importer un dépôt doit y
+figurer, sinon la migration échoue sur `migrate from %s is not allowed` — un message qui ne
+désigne pas ce réglage.
+
+### Ce qui est fermé côté réseau (`forgejo-netpol.yaml`)
+
+Une seule `CiliumNetworkPolicy` sélectionne le pod applicatif, dans les deux directions — donc
+tout ce qui n'y figure pas est refusé.
+
+- **Ingress** : port 3000 depuis les entités `ingress` / `host` / `remote-node` seulement (le
+  proxy du Gateway et les sondes du kubelet), port 2222 pour le SSH.
+- **Egress** : DNS, la base CNPG, et `0.0.0.0/0` **moins** les plages privées. Le pod ne peut
+  donc joindre ni l'API Kubernetes, ni un autre service du cluster, ni une machine du LAN — mais
+  garde ce dont Forgejo a besoin : cloner un dépôt distant, livrer un webhook, joindre un relais
+  SMTP externe.
+
+Deux choses à savoir avant d'y toucher :
+
+- **La restriction du SSH au LAN n'est pas dans la policy** mais dans
+  `service.ssh.loadBalancerSourceRanges` (`192.168.1.0/24`), appliqué en eBPF sur le nœud
+  d'entrée **avant** le DNAT. En `externalTrafficPolicy: Cluster`, un paquet relayé d'un nœud à
+  l'autre est SNATé et se présente à la policy en `remote-node`, pas en `world` : un filtre par
+  CIDR côté policy refuserait du trafic légitime, de façon intermittente.
+- **Le mode d'échec est un timeout**, jamais une erreur lisible :
+  ```bash
+  kubectl -n forgejo delete ciliumnetworkpolicy forgejo   # rollback ; ArgoCD la repose au sync suivant
+  cilium monitor --type drop -n forgejo                   # ce qui est effectivement jeté
+  ```
+
+### Ce que le pod n'a plus
+
+`serviceAccount.create: true` + `automountServiceAccountToken: false`. Sans ces deux valeurs, le
+chart ne pose **aucun** `serviceAccountName` et le pod retombe sur le ServiceAccount `default` du
+namespace, dont le jeton est monté dans les conteneurs. Forgejo ne parle jamais à l'API
+Kubernetes : ce jeton n'était qu'une primitive offerte à qui obtiendrait une exécution de code
+dans le pod. Aucun RBAC n'accompagne le SA dédié — il n'a strictement aucun droit.
+
+`containerSecurityContext` complète : `runAsNonRoot`, `runAsUser/Group: 1000`, `drop: [ALL]`,
+`allowPrivilegeEscalation: false`, et `seccompProfile: RuntimeDefault` posé au niveau du pod pour
+couvrir aussi les init-containers.
+
+> [!CAUTION]
+> Ce bloc ne tient **qu'avec l'image rootless** (`image.rootless: true`) — le chart amont le dit
+> lui-même. Repasser en rootful sans le retirer casse le démarrage. `SYS_CHROOT` n'est pas ajouté
+> parce que le cluster est en containerd ; il le faudrait sur des nœuds en CRI-O.
+
+### En-têtes et robots
+
+Les en-têtes de sécurité sont posés **par le Gateway** (filtre `ResponseHeaderModifier` de la
+HTTPRoute) et non par Forgejo : HSTS n'a de sens qu'au point où TLS est terminé, le backend
+parlant en clair dans le cluster. `set` et non `add`, pour remplacer les en-têtes que Forgejo émet
+déjà plutôt que de les dupliquer. HSTS est posé **sans `preload`** : `max-age` seul reste
+réversible, l'inscription à la liste de préchargement des navigateurs ne l'est pas.
+
+Le `robots.txt` vient d'un ConfigMap monté sur `/data/gitea/robots.txt` : Forgejo n'a **aucune
+clé d'`app.ini`** pour ce fichier, il ne sert que ce qu'il trouve dans son `CUSTOM_PATH`. Il ferme
+les quatre familles d'URL coûteuses (`archive/`, `raw/`, `blame/`, `commits/`) et laisse les pages
+d'accueil de dépôts indexables.
+
+> [!IMPORTANT]
+> Forgejo teste la présence du fichier **une seule fois, au démarrage** (`setting.HasRobotsTxt`).
+> Éditer le ConfigMap ne suffit pas :
+> ```bash
+> kubectl -n forgejo rollout restart deploy/forgejo
+> ```
+> Le montage est en `extraContainerVolumeMounts` et **non** `extraVolumeMounts` : il ne doit pas
+> arriver dans les init-containers, sinon kubelet créerait `/data/gitea` en root dans le PVC et
+> `configure-gitea`, qui tourne en 1000, ne pourrait plus y écrire l'`app.ini`.
+
+### Ce qui reste ouvert
+
+- **Aucune limitation de débit.** Ni Forgejo ni l'implémentation Gateway API de Cilium n'en
+  proposent : `/user/login` et les endpoints coûteux sont servis sans plafond. Le `robots.txt`
+  ne s'adresse qu'aux robots qui le respectent.
+- **La version minimale de TLS est celle du Gateway**, pas de ce composant
+  (`infra/gateway-api/manifests/gateway.yaml`).
+- **`forgejo` n'est toujours pas sauvegardé** (cf. Contraintes).
+
 ## Métriques
 
 `gitea.metrics.enabled` reste à `false`, et c'est un choix : l'endpoint `/metrics` est servi sur
@@ -220,17 +332,33 @@ L'activer demande deux choses, pas une :
 
 ### Câblage des secrets
 
-Canal **sealed-secrets** (cf. [sealed-secrets](../../infra/sealed-secrets/README.md)). Le template
-en clair `manifests/forgejo-admin.secret.yaml` est gitignoré (`*.secret.yaml`) ; le remplir,
-sceller, supprimer le clair, puis décommenter la ligne correspondante du `kustomization.yaml`.
-**À faire avant la première synchronisation** : sans ce Secret, le pod ne démarre pas.
+Canal **sealed-secrets** (cf. [sealed-secrets](../../infra/sealed-secrets/README.md)). Un seul
+template en clair, gitignoré (`*.secret.yaml`), porte les **trois** Secrets du composant en trois
+documents YAML — `kubeseal` lit un flux multi-documents et les scelle tous dans un seul
+`forgejo-admin.sealed.yaml`, d'où l'unique ligne du `kustomization.yaml` :
+
+| Document | Secret | Statut |
+| --- | --- | --- |
+| 1 | `forgejo-admin` (`username` / `password`) | **requis au démarrage** — sans lui, `CreateContainerConfigError` |
+| 2 | `forgejo-secrets` (4 secrets cryptographiques) | optionnel — cf. §Sceller les secrets cryptographiques |
+| 3 | `forgejo-smtp` (`PASSWD`) | optionnel — cf. §Mailer |
+
+Seul le document 1 est nécessaire **avant la première synchronisation** : les documents 2 et 3
+sont câblés en `optional: true` dans `helm-values.yaml` et leur absence est un non-événement.
+
+> [!CAUTION]
+> **Ne pas sceller ce fichier tant que le document 2 contient des `REMPLACER`.** Ces quatre
+> valeurs chiffrent des données déjà en base : les sceller telles quelles rendrait illisibles
+> toutes les sessions, tous les jetons d'API, LFS et OAuth2 existants. Soit on renseigne le
+> document 2 d'abord (§Sceller les secrets cryptographiques), soit on le retire temporairement du
+> fichier avant de sceller.
 
 ```bash
-# 1. Remplir la valeur REMPLACER du template (`password`) :
+# 1. Remplir la valeur REMPLACER du document 1 (`password`) :
 openssl rand -base64 24
 #    `username` reste `forgejo_admin` — et surtout PAS `admin`, nom réservé par Forgejo.
 
-# 2. Sceller
+# 2. Sceller (les trois documents d'un coup)
 kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
   < cluster/app/forgejo/manifests/forgejo-admin.secret.yaml \
   > cluster/app/forgejo/manifests/forgejo-admin.sealed.yaml
@@ -239,6 +367,12 @@ kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets 
 rm cluster/app/forgejo/manifests/forgejo-admin.secret.yaml
 ```
 
+> [!WARNING]
+> **Le fichier scellé remplace l'ancien.** Un `SealedSecret` ne se relit pas : re-sceller pour
+> ajouter un document oblige à re-fournir *aussi* les valeurs des documents déjà scellés. D'où
+> l'intérêt de tout renseigner en une fois — ou de garder ces valeurs dans un gestionnaire de
+> mots de passe.
+
 > [!NOTE]
 > Le mot de passe n'est lisible nulle part après scellement — le clair est détruit et le
 > `SealedSecret` n'est déchiffrable que par le contrôleur. Le garder de côté (gestionnaire de
@@ -246,6 +380,80 @@ rm cluster/app/forgejo/manifests/forgejo-admin.secret.yaml
 > `kubectl -n forgejo get secret forgejo-admin -o jsonpath='{.data.password}' | base64 -d`.
 > C'est la différence de fond avec un coffre à secrets : ici Git porte le chiffré, et rien ne
 > permet de le relire côté repo.
+
+### Sceller les secrets cryptographiques
+
+Les quatre secrets (`[security] SECRET_KEY`, `[security] INTERNAL_TOKEN`, `[oauth2] JWT_SECRET`,
+`[server] LFS_JWT_SECRET`) sont générés par le chart au premier démarrage et n'existent **que**
+dans `/data/gitea/conf/app.ini`, sur le PVC (cf. Contraintes). Les sceller les met dans Git sous
+forme chiffrée et rend le volume restaurable indépendamment.
+
+Le câblage est **déjà posé** dans `helm-values.yaml`
+(`additionalConfigFromEnvs`, `optional: true`) : tant que le Secret `forgejo-secrets` n'existe
+pas, les variables ne sont pas posées et Forgejo garde les valeurs de son `app.ini`. Il n'y a donc
+**rien à décommenter nulle part** — le document 2 du template partage le scellement du compte
+admin (§Câblage des secrets), et `forgejo-admin.sealed.yaml` est déjà dans le `kustomization.yaml`.
+
+> [!CAUTION]
+> **Ne pas générer de valeurs neuves sur une instance déjà en service.** Ces quatre valeurs
+> chiffrent ou signent des données **déjà en base** : sessions, jetons d'API, jetons LFS, jetons
+> OAuth2. Les remplacer ne fait pas « repartir de zéro », cela rend illisible ce qui existe. Il
+> faut sceller celles que le pod utilise en ce moment.
+
+```bash
+# 1. Extraire les valeurs VIVES
+kubectl -n forgejo exec deploy/forgejo -- \
+  sh -c 'grep -E "^(SECRET_KEY|INTERNAL_TOKEN|JWT_SECRET|LFS_JWT_SECRET) " /data/gitea/conf/app.ini'
+
+# 2. Les recopier dans le DOCUMENT 2 du template (gitignoré), en respectant la correspondance :
+#      [security] SECRET_KEY      -> SECRET_KEY
+#      [security] INTERNAL_TOKEN  -> INTERNAL_TOKEN
+#      [oauth2]   JWT_SECRET      -> OAUTH2_JWT_SECRET
+#      [server]   LFS_JWT_SECRET  -> LFS_JWT_SECRET
+#    ⚠️ Le document 1 (mot de passe admin) doit être renseigné DANS LE MÊME PASSAGE : le
+#    scellement porte sur le fichier entier et écrase forgejo-admin.sealed.yaml.
+
+# 3. Sceller et jeter le clair — même commande qu'au §Câblage des secrets
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/app/forgejo/manifests/forgejo-admin.secret.yaml \
+  > cluster/app/forgejo/manifests/forgejo-admin.sealed.yaml
+rm cluster/app/forgejo/manifests/forgejo-admin.secret.yaml
+```
+
+> [!WARNING]
+> Deux clés portent le **même nom** dans deux sections différentes de l'`app.ini` : `JWT_SECRET`
+> est celle d'`[oauth2]`, `LFS_JWT_SECRET` celle de `[server]`. Les intervertir casse LFS et
+> OAuth2 en même temps, et le seul signal est un jeton refusé à l'usage.
+
+Vérification, une fois scellé et le pod redémarré : les sessions ouvertes et les jetons d'API
+existants doivent **survivre**. C'est la preuve que les valeurs injectées sont bien celles qui
+étaient déjà en place.
+
+### Mailer
+
+Non configuré, et c'est un manque : sans mailer, Forgejo n'envoie **ni** réinitialisation de mot
+de passe **ni** notification de connexion. Sur une instance publique à compte unique, la perte du
+mot de passe admin ne se répare alors que par `kubectl exec` — donc en gardant un accès au
+cluster, pas seulement à la forge.
+
+Le blocage n'est pas technique : aucun relais n'est choisi. Celui d'Alertmanager est encore un
+`REMPLACER` (cf. [`kube-prometheus-stack`](../kube-prometheus-stack/helm-values.yaml)). Les deux
+composants peuvent partager le même relais, avec des identifiants distincts.
+
+Trois gestes, dans cet ordre :
+
+1. Remplir le **document 3** de `manifests/forgejo-admin.secret.yaml` (clé `PASSWD`) et re-sceller
+   le fichier (§Câblage des secrets). Rien à décommenter dans le `kustomization.yaml` : la
+   variable `FORGEJO__MAILER__PASSWD` est **déjà** câblée en `optional: true`.
+2. Décommenter le bloc `mailer:` de `gitea.config` dans `helm-values.yaml` et y écrire
+   `SMTP_ADDR`, `SMTP_PORT`, `FROM`, `USER`. Le mot de passe n'y va **pas** — ce fichier est dans
+   Git.
+3. Vérifier que le relais est **public** : la `CiliumNetworkPolicy` n'ouvre la sortie que vers des
+   adresses non privées. Un relais sur le LAN demanderait une règle `toCIDR` explicite dans
+   `manifests/forgejo-netpol.yaml`.
+
+Activer `ENABLED: true` avec un `SMTP_ADDR` faux fait échouer chaque envoi **en silence**, dans
+les logs seulement — d'où le bloc laissé commenté plutôt qu'à moitié rempli.
 
 ### Reste
 

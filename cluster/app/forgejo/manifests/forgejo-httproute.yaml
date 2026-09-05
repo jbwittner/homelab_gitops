@@ -30,6 +30,41 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      # En-têtes de sécurité posés PAR LE GATEWAY, et non par Forgejo. Deux raisons :
+      #   - HSTS ne peut pas venir du backend. Forgejo parle en clair dans le cluster
+      #     (`PROTOCOL: http`) ; c'est ici, au point où TLS est terminé, que l'en-tête a un sens.
+      #   - `ResponseHeaderModifier` est un filtre de base de Gateway API, implémenté par Cilium
+      #     depuis la 1.16 — rien à installer.
+      #
+      # ⚠️ `set` et non `add` : l'en-tête est REMPLACÉ s'il existe déjà. Forgejo émet lui-même
+      # `X-Content-Type-Options` et `X-Frame-Options` ; `add` en produirait deux exemplaires, ce
+      # que certains navigateurs traitent comme une valeur invalide, donc absente.
+      #
+      # ⚠️ Une seule règle dans cette route, donc un seul endroit où poser ces filtres. Ajouter
+      # une seconde règle (un jour, pour un chemin particulier) DEMANDE de recopier ce bloc :
+      # les filtres sont attachés à la règle, pas à la route.
+      filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              # 1 an, sous-domaines compris. ⚠️ Volontairement SANS `preload` : l'inscription à
+              # la liste de préchargement des navigateurs porte sur le domaine entier et se
+              # défait en des mois. `max-age` seul reste réversible en changeant cette ligne.
+              - name: Strict-Transport-Security
+                value: max-age=31536000; includeSubDomains
+              # Pas de reniflage de type MIME : décisif sur une forge, qui sert des fichiers
+              # arbitraires téléversés par des utilisateurs (pièces jointes, paquets, `raw/`).
+              - name: X-Content-Type-Options
+                value: nosniff
+              # `SAMEORIGIN` et non `DENY` : Forgejo utilise ses propres iframes (aperçus,
+              # éditeur). `DENY` casserait l'interface.
+              - name: X-Frame-Options
+                value: SAMEORIGIN
+              # L'URL complète n'est envoyée qu'aux pages du même site ; vers l'extérieur, seule
+              # l'origine part. Un chemin de dépôt privé ne fuite donc pas dans le `Referer`
+              # d'un lien sortant.
+              - name: Referrer-Policy
+                value: strict-origin-when-cross-origin
       backendRefs:
         - group: ""
           kind: Service
