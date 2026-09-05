@@ -269,7 +269,7 @@ gitea:
       # le web arrive par `shared-gw`, le SSH par le Service LoadBalancer ci-dessus. C'est la
       # valeur affichée dans le bouton « Clone » de l'UI — une erreur ici ne casse rien côté
       # serveur et rend juste toutes les commandes copiées inutilisables.
-      SSH_DOMAIN: forgejo.lan.wittner.tech
+      SSH_DOMAIN: forgejo.wittner.tech
       # Port ANNONCÉ dans les URLs de clone (celui du Service).
       SSH_PORT: 22
       # Port réellement ÉCOUTÉ dans le conteneur : 2222, imposé par l'image rootless. C'est le
@@ -301,6 +301,36 @@ gitea:
       # n'importe qui et permet de réécrire la configuration entière, base comprise. Laissé
       # implicite, sa disparition dans un bump de chart ne se verrait dans aucune revue.
       INSTALL_LOCK: true
+
+      # --- 2FA obligatoire ---
+      # Trois valeurs possibles : `none` (défaut), `admin`, `all`. `all` est retenu plutôt que
+      # `admin` alors que l'instance n'a QU'UN compte, et justement pour ça : les deux sont
+      # équivalents aujourd'hui, mais le jour où un compte non-admin est créé, `admin` le
+      # laisserait passer en mot de passe seul, sans que rien ne le signale.
+      #
+      # ⚠️ Le nom du réglage dit « two factor », pas « TOTP » : `HasTwoFactorByUID` est satisfaite
+      # par une appli TOTP **ou** par une clé WebAuthn/passkey (models/auth/two_factor.go). On ne
+      # peut donc pas imposer le TOTP *en particulier* — seulement le second facteur.
+      #
+      # ⚠️ Ce n'est PAS un verrou de connexion : un compte sans second facteur s'authentifie
+      # toujours par mot de passe, il est ensuite REDIRIGÉ vers `/user/settings/security` et n'a
+      # accès à rien d'autre tant qu'il n'a pas enrôlé. Activer ce réglage sur l'instance en
+      # service n'enferme donc pas dehors — mais entre le sync et l'enrôlement, TOUT le reste est
+      # déjà refusé : API (403), git en SSH (403), git en HTTP authentifié (302 vers la page
+      # d'enrôlement, que `git` suit et qui casse la commande), LFS et registre de paquets.
+      # Enrôler juste après le sync, pas le lendemain.
+      #
+      # ⚠️ Le clone ANONYME d'un dépôt public n'est pas touché (le contrôle est sous `IsSigned`) —
+      # cohérent avec `REQUIRE_SIGNIN_VIEW: false` plus bas, et c'est bien l'effet voulu.
+      #
+      # ⚠️ Les comptes techniques d'Actions sont exclus explicitement (`u.IsActions()`), un runner
+      # ne se retrouve donc pas bloqué. Rien à prévoir de ce côté.
+      #
+      # ⚠️ Perte du téléphone = perte de l'accès. Deux filets, à poser AVANT d'en avoir besoin :
+      # les codes de secours affichés à l'enrôlement (à ranger avec le mot de passe admin), et le
+      # `forgejo admin user reset-mfa` en `kubectl exec` — README §Reste. Ce dernier suppose de
+      # garder un accès au cluster, pas seulement à la forge.
+      GLOBAL_TWO_FACTOR_REQUIREMENT: all
 
     service:
       # Instance PUBLIQUE : sans ça, n'importe qui crée un compte. Les comptes se créent à la main

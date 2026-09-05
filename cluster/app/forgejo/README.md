@@ -224,6 +224,7 @@ les autres, et chacun a un mode de panne différent.
 | --- | --- | --- |
 | `DISABLE_REGISTRATION: true` | `[service]` | personne ne crée de compte depuis l'extérieur |
 | `INSTALL_LOCK: true` | `[security]` | `/install` ne réécrit plus la configuration (déjà forcé par le chart, explicité) |
+| `GLOBAL_TWO_FACTOR_REQUIREMENT: all` | `[security]` | un second facteur est **exigé** de tout compte — cf. §2FA obligatoire |
 | `ENABLE_OPENID_SIGNIN/SIGNUP: false` | `[openid]` | pas de seconde porte d'authentification |
 | `DEFAULT_KEEP_EMAIL_PRIVATE: true` + `NO_REPLY_ADDRESS` | `[service]` | pas d'adresse mail dans les commits faits depuis l'UI |
 | `SHOW_USER_EMAIL: false` | `[ui]` | pas d'adresse mail sur les profils |
@@ -242,6 +243,42 @@ les autres, et chacun a un mode de panne différent.
 `ALLOWED_DOMAINS` est une **liste blanche** : toute forge dont on veut importer un dépôt doit y
 figurer, sinon la migration échoue sur `migrate from %s is not allowed` — un message qui ne
 désigne pas ce réglage.
+
+### 2FA obligatoire
+
+`[security] GLOBAL_TWO_FACTOR_REQUIREMENT` accepte `none` (défaut), `admin` ou `all`. Ici : `all`.
+L'instance n'a qu'un compte, les deux valeurs non nulles y sont donc équivalentes **aujourd'hui** —
+`all` est retenu parce que `admin` laisserait passer un futur compte non-admin en mot de passe
+seul, sans que rien ne le signale.
+
+> [!IMPORTANT]
+> Le réglage impose **un second facteur**, pas le TOTP en particulier : une clé WebAuthn / passkey
+> le satisfait aussi bien qu'une application TOTP. Forgejo n'offre pas de moyen d'exiger le TOTP
+> à l'exclusion du reste.
+
+Ce n'est **pas** un verrou de connexion. Un compte sans second facteur s'authentifie toujours par
+mot de passe, puis est redirigé vers `/user/settings/security` et n'atteint rien d'autre tant qu'il
+n'a pas enrôlé. Activer le réglage sur l'instance en service **n'enferme donc pas dehors**.
+
+En revanche, entre le sync et l'enrôlement, tout le reste est déjà refusé :
+
+| Accès | Comportement sans second facteur |
+| --- | --- |
+| UI web | redirection forcée vers `/user/settings/security` |
+| API (jetons personnels compris) | `403`, message `must_enable_2fa` |
+| git en SSH | `403` renvoyé par le hook `serv` |
+| git en HTTP authentifié | `302` vers la page d'enrôlement — que `git` suit, et qui casse la commande |
+| LFS, registre de paquets | refusés (`IsAccessAllowed`) |
+| clone **anonyme** d'un dépôt public | **inchangé** — le contrôle est sous `IsSigned`, cohérent avec `REQUIRE_SIGNIN_VIEW: false` |
+| comptes techniques d'Actions | **exclus** explicitement (`IsActions()`), un runner ne se bloque pas |
+
+Donc : enrôler juste après le sync, pas le lendemain.
+
+> [!CAUTION]
+> **Perte du téléphone = perte de l'accès.** Deux filets, à poser *avant* d'en avoir besoin : les
+> **codes de secours** affichés à l'enrôlement — à ranger avec le mot de passe admin — et le
+> `reset-mfa` en `kubectl exec` (§Reste), qui suppose de garder un accès au cluster et pas
+> seulement à la forge.
 
 ### Ce qui est fermé côté réseau (`forgejo-netpol.yaml`)
 
@@ -546,6 +583,18 @@ relais, avec des identifiants distincts.
   kubectl -n forgejo exec deploy/forgejo -- forgejo admin user create \
     --username <nom> --email <mail> --random-password
   ```
+  ⚠️ Le compte créé devra enrôler un second facteur à sa première connexion (§2FA obligatoire) :
+  tant qu'il ne l'a pas fait, il ne peut ni cloner ni utiliser l'API.
+
+- **Second facteur perdu** — seul recours une fois les codes de secours épuisés ou perdus. Retire
+  **toutes** les configurations 2FA du compte (TOTP *et* clés WebAuthn), qui redevient alors
+  joignable par mot de passe seul et repart sur la redirection d'enrôlement :
+  ```bash
+  kubectl -n forgejo exec deploy/forgejo -- forgejo admin user reset-mfa --username forgejo_admin
+  ```
+  ⚠️ C'est aussi le contournement complet du 2FA pour qui a `exec` sur le namespace. Le second
+  facteur protège la forge exposée sur Internet, pas contre un accès au cluster — ce sont deux
+  périmètres distincts, et l'accès au cluster reste le plus privilégié des deux.
 
 - **État de la base et placement** (read-only) — la colonne `NODE` doit être **identique** pour
   le pod Forgejo et le pod `forgejo-db-1` (cf. §Placement) :
