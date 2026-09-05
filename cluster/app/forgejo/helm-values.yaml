@@ -382,25 +382,29 @@ gitea:
       # cible désignée, sans rien apporter à un utilisateur.
       SHOW_FOOTER_VERSION: false
 
-    # --- Mailer : NON configuré, et c'est un manque assumé ---
+    # --- Mailer : relais externe Brevo ---
     # ⚠️ Sans mailer, Forgejo ne peut envoyer NI réinitialisation de mot de passe, NI notification
     # de connexion. Sur une instance publique à compte unique, la perte du mot de passe admin ne
     # se répare alors que par `kubectl exec` (cf. README §Reste) — ce qui suppose de garder un
-    # accès au cluster, pas seulement à la forge.
+    # accès au cluster, pas seulement à la forge. Procédure complète : README §Mailer.
     #
-    # Le bloc reste COMMENTÉ parce qu'aucun relais n'est choisi : celui d'Alertmanager est encore
-    # un `REMPLACER` (cf. kube-prometheus-stack/helm-values.yaml). Activer `ENABLED: true` avec un
-    # `SMTP_ADDR` faux ferait échouer chaque envoi en silence, dans les logs seulement.
-    # Procédure complète : README §Mailer.
+    # ⚠️ `SMTP_ADDR` est `smtp-relay.brevo.com`, PAS `relay.brevo.com` : ce dernier n'existe pas
+    # dans le DNS et l'envoi échoue sur un NXDOMAIN remonté tel quel par gomail
+    # (`lookup relay.brevo.com on 10.96.0.10:53: no such host`). Le symptôme ressemble à un blocage
+    # réseau mais n'en est pas un : une CiliumNetworkPolicy qui refuse échoue en TIMEOUT, jamais en
+    # « no such host » — une réponse négative prouve que le paquet DNS est allé jusqu'à CoreDNS et
+    # en est revenu. Ne pas partir chercher dans forgejo-netpol.yaml sur cette erreur-là.
     mailer:
       ENABLED: true
       PROTOCOL: smtp+starttls
-      SMTP_ADDR: relay.brevo.com
+      SMTP_ADDR: smtp-relay.brevo.com
       SMTP_PORT: 587
       FROM: forgejo@wittner.tech
+      # Identifiant Brevo (`<id>@smtp-brevo.com`), et NON l'adresse d'expédition : les deux
+      # diffèrent, et intervertir les deux donne un échec d'authentification côté relais.
       USER: b66e7b001@smtp-brevo.com
-    #   # PASSWD n'est PAS ici — ce fichier est dans Git. Il arrive par
-    #   # `additionalConfigFromEnvs` (FORGEJO__MAILER__PASSWD), déjà câblé plus bas.
+      # PASSWD n'est PAS ici — ce fichier est dans Git. Il arrive par
+      # `additionalConfigFromEnvs` (FORGEJO__MAILER__PASSWD), câblé plus bas.
 
     indexer:
       # Recherche de code (et pas seulement de dépôts). Indexeur `bleve` par défaut, écrit sur le
@@ -467,9 +471,10 @@ gitea:
           name: forgejo-secrets
           key: LFS_JWT_SECRET
           optional: true
-    # Mot de passe du relais SMTP. Doublement inerte aujourd'hui : le Secret n'existe pas, et le
-    # bloc `mailer` de `gitea.config` est commenté. Câblé d'avance pour que l'activation du
-    # mailer ne demande que de décommenter ce bloc et de sceller — README §Mailer.
+    # Mot de passe du relais SMTP (clé Brevo). ⚠️ `optional: true` reste LOAD-BEARING : si le
+    # Secret `forgejo-smtp` n'est pas scellé, le pod démarre quand même mais le mailer est ACTIF
+    # sans mot de passe — l'échec est alors une authentification refusée par le relais, pas un
+    # CreateContainerConfigError. Cf. README §Mailer.
     - name: FORGEJO__MAILER__PASSWD
       valueFrom:
         secretKeyRef:

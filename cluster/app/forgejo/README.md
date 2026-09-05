@@ -431,29 +431,31 @@ existants doivent **survivre**. C'est la preuve que les valeurs injectées sont 
 
 ### Mailer
 
-Non configuré, et c'est un manque : sans mailer, Forgejo n'envoie **ni** réinitialisation de mot
-de passe **ni** notification de connexion. Sur une instance publique à compte unique, la perte du
-mot de passe admin ne se répare alors que par `kubectl exec` — donc en gardant un accès au
-cluster, pas seulement à la forge.
+Configuré sur **Brevo** (`smtp-relay.brevo.com:587`, STARTTLS), bloc `mailer:` de `gitea.config`
+dans `helm-values.yaml`. Sans mailer, Forgejo n'enverrait **ni** réinitialisation de mot de passe
+**ni** notification de connexion, et la perte du mot de passe admin ne se réparerait que par
+`kubectl exec` — donc en gardant un accès au cluster, pas seulement à la forge.
 
-Le blocage n'est pas technique : aucun relais n'est choisi. Celui d'Alertmanager est encore un
-`REMPLACER` (cf. [`kube-prometheus-stack`](../kube-prometheus-stack/helm-values.yaml)). Les deux
-composants peuvent partager le même relais, avec des identifiants distincts.
+Le mot de passe (clé SMTP Brevo) n'est **pas** dans `helm-values.yaml` : il arrive par
+`FORGEJO__MAILER__PASSWD`, depuis le **document 3** de `manifests/forgejo-admin.secret.yaml`
+(Secret `forgejo-smtp`, clé `PASSWD`) — à remplir et re-sceller, cf. §Câblage des secrets. Rien à
+décommenter dans le `kustomization.yaml` : `forgejo-admin.sealed.yaml` porte les trois Secrets.
 
-Trois gestes, dans cet ordre :
+⚠️ `optional: true` sur cette variable veut dire que le pod démarre **même sans** le Secret : le
+mailer est alors actif sans mot de passe et le relais refuse l'authentification. L'absence de
+scellement ne se voit pas au démarrage, seulement au premier envoi.
 
-1. Remplir le **document 3** de `manifests/forgejo-admin.secret.yaml` (clé `PASSWD`) et re-sceller
-   le fichier (§Câblage des secrets). Rien à décommenter dans le `kustomization.yaml` : la
-   variable `FORGEJO__MAILER__PASSWD` est **déjà** câblée en `optional: true`.
-2. Décommenter le bloc `mailer:` de `gitea.config` dans `helm-values.yaml` et y écrire
-   `SMTP_ADDR`, `SMTP_PORT`, `FROM`, `USER`. Le mot de passe n'y va **pas** — ce fichier est dans
-   Git.
-3. Vérifier que le relais est **public** : la `CiliumNetworkPolicy` n'ouvre la sortie que vers des
-   adresses non privées. Un relais sur le LAN demanderait une règle `toCIDR` explicite dans
-   `manifests/forgejo-netpol.yaml`.
+**Diagnostiquer un échec d'envoi** (bouton *Envoyer un email de test*, panneau d'admin) :
 
-Activer `ENABLED: true` avec un `SMTP_ADDR` faux fait échouer chaque envoi **en silence**, dans
-les logs seulement — d'où le bloc laissé commenté plutôt qu'à moitié rempli.
+| Message | Cause |
+|---|---|
+| `lookup … : no such host` | Nom de relais faux. Une réponse DNS **négative** prouve que CoreDNS a été joint : ce n'est **pas** la NetworkPolicy. Brevo, c'est `smtp-relay.brevo.com` — `relay.brevo.com` n'existe pas. |
+| `i/o timeout` / `connection timed out` | Là, c'est le réseau. La `CiliumNetworkPolicy` n'ouvre la sortie que vers des adresses **publiques** : un relais sur le LAN demande une règle `toCIDR` explicite dans `manifests/forgejo-netpol.yaml`. |
+| Authentification refusée | Secret `forgejo-smtp` non scellé, ou `USER` renseigné avec l'adresse d'expédition au lieu de l'identifiant Brevo (`<id>@smtp-brevo.com`) — les deux diffèrent. |
+
+Alertmanager, lui, est encore sur un `REMPLACER`
+(cf. [`kube-prometheus-stack`](../kube-prometheus-stack/helm-values.yaml)) : il peut partager ce
+relais, avec des identifiants distincts.
 
 ### Reste
 
