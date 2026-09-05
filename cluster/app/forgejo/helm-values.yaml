@@ -392,13 +392,13 @@ gitea:
     # un `REMPLACER` (cf. kube-prometheus-stack/helm-values.yaml). Activer `ENABLED: true` avec un
     # `SMTP_ADDR` faux ferait échouer chaque envoi en silence, dans les logs seulement.
     # Procédure complète : README §Mailer.
-    # mailer:
-    #   ENABLED: true
-    #   PROTOCOL: smtp+starttls
-    #   SMTP_ADDR: REMPLACER
-    #   SMTP_PORT: 587
-    #   FROM: forgejo@wittner.tech
-    #   USER: REMPLACER
+    mailer:
+      ENABLED: true
+      PROTOCOL: smtp+starttls
+      SMTP_ADDR: relay.brevo.com
+      SMTP_PORT: 587
+      FROM: forgejo@wittner.tech
+      USER: b66e7b001@smtp-brevo.com
     #   # PASSWD n'est PAS ici — ce fichier est dans Git. Il arrive par
     #   # `additionalConfigFromEnvs` (FORGEJO__MAILER__PASSWD), déjà câblé plus bas.
 
