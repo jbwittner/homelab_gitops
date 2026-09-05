@@ -37,6 +37,10 @@ Deux chemins d'accès, volontairement dissociés :
   applicatif — cf. §Exposition publique
 - `manifests/forgejo-robots.yaml` — ConfigMap du `robots.txt`, monté sur `/data/gitea/robots.txt`
   par `extraVolumes` / `extraContainerVolumeMounts` — cf. §Exposition publique
+- `manifests/forgejo-admin.secret.example.yaml` — template de scellement **versionné et vide de
+  toute valeur** : la copie de référence du clair `*.secret.yaml`, qui est gitignoré et supprimé
+  après `kubeseal`. Il ne porte aucun secret et n'est **pas** dans le `kustomization.yaml` — il se
+  recopie, il ne s'applique pas — cf. §Câblage des secrets
 - `manifests/kustomization.yaml` — assemblage. La ligne `forgejo-admin.sealed.yaml` y est
   **commentée** tant que le scellement n'a pas eu lieu : un `resources:` pointant un fichier
   absent fait échouer le `kustomize build` entier, donc l'Application
@@ -344,7 +348,25 @@ documents YAML — `kubeseal` lit un flux multi-documents et les scelle tous dan
 | 3 | `forgejo-smtp` (`PASSWD`) | optionnel — cf. §Mailer |
 
 Seul le document 1 est nécessaire **avant la première synchronisation** : les documents 2 et 3
-sont câblés en `optional: true` dans `helm-values.yaml` et leur absence est un non-événement.
+sont câblés en `optional: true` dans `helm-values.yaml` et leur absence ne bloque pas le
+démarrage. ⚠️ Pour le document 3 ce n'est plus anodin depuis l'activation du mailer : sans lui le
+pod démarre, mais **tous** les envois sont refusés par le relais (§Mailer).
+
+Le template en clair est gitignoré **et** supprimé après scellement, et un `SealedSecret` ne
+conserve que du chiffré : les commentaires qui expliquent chaque valeur ne survivraient nulle
+part. Ils sont donc versionnés à part, sans aucune valeur réelle, dans
+[`manifests/forgejo-admin.secret.example.yaml`](manifests/forgejo-admin.secret.example.yaml). Le
+point de départ est toujours une copie de ce fichier :
+
+```sh
+cp cluster/app/forgejo/manifests/forgejo-admin.secret.example.yaml \
+   cluster/app/forgejo/manifests/forgejo-admin.secret.yaml
+```
+
+> [!WARNING]
+> Le nom de la copie est ce qui la protège : `*.secret.yaml` est le motif du `.gitignore`. Un
+> fichier nommé autrement serait suivi par Git **en clair**. Et ne jamais renseigner le
+> `.example.yaml` lui-même — son nom, précisément, ne correspond pas au motif.
 
 > [!CAUTION]
 > **Ne pas sceller ce fichier tant que le document 2 contient des `REMPLACER`.** Ces quatre
