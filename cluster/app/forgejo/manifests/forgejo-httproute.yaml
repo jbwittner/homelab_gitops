@@ -3,7 +3,7 @@
 #
 # ⚠️ Le SSH n'est PAS ici et ne peut pas l'être : `shared-gw` n'a que des listeners HTTPS, et un
 # HTTPRoute ne transporte pas du TCP brut. Le SSH sort par le Service LoadBalancer
-# `forgejo-ssh` (192.168.1.85), sur le hostname `forgejo.lan.wittner.tech` — deux chemins
+# `forgejo-ssh` (192.168.1.81), sur le hostname `forgejo.lan.wittner.tech` — deux chemins
 # réseau, deux enregistrements DNS (cf. README §Réseau).
 #
 # ⚠️ Cette route expose TOUS les chemins, `/metrics` compris le jour où les métriques seront

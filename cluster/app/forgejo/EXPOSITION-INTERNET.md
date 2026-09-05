@@ -40,14 +40,14 @@ ressource n'a été créée hors de ce dossier.
   existe (`infra/sealed-secrets/README.md` §Backup / restauration de la clé) et le motif
   `*sealed-secrets-key*.yaml` est au `.gitignore`. Que la sauvegarde ait été **faite** ne se lit
   nulle part dans le dépôt, par construction.
-- [x] **Réserver une IP sur le pool LB-IPAM pour le service SSH** — `192.168.1.85` via
+- [x] **Réserver une IP sur le pool LB-IPAM pour le service SSH** — `192.168.1.81` via
   `lbipam.cilium.io/ips`, dans le bloc `192.168.1.80-89` du `CiliumLoadBalancerIPPool`
   (`infra/cilium/manifests/ip-pool.yaml`). L'annotation moderne est utilisée, pas
   `spec.loadBalancerIP` ni `io.cilium/lb-ipam-ips`.
 - [ ] **Enregistrement DNS + certificat cert-manager** — le certificat est là : `Certificate`
   wildcard `*.wittner.tech` (`letsencrypt-prod`, DNS-01), consommé par le listener
   `https-public` de `shared-gw`. Les **enregistrements DNS** (`forgejo.wittner.tech`,
-  `forgejo.lan.wittner.tech` → `192.168.1.85`) sont hors du dépôt : invérifiables.
+  `forgejo.lan.wittner.tech` → `192.168.1.81`) sont hors du dépôt : invérifiables.
 - [ ] **Passer les repos candidats au scan de secrets avant de les rendre publics** — acte
   opératoire, hors dépôt. Atténué par `[repository] DEFAULT_PRIVATE: private` **(posé ici)** :
   rendre un dépôt public devient un geste explicite.
@@ -128,7 +128,7 @@ ressource n'a été créée hors de ce dossier.
   `git gc` throttlé allonge la transaction sans rien protéger. La case est cochée pour ce qui est
   posé, pas pour une couverture complète des quatre champs.
 - [x] **Service LoadBalancer dédié pour SSH, serveur SSH interne de Forgejo** — déjà en place :
-  Service `forgejo-ssh` type LoadBalancer sur `192.168.1.85` (hors Gateway, qui n'a que des
+  Service `forgejo-ssh` type LoadBalancer sur `192.168.1.81` (hors Gateway, qui n'a que des
   listeners HTTPS), `START_SSH_SERVER: true` (serveur Go interne, pas OpenSSH), traduction
   22 → 2222 imposée par le rootless. **(posé ici)** en complément :
   `loadBalancerSourceRanges: [192.168.1.0/24]`, qui écrit noir sur blanc que le SSH reste un

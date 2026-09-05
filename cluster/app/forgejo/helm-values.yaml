@@ -121,7 +121,7 @@ service:
       #
       # `lbipam.cilium.io/ips` et non le champ `spec.loadBalancerIP` (déprécié côté Kubernetes)
       # ni l'ancien `io.cilium/lb-ipam-ips` (déprécié côté Cilium depuis la 1.16).
-      lbipam.cilium.io/ips: 192.168.1.85
+      lbipam.cilium.io/ips: 192.168.1.81
     # ⚠️ Le SSH reste un service de LAN, pas d'Internet : `forgejo.lan.wittner.tech` est annoncé
     # en ARP sur 192.168.1.0/24 et n'est de toute façon pas routable depuis l'extérieur. Cette
     # liste l'écrit noir sur blanc plutôt que de s'en remettre à la topologie — Cilium applique

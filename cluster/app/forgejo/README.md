@@ -11,7 +11,7 @@ Deux chemins d'accès, volontairement dissociés :
 - **Web / clone HTTPS** — `https://forgejo.wittner.tech`, via `shared-gw`, listener
   `https-public` (cf. [doc/reseau.md](../../../doc/reseau.md)).
 - **Clone SSH** — `git@forgejo.lan.wittner.tech:<org>/<repo>.git`, via un Service LoadBalancer
-  sur `192.168.1.85`, hors Gateway.
+  sur `192.168.1.81`, hors Gateway.
 
 ## Fichiers
 
@@ -82,7 +82,7 @@ Deux chemins d'accès, volontairement dissociés :
   cluster — un `sealed-secrets` réinstallé à neuf ne sait plus le déchiffrer, et le seul signal
   est le pod qui reste en `CreateContainerConfigError`.
 - Le composant `cnpg` doit tourner avant : sans la CRD `Cluster`, le manifeste DB échoue.
-- **L'IP `192.168.1.85` est un contrat DNS**, pas un détail d'implémentation : elle est fixée par
+- **L'IP `192.168.1.81` est un contrat DNS**, pas un détail d'implémentation : elle est fixée par
   l'annotation `lbipam.cilium.io/ips` parce qu'un enregistrement `forgejo.lan.wittner.tech` la
   vise. La laisser à l'allocateur casserait tous les remotes `git@…` au premier recréage du
   Service, sans erreur visible côté cluster.
@@ -203,7 +203,7 @@ Deux hostnames pour un seul service, parce que le trafic n'arrive pas au même e
 | Nom | Cible | Chemin |
 | --- | --- | --- |
 | `forgejo.wittner.tech` | IP de `shared-gw` | HTTPRoute, listener `https-public`, TLS terminé au Gateway |
-| `forgejo.lan.wittner.tech` | `192.168.1.85` | Service LoadBalancer `forgejo-ssh`, annonce L2 Cilium, port 22 → 2222 |
+| `forgejo.lan.wittner.tech` | `192.168.1.81` | Service LoadBalancer `forgejo-ssh`, annonce L2 Cilium, port 22 → 2222 |
 
 Le second est en `.lan` : il est annoncé en ARP sur le LAN et n'a aucun sens depuis Internet.
 Le certificat wildcard `*.lan.wittner.tech` ne le concerne pas — SSH ne fait pas de TLS.
@@ -620,7 +620,7 @@ relais, avec des identifiants distincts.
 
 - **Vérifier l'exposition SSH** :
   ```bash
-  kubectl -n forgejo get svc forgejo-ssh          # EXTERNAL-IP doit valoir 192.168.1.85
+  kubectl -n forgejo get svc forgejo-ssh          # EXTERNAL-IP doit valoir 192.168.1.81
   ssh -T -p 22 git@forgejo.lan.wittner.tech       # doit répondre par un message Forgejo
   ```
 
