@@ -46,8 +46,10 @@ ressource n'a été créée hors de ce dossier.
   `spec.loadBalancerIP` ni `io.cilium/lb-ipam-ips`.
 - [ ] **Enregistrement DNS + certificat cert-manager** — le certificat est là : `Certificate`
   wildcard `*.wittner.tech` (`letsencrypt-prod`, DNS-01), consommé par le listener
-  `https-public` de `shared-gw`. Les **enregistrements DNS** (`forgejo.wittner.tech`,
-  `forgejo.lan.wittner.tech` → `192.168.1.81`) sont hors du dépôt : invérifiables.
+  `https-public` de `shared-gw`. L'**enregistrement DNS** (`forgejo.wittner.tech` →
+  `192.168.1.50`, Traefik) et la **conf du proxy** (routeur HTTP vers `192.168.1.80` ; entrypoint
+  `ssh` sur `:2222` et routeur TCP vers `192.168.1.81:22`) sont hors du dépôt : invérifiables.
+  ⚠️ Le port de l'entrypoint est couplé à `SSH_PORT` (2222) dans `helm-values.yaml`.
 - [ ] **Passer les repos candidats au scan de secrets avant de les rendre publics** — acte
   opératoire, hors dépôt. Atténué par `[repository] DEFAULT_PRIVATE: private` **(posé ici)** :
   rendre un dépôt public devient un geste explicite.
@@ -116,7 +118,8 @@ ressource n'a été créée hors de ce dossier.
   port 2222 pour le SSH. ⚠️ Deux réserves écrites dans le fichier : `host`/`remote-node` sont
   nécessaires (sondes kubelet, et Envoy selon son mode de déploiement), ce qui laisse un pod en
   hostNetwork joindre le port ; et le filtrage par source du SSH n'est **pas** dans la policy
-  (SNAT en `externalTrafficPolicy: Cluster`) mais dans `loadBalancerSourceRanges`.
+  (SNAT en `externalTrafficPolicy: Cluster`) mais dans `loadBalancerSourceRanges` — lequel ne
+  voit plus que l'adresse de Traefik depuis que le SSH entre par le proxy.
 - [x] **`securityContext` : `runAsNonRoot`, capabilities droppées, seccomp `RuntimeDefault`** —
   `helm-values.yaml` **(posé ici)** : `containerSecurityContext` avec `runAsNonRoot`,
   `runAsUser/Group: 1000`, `drop: [ALL]`, `allowPrivilegeEscalation: false`, `privileged: false` ;
@@ -131,8 +134,12 @@ ressource n'a été créée hors de ce dossier.
   Service `forgejo-ssh` type LoadBalancer sur `192.168.1.81` (hors Gateway, qui n'a que des
   listeners HTTPS), `START_SSH_SERVER: true` (serveur Go interne, pas OpenSSH), traduction
   22 → 2222 imposée par le rootless. **(posé ici)** en complément :
-  `loadBalancerSourceRanges: [192.168.1.0/24]`, qui écrit noir sur blanc que le SSH reste un
-  service de LAN.
+  `loadBalancerSourceRanges: [192.168.1.0/24]`.
+  ⚠️ **Cette plage ne borne plus l'exposition.** Le SSH entre désormais par le routeur TCP de
+  Traefik : tous les paquets se présentent au Service avec l'adresse source du proxy
+  (`192.168.1.50`), qui est dans la plage — un client venu d'Internet la franchit comme un client
+  du LAN. La décision d'exposer ou non le SSH à Internet se prend sur la redirection de port de
+  la box et sur l'entrypoint `ssh` de Traefik, pas ici. Point ouvert, à trancher explicitement.
 - [x] **`/metrics` non routé publiquement** — déjà en place : `gitea.metrics.enabled: false`,
   décision documentée (l'endpoint est servi sur le port HTTP applicatif, donc derrière la
   HTTPRoute publique ; sans `[metrics] TOKEN` il serait lisible depuis Internet).

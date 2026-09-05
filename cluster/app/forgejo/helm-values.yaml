@@ -10,8 +10,10 @@
 image:
   # Défaut du chart, explicité car LOAD-BEARING pour tout le bloc SSH plus bas : en rootless, le
   # serveur SSH interne de Forgejo ne peut pas se lier au port 22 (privilégié) et écoute sur 2222.
-  # Le port ANNONCÉ dans les URLs de clone (`SSH_PORT`) et le port ÉCOUTÉ (`SSH_LISTEN_PORT`) sont
-  # alors deux choses différentes ; le Service fait la traduction 22 → 2222.
+  # Le port ANNONCÉ dans les URLs de clone (`SSH_PORT`, 2222 — celui de Traefik) et le port
+  # ÉCOUTÉ dans le pod (`SSH_LISTEN_PORT`, 2222 aussi — imposé ici) sont alors deux choses
+  # différentes qui portent la même valeur par coïncidence ; le Service, lui, écoute 22 et fait
+  # la traduction 22 → 2222 (tableau complet au-dessus de `service.ssh.port`).
   rootless: true
 
 # Forgejo n'est pas HA-ready : le chart lui-même refuse plusieurs configurations au-delà de 1
@@ -105,34 +107,55 @@ service:
     # `TCPRoute` (`tcpRoute.enabled`), mais il faudrait alors ajouter un listener `ssh` au Gateway
     # partagé — modifier un composant d'infra commun pour un seul consommateur. Un Service
     # LoadBalancer sur le pool Cilium fait le même travail, localement.
+    #
+    # ⚠️ Le client n'atteint PAS ce Service directement. Il tape `forgejo.wittner.tech`, qui
+    # résout sur Traefik (192.168.1.50) ; Traefik sépare les deux trafics — routeur HTTP vers
+    # `shared-gw` (192.168.1.80) pour le web, routeur TCP vers l'IP ci-dessous pour le SSH. Un
+    # seul hostname, deux chemins réseau derrière (cf. README §Réseau).
     type: LoadBalancer
-    # Port ANNONCÉ et écouté côté LAN. Le Service cible le port nommé `ssh` du pod, soit 2222.
+    # Port écouté par le Service, et cible du routeur TCP de Traefik (dont la conf dynamique porte
+    # `192.168.1.81:22` en dur). Le Service cible ensuite le port nommé `ssh` du pod, soit 2222.
+    #
+    # ⚠️ TROIS ports différents sur le trajet d'un clone SSH, dont deux valent 2222 sans aucun
+    # rapport entre eux :
+    #     client → :2222        entrypoint `ssh` de Traefik      (= `SSH_PORT`, annoncé)
+    #            → :22          CE port, sur 192.168.1.81        (Service LoadBalancer)
+    #            → :2222        `SSH_LISTEN_PORT` dans le pod    (imposé par l'image rootless)
+    # Ce port-ci n'est donc PAS `SSH_PORT` et n'a pas à le suivre : changer l'un sans l'autre est
+    # légitime. Il reste à 22 — le port privilégié n'est pas un problème côté Service, seule
+    # l'image rootless ne peut pas s'y lier.
     port: 22
     annotations:
       # IP fixe prise dans `CiliumLoadBalancerIPPool` bleu-kalecgos-pool (192.168.1.80-89,
       # cf. infra/cilium/manifests/ip-pool.yaml), annoncée en L2 sur le LAN.
       #
-      # ⚠️ Elle est FIXE parce qu'un enregistrement DNS la vise : `forgejo.lan.wittner.tech`
-      # (cf. `SSH_DOMAIN`). Une IP laissée à l'allocateur changerait au premier recréage du
-      # Service et casserait tous les remotes `git@…` en silence.
+      # ⚠️ Elle est FIXE parce que la conf dynamique de Traefik la vise en dur
+      # (`tcp.services.forgejo-ssh`, hors dépôt). Aucun DNS ne pointe plus ici — le contrat s'est
+      # déplacé du DNS vers le proxy, mais il est tout aussi rigide : une IP laissée à
+      # l'allocateur changerait au premier recréage du Service et couperait le clone SSH en
+      # silence, sans erreur visible côté cluster.
       #
-      # ⚠️ Cette IP est DISTINCTE de celle de `shared-gw` : le trafic web et le trafic SSH
-      # n'atterrissent pas au même endroit, d'où deux hostnames (cf. README §Réseau).
+      # ⚠️ Cette IP est DISTINCTE de celle de `shared-gw` (192.168.1.80, cible du routeur HTTP de
+      # Traefik) : web et SSH n'atterrissent pas au même endroit, même sous un hostname commun.
       #
       # `lbipam.cilium.io/ips` et non le champ `spec.loadBalancerIP` (déprécié côté Kubernetes)
       # ni l'ancien `io.cilium/lb-ipam-ips` (déprécié côté Cilium depuis la 1.16).
       lbipam.cilium.io/ips: 192.168.1.81
-    # ⚠️ Le SSH reste un service de LAN, pas d'Internet : `forgejo.lan.wittner.tech` est annoncé
-    # en ARP sur 192.168.1.0/24 et n'est de toute façon pas routable depuis l'extérieur. Cette
-    # liste l'écrit noir sur blanc plutôt que de s'en remettre à la topologie — Cilium applique
-    # le filtre en eBPF sur le nœud d'entrée, AVANT le DNAT vers le pod.
+    # Restreint qui peut ouvrir une connexion sur ce Service. Depuis que le SSH entre par Traefik,
+    # le seul client légitime est le proxy lui-même (192.168.1.50) — Cilium applique le filtre en
+    # eBPF sur le nœud d'entrée, AVANT le DNAT vers le pod.
     #
     # C'est aussi ce qui rend acceptable la règle d'ingress large du port 2222 dans
     # manifests/forgejo-netpol.yaml : en `externalTrafficPolicy` par défaut (`Cluster`), un
     # paquet relayé d'un nœud à l'autre est SNATé, l'identité Cilium vue par la policy n'est
     # alors plus `world` mais celle du nœud — le filtrage par source se fait donc ici, pas là-bas.
     #
-    # ⚠️ Élargir cette plage est le SEUL geste qui exposerait le SSH ailleurs que sur le LAN.
+    # ⚠️ Cette liste ne dit PLUS rien de l'exposition Internet, contrairement à ce qu'elle
+    # signifiait quand le client attaquait le Service en direct. Tout le trafic SSH se présente
+    # maintenant avec l'adresse source de Traefik (192.168.1.50), qui est dans la plage : un
+    # client venu d'Internet la franchit exactement comme un client du LAN. Ce qui décide de
+    # l'exposition réelle est en amont — redirection de port de la box vers 192.168.1.50, et
+    # entrypoint `ssh` de Traefik. Restreindre ICI ne protège de rien de tout ça.
     loadBalancerSourceRanges:
       - 192.168.1.0/24
 
@@ -265,13 +288,30 @@ gitea:
       # un certificat qu'il n'a pas.
       HTTP_PORT: 3000
 
-      # Hostname SSH DIFFÉRENT du hostname web, parce que les deux ne pointent pas sur la même IP :
-      # le web arrive par `shared-gw`, le SSH par le Service LoadBalancer ci-dessus. C'est la
-      # valeur affichée dans le bouton « Clone » de l'UI — une erreur ici ne casse rien côté
-      # serveur et rend juste toutes les commandes copiées inutilisables.
+      # MÊME hostname que le web : les deux trafics arrivent sur Traefik (192.168.1.50), qui les
+      # sépare — routeur HTTP vers `shared-gw` d'un côté, routeur TCP vers le Service
+      # LoadBalancer `forgejo-ssh` de l'autre. C'est la valeur affichée dans le bouton « Clone »
+      # de l'UI — une erreur ici ne casse rien côté serveur et rend juste toutes les commandes
+      # copiées inutilisables.
       SSH_DOMAIN: forgejo.wittner.tech
-      # Port ANNONCÉ dans les URLs de clone (celui du Service).
-      SSH_PORT: 22
+      # Port ANNONCÉ dans les URLs de clone : celui de l'entrypoint `ssh` de Traefik, PAS celui du
+      # Service (22) ni celui du pod (`SSH_LISTEN_PORT`, 2222) — cf. le tableau des trois ports
+      # au-dessus de `service.ssh.port`.
+      #
+      # 2222 et non 22, parce que le port 22 de 192.168.1.50 est tenu par l'OpenSSH du LXC qui
+      # porte Traefik. Déplacer ce sshd pour libérer 22 aurait rendu la forme courte
+      # `git@forgejo.wittner.tech:org/repo.git` utilisable (la syntaxe scp-like ne marche QUE sur
+      # 22), mais au prix d'un changement sur le plan d'ADMINISTRATION de la façade — toutes les
+      # habitudes et tout ce qui pointe sur ce sshd auraient dû suivre. Le coût de 2222, lui,
+      # s'annule : Forgejo émet l'URL correcte dans le bouton « Clone », et un `Port 2222` dans
+      # `~/.ssh/config` restitue la forme courte côté poste. Second effet : le serveur SSH interne
+      # de Forgejo (Go, moins éprouvé qu'OpenSSH) voit un ordre de grandeur de bruit de bots en
+      # moins qu'en 22.
+      #
+      # ⚠️ Valeur COUPLÉE à l'entrypoint `ssh` de Traefik (`address: ":2222"`, conf statique hors
+      # dépôt). Les désaligner ne casse rien au démarrage : l'UI affiche simplement une URL de
+      # clone qui ne répond pas.
+      SSH_PORT: 2222
       # Port réellement ÉCOUTÉ dans le conteneur : 2222, imposé par l'image rootless. C'est le
       # défaut que le chart poserait de toute façon ; explicité parce que le Service le cible.
       SSH_LISTEN_PORT: 2222

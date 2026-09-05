@@ -6,12 +6,15 @@ Forge Git auto-hébergée (dépôts, issues, PR, registre de paquets, Actions). 
 PostgreSQL dédiée, portée par un `Cluster` CNPG (opérateur fourni par
 [`cnpg`](../cnpg/README.md)).
 
-Deux chemins d'accès, volontairement dissociés :
+Un seul hostname, `forgejo.wittner.tech`, et deux chemins réseau derrière — Traefik
+(192.168.1.50) sépare les deux trafics :
 
-- **Web / clone HTTPS** — `https://forgejo.wittner.tech`, via `shared-gw`, listener
-  `https-public` (cf. [doc/reseau.md](../../../doc/reseau.md)).
-- **Clone SSH** — `git@forgejo.lan.wittner.tech:<org>/<repo>.git`, via un Service LoadBalancer
-  sur `192.168.1.81`, hors Gateway.
+- **Web / clone HTTPS** — `https://forgejo.wittner.tech`, routeur HTTP de Traefik vers
+  `shared-gw` (192.168.1.80), listener `https-public` (cf.
+  [doc/reseau.md](../../../doc/reseau.md)).
+- **Clone SSH** — `ssh://git@forgejo.wittner.tech:2222/<org>/<repo>.git`, routeur TCP de Traefik
+  (entrypoint `ssh`, port 2222) vers le Service LoadBalancer `forgejo-ssh` sur `192.168.1.81`,
+  hors Gateway.
 
 ## Fichiers
 
@@ -82,10 +85,10 @@ Deux chemins d'accès, volontairement dissociés :
   cluster — un `sealed-secrets` réinstallé à neuf ne sait plus le déchiffrer, et le seul signal
   est le pod qui reste en `CreateContainerConfigError`.
 - Le composant `cnpg` doit tourner avant : sans la CRD `Cluster`, le manifeste DB échoue.
-- **L'IP `192.168.1.81` est un contrat DNS**, pas un détail d'implémentation : elle est fixée par
-  l'annotation `lbipam.cilium.io/ips` parce qu'un enregistrement `forgejo.lan.wittner.tech` la
-  vise. La laisser à l'allocateur casserait tous les remotes `git@…` au premier recréage du
-  Service, sans erreur visible côté cluster.
+- **L'IP `192.168.1.81` est un contrat avec Traefik**, pas un détail d'implémentation : elle est
+  fixée par l'annotation `lbipam.cilium.io/ips` parce que la conf dynamique du proxy la porte en
+  dur (`tcp.services.forgejo-ssh`, hors dépôt). La laisser à l'allocateur casserait tous les
+  remotes `git@…` au premier recréage du Service, sans erreur visible côté cluster.
 - **`gitea.config.server.PROTOCOL: http` avec `ROOT_URL: https://…` est voulu** : TLS est terminé
   au Gateway. Aligner `PROTOCOL` sur `https` ferait attendre à Forgejo un certificat qu'il n'a
   pas.
@@ -198,20 +201,57 @@ protège plus de rien.
 
 ## Réseau
 
-Deux hostnames pour un seul service, parce que le trafic n'arrive pas au même endroit :
+Un seul hostname, `forgejo.wittner.tech` → `192.168.1.50` (Traefik). Le proxy est le point de
+séparation : c'est lui, et non le DNS, qui décide où part chaque protocole.
 
-| Nom | Cible | Chemin |
-| --- | --- | --- |
-| `forgejo.wittner.tech` | IP de `shared-gw` | HTTPRoute, listener `https-public`, TLS terminé au Gateway |
-| `forgejo.lan.wittner.tech` | `192.168.1.81` | Service LoadBalancer `forgejo-ssh`, annonce L2 Cilium, port 22 → 2222 |
+| Trafic | Routeur Traefik | Cible | Suite du chemin |
+| --- | --- | --- | --- |
+| Web / clone HTTPS | HTTP, `Host(\`forgejo.wittner.tech\`)`, entrypoint `websecure` | `https://192.168.1.80` (`shared-gw`) | HTTPRoute, listener `https-public`, TLS terminé au Gateway |
+| Clone SSH | TCP, `HostSNI(\`*\`)`, entrypoint `ssh` (`:2222`) | `192.168.1.81:22` (`forgejo-ssh`) | Service LoadBalancer, annonce L2 Cilium, port 22 → 2222 |
 
-Le second est en `.lan` : il est annoncé en ARP sur le LAN et n'a aucun sens depuis Internet.
-Le certificat wildcard `*.lan.wittner.tech` ne le concerne pas — SSH ne fait pas de TLS.
+Deux points de couplage, tous deux hors dépôt et silencieux quand ils cassent :
 
-Le port 22 du Service pointe sur le port 2222 du conteneur : l'image rootless ne peut pas se
-lier à un port privilégié. `SSH_PORT` (annoncé dans les URLs de clone) et `SSH_LISTEN_PORT`
-(réellement écouté) sont donc deux réglages distincts, tous deux explicites dans
-`helm-values.yaml`.
+- Le routeur HTTP a besoin d'un `serversTransport` avec `serverName: forgejo.wittner.tech` : le
+  backend est une IP, donc sans lui Traefik n'envoie aucun SNI et le Gateway Cilium ne trouve
+  aucun listener.
+- `HostSNI(\`*\`)` est **obligatoire** sur le routeur TCP : le SSH ne fait pas de TLS, il n'y a
+  donc aucun SNI à matcher. C'est aussi ce qui impose un entrypoint dédié au SSH — la règle
+  accepte tout ce qui arrive dessus.
+
+### Les trois ports du clone SSH
+
+Deux d'entre eux valent 2222, sans aucun rapport entre eux — c'est la source de confusion
+principale de cette section :
+
+```
+client → :2222   entrypoint `ssh` de Traefik     = SSH_PORT, le port ANNONCÉ
+       → :22     Service forgejo-ssh (.81)       = service.ssh.port
+       → :2222   port du conteneur               = SSH_LISTEN_PORT, imposé par le rootless
+```
+
+- `SSH_PORT` est **couplé à la conf statique de Traefik** (`entryPoints.ssh.address: ":2222"`),
+  pas au Service. Les désaligner ne casse rien au démarrage : l'UI affiche juste une URL de clone
+  qui ne répond pas.
+- `SSH_LISTEN_PORT` vaut 2222 parce que l'image rootless ne peut pas se lier à un port
+  privilégié. Aucun lien avec le 2222 de Traefik.
+- `service.ssh.port` reste à 22 et n'a pas à suivre `SSH_PORT`.
+
+**Pourquoi 2222 et pas 22** : le port 22 de `192.168.1.50` est tenu par l'OpenSSH du LXC qui porte
+Traefik. Le libérer aurait permis la forme courte `git@forgejo.wittner.tech:org/repo.git` — la
+syntaxe scp-like ne marche que sur 22 — mais au prix d'un déplacement du sshd d'administration de
+la façade. Arbitrage retenu : ne pas toucher au plan d'admin. Le coût côté clone s'annule presque
+entièrement (Forgejo émet l'URL correcte dans le bouton « Clone » ; un `Port 2222` dans
+`~/.ssh/config` restitue la forme courte sur un poste donné) :
+
+```
+Host forgejo.wittner.tech
+  Port 2222
+  User git
+```
+
+⚠️ Conséquence à garder en tête : `git clone git@forgejo.wittner.tech:org/repo.git` **sans** cette
+entrée `ssh_config` part sur le port 22, donc sur le sshd du LXC, qui répond par une demande de
+mot de passe. Le symptôme ne ressemble pas à une erreur de port.
 
 ## Exposition publique
 
@@ -294,9 +334,11 @@ tout ce qui n'y figure pas est refusé.
 
 Deux choses à savoir avant d'y toucher :
 
-- **La restriction du SSH au LAN n'est pas dans la policy** mais dans
+- **Le filtrage par source du SSH n'est pas dans la policy** mais dans
   `service.ssh.loadBalancerSourceRanges` (`192.168.1.0/24`), appliqué en eBPF sur le nœud
-  d'entrée **avant** le DNAT. En `externalTrafficPolicy: Cluster`, un paquet relayé d'un nœud à
+  d'entrée **avant** le DNAT. ⚠️ Il ne borne plus que le voisinage du Service : le seul client
+  est Traefik, et tout le trafic SSH porte donc son adresse source. L'exposition Internet se
+  décide en amont, sur le proxy et la box. En `externalTrafficPolicy: Cluster`, un paquet relayé d'un nœud à
   l'autre est SNATé et se présente à la policy en `remote-node`, pas en `world` : un filtre par
   CIDR côté policy refuserait du trafic légitime, de façon intermittente.
 - **Le mode d'échec est un timeout**, jamais une erreur lisible :
@@ -621,7 +663,8 @@ relais, avec des identifiants distincts.
 - **Vérifier l'exposition SSH** :
   ```bash
   kubectl -n forgejo get svc forgejo-ssh          # EXTERNAL-IP doit valoir 192.168.1.81
-  ssh -T -p 22 git@forgejo.lan.wittner.tech       # doit répondre par un message Forgejo
+  nc -w3 192.168.1.81 22 </dev/null               # bannière `SSH-2.0-Go` = Forgejo, sans Traefik
+  ssh -T -p 2222 git@forgejo.wittner.tech         # doit répondre par un message Forgejo
   ```
 
 - **Upgrade** : bumper `targetRevision` dans `forgejo.app.yaml`. Le versionnage du chart ne suit

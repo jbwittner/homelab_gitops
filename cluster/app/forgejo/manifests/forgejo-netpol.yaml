@@ -53,8 +53,10 @@ spec:
     # relayé vers le nœud qui porte le pod est SNATé — l'identité vue par cette policy n'est alors
     # plus `world` (le client) mais `remote-node`. Un filtre par CIDR à cet endroit refuserait donc
     # du trafic légitime de façon intermittente, selon le nœud d'arrivée.
-    # La restriction au LAN est posée là où elle est fiable : `service.ssh.loadBalancerSourceRanges`
-    # dans helm-values.yaml, appliqué en eBPF sur le nœud d'entrée AVANT le DNAT.
+    # Le filtrage par source est posé là où il est fiable : `service.ssh.loadBalancerSourceRanges`
+    # dans helm-values.yaml, appliqué en eBPF sur le nœud d'entrée AVANT le DNAT. ⚠️ Depuis que le
+    # SSH entre par Traefik, ce filtre ne borne plus que le voisinage du Service (seul le proxy
+    # l'attaque) — il ne dit rien de l'exposition Internet, qui se décide sur Traefik et la box.
     - fromEntities:
         - world
         - cluster
