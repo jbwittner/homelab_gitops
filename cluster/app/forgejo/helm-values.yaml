@@ -90,16 +90,27 @@ service:
 # (SECRET_KEY, INTERNAL_TOKEN, JWT_SECRET, LFS_JWT_SECRET). Voir README §Contraintes : le perdre
 # n'est pas « repartir d'une base vide », c'est perdre de quoi déchiffrer ce qui reste en base.
 #
-# ⚠️ Dimensionnement : ces 20Gi ne bornent RIEN. Le registre de paquets et Actions sont actifs par
-# défaut côté Forgejo, `[quota] ENABLED` vaut `false`, et la StorageClass est en `thinProvision:
-# "no"` — le LV est donc réservé en entier dans le VG dès la création, mais rien n'empêche de le
-# remplir. Volume plein = écritures en échec, pas de dégradation progressive. Voir README
-# §Dimensionnement du volume pour les trois leviers.
+# ⚠️ Dimensionnement : ces 100Gi ne bornent RIEN, et c'est un choix — instance mono-utilisateur,
+# surveillance à la main. Le registre de paquets et Actions sont actifs par défaut côté Forgejo,
+# `[quota] ENABLED` reste à `false`, et la StorageClass est en `thinProvision: "no"` : le LV est
+# réservé en entier dans le VG dès la création, mais rien n'empêche de le remplir. Volume plein =
+# écritures en échec, pas de dégradation progressive. Leviers et commandes de surveillance dans le
+# README, §Dimensionnement du volume.
 persistence:
   enabled: true
   create: true
   claimName: forgejo-data
-  size: 20Gi
+  # 100Gi. Deux propriétés de la StorageClass gouvernent ce chiffre, et elles tirent en sens
+  # inverse :
+  #   - `thinProvision: "no"` → le LV réserve ses 100Gi dans le VG DÈS la création, utilisés ou
+  #     non. Ce qui est pris ici n'est pas disponible pour les autres composants du nœud (et la
+  #     base CNPG co-localisée en prend 10 de plus, cf. manifests/forgejo-db.yaml).
+  #   - `allowVolumeExpansion: true` → agrandir plus tard se fait À CHAUD : bumper cette valeur,
+  #     committer, et le CSI étend le LV puis le système de fichiers, sans recréer le PVC ni
+  #     redémarrer le pod (cf. README §Opérations).
+  # Autrement dit, sous-dimensionner se rattrape sans interruption ; surdimensionner immobilise du
+  # VG tout de suite. ⚠️ L'opération n'est PAS symétrique : on ne rétrécit jamais un PVC.
+  size: 100Gi
   accessModes:
     - ReadWriteOnce
   # StorageClass laissée vide → `openebs-lvm-thin`, classe par défaut du cluster
@@ -206,34 +217,9 @@ gitea:
 
     indexer:
       # Recherche de code (et pas seulement de dépôts). Indexeur `bleve` par défaut, écrit sur le
-      # PVC — d'où le dimensionnement à 20Gi. C'est la configuration mono-pod recommandée par le
+      # PVC, et compte dans son occupation. C'est la configuration mono-pod recommandée par le
       # chart ; elle interdit à elle seule de passer à plusieurs replicas.
       REPO_INDEXER_ENABLED: true
-
-    # --- Plafond de stockage ---
-    # Garde-fou du volume : sans lui, rien ne borne la croissance du registre de paquets ni des
-    # artefacts Actions, et un PVC plein fait ÉCHOUER les écritures au lieu de dégrader
-    # (cf. README §Dimensionnement du volume). Le quota transforme cet `ENOSPC` en refus applicatif
-    # propre, avec un message à l'utilisateur.
-    #
-    # ⚠️ Quota « SOFT », et Forgejo le qualifie lui-même d'« early support » : la vérification a
-    # lieu AVANT l'opération, mais une opération déjà lancée va au bout. Un push peut donc dépasser
-    # le plafond — après quoi plus rien qui augmente la taille ne passe. Ce n'est pas une barrière
-    # dure, c'est ce qui empêche une dérive de remplir le volume.
-    quota:
-      ENABLED: true
-
-    # Section `[quota.default]` — écrite comme une clé littérale à point, comme le fait le chart
-    # pour `ssh.minimum_key_sizes` ou `email.incoming` : ce n'est PAS un sous-bloc de `quota`.
-    #
-    # ⚠️ Le plafond s'applique PAR UTILISATEUR (sujet `size:all`), pas à l'instance. 15G tient tant
-    # que l'instance reste à quelques comptes ; il est à revoir à la baisse, ou à répartir en
-    # groupes de quota via l'API, si le nombre de comptes augmente.
-    #
-    # 15G sur 20Gi de volume : les 5Gi de marge couvrent l'index bleve, les logs Actions et
-    # l'`app.ini`, qui ne sont pas décomptés du quota d'un utilisateur.
-    quota.default:
-      TOTAL: 15G
 
   # --- Mot de passe de la base ---
   # Injecté en VARIABLE D'ENVIRONNEMENT et non dans `gitea.config.database.PASSWD` : ce fichier est

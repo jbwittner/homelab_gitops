@@ -19,7 +19,7 @@ Deux chemins d'accès, volontairement dissociés :
   Le chart n'existe **qu'en OCI** : `repoURL` est écrit sans le préfixe `oci://`, seule forme
   qu'ArgoCD accepte (et que Renovate suit, via la datasource `docker`).
 - `helm-values.yaml` — base externe CNPG, exposition déléguée aux manifestes, SSH en
-  LoadBalancer, PVC protégé du prune, admin par `existingSecret`, quota de stockage à 15G
+  LoadBalancer, PVC protégé du prune, admin par `existingSecret`
 - `manifests/namespace.yaml` — ns `forgejo` (wave -1)
 - `manifests/forgejo-db.yaml` — `Cluster` CNPG (l'opérateur génère le service `forgejo-db-rw`
   et le secret `forgejo-db-app`), **co-localisé avec le pod Forgejo** par
@@ -84,7 +84,7 @@ Deux chemins d'accès, volontairement dissociés :
 
 ## Dimensionnement du volume
 
-Les 20Gi de `forgejo-data` ne bornent **rien** aujourd'hui, et trois faits se combinent mal :
+Les 100Gi de `forgejo-data` ne bornent **rien** aujourd'hui, et trois faits se combinent mal :
 
 - **Le registre de paquets est actif par défaut** (`[packages] ENABLED = true`) : conteneurs,
   npm, maven, PyPI, Helm… Sur une instance au hostname public, c'est le poste qui grossit le plus
@@ -93,50 +93,65 @@ Les 20Gi de `forgejo-data` ne bornent **rien** aujourd'hui, et trois faits se co
   90` et `LOG_RETENTION_DAYS = 365`. Aucun runner n'est déployé aujourd'hui (§Non retenu), donc
   rien ne produit d'artefact — mais le jour où un runner arrive, la rétention par défaut est de
   trois mois.
-- **La StorageClass est en `thinProvision: "no"`** : le LV est réservé en entier dans le VG dès la
-  création (pas de surallocation possible), mais rien n'empêche de le **remplir**. Un volume plein
-  ne dégrade pas, il fait échouer les écritures.
+- **Aucune limite applicative** : `[quota] ENABLED` reste à `false`, et la StorageClass est en
+  `thinProvision: "no"`. Le LV est réservé en entier dans le VG dès la création (pas de
+  surallocation possible), mais rien n'empêche de le **remplir**. Un volume plein ne dégrade pas,
+  il fait échouer les écritures.
 
 Les crons de ménage existent et tournent (`cron.cleanup_packages` toutes les nuits,
 `cron.cleanup_actions` aussi) mais ils ne ramassent que le **non référencé** : un paquet qu'on a
 publié et jamais supprimé reste, indéfiniment.
 
-### Le garde-fou posé : quota applicatif
+### Le choix retenu : surveillance, pas de plafond
 
-```ini
-[quota]
-ENABLED = true
-[quota.default]
-TOTAL = 15G
+Pas de quota applicatif. L'instance est **mono-utilisateur** : le mode de panne que le quota
+protège — un compte tiers qui remplit le volume — n'existe pas ici, et le seul producteur de
+données est aussi celui qui surveille. La contrepartie est explicite : **rien ne préviendra**, le
+signal sera un `ENOSPC` sur une écriture (push refusé, upload de paquet en échec), pas une alerte.
+
+À surveiller à la main, périodiquement :
+```bash
+kubectl -n forgejo exec deploy/forgejo -- df -h /data
+kubectl -n forgejo exec deploy/forgejo -- sh -c 'du -sh /data/git /data/gitea/* | sort -h'
 ```
 
-15G de données utiles sur 20Gi de volume ; les 5Gi de marge couvrent l'index bleve, les logs
-Actions et l'`app.ini`, qui ne sont pas décomptés du quota d'un utilisateur. Le dépassement
-devient un **refus applicatif avec message**, au lieu d'un `ENOSPC` qui casse l'instance.
+Le poste à regarder en premier est `/data/gitea/packages` : c'est le seul qui grossit sans qu'on
+s'en rende compte, une image de conteneur pesant des centaines de Mo.
 
-Deux limites à connaître :
+> [!NOTE]
+> Ce choix se réexamine si un compte est ouvert à quelqu'un d'autre, ou si un runner Actions est
+> déployé (§Non retenu) — les artefacts de builds sont alors produits par des workflows, pas par
+> une action humaine, et la rétention par défaut est de 90 jours.
 
-- **Le quota est « soft », et Forgejo qualifie la fonctionnalité d'« early support »** : la
-  vérification a lieu *avant* l'opération, mais une opération déjà lancée va au bout. Un push peut
-  donc franchir le plafond — après quoi plus rien qui augmente la taille ne passe. Ce n'est pas
-  une barrière dure, c'est ce qui empêche une dérive de remplir le volume.
-- **Le plafond s'applique par UTILISATEUR** (sujet `size:all`), pas à l'instance. 15G tient tant
-  que l'instance reste à quelques comptes ; au-delà, le baisser ou passer par des groupes de quota
-  via l'API (`/admin/quota/groups`), qui n'est pas déclaratif.
+### Ce que la StorageClass impose
 
-### Si ça ne suffit plus
+Deux propriétés d'`openebs-lvm-thin` tirent en sens inverse et fixent la méthode :
+
+- **`thinProvision: "no"`** — le LV réserve ses 100Gi dans le VG **dès la création**, utilisés ou
+  non. Ce qui est pris ici n'est pas disponible aux autres composants du nœud, et la base CNPG
+  co-localisée en prend 10 de plus.
+- **`allowVolumeExpansion: true`** — agrandir plus tard se fait **à chaud**, sans recréer le PVC ni
+  redémarrer le pod (§Opérations).
+
+Donc : sous-dimensionner se rattrape sans interruption, surdimensionner immobilise du VG tout de
+suite. On ne **rétrécit jamais** un PVC — l'opération n'est pas symétrique. Vérifier la place
+restante avant tout agrandissement :
+```bash
+kubectl -n openebs exec ds/lvmvg-bootstrap -- vgs lvmvg   # VSize / VFree
+```
+
+### Les leviers, si ça déborde
 
 | Levier | Effet | Réversible |
 | --- | --- | --- |
-| `persistence.size` | agrandir. `allowVolumeExpansion: true` sur la SC → à chaud, sans recréer le PVC | oui, dans un seul sens (on ne rétrécit pas) |
-| `quota.default.TOTAL` | resserrer le plafond par compte | oui |
+| `persistence.size` | agrandir à chaud (§Opérations) | oui, dans un seul sens (on ne rétrécit pas) |
+| `gitea.config.quota.ENABLED: true` + `quota.default.TOTAL` | plafond **par utilisateur**, refus applicatif au lieu d'un `ENOSPC`. Quota « soft » et qualifié d'« early support » par Forgejo : une opération déjà lancée va au bout | oui |
 | `gitea.config.packages.ENABLED: false` | coupe le registre de paquets | oui, mais les paquets déjà publiés deviennent inaccessibles |
 
-Surveiller l'occupation :
-```bash
-kubectl -n forgejo exec deploy/forgejo -- df -h /data
-kubectl -n forgejo exec deploy/forgejo -- du -sh /data/git /data/gitea/* | sort -h
-```
+Ces trois réglages passent par `gitea.config`, qui est un **passe-plat vers `app.ini`** et non une
+liste fermée de paramètres du chart : toute section du
+[Configuration Cheat Sheet](https://forgejo.org/docs/v15.0/admin/config-cheat-sheet/) s'y écrit en
+bloc YAML minuscule à clés majuscules, qu'elle figure ou non dans la liste des paramètres du chart.
 
 ## Placement
 
@@ -251,6 +266,48 @@ rm cluster/app/forgejo/manifests/forgejo-admin.secret.yaml
   ```bash
   kubectl -n velero get podvolumebackups -l velero.io/backup-name=<backup>
   ```
+
+- **Agrandir le volume sans le détruire** — le PVC est modifié **en place** : ni suppression, ni
+  recréation, ni démontage, ni redémarrage du pod.
+
+  Le chemin complet : bumper `persistence.size` → ArgoCD **patche** le PVC (`ServerSideApply`,
+  jamais un delete/create) → `spec.resources.requests.storage` est l'un des rares champs mutables
+  d'un PVC, l'API accepte l'augmentation → l'`external-resizer` déclenche
+  `ControllerExpandVolume` → lvm-localpv fait un `lvextend -r`, qui étend le LV **et** le système
+  de fichiers en ligne.
+
+  ```bash
+  # 1. Place restante dans le VG du nœud (LVM THICK : la réserve est immédiate)
+  kubectl -n openebs exec ds/lvmvg-bootstrap -- vgs lvmvg
+
+  # 2. Bumper `persistence.size` dans helm-values.yaml, committer, pousser. Rien d'impératif.
+
+  # 3. Suivre
+  kubectl -n forgejo get pvc forgejo-data -w          # CAPACITY suit la nouvelle valeur
+  kubectl -n forgejo exec deploy/forgejo -- df -h /data
+  ```
+
+  Trois choses à savoir pendant l'opération :
+
+  - **Le message `FileSystemResizePending` est trompeur.** Kubernetes affiche « Waiting for user to
+    (re-)start a pod to finish file system resize » — c'est un texte générique. Avec lvm-localpv,
+    l'agent du nœud fait le `resize2fs` tout seul ; la condition disparaît sans qu'on touche au
+    pod. Ne PAS redémarrer Forgejo en réaction à ce message.
+  - **Le pod doit référencer le volume pour que le système de fichiers grandisse.** Si le
+    Deployment est à 0 replica, le LV est étendu mais le `df` reste à l'ancienne taille jusqu'à ce
+    qu'un pod remonte le volume.
+  - **Un champ immuable ferait échouer la sync, pas une recréation.** Si un bump de chart changeait
+    autre chose que la taille dans le PVC rendu, l'apply serait rejeté (`spec is immutable after
+    creation except resources.requests…`) et l'Application passerait en `SyncFailed`. ArgoCD ne
+    recrée un objet que si on le lui demande explicitement (`Replace=true`), ce qui n'est le cas
+    nulle part dans ce dépôt — et le PVC porte en plus `Prune=false,Delete=false`.
+
+  > [!CAUTION]
+  > **Sens unique.** Kubernetes refuse toute diminution de `spec.resources.requests.storage` : un
+  > `persistence.size` revu à la baisse fait échouer la sync sur `field can not be less than
+  > previous value`, et le seul retour en arrière est une recréation du PVC — donc une
+  > sauvegarde/restauration complète des dépôts, paquets et de l'`app.ini`. Agrandir par paliers
+  > coûte moins cher que viser trop large d'un coup.
 
 - **Créer un compte** (l'inscription libre est coupée) : depuis l'UI d'admin, ou
   ```bash
