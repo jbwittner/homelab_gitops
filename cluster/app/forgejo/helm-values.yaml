@@ -108,16 +108,16 @@ service:
     # partagé — modifier un composant d'infra commun pour un seul consommateur. Un Service
     # LoadBalancer sur le pool Cilium fait le même travail, localement.
     #
-    # ⚠️ Le client n'atteint PAS ce Service directement, et n'ouvre même pas de connexion TCP
-    # vers le LAN. Il tape `git-ssh.wittner.tech`, servi par un tunnel Cloudflare :
-    #     client (cloudflared, ProxyCommand)
-    #       → edge Cloudflare
-    #       → tunnel jusqu'au LXC cloudflared (192.168.1.56)
-    #       → 192.168.1.50:2222  (entrypoint `ssh` de Traefik, routeur TCP)
+    # ⚠️ Le client n'atteint PAS ce Service directement. Il tape `git-ssh.wittner.tech`, qui suit
+    # un chemin DIFFÉRENT de celui du web :
+    #     client Internet
+    #       → IP publique de la box   (enregistrement A, DNS-only — PAS le tunnel)
+    #       → redirection TCP 2222
+    #       → 192.168.1.50:2222       (entrypoint `ssh` de Traefik, routeur TCP)
     #       → CE Service
-    # Rien n'est ouvert sur la box : `cloudflared` établit une connexion SORTANTE. Deux hostnames,
-    # parce que l'ingress cloudflared discrimine par hostname et non par protocole
-    # (cf. README §Réseau).
+    # Le web, lui, passe par un tunnel Cloudflare. Le SSH ne peut pas l'emprunter sans imposer
+    # `cloudflared` à chaque client, et ne peut pas traverser le proxy Cloudflare du tout (c'est un
+    # proxy HTTP). D'où deux hostnames et deux chemins — cf. README §Réseau.
     type: LoadBalancer
     # Port écouté par le Service, et cible du routeur TCP de Traefik (dont la conf dynamique porte
     # `192.168.1.81:22` en dur). Le Service cible ensuite le port nommé `ssh` du pod, soit 2222.
@@ -296,10 +296,11 @@ gitea:
       HTTP_PORT: 3000
 
       # Hostname DIFFÉRENT du web (`forgejo.wittner.tech`), et ce n'est pas un choix esthétique :
-      # l'ingress de `cloudflared` discrimine par hostname, pas par protocole — deux règles ne
-      # peuvent pas partager un nom, la première qui matche gagne. Il faut donc un nom pour le
-      # HTTP et un nom pour le SSH. Les deux entrent par le même tunnel et ressortent sur le même
-      # Traefik (cf. README §Réseau).
+      # les deux noms n'ont pas le même TYPE d'enregistrement DNS. `forgejo` est un enregistrement
+      # Tunnel proxifié ; `git-ssh` est un A en DNS-only vers l'IP publique. Un seul nom ne peut
+      # pas être les deux à la fois — et un enregistrement Tunnel passé en DNS-only ne crée pas un
+      # chemin direct, il tue le nom (`<uuid>.cfargotunnel.com` n'est pas résoluble publiquement).
+      # Les deux chemins convergent ensuite sur le même Traefik (cf. README §Réseau).
       #
       # C'est la valeur affichée dans le bouton « Clone » de l'UI — une erreur ici ne casse rien
       # côté serveur et rend juste toutes les commandes copiées inutilisables.
@@ -309,21 +310,20 @@ gitea:
       # gouverne en revanche tout ce qui arrive quand ce `ProxyCommand` est absent — et c'est ça
       # qui tranche entre 22 et 2222.
       #
-      # ⚠️ Le DNS du LAN sert `192.168.1.50` pour TOUT `*.wittner.tech`, `git-ssh` compris. Un
-      # client du LAN sans `ProxyCommand` composerait donc le port annoncé sur le LXC Traefik :
+      # Côté externe, 2222 est le port réellement redirigé par la box — seul port ouvert de
+      # l'installation.
+      #
+      # ⚠️ Côté LAN, le DNS interne sert `192.168.1.50` pour TOUT `*.wittner.tech`, `git-ssh`
+      # compris. Le port annoncé est donc composé directement sur le LXC Traefik :
       #     22   → OpenSSH d'ADMINISTRATION du LXC, qui demande un mot de passe. Symptôme
-      #            trompeur au possible : rien n'indique qu'il manque un ProxyCommand.
-      #     2222 → entrypoint `ssh` de Traefik, donc Forgejo. Le clone MARCHE, sans cloudflared.
-      # 2222 supprime le seul scénario où l'on atterrit sur le plan d'admin, et offre en prime un
-      # chemin LAN direct qui n'a besoin d'aucun client Cloudflare.
+      #            trompeur au possible : rien n'indique que le port est en cause.
+      #     2222 → entrypoint `ssh` de Traefik, donc Forgejo.
+      # 2222 est donc la seule valeur qui marche des DEUX côtés, et elle supprime le scénario où
+      # l'on atterrit sur le plan d'administration.
       #
       # Le prix : la syntaxe scp-like `git@…:org/repo.git` ne marche que sur 22, le bouton
       # « Clone » affiche donc la forme longue `ssh://git@git-ssh.wittner.tech:2222/…`. Un
       # `Port 2222` dans `~/.ssh/config` restitue la forme courte poste par poste.
-      #
-      # ⚠️ Depuis l'extérieur, sans `ProxyCommand`, la connexion part vers l'edge Cloudflare qui
-      # n'accepte que du HTTP(S) : elle expire, quel que soit le port. Pré-requis client
-      # documenté au README §Réseau.
       SSH_PORT: 2222
       # Port réellement ÉCOUTÉ dans le conteneur : 2222, imposé par l'image rootless. C'est le
       # défaut que le chart poserait de toute façon ; explicité parce que le Service le cible.

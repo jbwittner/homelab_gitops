@@ -140,25 +140,35 @@ ressource n'a été créée hors de ce dossier.
   les paquets se présentent au Service avec l'adresse source du proxy (`192.168.1.50`), qui est
   dans la plage — un client venu d'Internet la franchit comme un client du LAN. Elle ne borne plus
   que le voisinage du Service (empêcher une autre machine du LAN de l'attaquer hors du proxy).
-- [x] **Aucun port ouvert sur la box, IP d'origine non publiée** — le web ET le SSH entrent par un
-  tunnel Cloudflare : `cloudflared` (LXC `192.168.1.56`) établit une connexion *sortante*, il n'y a
-  donc plus ni redirection de port ni enregistrement A visant la maison. Ça remplace le montage
-  précédent (DNS-only + redirection 2222 ouverte à toute source), dont le coût était exactement
-  l'inverse : IP publiée et port exposé.
-  ⚠️ **L'exposition s'est déplacée, elle n'a pas disparu** : elle est maintenant gouvernée par la
-  politique **Cloudflare Access** posée sur `git-ssh.wittner.tech`. Sans policy, quiconque connaît
-  le nom atteint le serveur SSH par le tunnel — le tunnel n'authentifie rien par lui-même. Cette
-  policy est hors dépôt, donc invérifiable ici : à contrôler dans le tableau de bord Zero Trust.
-  Ce qui tient en défense de fond, indépendamment du tunnel :
+- [x] **Un seul port ouvert (2222/SSH), le web sans aucun port** — montage hybride assumé, décidé le
+  6 septembre 2026 après avoir essayé les trois autres :
+  - le **web** entre par un tunnel Cloudflare (`cloudflared`, LXC `192.168.1.56`, connexion
+    *sortante*) : aucun port ouvert pour lui, et son WAF / rate-limiting / absorption DDoS ne sont
+    **pas contournables**, à condition que la redirection **443 reste fermée** ;
+  - le **SSH** entre en direct : `git-ssh.wittner.tech` est un enregistrement **A en DNS-only** vers
+    l'IP publique, avec la redirection 2222 de la box.
+
+  ⚠️ **L'enregistrement `git-ssh` publie l'IP d'origine.** C'est une fuite d'information, pas un
+  chemin d'accès — ce qui ouvre un chemin, c'est un port. D'où la règle qui rend le montage
+  tenable : **443 fermé**. Si cette redirection est rouverte un jour, l'IP publiée devient
+  exploitable et le tunnel ne protège plus rien.
+
+  Pourquoi ne pas tout faire passer par le tunnel : il faudrait `cloudflared` + un `ProxyCommand`
+  sur **chaque** client SSH. Pourquoi ne pas tout passer en HTTPS : Cloudflare plafonne les requêtes
+  à **100 Mo** sur le plan gratuit et un `git push` est un seul POST — un premier push volumineux
+  se prend un `413`. Le SSH direct n'a ni l'un ni l'autre de ces défauts, au prix de l'IP publiée.
+
+  Ce qui tient en défense de fond sur le SSH exposé :
   - le serveur SSH interne de Forgejo authentifie **par clé publique uniquement**, depuis sa base
     — pas de mot de passe, pas de `authorized_keys` sur disque ;
   - `DISABLE_REGISTRATION: true` : aucune clé ne peut être enrôlée par un compte créé de
     l'extérieur ;
   - `GLOBAL_TWO_FACTOR_REQUIREMENT: all` : le git en SSH répond `403` à tout compte sans second
     facteur.
-  ⚠️ Contrepartie : Cloudflare devient une **dépendance dure** pour tout accès externe, web compris.
-  L'accès LAN n'est pas concerné (le DNS interne pointe `192.168.1.50` en direct), donc une panne de
-  tunnel n'enferme pas dehors depuis la maison.
+  ⚠️ Contrepartie : Cloudflare devient une dépendance dure pour l'accès **web** externe. Le SSH n'en
+  dépend pas, et l'accès LAN non plus (le DNS interne sert `192.168.1.50` pour tout
+  `*.wittner.tech`) — une panne de tunnel laisse donc le clone SSH et tout l'accès depuis la maison
+  intacts.
 - [x] **`/metrics` non routé publiquement** — déjà en place : `gitea.metrics.enabled: false`,
   décision documentée (l'endpoint est servi sur le port HTTP applicatif, donc derrière la
   HTTPRoute publique ; sans `[metrics] TOKEN` il serait lisible depuis Internet).

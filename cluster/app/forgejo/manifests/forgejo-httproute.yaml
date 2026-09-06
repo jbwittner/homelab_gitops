@@ -3,10 +3,11 @@
 #
 # ⚠️ Le SSH n'est PAS ici et ne peut pas l'être : `shared-gw` n'a que des listeners HTTPS, et un
 # HTTPRoute ne transporte pas du TCP brut. Il sort par un SECOND hostname,
-# `git-ssh.wittner.tech` — contrainte de l'ingress `cloudflared`, qui discrimine par hostname et
-# non par protocole. Les deux noms entrent par le même tunnel Cloudflare et ressortent sur le même
-# Traefik (192.168.1.50), qui aiguille le HTTPS vers ce Gateway et le TCP vers le Service
-# LoadBalancer `forgejo-ssh` (192.168.1.81). Cf. README §Réseau.
+# `git-ssh.wittner.tech`, et surtout par un AUTRE chemin d'entrée : ce hostname est un
+# enregistrement A en DNS-only (redirection 2222 de la box), là où `forgejo.wittner.tech` passe par
+# un tunnel Cloudflare. Un proxy HTTP ne relaie pas de SSH brut ; c'est ce qui impose la
+# séparation. Les deux chemins convergent sur Traefik (192.168.1.50), qui aiguille le HTTPS vers ce
+# Gateway et le TCP vers le Service LoadBalancer `forgejo-ssh` (192.168.1.81). Cf. README §Réseau.
 #
 # ⚠️ Cette route expose TOUS les chemins, `/metrics` compris le jour où les métriques seront
 # activées. C'est la raison pour laquelle `gitea.metrics.enabled` reste à `false`.

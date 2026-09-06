@@ -6,16 +6,18 @@ Forge Git auto-hébergée (dépôts, issues, PR, registre de paquets, Actions). 
 PostgreSQL dédiée, portée par un `Cluster` CNPG (opérateur fourni par
 [`cnpg`](../cnpg/README.md)).
 
-Deux hostnames, une seule porte d'entrée : un tunnel Cloudflare vers le LXC `cloudflared`
-(192.168.1.56), qui ressort sur Traefik (192.168.1.50). Rien n'est ouvert sur la box.
+Deux hostnames et **deux chemins d'entrée distincts**, qui convergent sur Traefik
+(192.168.1.50) :
 
-- **Web / clone HTTPS** — `https://forgejo.wittner.tech`, puis routeur HTTP de Traefik vers
-  `shared-gw` (192.168.1.80), listener `https-public` (cf.
-  [doc/reseau.md](../../../doc/reseau.md)).
-- **Clone SSH** — `ssh://git@git-ssh.wittner.tech:2222/<org>/<repo>.git`, puis routeur TCP de Traefik
-  (entrypoint `ssh`, port 2222) vers le Service LoadBalancer `forgejo-ssh` sur `192.168.1.81`,
-  hors Gateway. ⚠️ Nécessite `cloudflared` et un `ProxyCommand` sur le poste client
-  (cf. §Réseau) : un `ssh` nu n'aboutit pas.
+- **Web / clone HTTPS** — `https://forgejo.wittner.tech`, par un **tunnel Cloudflare** (LXC
+  `cloudflared`, 192.168.1.56), puis routeur HTTP de Traefik vers `shared-gw` (192.168.1.80),
+  listener `https-public` (cf. [doc/reseau.md](../../../doc/reseau.md)).
+- **Clone SSH** — `ssh://git@git-ssh.wittner.tech:2222/<org>/<repo>.git`, **en direct** :
+  enregistrement A en DNS-only, redirection 2222 de la box, puis routeur TCP de Traefik vers le
+  Service LoadBalancer `forgejo-ssh` sur `192.168.1.81`, hors Gateway.
+
+Le SSH ne peut pas emprunter le tunnel sans imposer `cloudflared` à chaque client, et ne peut pas
+traverser le proxy Cloudflare du tout — cf. [§Réseau](#pourquoi-ce-découpage).
 
 ## Fichiers
 
@@ -202,99 +204,101 @@ protège plus de rien.
 
 ## Réseau
 
-Deux hostnames, une seule porte d'entrée : un **tunnel Cloudflare**. Rien n'est ouvert sur la box —
-`cloudflared` établit une connexion *sortante* depuis le LAN, et l'IP d'origine n'est pas publiée.
+Deux hostnames, **deux chemins d'entrée différents** : le web passe par un tunnel Cloudflare, le
+SSH entre en direct. Ce n'est pas une inconséquence, c'est le seul montage qui satisfasse les
+contraintes des deux protocoles — voir [Pourquoi ce découpage](#pourquoi-ce-découpage).
 
 ```
-client Internet
-  → edge Cloudflare                CNAME vers <tunnel-id>.cfargotunnel.com, proxifié
-  → tunnel                         cloudflared, LXC 192.168.1.56
-  → 192.168.1.50                   Traefik, unique point d'entrée côté LAN
-  → 192.168.1.80 / 192.168.1.81    shared-gw ou Service forgejo-ssh
+web                                     ssh
+client Internet                         client Internet
+  → edge Cloudflare (proxifié)            → IP publique de la box  (A, DNS-only)
+  → tunnel, LXC cloudflared .56           → redirection TCP 2222
+  → 192.168.1.50   Traefik                → 192.168.1.50   Traefik
+  → 192.168.1.80   shared-gw              → 192.168.1.81   Service forgejo-ssh
 ```
 
-Depuis le LAN, le DNS interne court-circuite les deux premiers sauts et pointe `192.168.1.50`
-directement. ⚠️ **Un test local ne prouve donc rien sur le chemin externe** — c'est le piège de
-diagnostic principal de cette section.
+Traefik reste le seul routeur du LAN dans les deux cas. Depuis le LAN, le DNS interne renvoie
+`192.168.1.50` pour **tout** `*.wittner.tech` et court-circuite les sauts amont.
+⚠️ **Un test local ne prouve donc rien sur le chemin externe** — c'est le piège de diagnostic
+principal de cette section, et il a coûté plusieurs fausses pistes.
 
-| Hostname | Ingress cloudflared | Routeur Traefik | Suite du chemin |
-| --- | --- | --- | --- |
-| `forgejo.wittner.tech` | `https://192.168.1.50` + `originServerName` | HTTP, `Host(...)`, entrypoint `websecure` | `shared-gw` (192.168.1.80), HTTPRoute, listener `https-public` |
-| `git-ssh.wittner.tech` | `ssh://192.168.1.50:2222` | TCP, `HostSNI(*)`, entrypoint `ssh` | Service `forgejo-ssh` (192.168.1.81:22), puis pod `:2222` |
+| Hostname | Enregistrement DNS | Chemin | Routeur Traefik | Suite |
+| --- | --- | --- | --- | --- |
+| `forgejo.wittner.tech` | Tunnel, **Proxied** | edge → tunnel → `https://192.168.1.50` (`originServerName`) | HTTP, `Host(...)`, entrypoint `websecure` | `shared-gw` (192.168.1.80), HTTPRoute `https-public` |
+| `git-ssh.wittner.tech` | **A → IP publique, DNS-only** | redirection 2222 de la box → `192.168.1.50:2222` | TCP, `HostSNI(*)`, entrypoint `ssh` | Service `forgejo-ssh` (192.168.1.81:22), puis pod `:2222` |
 
-### Pourquoi deux hostnames
+### Pourquoi ce découpage
 
-L'ingress de `cloudflared` discrimine par **hostname**, pas par protocole : deux règles ne peuvent
-pas partager un nom, la première qui matche gagne. Un nom porte donc le HTTP, l'autre le SSH.
+**Le SSH ne peut pas passer par le proxy Cloudflare.** L'edge est un reverse proxy **HTTP** : il
+termine TLS et parse du HTTP, sur une liste fixe de ports (80, 8080, 8880, 2052, 2082, 2086, 2095
+en clair ; 443, 2053, 2083, 2087, 2096, 8443 en TLS). Du SSH brut ne le traverse **à aucun port** —
+vérifié sur les huit : la connexion TCP est acceptée, puis fermée dès la poignée de main. La
+contrainte n'est pas le port, c'est le protocole.
 
-C'est aussi ce qui a écarté l'idée d'un hostname unique derrière le nuage orange. Le proxy
-Cloudflare est un reverse proxy **HTTP** : il termine TLS et parse du HTTP, sur une liste fixe de
-ports (80, 8080, 8880, 2052, 2082, 2086, 2095 en clair ; 443, 2053, 2083, 2087, 2096, 8443 en TLS).
-Du SSH brut ne le traverse **à aucun port** — vérifié sur les huit : la connexion TCP est acceptée,
-puis fermée dès la poignée de main. La contrainte n'est pas le port, c'est le protocole. Le tunnel
-la lève en encapsulant le SSH *dans* du HTTPS, ce qui en fait vraiment du trafic HTTP.
+**Le tunnel lèverait cette contrainte, mais au prix d'un client dédié.** `cloudflared access ssh`
+encapsule le SSH dans du HTTPS ; il faut alors installer `cloudflared` et poser un `ProxyCommand`
+sur **chaque** poste. Écarté : un `ssh` standard depuis n'importe où était l'objectif.
 
-### Le client SSH a besoin de cloudflared
+**Le tout-HTTPS a été écarté pour une raison précise** : Cloudflare plafonne les requêtes à
+**100 Mo** sur le plan gratuit, et un `git push` est un seul POST. Un premier push volumineux se
+prend un `413` sans message parlant côté git. Le SSH n'a pas cette limite puisqu'il ne traverse pas
+Cloudflare.
 
-Coût structurel du tunnel, à connaître avant de promettre un accès à quelqu'un : l'edge n'accepte
-que du HTTP(S) depuis Internet, donc **un `ssh` nu ne peut pas aboutir**. Chaque poste doit
-installer `cloudflared` et porter :
+⚠️ Un enregistrement de type **Tunnel ne fonctionne qu'en Proxied** : `<uuid>.cfargotunnel.com`
+n'est pas résoluble publiquement, c'est un pseudo-nom interne à l'edge. Le passer en DNS-only ne
+crée pas un chemin direct, il **tue** le nom. Cloudflare le signale par un ⚠️ dans la liste des
+enregistrements. Pour un chemin direct il faut un **A** vers l'IP publique, ce que porte `git-ssh`.
 
-```
-Host git-ssh.wittner.tech
-  ProxyCommand cloudflared access ssh --hostname %h
-  User git
-```
+### Ce que le découpage coûte, et ce qu'il préserve
 
-⚠️ Sans cette entrée, `git clone git@git-ssh.wittner.tech:…` échoue par **timeout** — un symptôme
-qui ne ressemble pas du tout à « il manque un ProxyCommand ».
+L'enregistrement `git-ssh` **publie l'IP d'origine**. C'est une fuite d'information, pas un chemin
+d'accès : ce qui ouvre un chemin, c'est un port ouvert. D'où la règle qui rend ce montage tenable —
+**la redirection 443 doit rester fermée**. Le web n'est alors joignable que par l'edge Cloudflare,
+et son WAF, son rate-limiting et son absorption DDoS ne sont **pas contournables** même en
+connaissant l'IP. Le seul port ouvert de l'installation est le 2222.
+
+C'est aussi ce qui explique que le tunnel garde tout son intérêt malgré l'IP publiée : il protège
+la moitié web, de loin la plus grande surface (UI complète, API, registre de paquets). Le SSH
+n'expose qu'un serveur qui n'accepte que des clés publiques.
 
 ### Les ports du clone SSH
 
-Sur le chemin nominal, le `ProxyCommand` est un tube stdio : **aucun port n'est composé par le
-client**, et `SSH_PORT` est inerte.
-
 ```
-client → (aucun port)  ProxyCommand cloudflared, tube stdio
-       → :2222         entrypoint `ssh` de Traefik   visé par l'ingress cloudflared
-       → :22           Service forgejo-ssh (.81)     = service.ssh.port
-       → :2222         port du conteneur             = SSH_LISTEN_PORT, imposé par le rootless
+client → :2222   redirection de la box, puis entrypoint `ssh` de Traefik   = SSH_PORT, annoncé
+       → :22     Service forgejo-ssh (.81)                                 = service.ssh.port
+       → :2222   port du conteneur                    = SSH_LISTEN_PORT, imposé par le rootless
 ```
 
-Les trois `2222` de cette section n'ont **aucun rapport** entre eux : entrypoint Traefik (choix de
-conf), `SSH_PORT` (valeur annoncée), et `SSH_LISTEN_PORT` (imposé par l'image rootless, qui ne peut
-pas se lier à un port privilégié).
+Les trois `2222` n'ont **aucun rapport** entre eux : redirection de la box, entrypoint Traefik
+(choix de conf), et `SSH_LISTEN_PORT` (imposé par l'image rootless, qui ne peut pas se lier à un
+port privilégié). `service.ssh.port` reste à 22 et n'a pas à suivre `SSH_PORT`.
 
-**Pourquoi `SSH_PORT: 2222` et pas 22**, alors que la valeur est inerte sur le chemin nominal :
-elle gouverne ce qui se passe quand le `ProxyCommand` est **absent**, et le DNS du LAN sert
-`192.168.1.50` pour tout `*.wittner.tech`, `git-ssh` compris.
+**`SSH_PORT: 2222` et non 22**, pour deux raisons distinctes :
 
-| Contexte | `ProxyCommand` | `SSH_PORT: 22` | `SSH_PORT: 2222` |
-| --- | --- | --- | --- |
-| Externe | présent | tunnel → Forgejo ✅ | tunnel → Forgejo ✅ |
-| Externe | absent | edge CF:22 → timeout | edge CF:2222 → timeout |
-| **LAN** | **absent** | **`.50:22` → OpenSSH d'admin du LXC, demande de mot de passe** ❌ | `.50:2222` → Traefik → Forgejo ✅ |
-| LAN | présent | tunnel → Forgejo ✅ | tunnel → Forgejo ✅ |
+- côté externe, c'est le port réellement redirigé par la box ;
+- côté LAN, le DNS interne sert `192.168.1.50` pour tout `*.wittner.tech`. Sur `22`, un clone
+  atterrirait sur l'**OpenSSH d'administration** du LXC Traefik, qui demande un mot de passe — un
+  symptôme qui ne ressemble pas du tout à une erreur de port. Sur `2222`, il tombe sur l'entrypoint
+  Traefik, donc sur Forgejo.
 
-2222 supprime donc le seul cas où l'on atterrit sur le plan d'administration — un échec dont le
-symptôme (mot de passe demandé) ne ressemble en rien à « il manque un ProxyCommand » — et offre en
-prime un chemin LAN direct ne nécessitant aucun client Cloudflare. Le prix est la forme longue
-`ssh://git@git-ssh.wittner.tech:2222/org/repo.git` dans le bouton « Clone » ; un `Port 2222` dans
-`~/.ssh/config` restitue la forme courte poste par poste.
+Le prix est la forme longue `ssh://git@git-ssh.wittner.tech:2222/org/repo.git` dans le bouton
+« Clone » — la syntaxe scp-like ne marche que sur 22. Un `Port 2222` dans `~/.ssh/config` restitue
+la forme courte poste par poste.
 
 ### Points de couplage hors dépôt
 
 Silencieux quand ils cassent, tous les trois :
 
-- L'ingress HTTP a besoin d'`originRequest.originServerName: forgejo.wittner.tech` : le backend est
-  une IP, donc sans lui aucun SNI n'est envoyé et le Gateway Cilium ne trouve aucun listener. Même
-  cause que le `serversTransport` du routeur HTTP de Traefik, qui l'exige pour la même raison.
+- L'ingress HTTP du tunnel a besoin d'`originRequest.originServerName: forgejo.wittner.tech` : le
+  backend est une IP, donc sans lui aucun SNI n'est envoyé et le Gateway Cilium ne trouve aucun
+  listener. Même cause que le `serversTransport` du routeur HTTP de Traefik, qui l'exige pour la
+  même raison.
 - `HostSNI(*)` est **obligatoire** sur le routeur TCP : le SSH ne fait pas de TLS, il n'y a aucun
   SNI à matcher. C'est ce qui impose un entrypoint dédié au SSH — la règle accepte tout ce qui
   arrive dessus.
-- L'**ordre** des règles d'ingress : le fourre-tout `service: http_status:404` doit rester en
-  dernier, et la règle SSH être déclarée avant lui. `cloudflared tunnel ingress validate` le
-  vérifie.
+- La **redirection 2222** de la box, seul port ouvert de l'installation. ⚠️ Et son pendant : la
+  redirection **443 doit rester fermée**, sinon le web devient joignable en direct sur l'IP publiée
+  par `git-ssh`, et tout l'intérêt du tunnel tombe.
 
 ## Exposition publique
 
@@ -707,9 +711,9 @@ relais, avec des identifiants distincts.
   ```bash
   kubectl -n forgejo get svc forgejo-ssh          # EXTERNAL-IP doit valoir 192.168.1.81
   nc -w3 192.168.1.81 22 </dev/null               # bannière `SSH-2.0-Go` = Forgejo, seul
-  ssh -vv -p 2222 git@192.168.1.50 2>&1 | grep 'software version'   # + Traefik, sans le tunnel
-  dig +short CNAME git-ssh.wittner.tech           # doit pointer <tunnel-id>.cfargotunnel.com
-  ssh -T git-ssh.wittner.tech                     # chaîne complète, via le ProxyCommand
+  ssh -vv -p 2222 git@192.168.1.50 2>&1 | grep 'software version'   # + Traefik, depuis le LAN
+  dig +short git-ssh.wittner.tech @1.1.1.1        # doit renvoyer l'IP publique, PAS une IP 188.114.x
+  ssh -T -p 2222 git@git-ssh.wittner.tech         # chaîne complète, depuis un réseau externe
   ```
   Remonter le chemin saut par saut, dans cet ordre : le premier qui ne répond pas est le coupable.
   Deux faux négatifs classiques :
