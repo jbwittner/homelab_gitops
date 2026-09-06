@@ -201,8 +201,41 @@ protège plus de rien.
 
 ## Réseau
 
-Un seul hostname, `forgejo.wittner.tech` → `192.168.1.50` (Traefik). Le proxy est le point de
-séparation : c'est lui, et non le DNS, qui décide où part chaque protocole.
+Un seul hostname, `forgejo.wittner.tech`, et quatre sauts avant le pod :
+
+```
+client Internet
+  → IP publique de la box          DNS Cloudflare, enregistrement en DNS-only
+  → 192.168.1.50                   redirections de port de la box (443 et 2222)
+  → Traefik                        sépare HTTP et TCP (tableau ci-dessous)
+  → 192.168.1.80 / 192.168.1.81    shared-gw ou Service forgejo-ssh
+```
+
+Depuis le LAN, le DNS interne court-circuite les deux premiers sauts et pointe `192.168.1.50`
+directement. ⚠️ **Un test local ne prouve donc rien sur le chemin externe** — c'est le piège de
+diagnostic principal de cette section.
+
+### Pourquoi l'enregistrement est en DNS-only
+
+Le proxy Cloudflare (« nuage orange ») est un **reverse proxy HTTP** : il termine TLS et parse du
+HTTP, sur une liste fixe de ports (80, 8080, 8880, 2052, 2082, 2086, 2095 en clair ; 443, 2053,
+2083, 2087, 2096, 8443 en TLS). Du SSH brut ne peut pas le traverser, **quel que soit le port
+choisi** — 2222 n'est pas dans la liste, et même un port de la liste attendrait du TLS+HTTP. Le
+TCP arbitraire chez Cloudflare, c'est Spectrum, réservé aux plans Enterprise pour le SSH.
+
+Le nuage orange a donc été retiré de ce hostname. Ce que ça coûte, et qui est assumé : l'IP
+d'origine est publiée, le 443 arrive en direct sur Traefik, et le masquage d'origine comme le
+filtrage Cloudflare ne s'appliquent plus au web.
+
+Alternative écartée pour l'instant — garder `forgejo.wittner.tech` en orange pour le web et créer
+un `git-ssh.wittner.tech` en DNS-only pour le seul SSH. Ça restaure la protection Cloudflare côté
+web au prix d'un second hostname et d'un `SSH_DOMAIN` distinct. À reprendre si le web devient une
+cible.
+
+### La séparation des protocoles
+
+Traefik est le point de séparation : c'est lui, et non le DNS, qui décide où part chaque
+protocole.
 
 | Trafic | Routeur Traefik | Cible | Suite du chemin |
 | --- | --- | --- | --- |
@@ -664,7 +697,32 @@ relais, avec des identifiants distincts.
   ```bash
   kubectl -n forgejo get svc forgejo-ssh          # EXTERNAL-IP doit valoir 192.168.1.81
   nc -w3 192.168.1.81 22 </dev/null               # bannière `SSH-2.0-Go` = Forgejo, sans Traefik
-  ssh -T -p 2222 git@forgejo.wittner.tech         # doit répondre par un message Forgejo
+  ssh -vv -p 2222 git@192.168.1.50 2>&1 | grep 'software version'   # + Traefik, sans la box
+  ssh -T -p 2222 git@forgejo.wittner.tech         # chaîne complète, doit répondre du Forgejo
+  ```
+  Remonter le chemin saut par saut, dans cet ordre : le premier qui ne répond pas est le coupable.
+  Deux faux négatifs classiques :
+  - **`nc` sur le port de Traefik ne montre aucune bannière** alors que le chemin est bon : `nc`
+    ferme stdin immédiatement et le routeur TCP attend brièvement un ClientHello. Utiliser
+    `ssh -vv` pour trancher, pas `nc`.
+  - **Le test depuis le LAN réussit et l'externe échoue** : le DNS interne pointe `192.168.1.50`
+    en direct, donc le test local ne traverse ni la box ni le DNS public. Vérifier la résolution
+    réellement servie, et vider le cache si elle diverge :
+  - **Un VPN actif impose son propre résolveur**, prioritaire sur celui du LAN, et il a pu mettre
+    en cache une réponse antérieure à un changement DNS — avec un TTL que `dscacheutil` ne touche
+    pas, puisque le cache est distant. Le symptôme est un `Operation timed out` sur le port SSH,
+    identique à une redirection de port manquante. Interroger **chaque** résolveur, pas seulement
+    le système :
+  ```bash
+  scutil --dns | grep 'nameserver\[0\]'          # qui répond, et dans quel ordre
+  dig +short forgejo.wittner.tech @<chaque résolveur>
+  ```
+  Si un résolveur diverge, couper le VPN ou contourner le nom (`/etc/hosts`) le temps que son TTL
+  expire.
+  ```bash
+  dig +short forgejo.wittner.tech @1.1.1.1        # ce que voit Internet
+  host forgejo.wittner.tech                       # ce que voit ta machine (cache possible)
+  sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder
   ```
 
 - **Upgrade** : bumper `targetRevision` dans `forgejo.app.yaml`. Le versionnage du chart ne suit

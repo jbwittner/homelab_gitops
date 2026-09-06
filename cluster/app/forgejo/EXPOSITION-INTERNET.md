@@ -135,11 +135,22 @@ ressource n'a été créée hors de ce dossier.
   listeners HTTPS), `START_SSH_SERVER: true` (serveur Go interne, pas OpenSSH), traduction
   22 → 2222 imposée par le rootless. **(posé ici)** en complément :
   `loadBalancerSourceRanges: [192.168.1.0/24]`.
-  ⚠️ **Cette plage ne borne plus l'exposition.** Le SSH entre désormais par le routeur TCP de
-  Traefik : tous les paquets se présentent au Service avec l'adresse source du proxy
-  (`192.168.1.50`), qui est dans la plage — un client venu d'Internet la franchit comme un client
-  du LAN. La décision d'exposer ou non le SSH à Internet se prend sur la redirection de port de
-  la box et sur l'entrypoint `ssh` de Traefik, pas ici. Point ouvert, à trancher explicitement.
+  ⚠️ **Cette plage ne borne plus l'exposition.** Le SSH entre par le routeur TCP de Traefik : tous
+  les paquets se présentent au Service avec l'adresse source du proxy (`192.168.1.50`), qui est
+  dans la plage — un client venu d'Internet la franchit comme un client du LAN. Elle ne borne plus
+  que le voisinage du Service (empêcher une autre machine du LAN de l'attaquer hors du proxy).
+- [x] **SSH exposé à Internet — choix assumé, pas un oubli.** La redirection de port 2222 de la box
+  est ouverte à toute source, et l'enregistrement DNS est en DNS-only (le proxy Cloudflare ne
+  passe pas le TCP brut, cf. README §Réseau). Ce qui tient à la place d'un filtrage par IP :
+  - le serveur SSH interne de Forgejo authentifie **par clé publique uniquement**, depuis sa base
+    — pas de mot de passe, pas de `authorized_keys` sur disque ;
+  - `DISABLE_REGISTRATION: true` : aucune clé ne peut être enrôlée par un compte créé de
+    l'extérieur ;
+  - `GLOBAL_TWO_FACTOR_REQUIREMENT: all` : le git en SSH répond `403` à tout compte sans second
+    facteur.
+  Le coût résiduel assumé est le bruit de balayage sur 2222. ⚠️ Si ce compromis devient
+  inacceptable, la sortie est en amont — restreindre la source sur la redirection de la box, ou
+  passer le SSH derrière un VPN / un Cloudflare Tunnel — pas dans `loadBalancerSourceRanges`.
 - [x] **`/metrics` non routé publiquement** — déjà en place : `gitea.metrics.enabled: false`,
   décision documentée (l'endpoint est servi sur le port HTTP applicatif, donc derrière la
   HTTPRoute publique ; sans `[metrics] TOKEN` il serait lisible depuis Internet).
