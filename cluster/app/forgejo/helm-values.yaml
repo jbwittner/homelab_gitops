@@ -8,12 +8,13 @@
 
 # --- Image ---
 image:
-  # Défaut du chart, explicité car LOAD-BEARING pour tout le bloc SSH plus bas : en rootless, le
-  # serveur SSH interne de Forgejo ne peut pas se lier au port 22 (privilégié) et écoute sur 2222.
-  # Le port ANNONCÉ dans les URLs de clone (`SSH_PORT`, 2222 — celui de Traefik) et le port
-  # ÉCOUTÉ dans le pod (`SSH_LISTEN_PORT`, 2222 aussi — imposé ici) sont alors deux choses
-  # différentes qui portent la même valeur par coïncidence ; le Service, lui, écoute 22 et fait
-  # la traduction 22 → 2222 (tableau complet au-dessus de `service.ssh.port`).
+  # Défaut du chart, explicité : le conteneur tourne sans privilèges. C'est désormais la seule
+  # raison de ce réglage — tout le bloc SSH qu'il gouvernait a disparu avec la coupure du clone
+  # SSH (cf. `gitea.config.server.DISABLE_SSH`).
+  #
+  # ⚠️ Il reste LOAD-BEARING sur un point résiduel : le chart déclare un `containerPort` nommé
+  # `ssh` SANS CONDITION, valorisé par `SSH_LISTEN_PORT`. En rootless ce port ne peut pas être
+  # privilégié, d'où le 2222 conservé plus bas alors même que plus rien n'écoute derrière.
   rootless: true
 
 # Forgejo n'est pas HA-ready : le chart lui-même refuse plusieurs configurations au-delà de 1
@@ -87,8 +88,8 @@ resources:
 # composants du repo. Un seul endroit où lire un hostname, et les manifestes annexes sont déjà
 # la source des `group`/`kind`/`weight` que le CRD Gateway réinjecte.
 #
-# Conséquence directe : le chart ne peut PLUS dériver `DOMAIN` / `ROOT_URL` / `SSH_DOMAIN` de
-# l'ingress (il retomberait sur `git.example.com`). Ils sont donc écrits à la main dans
+# Conséquence directe : le chart ne peut PLUS dériver `DOMAIN` / `ROOT_URL` de l'ingress (il
+# retomberait sur `git.example.com`). Ils sont donc écrits à la main dans
 # `gitea.config.server` — les oublier ne casse rien au démarrage mais produit des URLs de clone
 # et des liens de mail pointant vers `git.example.com`.
 ingress:
@@ -102,69 +103,23 @@ service:
     type: ClusterIP
     port: 3000
   ssh:
-    # SSH ne passe PAS par `shared-gw` : le Gateway n'a que des listeners HTTPS, et Gateway API ne
-    # route pas du TCP brut sans `TCPRoute` + un listener TCP dédié. Le chart sait poser un
-    # `TCPRoute` (`tcpRoute.enabled`), mais il faudrait alors ajouter un listener `ssh` au Gateway
-    # partagé — modifier un composant d'infra commun pour un seul consommateur. Un Service
-    # LoadBalancer sur le pool Cilium fait le même travail, localement.
+    # ⚠️ Ce Service EXISTE encore alors que le SSH est coupé, et ce n'est pas un oubli : le chart
+    # 17.1.5 rend `templates/gitea/ssh-svc.yaml` SANS AUCUNE CONDITION — il n'y a pas de
+    # `service.ssh.enabled`, pas plus que pour le `containerPort` correspondant. Le seul levier
+    # disponible est donc le TYPE.
     #
-    # ⚠️ Le client n'atteint PAS ce Service directement. Il tape `git-ssh.wittner.tech`, qui suit
-    # un chemin DIFFÉRENT de celui du web :
-    #     client Internet
-    #       → IP publique de la box   (enregistrement A, DNS-only — PAS le tunnel)
-    #       → redirection TCP 2222
-    #       → 192.168.1.50:2222       (entrypoint `ssh` de Traefik, routeur TCP)
-    #       → CE Service
-    # Le web, lui, passe par un tunnel Cloudflare. Le SSH ne peut pas l'emprunter sans imposer
-    # `cloudflared` à chaque client, et ne peut pas traverser le proxy Cloudflare du tout (c'est un
-    # proxy HTTP). D'où deux hostnames et deux chemins — cf. README §Réseau.
-    type: LoadBalancer
-    # Port écouté par le Service, et cible du routeur TCP de Traefik (dont la conf dynamique porte
-    # `192.168.1.81:22` en dur). Le Service cible ensuite le port nommé `ssh` du pod, soit 2222.
+    # En `ClusterIP` : plus d'IP prise sur le pool LB-IPAM (`192.168.1.81` est rendue au pool
+    # `bleu-kalecgos-pool`), plus d'annonce L2 sur le LAN, plus de `loadBalancerSourceRanges` à
+    # tenir. Il ne reste qu'un objet inerte dans le namespace, dont les endpoints ne se peuplent
+    # même pas puisque le serveur SSH du pod ne démarre plus.
     #
-    # ⚠️ Les ports du trajet, dont deux valent 2222 sans aucun rapport entre eux :
-    #     client → (aucun)      le ProxyCommand cloudflared est un tube stdio
-    #            → :2222        entrypoint `ssh` de Traefik   (visé par l'ingress cloudflared)
-    #            → :22          CE port, sur 192.168.1.81     (Service LoadBalancer)
-    #            → :2222        `SSH_LISTEN_PORT` dans le pod (imposé par l'image rootless)
-    # Ce port-ci n'est donc PAS `SSH_PORT`, et depuis le passage au tunnel il n'est plus couplé à
-    # rien côté client : aucun port n'est composé par le client. Il reste à 22 — le port
-    # privilégié n'est pas un problème côté Service, seule l'image rootless ne peut pas s'y lier.
+    # ⚠️ NE PAS le repasser en `LoadBalancer` isolément : cela ne rétablirait rien et rouvrirait
+    # une exposition sans le serveur en face. Le chemin complet d'un rétablissement est écrit dans
+    # `gitea.config.server`, section « SSH : coupé ».
+    type: ClusterIP
+    # Sans effet fonctionnel — rien n'écoute derrière — mais le chart exige la valeur pour rendre
+    # le Service. 22 est conservé : c'est le port qu'un rétablissement reprendrait.
     port: 22
-    annotations:
-      # IP fixe prise dans `CiliumLoadBalancerIPPool` bleu-kalecgos-pool (192.168.1.80-89,
-      # cf. infra/cilium/manifests/ip-pool.yaml), annoncée en L2 sur le LAN.
-      #
-      # ⚠️ Elle est FIXE parce que la conf dynamique de Traefik la vise en dur
-      # (`tcp.services.forgejo-ssh`, hors dépôt). Aucun DNS ne pointe ici — le contrat s'est
-      # déplacé du DNS vers le proxy, mais il est tout aussi rigide : une IP laissée à
-      # l'allocateur changerait au premier recréage du Service et couperait le clone SSH en
-      # silence, sans erreur visible côté cluster.
-      #
-      # ⚠️ Cette IP est DISTINCTE de celle de `shared-gw` (192.168.1.80, cible du routeur HTTP de
-      # Traefik) : web et SSH n'atterrissent pas au même endroit, et portent maintenant deux
-      # hostnames distincts jusqu'au bout de la chaîne.
-      #
-      # `lbipam.cilium.io/ips` et non le champ `spec.loadBalancerIP` (déprécié côté Kubernetes)
-      # ni l'ancien `io.cilium/lb-ipam-ips` (déprécié côté Cilium depuis la 1.16).
-      lbipam.cilium.io/ips: 192.168.1.81
-    # Restreint qui peut ouvrir une connexion sur ce Service. Depuis que le SSH entre par Traefik,
-    # le seul client légitime est le proxy lui-même (192.168.1.50) — Cilium applique le filtre en
-    # eBPF sur le nœud d'entrée, AVANT le DNAT vers le pod.
-    #
-    # C'est aussi ce qui rend acceptable la règle d'ingress large du port 2222 dans
-    # manifests/forgejo-netpol.yaml : en `externalTrafficPolicy` par défaut (`Cluster`), un
-    # paquet relayé d'un nœud à l'autre est SNATé, l'identité Cilium vue par la policy n'est
-    # alors plus `world` mais celle du nœud — le filtrage par source se fait donc ici, pas là-bas.
-    #
-    # ⚠️ Cette liste ne dit PLUS rien de l'exposition Internet, contrairement à ce qu'elle
-    # signifiait quand le client attaquait le Service en direct. Tout le trafic SSH se présente
-    # maintenant avec l'adresse source de Traefik (192.168.1.50), qui est dans la plage : un
-    # client venu d'Internet la franchit exactement comme un client du LAN. Ce qui décide de
-    # l'exposition réelle est en amont — redirection de port de la box vers 192.168.1.50, et
-    # entrypoint `ssh` de Traefik. Restreindre ICI ne protège de rien de tout ça.
-    loadBalancerSourceRanges:
-      - 192.168.1.0/24
 
 # --- Stockage ---
 # Le PVC porte TOUT l'état non-SQL. Le `[storage]` de Forgejo est en `local` par défaut et
@@ -295,42 +250,42 @@ gitea:
       # un certificat qu'il n'a pas.
       HTTP_PORT: 3000
 
-      # Hostname DIFFÉRENT du web (`forgejo.wittner.tech`), et ce n'est pas un choix esthétique :
-      # les deux noms n'ont pas le même TYPE d'enregistrement DNS. `forgejo` est un enregistrement
-      # Tunnel proxifié ; `git-ssh` est un A en DNS-only vers l'IP publique. Un seul nom ne peut
-      # pas être les deux à la fois — et un enregistrement Tunnel passé en DNS-only ne crée pas un
-      # chemin direct, il tue le nom (`<uuid>.cfargotunnel.com` n'est pas résoluble publiquement).
-      # Les deux chemins convergent ensuite sur le même Traefik (cf. README §Réseau).
+      # --- SSH : coupé ---
+      # Le clone Git se fait UNIQUEMENT en HTTPS, par `forgejo.wittner.tech` et le tunnel
+      # Cloudflare. Décision du 2026-09-06. Ont été supprimés du même geste, hors dépôt : le
+      # hostname `git-ssh.wittner.tech` — un enregistrement A qui PUBLIAIT l'IP d'origine —, la
+      # redirection 2222 de la box, qui était le SEUL port entrant de l'installation, et le
+      # routeur TCP de Traefik. Il ne reste aucun port ouvert : tout entre par le tunnel, donc
+      # derrière le WAF de l'edge. Cf. README §Réseau.
       #
-      # C'est la valeur affichée dans le bouton « Clone » de l'UI — une erreur ici ne casse rien
-      # côté serveur et rend juste toutes les commandes copiées inutilisables.
-      SSH_DOMAIN: git-ssh.wittner.tech
-      # Port ANNONCÉ dans les URLs de clone. Avec le `ProxyCommand cloudflared access ssh` (tube
-      # stdio), ce port n'est PAS composé : la valeur est inerte sur le chemin nominal. Elle
-      # gouverne en revanche tout ce qui arrive quand ce `ProxyCommand` est absent — et c'est ça
-      # qui tranche entre 22 et 2222.
+      # Deux réglages, deux effets distincts, les deux nécessaires :
+      #   DISABLE_SSH        côté APPLICATION — les URLs de clone SSH disparaissent de l'UI et la
+      #                      gestion des clés publiques quitte le profil.
+      #   START_SSH_SERVER   côté PROCESSUS — le serveur SSH interne (Go) ne démarre pas.
       #
-      # Côté externe, 2222 est le port réellement redirigé par la box — seul port ouvert de
-      # l'installation.
+      # ⚠️ Ne PAS poser `START_SSH_SERVER: false` seul, en laissant `DISABLE_SSH` à `false` : cette
+      # combinaison ne veut pas dire « pas de SSH », elle veut dire « SSH servi par un OpenSSH
+      # EXTERNE ». Forgejo se met alors à gérer et à valider un `authorized_keys` sur le volume
+      # (cf. `custom/conf/app.example.ini` amont, §`[server]`) — exactement ce qu'on ne veut pas.
+      # C'est `DISABLE_SSH` qui coupe la fonctionnalité ; `START_SSH_SERVER` ne fait qu'éteindre
+      # le démon.
       #
-      # ⚠️ Côté LAN, le DNS interne sert `192.168.1.50` pour TOUT `*.wittner.tech`, `git-ssh`
-      # compris. Le port annoncé est donc composé directement sur le LXC Traefik :
-      #     22   → OpenSSH d'ADMINISTRATION du LXC, qui demande un mot de passe. Symptôme
-      #            trompeur au possible : rien n'indique que le port est en cause.
-      #     2222 → entrypoint `ssh` de Traefik, donc Forgejo.
-      # 2222 est donc la seule valeur qui marche des DEUX côtés, et elle supprime le scénario où
-      # l'on atterrit sur le plan d'administration.
-      #
-      # Le prix : la syntaxe scp-like `git@…:org/repo.git` ne marche que sur 22, le bouton
-      # « Clone » affiche donc la forme longue `ssh://git@git-ssh.wittner.tech:2222/…`. Un
-      # `Port 2222` dans `~/.ssh/config` restitue la forme courte poste par poste.
-      SSH_PORT: 2222
-      # Port réellement ÉCOUTÉ dans le conteneur : 2222, imposé par l'image rootless. C'est le
-      # défaut que le chart poserait de toute façon ; explicité parce que le Service le cible.
+      # ⚠️ Rétablir le SSH demande, dans cet ordre : ces deux réglages inversés, `service.ssh.type`
+      # en `LoadBalancer` avec une IP du pool, la règle d'ingress 2222 dans
+      # `manifests/forgejo-netpol.yaml`, puis hors dépôt le routeur TCP de Traefik, la redirection
+      # de la box et un enregistrement DNS. Aucune de ces étapes n'est facultative, et l'oubli
+      # d'une seule se diagnostique en timeout muet.
+      DISABLE_SSH: true
+      START_SSH_SERVER: false
+      # ⚠️ Conservé, et ce n'est pas un résidu : le chart déclare le `containerPort` nommé `ssh`
+      # SANS CONDITION (`templates/gitea/deployment.yaml`) et le valorise avec ce réglage. Le
+      # retirer ferait retomber le chart sur son propre défaut — 2222 en rootless, donc la même
+      # valeur — mais l'écrire ici garde le port du manifeste explicite plutôt que dérivé. Aucun
+      # processus n'écoute derrière.
       SSH_LISTEN_PORT: 2222
-      # Serveur SSH interne (Go), pas un OpenSSH : pas de gestion de `authorized_keys` sur disque,
-      # Forgejo authentifie les clés depuis sa base. Défaut du chart en rootless.
-      START_SSH_SERVER: true
+      # `SSH_DOMAIN` et `SSH_PORT` ne sont plus écrits : le chart leur donne des défauts (le
+      # `DOMAIN`, et `service.ssh.port`) qui atterrissent dans `app.ini` sans aucun effet, la
+      # section SSH étant désactivée. Rien à maintenir de ce côté.
 
     database:
       DB_TYPE: postgres
@@ -369,7 +324,7 @@ gitea:
       # toujours par mot de passe, il est ensuite REDIRIGÉ vers `/user/settings/security` et n'a
       # accès à rien d'autre tant qu'il n'a pas enrôlé. Activer ce réglage sur l'instance en
       # service n'enferme donc pas dehors — mais entre le sync et l'enrôlement, TOUT le reste est
-      # déjà refusé : API (403), git en SSH (403), git en HTTP authentifié (302 vers la page
+      # déjà refusé : API (403), git en HTTP authentifié (302 vers la page
       # d'enrôlement, que `git` suit et qui casse la commande), LFS et registre de paquets.
       # Enrôler juste après le sync, pas le lendemain.
       #

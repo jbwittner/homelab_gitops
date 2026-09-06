@@ -45,27 +45,13 @@ spec:
             - port: "3000"
               protocol: TCP
 
-    # --- Clone SSH : par le Service LoadBalancer ---
-    # Port 2222, celui que le conteneur rootless écoute réellement (le Service traduit 22 → 2222).
-    #
-    # ⚠️ La liste d'entités est volontairement LARGE, et le filtrage par source ne se fait PAS
-    # ici : avec l'`externalTrafficPolicy` par défaut (`Cluster`), un paquet reçu par un nœud puis
-    # relayé vers le nœud qui porte le pod est SNATé — l'identité vue par cette policy n'est alors
-    # plus `world` (le client) mais `remote-node`. Un filtre par CIDR à cet endroit refuserait donc
-    # du trafic légitime de façon intermittente, selon le nœud d'arrivée.
-    # Le filtrage par source est posé là où il est fiable : `service.ssh.loadBalancerSourceRanges`
-    # dans helm-values.yaml, appliqué en eBPF sur le nœud d'entrée AVANT le DNAT. ⚠️ Depuis que le
-    # SSH entre par Traefik, ce filtre ne borne plus que le voisinage du Service (seul le proxy
-    # l'attaque) — il ne dit rien de l'exposition Internet, qui se décide sur Traefik et la box.
-    - fromEntities:
-        - world
-        - cluster
-        - host
-        - remote-node
-      toPorts:
-        - ports:
-            - port: "2222"
-              protocol: TCP
+    # ⚠️ Il n'y a plus qu'UNE règle d'ingress, et c'est le signe que le SSH est coupé. Une règle
+    # ouvrait auparavant le port 2222 à une liste d'entités large (`world`, `cluster`, `host`,
+    # `remote-node`), le filtrage par source étant délégué à `service.ssh.loadBalancerSourceRanges`.
+    # Elle a été retirée avec le clone SSH le 2026-09-06 : le pod ne reçoit plus rien d'autre que
+    # le trafic du Gateway sur 3000. La remettre fait partie de la procédure de rétablissement
+    # écrite dans helm-values.yaml, section « SSH : coupé » — et sans elle, un SSH rétabli échoue
+    # en timeout muet.
 
   egress:
     # --- DNS ---

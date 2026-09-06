@@ -40,17 +40,20 @@ ressource n'a été créée hors de ce dossier.
   existe (`infra/sealed-secrets/README.md` §Backup / restauration de la clé) et le motif
   `*sealed-secrets-key*.yaml` est au `.gitignore`. Que la sauvegarde ait été **faite** ne se lit
   nulle part dans le dépôt, par construction.
-- [x] **Réserver une IP sur le pool LB-IPAM pour le service SSH** — `192.168.1.81` via
-  `lbipam.cilium.io/ips`, dans le bloc `192.168.1.80-89` du `CiliumLoadBalancerIPPool`
-  (`infra/cilium/manifests/ip-pool.yaml`). L'annotation moderne est utilisée, pas
-  `spec.loadBalancerIP` ni `io.cilium/lb-ipam-ips`.
+- [x] **Réserver une IP sur le pool LB-IPAM pour le service SSH** — **sans objet depuis le
+  2026-09-06.** Le SSH est coupé, le Service `forgejo-ssh` est repassé en `ClusterIP` et
+  `192.168.1.81` est rendue au pool `bleu-kalecgos-pool` (`infra/cilium/manifests/ip-pool.yaml`,
+  bloc `192.168.1.80-89`). Ce composant ne réserve plus aucune IP de pool.
 - [ ] **Enregistrement DNS + certificat cert-manager** — le certificat est là : `Certificate`
   wildcard `*.wittner.tech` (`letsencrypt-prod`, DNS-01), consommé par le listener
-  `https-public` de `shared-gw`. Les **enregistrements DNS** (`forgejo.wittner.tech` et
-  `git-ssh.wittner.tech`, tous deux CNAME vers `<tunnel-id>.cfargotunnel.com`), l'**ingress du
-  tunnel** (`https://192.168.1.50` avec `originServerName` ; `ssh://192.168.1.50:2222`) et la
-  **conf Traefik** (routeur HTTP vers `192.168.1.80` ; entrypoint `ssh` sur `:2222` et routeur TCP
-  vers `192.168.1.81:22`) sont hors du dépôt : invérifiables.
+  `https-public` de `shared-gw`. Restent hors du dépôt, donc invérifiables : l'**enregistrement
+  DNS** `forgejo.wittner.tech` (CNAME vers `<tunnel-id>.cfargotunnel.com`, **Proxied**),
+  l'**ingress du tunnel** (`https://192.168.1.50` avec `originServerName`) et la **conf Traefik**
+  (routeur HTTP vers `192.168.1.80`).
+  ⚠️ **À supprimer s'ils traînent encore**, côté Cloudflare, box et Traefik : l'enregistrement A
+  `git-ssh.wittner.tech`, la redirection 2222 et l'entrypoint `ssh` + son routeur TCP. Tant qu'ils
+  existent, l'IP d'origine reste publiée et un port reste ouvert — alors que le dépôt, lui,
+  n'expose plus rien en SSH.
 - [ ] **Passer les repos candidats au scan de secrets avant de les rendre publics** — acte
   opératoire, hors dépôt. Atténué par `[repository] DEFAULT_PRIVATE: private` **(posé ici)** :
   rendre un dépôt public devient un geste explicite.
@@ -114,13 +117,11 @@ ressource n'a été créée hors de ce dossier.
   `169.254/16`, `127/8`, `100.64/10`. ⚠️ `toEntities: [world]` aurait été un piège : en Cilium,
   `world` inclut les machines du LAN. Le SMTP externe est couvert par la règle publique ; un
   relais sur le LAN demanderait un `toCIDR` explicite.
-- [x] **`CiliumNetworkPolicy` ingress : uniquement depuis l'ingress controller et le service SSH**
-  — même fichier **(posé ici)**. Port 3000 depuis `ingress` / `host` / `remote-node` uniquement,
-  port 2222 pour le SSH. ⚠️ Deux réserves écrites dans le fichier : `host`/`remote-node` sont
-  nécessaires (sondes kubelet, et Envoy selon son mode de déploiement), ce qui laisse un pod en
-  hostNetwork joindre le port ; et le filtrage par source du SSH n'est **pas** dans la policy
-  (SNAT en `externalTrafficPolicy: Cluster`) mais dans `loadBalancerSourceRanges` — lequel ne
-  voit plus que l'adresse de Traefik depuis que le SSH entre par le proxy.
+- [x] **`CiliumNetworkPolicy` ingress : uniquement depuis l'ingress controller** — même fichier
+  **(posé ici)**. Port 3000 depuis `ingress` / `host` / `remote-node` uniquement, et **plus rien
+  d'autre** : la règle du port 2222 est partie avec le SSH le 2026-09-06. ⚠️ Réserve inchangée et
+  écrite dans le fichier : `host`/`remote-node` sont nécessaires (sondes kubelet, et Envoy selon
+  son mode de déploiement), ce qui laisse un pod en hostNetwork joindre ce port.
 - [x] **`securityContext` : `runAsNonRoot`, capabilities droppées, seccomp `RuntimeDefault`** —
   `helm-values.yaml` **(posé ici)** : `containerSecurityContext` avec `runAsNonRoot`,
   `runAsUser/Group: 1000`, `drop: [ALL]`, `allowPrivilegeEscalation: false`, `privileged: false` ;
@@ -131,44 +132,46 @@ ressource n'a été créée hors de ce dossier.
   512Mi, `limits` mémoire 2Gi. ⚠️ **Pas de limite CPU, volontairement** et c'est documenté : un
   `git gc` throttlé allonge la transaction sans rien protéger. La case est cochée pour ce qui est
   posé, pas pour une couverture complète des quatre champs.
-- [x] **Service LoadBalancer dédié pour SSH, serveur SSH interne de Forgejo** — déjà en place :
-  Service `forgejo-ssh` type LoadBalancer sur `192.168.1.81` (hors Gateway, qui n'a que des
-  listeners HTTPS), `START_SSH_SERVER: true` (serveur Go interne, pas OpenSSH), traduction
-  22 → 2222 imposée par le rootless. **(posé ici)** en complément :
-  `loadBalancerSourceRanges: [192.168.1.0/24]`.
-  ⚠️ **Cette plage ne borne plus l'exposition.** Le SSH entre par le routeur TCP de Traefik : tous
-  les paquets se présentent au Service avec l'adresse source du proxy (`192.168.1.50`), qui est
-  dans la plage — un client venu d'Internet la franchit comme un client du LAN. Elle ne borne plus
-  que le voisinage du Service (empêcher une autre machine du LAN de l'attaquer hors du proxy).
-- [x] **Un seul port ouvert (2222/SSH), le web sans aucun port** — montage hybride assumé, décidé le
-  6 septembre 2026 après avoir essayé les trois autres :
-  - le **web** entre par un tunnel Cloudflare (`cloudflared`, LXC `192.168.1.56`, connexion
-    *sortante*) : aucun port ouvert pour lui, et son WAF / rate-limiting / absorption DDoS ne sont
-    **pas contournables**, à condition que la redirection **443 reste fermée** ;
-  - le **SSH** entre en direct : `git-ssh.wittner.tech` est un enregistrement **A en DNS-only** vers
-    l'IP publique, avec la redirection 2222 de la box.
+- [x] **Service LoadBalancer dédié pour SSH, serveur SSH interne de Forgejo** — **annulé le
+  2026-09-06.** Le serveur SSH ne démarre plus (`START_SSH_SERVER: false`) et l'application ne
+  propose plus de clone SSH (`DISABLE_SSH: true`). Le Service `forgejo-ssh` subsiste en
+  `ClusterIP` — le chart 17.1.5 rend `ssh-svc.yaml` et son `containerPort` **sans condition**, il
+  n'existe pas de `service.ssh.enabled` — donc sans IP de pool, sans annonce L2 et sans endpoint.
+  `loadBalancerSourceRanges` a été retiré : il n'a aucun sens hors d'un type `LoadBalancer`.
+- [x] **Aucun port ouvert** — révision, le 2026-09-06, du montage hybride décidé le matin même.
+  Tout entre désormais par le tunnel Cloudflare (`cloudflared`, LXC `192.168.1.56`, connexion
+  *sortante*) : aucun port entrant, et le WAF / rate-limiting / absorption DDoS de l'edge ne sont
+  contournables **par rien**.
 
-  ⚠️ **L'enregistrement `git-ssh` publie l'IP d'origine.** C'est une fuite d'information, pas un
-  chemin d'accès — ce qui ouvre un chemin, c'est un port. D'où la règle qui rend le montage
-  tenable : **443 fermé**. Si cette redirection est rouverte un jour, l'IP publiée devient
-  exploitable et le tunnel ne protège plus rien.
+  Ce que la coupure du SSH a supprimé :
+  - la redirection **2222** de la box, qui était le seul port ouvert de l'installation ;
+  - l'enregistrement **A `git-ssh.wittner.tech`**, qui **publiait l'IP d'origine** — fuite
+    d'information d'autant plus durable que l'IP est fixe ;
+  - le routeur TCP de Traefik et son entrypoint `ssh`.
 
-  Pourquoi ne pas tout faire passer par le tunnel : il faudrait `cloudflared` + un `ProxyCommand`
-  sur **chaque** client SSH. Pourquoi ne pas tout passer en HTTPS : Cloudflare plafonne les requêtes
-  à **100 Mo** sur le plan gratuit et un `git push` est un seul POST — un premier push volumineux
-  se prend un `413`. Le SSH direct n'a ni l'un ni l'autre de ces défauts, au prix de l'IP publiée.
+  ⚠️ La règle **443 fermé** reste entière et devient la seule qui compte : c'est elle, désormais
+  seule, qui garantit que l'edge n'est pas contournable.
 
-  Ce qui tient en défense de fond sur le SSH exposé :
-  - le serveur SSH interne de Forgejo authentifie **par clé publique uniquement**, depuis sa base
-    — pas de mot de passe, pas de `authorized_keys` sur disque ;
-  - `DISABLE_REGISTRATION: true` : aucune clé ne peut être enrôlée par un compte créé de
-    l'extérieur ;
-  - `GLOBAL_TWO_FACTOR_REQUIREMENT: all` : le git en SSH répond `403` à tout compte sans second
-    facteur.
-  ⚠️ Contrepartie : Cloudflare devient une dépendance dure pour l'accès **web** externe. Le SSH n'en
-  dépend pas, et l'accès LAN non plus (le DNS interne sert `192.168.1.50` pour tout
-  `*.wittner.tech`) — une panne de tunnel laisse donc le clone SSH et tout l'accès depuis la maison
-  intacts.
+  Ce que ça coûte, et qui est assumé : Cloudflare plafonne une requête à **100 Mo** sur le plan
+  gratuit, or un `git push` est un seul POST — un push volumineux se prend un `413` que git
+  n'explique pas, et chaque objet LFS compte pour une requête. L'échappatoire est le chemin LAN,
+  où le DNS interne sert `192.168.1.50` et où le trafic ne traverse jamais l'edge : un import
+  initial volumineux se fait depuis la maison, sans plafond.
+
+  Ce qui tient en défense de fond, maintenant que tout passe en HTTPS authentifié :
+  - `DISABLE_REGISTRATION: true` : aucun compte ne se crée depuis l'extérieur ;
+  - `GLOBAL_TWO_FACTOR_REQUIREMENT: all` : sans second facteur, l'API répond `403` et le git en
+    HTTP authentifié part en `302` vers la page d'enrôlement ;
+  - les jetons d'accès personnels se **scopent, s'expirent et se révoquent un par un**, ce qu'une
+    clé SSH de compte ne savait pas faire. ⚠️ En regard, un jeton est un secret **porteur**,
+    transmis à chaque requête là où une clé privée ne quitte jamais le poste : à ranger dans un
+    credential helper (trousseau macOS), jamais dans un `.git-credentials` en clair.
+
+  ⚠️ Contrepartie, plus lourde qu'avant : **Cloudflare est maintenant une dépendance dure pour
+  TOUT accès externe**, Git compris. Une panne de tunnel ne laisse plus que l'accès depuis le LAN
+  (le DNS interne sert `192.168.1.50` pour tout `*.wittner.tech`). Auparavant le SSH survivait à
+  cette panne ; c'est le prix direct de la simplification, et il est payé sciemment.
+
 - [x] **`/metrics` non routé publiquement** — déjà en place : `gitea.metrics.enabled: false`,
   décision documentée (l'endpoint est servi sur le port HTTP applicatif, donc derrière la
   HTTPRoute publique ; sans `[metrics] TOKEN` il serait lisible depuis Internet).
@@ -225,6 +228,10 @@ Aucune n'a été effectuée : elles demandent toutes une instance en service, et
       `ALLOWED_DOMAINS`, puis la policy egress)
 - [ ] Depuis un shell dans le pod : API Kubernetes et autres services du cluster injoignables
       (policy egress + `automountServiceAccountToken: false`)
+- [ ] Depuis un réseau externe : **aucun port ouvert** sur l'IP publique — la redirection 2222 a
+      été retirée le 2026-09-06, la 443 ne l'a jamais été (`nc -vz <ip-publique> 2222` doit
+      échouer, et rester le seul port jamais testé positif)
+- [ ] `git clone` / `git push` en HTTPS avec un jeton personnel → seul chemin Git restant
 - [ ] Tentatives de login ratées en série → rate limiting — **échouera** : il n'y en a pas
 - [ ] Token d'API sans 2FA : vérifier que ses scopes sont limités
 - [ ] Redéploiement du chart : sessions et tokens survivent — **ne prouvera rien tant que

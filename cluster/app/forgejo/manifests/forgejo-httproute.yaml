@@ -1,13 +1,15 @@
 # UI et API HTTP de Forgejo. Listener `https-public` (*.wittner.tech) : une forge n'a d'intérêt
 # que joignable de l'extérieur, et le clone HTTPS passe par cette même route.
 #
-# ⚠️ Le SSH n'est PAS ici et ne peut pas l'être : `shared-gw` n'a que des listeners HTTPS, et un
-# HTTPRoute ne transporte pas du TCP brut. Il sort par un SECOND hostname,
-# `git-ssh.wittner.tech`, et surtout par un AUTRE chemin d'entrée : ce hostname est un
-# enregistrement A en DNS-only (redirection 2222 de la box), là où `forgejo.wittner.tech` passe par
-# un tunnel Cloudflare. Un proxy HTTP ne relaie pas de SSH brut ; c'est ce qui impose la
-# séparation. Les deux chemins convergent sur Traefik (192.168.1.50), qui aiguille le HTTPS vers ce
-# Gateway et le TCP vers le Service LoadBalancer `forgejo-ssh` (192.168.1.81). Cf. README §Réseau.
+# ⚠️ C'est le SEUL chemin d'entrée de la forge depuis le 2026-09-06. Le clone SSH a été coupé et
+# tout le Git passe maintenant par cette route, en HTTPS. Il n'y a plus de second hostname, plus de
+# port ouvert sur la box, et rien à router en TCP — un HTTPRoute ne transporte de toute façon pas
+# de TCP brut, et `shared-gw` n'a que des listeners HTTPS. Cf. README §Réseau.
+#
+# ⚠️ Conséquence à connaître avant de diagnostiquer un `git push` qui échoue : le trafic traverse
+# le proxy Cloudflare, qui plafonne une requête à 100 Mo sur le plan gratuit. Un push volumineux se
+# prend un `413` que git ne sait pas expliquer. L'échappatoire est documentée dans README §Réseau —
+# depuis le LAN, le DNS interne court-circuite l'edge et le plafond disparaît.
 #
 # ⚠️ Cette route expose TOUS les chemins, `/metrics` compris le jour où les métriques seront
 # activées. C'est la raison pour laquelle `gitea.metrics.enabled` reste à `false`.
