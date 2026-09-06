@@ -108,35 +108,42 @@ service:
     # partagé — modifier un composant d'infra commun pour un seul consommateur. Un Service
     # LoadBalancer sur le pool Cilium fait le même travail, localement.
     #
-    # ⚠️ Le client n'atteint PAS ce Service directement. Il tape `forgejo.wittner.tech`, qui
-    # résout sur Traefik (192.168.1.50) ; Traefik sépare les deux trafics — routeur HTTP vers
-    # `shared-gw` (192.168.1.80) pour le web, routeur TCP vers l'IP ci-dessous pour le SSH. Un
-    # seul hostname, deux chemins réseau derrière (cf. README §Réseau).
+    # ⚠️ Le client n'atteint PAS ce Service directement, et n'ouvre même pas de connexion TCP
+    # vers le LAN. Il tape `git-ssh.wittner.tech`, servi par un tunnel Cloudflare :
+    #     client (cloudflared, ProxyCommand)
+    #       → edge Cloudflare
+    #       → tunnel jusqu'au LXC cloudflared (192.168.1.56)
+    #       → 192.168.1.50:2222  (entrypoint `ssh` de Traefik, routeur TCP)
+    #       → CE Service
+    # Rien n'est ouvert sur la box : `cloudflared` établit une connexion SORTANTE. Deux hostnames,
+    # parce que l'ingress cloudflared discrimine par hostname et non par protocole
+    # (cf. README §Réseau).
     type: LoadBalancer
     # Port écouté par le Service, et cible du routeur TCP de Traefik (dont la conf dynamique porte
     # `192.168.1.81:22` en dur). Le Service cible ensuite le port nommé `ssh` du pod, soit 2222.
     #
-    # ⚠️ TROIS ports différents sur le trajet d'un clone SSH, dont deux valent 2222 sans aucun
-    # rapport entre eux :
-    #     client → :2222        entrypoint `ssh` de Traefik      (= `SSH_PORT`, annoncé)
-    #            → :22          CE port, sur 192.168.1.81        (Service LoadBalancer)
-    #            → :2222        `SSH_LISTEN_PORT` dans le pod    (imposé par l'image rootless)
-    # Ce port-ci n'est donc PAS `SSH_PORT` et n'a pas à le suivre : changer l'un sans l'autre est
-    # légitime. Il reste à 22 — le port privilégié n'est pas un problème côté Service, seule
-    # l'image rootless ne peut pas s'y lier.
+    # ⚠️ Les ports du trajet, dont deux valent 2222 sans aucun rapport entre eux :
+    #     client → (aucun)      le ProxyCommand cloudflared est un tube stdio
+    #            → :2222        entrypoint `ssh` de Traefik   (visé par l'ingress cloudflared)
+    #            → :22          CE port, sur 192.168.1.81     (Service LoadBalancer)
+    #            → :2222        `SSH_LISTEN_PORT` dans le pod (imposé par l'image rootless)
+    # Ce port-ci n'est donc PAS `SSH_PORT`, et depuis le passage au tunnel il n'est plus couplé à
+    # rien côté client : aucun port n'est composé par le client. Il reste à 22 — le port
+    # privilégié n'est pas un problème côté Service, seule l'image rootless ne peut pas s'y lier.
     port: 22
     annotations:
       # IP fixe prise dans `CiliumLoadBalancerIPPool` bleu-kalecgos-pool (192.168.1.80-89,
       # cf. infra/cilium/manifests/ip-pool.yaml), annoncée en L2 sur le LAN.
       #
       # ⚠️ Elle est FIXE parce que la conf dynamique de Traefik la vise en dur
-      # (`tcp.services.forgejo-ssh`, hors dépôt). Aucun DNS ne pointe plus ici — le contrat s'est
+      # (`tcp.services.forgejo-ssh`, hors dépôt). Aucun DNS ne pointe ici — le contrat s'est
       # déplacé du DNS vers le proxy, mais il est tout aussi rigide : une IP laissée à
       # l'allocateur changerait au premier recréage du Service et couperait le clone SSH en
       # silence, sans erreur visible côté cluster.
       #
       # ⚠️ Cette IP est DISTINCTE de celle de `shared-gw` (192.168.1.80, cible du routeur HTTP de
-      # Traefik) : web et SSH n'atterrissent pas au même endroit, même sous un hostname commun.
+      # Traefik) : web et SSH n'atterrissent pas au même endroit, et portent maintenant deux
+      # hostnames distincts jusqu'au bout de la chaîne.
       #
       # `lbipam.cilium.io/ips` et non le champ `spec.loadBalancerIP` (déprécié côté Kubernetes)
       # ni l'ancien `io.cilium/lb-ipam-ips` (déprécié côté Cilium depuis la 1.16).
@@ -288,29 +295,35 @@ gitea:
       # un certificat qu'il n'a pas.
       HTTP_PORT: 3000
 
-      # MÊME hostname que le web : les deux trafics arrivent sur Traefik (192.168.1.50), qui les
-      # sépare — routeur HTTP vers `shared-gw` d'un côté, routeur TCP vers le Service
-      # LoadBalancer `forgejo-ssh` de l'autre. C'est la valeur affichée dans le bouton « Clone »
-      # de l'UI — une erreur ici ne casse rien côté serveur et rend juste toutes les commandes
-      # copiées inutilisables.
-      SSH_DOMAIN: forgejo.wittner.tech
-      # Port ANNONCÉ dans les URLs de clone : celui de l'entrypoint `ssh` de Traefik, PAS celui du
-      # Service (22) ni celui du pod (`SSH_LISTEN_PORT`, 2222) — cf. le tableau des trois ports
-      # au-dessus de `service.ssh.port`.
+      # Hostname DIFFÉRENT du web (`forgejo.wittner.tech`), et ce n'est pas un choix esthétique :
+      # l'ingress de `cloudflared` discrimine par hostname, pas par protocole — deux règles ne
+      # peuvent pas partager un nom, la première qui matche gagne. Il faut donc un nom pour le
+      # HTTP et un nom pour le SSH. Les deux entrent par le même tunnel et ressortent sur le même
+      # Traefik (cf. README §Réseau).
       #
-      # 2222 et non 22, parce que le port 22 de 192.168.1.50 est tenu par l'OpenSSH du LXC qui
-      # porte Traefik. Déplacer ce sshd pour libérer 22 aurait rendu la forme courte
-      # `git@forgejo.wittner.tech:org/repo.git` utilisable (la syntaxe scp-like ne marche QUE sur
-      # 22), mais au prix d'un changement sur le plan d'ADMINISTRATION de la façade — toutes les
-      # habitudes et tout ce qui pointe sur ce sshd auraient dû suivre. Le coût de 2222, lui,
-      # s'annule : Forgejo émet l'URL correcte dans le bouton « Clone », et un `Port 2222` dans
-      # `~/.ssh/config` restitue la forme courte côté poste. Second effet : le serveur SSH interne
-      # de Forgejo (Go, moins éprouvé qu'OpenSSH) voit un ordre de grandeur de bruit de bots en
-      # moins qu'en 22.
+      # C'est la valeur affichée dans le bouton « Clone » de l'UI — une erreur ici ne casse rien
+      # côté serveur et rend juste toutes les commandes copiées inutilisables.
+      SSH_DOMAIN: git-ssh.wittner.tech
+      # Port ANNONCÉ dans les URLs de clone. Avec le `ProxyCommand cloudflared access ssh` (tube
+      # stdio), ce port n'est PAS composé : la valeur est inerte sur le chemin nominal. Elle
+      # gouverne en revanche tout ce qui arrive quand ce `ProxyCommand` est absent — et c'est ça
+      # qui tranche entre 22 et 2222.
       #
-      # ⚠️ Valeur COUPLÉE à l'entrypoint `ssh` de Traefik (`address: ":2222"`, conf statique hors
-      # dépôt). Les désaligner ne casse rien au démarrage : l'UI affiche simplement une URL de
-      # clone qui ne répond pas.
+      # ⚠️ Le DNS du LAN sert `192.168.1.50` pour TOUT `*.wittner.tech`, `git-ssh` compris. Un
+      # client du LAN sans `ProxyCommand` composerait donc le port annoncé sur le LXC Traefik :
+      #     22   → OpenSSH d'ADMINISTRATION du LXC, qui demande un mot de passe. Symptôme
+      #            trompeur au possible : rien n'indique qu'il manque un ProxyCommand.
+      #     2222 → entrypoint `ssh` de Traefik, donc Forgejo. Le clone MARCHE, sans cloudflared.
+      # 2222 supprime le seul scénario où l'on atterrit sur le plan d'admin, et offre en prime un
+      # chemin LAN direct qui n'a besoin d'aucun client Cloudflare.
+      #
+      # Le prix : la syntaxe scp-like `git@…:org/repo.git` ne marche que sur 22, le bouton
+      # « Clone » affiche donc la forme longue `ssh://git@git-ssh.wittner.tech:2222/…`. Un
+      # `Port 2222` dans `~/.ssh/config` restitue la forme courte poste par poste.
+      #
+      # ⚠️ Depuis l'extérieur, sans `ProxyCommand`, la connexion part vers l'edge Cloudflare qui
+      # n'accepte que du HTTP(S) : elle expire, quel que soit le port. Pré-requis client
+      # documenté au README §Réseau.
       SSH_PORT: 2222
       # Port réellement ÉCOUTÉ dans le conteneur : 2222, imposé par l'image rootless. C'est le
       # défaut que le chart poserait de toute façon ; explicité parce que le Service le cible.

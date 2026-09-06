@@ -2,10 +2,11 @@
 # que joignable de l'extérieur, et le clone HTTPS passe par cette même route.
 #
 # ⚠️ Le SSH n'est PAS ici et ne peut pas l'être : `shared-gw` n'a que des listeners HTTPS, et un
-# HTTPRoute ne transporte pas du TCP brut. Le hostname est pourtant le même : `forgejo.wittner.tech`
-# arrive d'abord sur Traefik (192.168.1.50), qui aiguille le HTTPS vers ce Gateway et le TCP du
-# port SSH vers le Service LoadBalancer `forgejo-ssh` (192.168.1.81). Un seul enregistrement DNS,
-# deux chemins réseau (cf. README §Réseau).
+# HTTPRoute ne transporte pas du TCP brut. Il sort par un SECOND hostname,
+# `git-ssh.wittner.tech` — contrainte de l'ingress `cloudflared`, qui discrimine par hostname et
+# non par protocole. Les deux noms entrent par le même tunnel Cloudflare et ressortent sur le même
+# Traefik (192.168.1.50), qui aiguille le HTTPS vers ce Gateway et le TCP vers le Service
+# LoadBalancer `forgejo-ssh` (192.168.1.81). Cf. README §Réseau.
 #
 # ⚠️ Cette route expose TOUS les chemins, `/metrics` compris le jour où les métriques seront
 # activées. C'est la raison pour laquelle `gitea.metrics.enabled` reste à `false`.

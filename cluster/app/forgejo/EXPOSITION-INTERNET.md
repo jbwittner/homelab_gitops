@@ -46,10 +46,11 @@ ressource n'a été créée hors de ce dossier.
   `spec.loadBalancerIP` ni `io.cilium/lb-ipam-ips`.
 - [ ] **Enregistrement DNS + certificat cert-manager** — le certificat est là : `Certificate`
   wildcard `*.wittner.tech` (`letsencrypt-prod`, DNS-01), consommé par le listener
-  `https-public` de `shared-gw`. L'**enregistrement DNS** (`forgejo.wittner.tech` →
-  `192.168.1.50`, Traefik) et la **conf du proxy** (routeur HTTP vers `192.168.1.80` ; entrypoint
-  `ssh` sur `:2222` et routeur TCP vers `192.168.1.81:22`) sont hors du dépôt : invérifiables.
-  ⚠️ Le port de l'entrypoint est couplé à `SSH_PORT` (2222) dans `helm-values.yaml`.
+  `https-public` de `shared-gw`. Les **enregistrements DNS** (`forgejo.wittner.tech` et
+  `git-ssh.wittner.tech`, tous deux CNAME vers `<tunnel-id>.cfargotunnel.com`), l'**ingress du
+  tunnel** (`https://192.168.1.50` avec `originServerName` ; `ssh://192.168.1.50:2222`) et la
+  **conf Traefik** (routeur HTTP vers `192.168.1.80` ; entrypoint `ssh` sur `:2222` et routeur TCP
+  vers `192.168.1.81:22`) sont hors du dépôt : invérifiables.
 - [ ] **Passer les repos candidats au scan de secrets avant de les rendre publics** — acte
   opératoire, hors dépôt. Atténué par `[repository] DEFAULT_PRIVATE: private` **(posé ici)** :
   rendre un dépôt public devient un geste explicite.
@@ -139,18 +140,25 @@ ressource n'a été créée hors de ce dossier.
   les paquets se présentent au Service avec l'adresse source du proxy (`192.168.1.50`), qui est
   dans la plage — un client venu d'Internet la franchit comme un client du LAN. Elle ne borne plus
   que le voisinage du Service (empêcher une autre machine du LAN de l'attaquer hors du proxy).
-- [x] **SSH exposé à Internet — choix assumé, pas un oubli.** La redirection de port 2222 de la box
-  est ouverte à toute source, et l'enregistrement DNS est en DNS-only (le proxy Cloudflare ne
-  passe pas le TCP brut, cf. README §Réseau). Ce qui tient à la place d'un filtrage par IP :
+- [x] **Aucun port ouvert sur la box, IP d'origine non publiée** — le web ET le SSH entrent par un
+  tunnel Cloudflare : `cloudflared` (LXC `192.168.1.56`) établit une connexion *sortante*, il n'y a
+  donc plus ni redirection de port ni enregistrement A visant la maison. Ça remplace le montage
+  précédent (DNS-only + redirection 2222 ouverte à toute source), dont le coût était exactement
+  l'inverse : IP publiée et port exposé.
+  ⚠️ **L'exposition s'est déplacée, elle n'a pas disparu** : elle est maintenant gouvernée par la
+  politique **Cloudflare Access** posée sur `git-ssh.wittner.tech`. Sans policy, quiconque connaît
+  le nom atteint le serveur SSH par le tunnel — le tunnel n'authentifie rien par lui-même. Cette
+  policy est hors dépôt, donc invérifiable ici : à contrôler dans le tableau de bord Zero Trust.
+  Ce qui tient en défense de fond, indépendamment du tunnel :
   - le serveur SSH interne de Forgejo authentifie **par clé publique uniquement**, depuis sa base
     — pas de mot de passe, pas de `authorized_keys` sur disque ;
   - `DISABLE_REGISTRATION: true` : aucune clé ne peut être enrôlée par un compte créé de
     l'extérieur ;
   - `GLOBAL_TWO_FACTOR_REQUIREMENT: all` : le git en SSH répond `403` à tout compte sans second
     facteur.
-  Le coût résiduel assumé est le bruit de balayage sur 2222. ⚠️ Si ce compromis devient
-  inacceptable, la sortie est en amont — restreindre la source sur la redirection de la box, ou
-  passer le SSH derrière un VPN / un Cloudflare Tunnel — pas dans `loadBalancerSourceRanges`.
+  ⚠️ Contrepartie : Cloudflare devient une **dépendance dure** pour tout accès externe, web compris.
+  L'accès LAN n'est pas concerné (le DNS interne pointe `192.168.1.50` en direct), donc une panne de
+  tunnel n'enferme pas dehors depuis la maison.
 - [x] **`/metrics` non routé publiquement** — déjà en place : `gitea.metrics.enabled: false`,
   décision documentée (l'endpoint est servi sur le port HTTP applicatif, donc derrière la
   HTTPRoute publique ; sans `[metrics] TOKEN` il serait lisible depuis Internet).
