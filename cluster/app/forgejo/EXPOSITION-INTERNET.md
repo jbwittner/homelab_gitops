@@ -3,6 +3,19 @@
 Audit du seul périmètre autorisé : `cluster/app/forgejo/`. Aucun logiciel n'a été ajouté, aucune
 ressource n'a été créée hors de ce dossier.
 
+> [!NOTE]
+> **Modèle d'accès, depuis le 2026-09-06 : full HTTPS, SSH désactivé.** Le seul chemin Git est
+> `https://forgejo.wittner.tech` avec un jeton d'accès personnel — depuis Internet par le tunnel
+> Cloudflare, depuis le LAN par le DNS interne qui sert `192.168.1.50`. Côté application
+> `DISABLE_SSH: true` et côté processus `START_SSH_SERVER: false` (`helm-values.yaml`,
+> `gitea.config.server`) : les URLs de clone SSH ont disparu de l'UI et le serveur SSH interne ne
+> démarre plus. Ont été retirés avec lui : la redirection **2222** de la box — seul port entrant de
+> l'installation —, l'enregistrement A **`git-ssh.wittner.tech`** qui publiait l'IP d'origine, le
+> routeur TCP Traefik et son entrypoint `ssh`, et la réservation de `192.168.1.81` sur le pool
+> LB-IPAM. Ce qui reste : **aucun port ouvert**, tout entre par une connexion *sortante*.
+> Contrepartie assumée : Cloudflare devient une dépendance dure pour tout accès externe, Git
+> compris, et un `git push` de plus de 100 Mo passe par le LAN.
+
 **Comment lire les cases.**
 
 | Marque | Signification |
@@ -175,13 +188,64 @@ ressource n'a été créée hors de ce dossier.
 - [x] **`/metrics` non routé publiquement** — déjà en place : `gitea.metrics.enabled: false`,
   décision documentée (l'endpoint est servi sur le port HTTP applicatif, donc derrière la
   HTTPRoute publique ; sans `[metrics] TOKEN` il serait lisible depuis Internet).
-- [ ] **Rate limiting ingress sur `/user/login`** — **impossible dans le périmètre.** Ni Forgejo
-  ni l'implémentation Gateway API de Cilium n'offrent de limitation de débit ; il faudrait un
-  logiciel supplémentaire, explicitement exclu.
-- [ ] **Rate limiting ingress sur `/archive/`, `/raw/`, `/blame/`, `/commits/`** — même blocage,
-  plus une limite de Gateway API : les `matches` ne connaissent que `Exact` et `PathPrefix`,
-  incapables d'exprimer un segment au milieu de `/<owner>/<repo>/archive/`. Atténué — pas
+- [ ] **Rate limiting ingress sur `/user/login`** — **plus « impossible », mais toujours hors
+  dépôt : la limitation est posée à l'edge Cloudflare.** Règle *Rate limiting* `Forgejo rate
+  limiting`, active, action **Block**, sur les chemins d'authentification :
+
+  ```
+  (http.request.uri.path wildcard r"/user/login*") or
+  (http.request.uri.path wildcard r"/user/two_factor*") or
+  (http.request.uri.path wildcard r"/user/webauthn*") or
+  (http.request.uri.path wildcard r"/user/forgot_password*") or
+  (http.request.uri.path wildcard r"/user/recover_account*") or
+  (http.request.uri.path wildcard r"/user/activate*") or
+  (http.request.uri.path wildcard r"/user/link_account*") or
+  (http.request.uri.path wildcard r"/user/oauth2/*") or
+  (http.request.uri.path wildcard r"/login/oauth/*") or
+  (http.request.uri.path wildcard r"/user/sign_up*")
+  ```
+
+  Rien de tout cela ne se lit dans le dépôt — configuration de tableau de bord, donc `[ ]` par la
+  convention de cette liste, pas par absence.
+
+  Ce que chaque motif ferme, au-delà du formulaire de login : `two_factor` et `webauthn` (le second
+  facteur, sinon on limite la première étape et pas la seconde) ; `forgot_password` puis
+  `recover_account`, **qui est l'endroit où le jeton de réinitialisation est consommé**
+  (`?code=…`) — c'est lui le vrai brute-forçable de la paire, il n'existe pas de
+  `/user/reset_password` chez Forgejo ; `activate` et `activate_email`, mêmes codes à usage
+  unique ; `link_account*` (`link_account_signin`, `link_account_signup`), chemin de connexion
+  alternatif ; `oauth2/*`, le signin par provider externe et son callback ; **`/login/oauth/*`**,
+  Forgejo *en tant que* fournisseur OAuth2 (`access_token`, `introspect`, `grant`) — endpoints à
+  identifiants, et les seuls de la liste à vivre hors de `/user/` ; `sign_up*` enfin, redondant avec
+  `DISABLE_REGISTRATION` mais qui coupe le sondage avant l'origine. `/user/login/openid` est déjà
+  couvert par le joker de `/user/login*`.
+
+  ⚠️ Trois réserves.
+  - Le plan gratuit n'autorise **qu'une seule** règle de rate limiting (`1/1 rules`) et son
+    compteur est **partagé** entre tous les motifs ci-dessus. C'est sans conséquence ici — ce sont
+    tous des chemins à faible volume — mais cela interdit d'y ajouter `/api/v1/*` ou les endpoints
+    Git HTTP (`*/git-upload-pack`, `*/git-receive-pack`) : un seuil calibré pour un formulaire de
+    login casserait un `clone` légitime. Pour la même raison, **ne pas élargir en `/user/*`** :
+    `/user/avatar/*` est servi à chaque page.
+  - La force brute sur `/api/v1/*` n'est donc **pas** limitée. Ce qui la tient, c'est
+    `GLOBAL_TWO_FACTOR_REQUIREMENT: all` (403 sans second facteur), pas l'edge.
+  - La protection ne vaut que pour le chemin edge : un accès **depuis le LAN**, qui tape
+    `192.168.1.50` sans traverser Cloudflare, n'est limité par rien.
+
+  Côté cluster, le constat d'origine tient toujours : ni Forgejo ni le Gateway API de Cilium
+  n'offrent de limitation de débit.
+- [ ] **Rate limiting ingress sur `/archive/`, `/raw/`, `/blame/`, `/commits/`** — **non couvert**
+  par la règle ci-dessus, qui ne vise que l'authentification, et le quota d'une règle sur le plan
+  gratuit est déjà consommé. La limite de Gateway API reste entière : les `matches` ne connaissent
+  que `Exact` et `PathPrefix`, incapables d'exprimer un segment au milieu de
+  `/<owner>/<repo>/archive/` — un *wildcard* Cloudflare, lui, saurait l'écrire. Atténué — pas
   remplacé — par le `robots.txt`, qui ne s'adresse qu'aux robots qui le respectent.
+- [ ] **Filtrage géographique à l'edge** — hors checklist d'origine, constaté sur le tableau de
+  bord : règle personnalisée `Block not EU` (`Continent does not equal EU`), active, action
+  **Block**. Coupe l'essentiel du bruit de fond automatisé avant qu'il n'atteigne l'origine.
+  ⚠️ À assumer : un déplacement hors UE coupe l'accès à sa propre forge, et le filtre est
+  contournable par un VPN européen — c'est une réduction de bruit, pas un contrôle d'accès.
+  ⚠️ Aucune **Managed rule** (WAF managé) n'est configurée : elles demandent un plan payant.
 - [x] **`robots.txt` restrictif** — `manifests/forgejo-robots.yaml` **(posé ici)**, ConfigMap monté
   sur `/data/gitea/robots.txt` (Forgejo n'a aucune clé d'`app.ini` pour ça). Ferme les quatre
   familles d'URL coûteuses ci-dessus plus `/user/`, `/api/`, `/explore/`, avec `Crawl-delay: 10`,
@@ -232,7 +296,10 @@ Aucune n'a été effectuée : elles demandent toutes une instance en service, et
       été retirée le 2026-09-06, la 443 ne l'a jamais été (`nc -vz <ip-publique> 2222` doit
       échouer, et rester le seul port jamais testé positif)
 - [ ] `git clone` / `git push` en HTTPS avec un jeton personnel → seul chemin Git restant
-- [ ] Tentatives de login ratées en série → rate limiting — **échouera** : il n'y en a pas
+- [ ] Tentatives de login ratées en série → rate limiting — **testable depuis le 2026-09-06**,
+      mais uniquement **depuis Internet** (règle Cloudflare `Forgejo rate limiting`, action
+      `Block`). La même série lancée depuis le LAN doit, elle, passer sans être limitée : c'est
+      le comportement attendu, pas un échec du test
 - [ ] Token d'API sans 2FA : vérifier que ses scopes sont limités
 - [ ] Redéploiement du chart : sessions et tokens survivent — **ne prouvera rien tant que
       `forgejo-secrets` n'est pas scellé** : aujourd'hui la stabilité vient du fichier `app.ini`
@@ -300,10 +367,14 @@ Aucune n'a été effectuée : elles demandent toutes une instance en service, et
 
 8. **TLS 1.2 minimum sur le Gateway** (`infra/gateway-api/manifests/gateway.yaml`).
 
-9. **Limitation de débit** sur `/user/login` et les endpoints coûteux. Aucune solution ne tient
-   dans la contrainte « pas de logiciel supplémentaire » : ni Forgejo ni le Gateway API de Cilium
-   n'en proposent. À reprendre comme une décision d'infrastructure, en sachant que le `robots.txt`
-   ne couvre que les robots polis.
+9. **Limitation de débit** — **partiellement réglée à l'edge**, hors dépôt : la règle Cloudflare
+   `Forgejo rate limiting` bloque les rafales sur `/user/login*`, `/user/two_factor*` et les autres
+   chemins d'authentification ; la règle `Block not EU` coupe le bruit hors UE en amont. Reste
+   ouvert : les endpoints coûteux (`/archive/`, `/raw/`, `/blame/`, `/commits/`) ne sont pas
+   limités — le plan gratuit ne donne qu'**une** règle de rate limiting, déjà consommée — et le
+   chemin LAN n'est limité par rien. Côté cluster, la contrainte « pas de logiciel supplémentaire »
+   n'a pas bougé : ni Forgejo ni le Gateway API de Cilium n'en proposent. Le `robots.txt` ne couvre
+   toujours que les robots polis.
 
 ### 4. Recommandations, non appliquées volontairement
 
@@ -318,5 +389,8 @@ Ces trois points ne figurent pas dans la checklist ; ils n'ont **pas** été mod
   volume qui ne borne rien. Le `README` le documente déjà (§Dimensionnement du volume) ; le risque
   change de nature une fois la forge publique.
 - **`REVERSE_PROXY_TRUSTED_PROXIES` n'est pas réglé.** Derrière le Gateway, Forgejo journalise
-  probablement l'IP du proxy au lieu de celle du client — ce qui rendra toute analyse de tentatives
-  de connexion peu exploitable, et neutraliserait un futur rate limiting par IP.
+  probablement l'IP du proxy au lieu de celle du client — ce qui rend toute analyse de tentatives de
+  connexion peu exploitable. ⚠️ Le rate limiting Cloudflare, lui, n'en souffre pas : il s'applique à
+  l'edge, sur l'IP réelle du client, bien avant l'origine. C'est en revanche exactement ce qui
+  empêcherait un blocage **côté Forgejo** (ban d'IP, corrélation d'échecs) de viser la bonne
+  adresse.
