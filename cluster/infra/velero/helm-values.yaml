@@ -158,7 +158,7 @@ schedules:
       # Reste hors de portée des deux : une lifecycle rule GCS qui purgerait le bucket de snapshots,
       # qu'aucune métrique du cluster ne voit. Seul un `verify` périodique y répond, et il est manuel.
       includedNamespaces:
-        - test-nginx
+        - forgejo
       snapshotVolumes: false   # cohérent avec snapshotsEnabled: false — les données passent par kopia
       # Garde-fou du mode opt-out : ignore la copie des `emptyDir` (rien à restaurer par
       # construction, et un pod terminé fait échouer la sauvegarde ENTIÈRE sur un volume déjà
