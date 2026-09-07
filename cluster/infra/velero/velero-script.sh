@@ -157,10 +157,13 @@ wait_phase() {
       last="$line"
     fi
 
-    # shellcheck disable=SC2254  # `terminal` est un motif case, l'absence de guillemets est voulue
-    case "$PHASE" in
-      $terminal) break ;;
-    esac
+    # PAS de `case "$PHASE" in $terminal)` : l'alternation « | » d'un motif `case` est résolue à
+    # l'analyse du source, jamais à l'expansion. Venu d'une variable, le « | » est un caractère
+    # LITTÉRAL — `Completed` ne matchait rien et la boucle tournait jusqu'au TIMEOUT. Les « | »
+    # encadrants évitent qu'un préfixe partiel passe (`Failed` vs `FailedValidation`).
+    if [[ "|$terminal|" == *"|$PHASE|"* ]]; then
+      break
+    fi
     if (( SECONDS >= deadline )); then
       [[ -t 1 ]] && printf '\n' || true
       warn "Délai de ${TIMEOUT}s dépassé — l'opération continue côté cluster."
