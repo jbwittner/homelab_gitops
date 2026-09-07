@@ -159,8 +159,8 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   `velero@homelab-499008.iam.gserviceaccount.com` (sortie `velero_service_account_email`), et il
   lui faut `roles/storage.objectAdmin` **sur le bucket** :
   ```bash
-  gcloud storage buckets describe gs://homelab-velero-backups-1a91ac18 --project=homelab-499008
-  gcloud storage buckets get-iam-policy gs://homelab-velero-backups-1a91ac18 --project=homelab-499008
+  gcloud storage buckets describe gs://homelab-velero-backups-b788806f --project=homelab-499008
+  gcloud storage buckets get-iam-policy gs://homelab-velero-backups-b788806f --project=homelab-499008
   ```
   Ne pas poser de règle de cycle de vie sur ce bucket : la rétention est celle du `ttl` de la
   schedule, et velero supprime lui-même ce qui expire.
@@ -359,14 +359,14 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
   kubectl -n velero get backups.velero.io \
     -o custom-columns=NAME:.metadata.name,NS:.spec.includedNamespaces
   kubectl -n velero delete backuprepository <ns>-default-kopia
-  gcloud storage rm -r gs://homelab-velero-backups-1a91ac18/kopia/<ns> --project=homelab-499008
+  gcloud storage rm -r gs://homelab-velero-backups-b788806f/kopia/<ns> --project=homelab-499008
   ```
 - **Repartir de zéro** (⚠️ **irréversible** — détruit toutes les sauvegardes). L'ordre est
   load-bearing : vider le bucket **d'abord**, sinon le contrôleur `backup-sync` recrée les objets
   `Backup` depuis les métadonnées restées en ligne, dans la minute.
   ```bash
   # 1. Bucket (le bucket lui-même est conservé : il vient de Terraform)
-  gcloud storage rm --recursive "gs://homelab-velero-backups-1a91ac18/**" --project=homelab-499008
+  gcloud storage rm --recursive "gs://homelab-velero-backups-b788806f/**" --project=homelab-499008
 
   # 2. CRs — les Backup disparaissent souvent d'eux-mêmes une fois leurs données absentes
   kubectl -n velero delete backups.velero.io --all
@@ -379,7 +379,7 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
   kubectl -n velero rollout restart deploy/velero ds/node-agent
 
   # 4. Contrôle
-  gcloud storage du -s gs://homelab-velero-backups-1a91ac18 --project=homelab-499008   # 0
+  gcloud storage du -s gs://homelab-velero-backups-b788806f --project=homelab-499008   # 0
   kubectl -n velero get backupstoragelocation default                                   # Available
   ```
   Ne PAS supprimer le Secret `velero-repo-credentials` : la passphrase kopia sert aux dépôts
