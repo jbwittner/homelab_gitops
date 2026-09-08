@@ -189,6 +189,27 @@ son existence — un fichier scellé vide ne fait pas échouer `kustomize build`
 compris : ArgoCD apparie credential et source par égalité d'URL normalisée. Un décalage ne produit
 aucune erreur de configuration, juste un clone anonyme qui échoue.
 
+> [!WARNING]
+> **`cluster/root.yaml` ne se met PAS à jour tout seul.** C'est le seul objet `Application` du
+> dispositif que rien ne gère : il est appliqué à la main au bootstrap, et aucune Application ne
+> le prend pour cible (il en serait sinon son propre parent). Toute modification de `root.yaml` —
+> **son `repoURL` au premier chef** — exige donc un ré-apply manuel :
+>
+> ```bash
+> kubectl apply -f cluster/root.yaml --server-side --force-conflicts
+> ```
+>
+> Vécu au passage en dépôt privé : les 32 `repoURL` étaient en SSH dans Git, les 21 Applications
+> enfants avaient été mises à jour par `root`… et `root` lui-même clonait encore en HTTPS. Tout
+> était `Synced`/`Healthy` — parce que le dépôt était **encore public** et que le clone anonyme
+> marchait toujours. Le flip de visibilité aurait cassé le tier-1, donc l'arbre entier, sans
+> qu'aucune vérification préalable n'ait rien vu. Contrôle qui l'attrape :
+>
+> ```bash
+> kubectl -n argocd get applications -o jsonpath='{range .items[*]}{.spec.source.repoURL}{"\n"}{range .spec.sources[*]}{.repoURL}{"\n"}{end}{end}' \
+>   | grep jbwittner | sort | uniq -c    # une seule ligne attendue, en git@github.com:
+> ```
+
 ### Vérifier
 
 > [!WARNING]
