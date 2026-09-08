@@ -18,7 +18,7 @@ spec:
   sources:
     - repoURL: https://helm.cilium.io/
       chart: cilium
-      targetRevision: 1.20.0
+      targetRevision: 1.20.1
       helm:
         # ⚠️ releaseName DOIT rester `cilium` : la release a été adoptée depuis le
         # `helm install cilium` du bootstrap. Le changer renommerait toutes les ressources
