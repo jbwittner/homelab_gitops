@@ -46,7 +46,7 @@ spec:
     # `serverName` vaut le nom du `Cluster` (`forgejo-db`) quand il est omis. C'est ce qui permet
     # à plusieurs bases de partager un bucket sans se marcher dessus — ne pas ajouter de préfixe
     # à la main ici.
-    destinationPath: gs://homelab-cnpg-backups-8b8ff253
+    destinationPath: gs://homelab-cnpg-backups-8b8ff253/forgejo/
 
     # Clé JSON du compte de service GCP, montée depuis le Secret produit par sealed-secrets
     # (`forgejo-db-gcs.sealed.yaml`). ⚠️ `gkeEnvironment` n'est PAS activé : il suppose un cluster
