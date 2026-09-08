@@ -22,12 +22,18 @@
 #      `pgsql-test`. C'est aussi pourquoi la forme `absent(...)` de VeleroNoBackupMetric ne se
 #      transpose pas telle quelle : la série existe, elle est simplement à zéro.
 #
-#   3. Les trois métriques `cnpg_collector_*_backup_timestamp` sont marquées **(Deprecated)** par
-#      l'amont depuis que la sauvegarde est passée aux plugins CNPG-I. Elles restent servies en
-#      1.30 et ce sont les SEULES à porter l'âge d'une sauvegarde de base côté instance — aucune
-#      métrique de remplacement n'existe, ni sur l'instance ni sur l'opérateur. À revérifier à
-#      chaque montée majeure de CNPG : leur disparition rendrait `CNPGBackupTooOld` muette sans
-#      qu'aucune alerte ne se déclenche.
+#   3. Les métriques `cnpg_collector_*_backup_timestamp` sont marquées **(Deprecated)** par
+#      l'amont depuis que la sauvegarde est passée aux plugins CNPG-I. Leur remplacement est servi
+#      par le SIDECAR, sur le même endpoint 9187, sous le préfixe du plugin :
+#      `barman_cloud_cloudnative_pg_io_{last_available_backup,last_failed_backup,first_recoverability_point}_timestamp`.
+#      Ce sont elles qui sont utilisées ici.
+#
+#      ⚠️ Conséquence à ne pas perdre : ces métriques N'EXISTENT QUE pour les bases dont le
+#      `spec.plugins` est câblé. C'est ce qui dispense `CNPGNoBackupYet` d'une liste blanche —
+#      l'intention « cette base doit être sauvegardée » est portée par le `Cluster` lui-même, pas
+#      par une liste à tenir à jour ici. Le revers est qu'une base à qui on RETIRE `spec.plugins`
+#      devient silencieuse : c'est le rôle de `CNPGBackupChainAbsent`, qui est la seule règle du
+#      fichier à nommer explicitement les bases attendues.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -82,11 +88,12 @@ spec:
         # 36 h, seuil aligné sur `VeleroBackupTooOld` : laisse passer un décalage de la schedule
         # quotidienne (02:00) sans crier, pas une journée entière sautée.
         #
-        # ⚠️ La garde `> 0` est LOAD-BEARING (piège n°2 en tête de fichier) : sans elle, la règle
-        # se déclenche définitivement sur toute base sans sauvegarde configurée, dont la métrique
-        # vaut 0 et non « absent ».
+        # ⚠️ La garde `> 0` est LOAD-BEARING (piège n°2 en tête de fichier) : la métrique vaut 0,
+        # et non « absent », tant qu'aucune sauvegarde n'a abouti. Sans elle, la règle se
+        # déclencherait pour l'éternité dès l'instant où le plugin est câblé et avant la première
+        # sauvegarde réussie.
         - alert: CNPGBackupTooOld
-          expr: (time() - cnpg_collector_last_available_backup_timestamp > 129600) and cnpg_collector_last_available_backup_timestamp > 0
+          expr: (time() - barman_cloud_cloudnative_pg_io_last_available_backup_timestamp > 129600) and barman_cloud_cloudnative_pg_io_last_available_backup_timestamp > 0
           for: 30m
           labels:
             severity: critical
@@ -97,7 +104,7 @@ spec:
         # La dernière TENTATIVE a échoué : l'échec est plus récent que le dernier succès. Se
         # déclenche dès la première nuit ratée, sans attendre les 36 h de la règle précédente.
         - alert: CNPGLastBackupFailed
-          expr: (cnpg_collector_last_failed_backup_timestamp > cnpg_collector_last_available_backup_timestamp) and cnpg_collector_last_failed_backup_timestamp > 0
+          expr: (barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp > barman_cloud_cloudnative_pg_io_last_available_backup_timestamp) and barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp > 0
           for: 15m
           labels:
             severity: warning
@@ -111,19 +118,37 @@ spec:
         # elle est à ZÉRO. Sans cette règle, une base dont la sauvegarde n'a JAMAIS abouti est
         # parfaitement silencieuse — `CNPGBackupTooOld` étant justement gardée par `> 0`.
         #
-        # ⚠️ LISTE BLANCHE, sur le modèle d'`includedNamespaces` côté velero : la règle ne parle
-        # que des bases dont une sauvegarde est ATTENDUE. `authentik-db` et `pgsql-test` n'ont
-        # aujourd'hui aucune chaîne native et hurleraient en permanence. Contrepartie assumée et
-        # identique à celle de velero — mettre une base sous sauvegarde demande de l'ajouter ICI
-        # AUSSI, et rien ne le signale.
+        # PAS de liste blanche, et c'est le métrique du plugin qui le permet : elle n'existe que
+        # pour les bases dont le `spec.plugins` est câblé. `authentik-db` et `pgsql-test`, qui
+        # n'ont aucune chaîne native, n'ont pas non plus la série — elles ne peuvent pas déclencher
+        # cette règle. L'intention « cette base doit être sauvegardée » est portée par le `Cluster`
+        # lui-même, pas par une liste à tenir ici.
         - alert: CNPGNoBackupYet
-          expr: cnpg_collector_last_available_backup_timestamp{cnpg_io_cluster=~"forgejo-db"} == 0
+          expr: barman_cloud_cloudnative_pg_io_last_available_backup_timestamp == 0
           for: 24h
           labels:
             severity: warning
           annotations:
             summary: "cnpg : aucune sauvegarde de base n'a jamais abouti ({{ $labels.cnpg_io_cluster }})"
-            description: "Cette base est censée être sauvegardée mais aucune sauvegarde n'a jamais réussi depuis 24 h. Tant que c'est le cas, CNPGBackupTooOld est aveugle — sa garde `> 0` l'empêche de se déclencher. Causes usuelles : ligne `forgejo-db-gcs.sealed.yaml` restée commentée dans le kustomization, ou `spec.plugins` absent du Cluster."
+            description: "Le plugin barman-cloud est câblé sur cette base mais aucune sauvegarde n'a jamais réussi depuis 24 h. Tant que c'est le cas, CNPGBackupTooOld est aveugle — sa garde `> 0` l'empêche de se déclencher. Causes usuelles : `destinationPath` laissé à REMPLACER, ligne du SealedSecret restée commentée dans le kustomization, ou droits IAM insuffisants sur le bucket."
+
+        # Le symétrique de la précédente, et la SEULE règle du fichier à nommer les bases : les
+        # métriques du plugin disparaissent avec lui. Une base à qui on retire `spec.plugins` — par
+        # erreur, ou par un `Cluster` re-rendu sans la clé — cesse d'être sauvegardée ET cesse de
+        # pouvoir déclencher quoi que ce soit ci-dessus. `absent()` perdant les labels, la liste
+        # est écrite en dur : c'est le prix d'un angle mort qu'aucune autre forme ne couvre.
+        #
+        # ⚠️ À TENIR À JOUR : mettre une base sous sauvegarde demande de l'ajouter ici. C'est le
+        # quatrième geste de la procédure (cf. cnpg-barman-plugin/README.md §Opérations), et rien
+        # ne signale son oubli.
+        - alert: CNPGBackupChainAbsent
+          expr: absent(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cnpg_io_cluster="forgejo-db"})
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "cnpg : plus aucune chaîne de sauvegarde sur forgejo-db"
+            description: "Les métriques du plugin barman-cloud ont disparu pour cette base : `spec.plugins` a été retiré du Cluster, le sidecar ne démarre plus, ou la base n'existe plus. Elle n'est sauvegardée par RIEN — son PVC est aussi exclu de la copie kopia de velero."
 
         # Plus aucune instance CNPG n'est scrapée : toutes les règles ci-dessus deviennent muettes
         # d'un coup. Formulé en `absent(...)` sur une métrique servie inconditionnellement plutôt

@@ -57,11 +57,16 @@ alerte qui hurle en permanence, soit une alerte muette.
    **pour l'éternité** sur toute base non sauvegardée. C'est aussi pourquoi la forme `absent(...)`
    de `VeleroNoBackupMetric` ne se transpose pas telle quelle : la série existe, elle est à zéro —
    d'où `CNPGNoBackupYet`, qui teste `== 0`.
-3. **Les trois `cnpg_collector_*_backup_timestamp` sont marquées `(Deprecated)`** par l'amont depuis
-   le passage aux plugins CNPG-I. Elles restent servies en 1.30 et sont les **seules** à porter
-   l'âge d'une sauvegarde de base côté instance — aucun remplacement n'existe, ni sur l'instance ni
-   sur l'opérateur. ⚠️ À revérifier à chaque montée majeure de CNPG : leur disparition rendrait
-   `CNPGBackupTooOld` muette **sans qu'aucune alerte ne se déclenche**.
+3. **Les `cnpg_collector_*_backup_timestamp` sont marquées `(Deprecated)`** par l'amont depuis le
+   passage aux plugins CNPG-I. Leur remplacement est servi par le **sidecar**, sur le même endpoint
+   9187, sous le préfixe du plugin : `barman_cloud_cloudnative_pg_io_last_available_backup_timestamp`
+   et ses deux voisines. Ce sont elles qui sont utilisées ici.
+
+   ⚠️ **Conséquence structurelle** : ces métriques n'existent **que** pour les bases dont le
+   `spec.plugins` est câblé. C'est ce qui dispense `CNPGNoBackupYet` d'une liste blanche —
+   l'intention « cette base doit être sauvegardée » est portée par le `Cluster` lui-même. Le revers
+   est qu'une base à qui on **retire** `spec.plugins` devient silencieuse, d'où
+   `CNPGBackupChainAbsent`, seule règle du fichier à nommer explicitement les bases attendues.
 
 ## Alertes
 
