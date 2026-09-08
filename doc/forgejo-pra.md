@@ -598,3 +598,45 @@ Traefik.
 - **Le chemin CSI snapshot**, qui supprimerait cet étalement : **mesuré fermé** le 2026-09-08
   (`snapshot … is not of thin type`). Le rouvrir demande de migrer la StorageClass en thin, ce qui
   est un chantier de stockage, pas un réglage de sauvegarde.
+
+---
+
+## 11. Le coût de ce plan, et les alternatives
+
+**Ce plan est disproportionné, et c'est assumé.** Au 2026-09-08 : **2 852 lignes** de script et de
+documentation pour **2 dépôts, 2 comptes, 1,6 Mio** de données. À relire avant d'ajouter quoi que
+ce soit ici.
+
+D'où vient cette complexité : le composant a **deux chaînes** parce que les PVC CNPG ont été sortis
+du périmètre kopia le 2026-09-08 au profit de barman-cloud
+([`volume-policies.yaml`](../cluster/infra/velero/manifests/volume-policies.yaml)). Bon arbitrage à
+volumétrie réelle — cohérent-transaction plutôt que cohérent-crash — mais c'est lui qui impose tout
+le reste : deux instants à aligner, une fenêtre PITR à recouvrir, un script de préparation.
+
+> [!NOTE]
+> **Un dépôt Git est déjà répliqué par construction.** Chaque `git clone` est une copie complète,
+> historique inclus. Ce qui n'est répliqué nulle part, c'est : les issues, les PR, les comptes, et
+> les quatre secrets d'`app.ini`. La partie réellement irremplaçable de cette forge pèse quelques
+> kilo-octets.
+
+| | Option | Complexité | Ce qu'on perd |
+| --- | --- | --- | --- |
+| **A** | **Statu quo** — deux chaînes | ●●●● | rien |
+| **B** | Une seule chaîne : PVC CNPG remis dans kopia, barman supprimé | ●● | PITR, cohérence-transaction |
+| **C** | `forgejo dump` nocturne vers le bucket | ●● | PITR, et la restauration est **manuelle** |
+| **D** | Miroirs push des dépôts vers une forge tierce | ● | ne couvre **que** les dépôts |
+
+- **B** annule la décision du 2026-09-08 : un outil, un instant, plus d'alignement ni de script de
+  préparation — environ 60 % de la complexité en moins. La base repart en cohérence-crash, et
+  PostgreSQL rejoue son WAL au démarrage. Ce qu'on perd vraiment est le PITR : sur deux dépôts, il
+  ne sert qu'à rattraper une issue supprimée.
+- **C** ⚠️ **il n'existe pas de `forgejo restore`** : on décompresse, on recharge la base à la
+  main, on recopie les répertoires. Simple à produire, pas à remonter. Et cela n'allège qu'à
+  condition de supprimer les autres chaînes en même temps.
+- **D** quasi gratuit, hors cluster et hors GCP. Ne remplace rien, mais couvre hors site la partie
+  qu'on regretterait vraiment. Meilleur rapport valeur/effort de la liste.
+
+**Décision au 2026-09-08 : rester en A.** Ce qui existe fonctionne et est éprouvé ; le démonter
+coûterait plus que le garder. Mais **ne rien ajouter** — ni drill en cron, ni migration de la
+StorageClass en thin, ni snapshot CSI. Et si la complexité finit par gêner, le levier est le
+**design** (passer en B), pas les scripts ni cette page.
