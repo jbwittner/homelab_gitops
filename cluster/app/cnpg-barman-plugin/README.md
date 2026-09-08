@@ -73,6 +73,65 @@ mutualise pas entre applications. Chaque base ajoutée veut le sien, **et** son 
 
 ## Opérations
 
+Le geste courant passe par **[`script/cnpg-barman-plugin-script.sh`](../../../script/README.md)**
+(`list`, `show`, `backup`, `restore`, `delete`). Il ne remplace pas les `kubectl` ci-dessous, qui
+restent le diagnostic quand c'est le plugin lui-même qui est en cause — mais il porte les
+contrôles que ces `kubectl` ne font pas.
+
+```bash
+script/cnpg-barman-plugin-script.sh list            # bases, sauvegardes, schedules, fenêtre PITR
+script/cnpg-barman-plugin-script.sh backup          # sauvegarde manuelle, spec dérivée de la schedule
+script/cnpg-barman-plugin-script.sh show <backup>   # LSN, WAL, durée, destination
+```
+
+> [!WARNING]
+> **Deux commandes se comportent à l'inverse de leur homonyme dans
+> [`velero-script.sh`](../../infra/velero/README.md)**, et l'intuition acquise là-bas est fausse
+> ici :
+> - **`delete` ne vide pas le bucket.** Il n'existe pas de `DeleteBackupRequest` côté CNPG. Les
+>   données ne relèvent QUE de la `retentionPolicy` de l'`ObjectStore` ; supprimer l'objet
+>   `Backup` ne perd que l'entrée du catalogue Kubernetes. La sauvegarde reste dans le bucket et
+>   reste restaurable par son `backupId`.
+>
+>   Ce n'est pas une limite du script : **le plugin n'expose aucune suppression distante**.
+>   Vérifié le 2026-09-08 sur v0.15.0 — les `Backup` ne portent aucun finalizer, `ObjectStore.spec`
+>   n'a que trois champs (`configuration`, `instanceSidecarConfiguration`, `retentionPolicy`), et
+>   le groupe `barmancloud.cnpg.io` ne contient qu'une seule CRD. Il n'y a rien à appeler.
+>
+>   Les deux horloges sont **indépendantes** : supprimer l'objet ne déclenche pas le GC, et la
+>   rétention tourne sur l'**âge** (toutes les `retentionPolicyIntervalSeconds`, 1800 s par
+>   défaut) que l'objet existe encore ou non. Supprimer l'objet n'accélère donc rien — cela rend
+>   seulement la sauvegarde invisible jusqu'à son expiration.
+>
+>   L'absence de suppression ciblée est **délibérée en amont** : barman ne conserve que les WAL
+>   nécessaires à la plus ancienne sauvegarde de base encore vivante. Purger une base au milieu
+>   du catalogue casserait la fenêtre PITR de toutes celles qui la suivent. La rétention purge
+>   par le bas, dans l'ordre — c'est la seule opération sûre, et le seul levier : il vit dans
+>   `forgejo-db-objectstore.yaml`, en GitOps.
+> - **`restore` n'applique rien, il imprime un manifeste.** Une restauration CNPG est un `Cluster`
+>   neuf en `bootstrap.recovery` : un **état désiré**, donc du Git. Le script le dérive du
+>   `Cluster` source — en ne gardant que ce qu'ArgoCD a réellement déclaré (lu dans
+>   `.metadata.managedFields`), et non le `.spec` défauté servi par l'API — puis le rend sur la
+>   sortie standard, à relire et à committer.
+
+> [!CAUTION]
+> **Un cluster restauré qui archive sous le `serverName` de sa source écrase les WAL de
+> celle-ci** — la restauration détruit la sauvegarde dont elle vient. `serverName` vaut le nom du
+> `Cluster` quand il est omis : le piège ne se referme donc pas tout de suite, mais à la seconde
+> où le cluster restauré est **renommé** pour prendre la place de l'original. La sous-commande
+> `restore` écrit toujours un `serverName` **explicite des deux côtés** (`externalClusters` en
+> lecture, `plugins` en écriture) pour cette seule raison.
+
+- **Lire l'état des sauvegardes** — ⚠️ **pas** sur le `Cluster`. `status.firstRecoverabilityPoint`
+  et `status.lastSuccessfulBackup` sont des champs de l'ancien support in-tree et valent `null`
+  avec le plugin (vérifié le 2026-09-08 sur `forgejo-db` : deux `Backup` en phase `completed`, les
+  deux champs à `null`). La fenêtre de récupération réelle vit sur l'`ObjectStore` :
+  ```bash
+  kubectl -n forgejo get objectstore forgejo-db-store -o jsonpath='{.status.serverRecoveryWindow}' | jq
+  ```
+  ⚠️ Les phases des `Backup` sont en **minuscules** (`completed`, `failed`, `running`,
+  `walArchivingFailing`), contrairement à velero — un `grep Completed` ne trouve rien.
+
 - **Vérifier le plugin** :
   ```bash
   kubectl -n cnpg-system rollout status deploy/plugin-barman-cloud
@@ -106,6 +165,13 @@ mutualise pas entre applications. Chaque base ajoutée veut le sien, **et** son 
   4. `ScheduledBackup`, puis ajouter la base à `CNPGBackupChainAbsent`
      ([cnpg-monitoring](../cnpg-monitoring/README.md)) — c'est la **seule** alerte à nommer les
      bases en dur, et sans ce geste un retrait futur de `spec.plugins` passerait inaperçu.
+
+  Puis déclencher la première sauvegarde à la main (`immediate: true` est délibérément absent de
+  la `ScheduledBackup`) et vérifier qu'elle produit bien une fenêtre :
+  ```bash
+  script/cnpg-barman-plugin-script.sh backup <cluster>
+  script/cnpg-barman-plugin-script.sh list
+  ```
 
 - **Upgrade** : bumper `targetRevision` dans `cnpg-barman-plugin.app.yaml`, commit, push. Renovate
   le suit (manager `argocd`, motif `*.app.yaml`).
