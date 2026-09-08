@@ -56,7 +56,7 @@ spec:
     spec:
       initContainers:
         - name: vg-bootstrap
-          image: docker.io/openebs/lvm-driver:1.9.1
+          image: docker.io/openebs/lvm-driver:1.10.0
           securityContext:
             privileged: true
           command:
@@ -110,7 +110,7 @@ spec:
         # Conteneur « témoin » : ne fait RIEN d'autre que rester Ready pour que le DaemonSet soit
         # Healthy (cf. en-tête). Non privilégié, aucun accès à /dev.
         - name: pause
-          image: docker.io/openebs/lvm-driver:1.9.1
+          image: docker.io/openebs/lvm-driver:1.10.0
           command:
             - /bin/sh
             - -c
