@@ -13,10 +13,28 @@ déclarées par les applications consommatrices — aujourd'hui
 - `cnpg.app.yaml` — Application (archétype (a) : Helm + `$values`), ns `cnpg-system`
 - `helm-values.yaml` — `replicaCount: 1` (mono-nœud)
 
+## Composants frères
+
+- [`cnpg-barman-plugin`](../cnpg-barman-plugin/README.md) — sauvegarde native vers stockage objet
+  (sauvegardes de base + archivage WAL, donc PITR). Composant à part parce que l'amont l'a séparé :
+  depuis CloudNativePG **1.26**, barman-cloud est **sorti de l'opérateur**
+  (`spec.backup.barmanObjectStore` déprécié puis retiré) au profit d'un plugin CNPG-I.
+- [`cnpg-monitoring`](../cnpg-monitoring/README.md) — PodMonitor + alertes sur l'état de cette
+  chaîne. **Load-bearing** : les PVC des bases CNPG sont exclus de la copie kopia de velero, ces
+  alertes sont ce qui rend l'exclusion défendable.
+
 ## Contraintes
 
 - **Aucun `Cluster` ne se déclare ici.** Une base vit dans le dossier de l'application qui la
   consomme, avec son cycle de vie.
+- **Une base n'est PAS sauvegardée par défaut**, et rien ne le signale. Il faut un `ObjectStore`,
+  un `spec.plugins` sur le `Cluster`, une `ScheduledBackup` et une entrée dans la liste blanche de
+  `CNPGNoBackupYet` — quatre gestes, détaillés dans
+  [`cnpg-barman-plugin`](../cnpg-barman-plugin/README.md) §Opérations. Aujourd'hui seule
+  `forgejo-db` est couverte ; `authentik-db` et `pgsql-test` n'ont **aucune** chaîne de sauvegarde.
+- **`kubectl get backups` ne montre PAS les sauvegardes velero mais celles de CNPG.** Le nom court
+  est ambigu entre `backups.postgresql.cnpg.io` et `backups.velero.io`, et kubectl tranche
+  silencieusement en faveur de CNPG. Écrire le nom long des deux côtés.
 - L'opérateur génère lui-même le service `<cluster>-rw` et le secret `<cluster>-app` (identifiants
   applicatifs) : les consommateurs les référencent par `secretKeyRef`, ils ne sont jamais scellés.
 

@@ -1,0 +1,47 @@
+# Scrape du collecteur de métriques des instances PostgreSQL gérées par CloudNativePG.
+#
+# PodMonitor et non ServiceMonitor : l'opérateur crée bien des Services (`<cluster>-rw`, `-ro`,
+# `-r`), mais ils n'exposent que le port 5432. Le port `metrics` (9187) n'est présent que sur les
+# pods — un ServiceMonitor n'aurait rien à cibler.
+#
+# ⚠️ Cet objet est écrit à la main plutôt qu'activé par `spec.monitoring.enablePodMonitor: true`
+# sur chaque `Cluster` : l'opérateur ne pose PAS le label `release: kube-prometheus-stack` sur le
+# PodMonitor qu'il génère, et le sélecteur de Prometheus (défaut du chart,
+# `podMonitorSelectorNilUsesHelmValues: true`) l'ignorerait sans rien signaler. Les métriques,
+# elles, sont servies sans condition par le collecteur : il n'y a rien à activer côté `Cluster`.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cnpg-instances
+  namespace: cnpg-system
+  labels:
+    # ⚠️ LOAD-BEARING. Sans ce label, Prometheus ne sélectionne pas l'objet et TOUTES les alertes
+    # de `prometheusrule.yaml` deviennent muettes — y compris celles qui tiennent l'exclusion des
+    # PVC CNPG du périmètre kopia.
+    release: kube-prometheus-stack
+spec:
+  # ⚠️ `any: true` et non une liste : les pods scrapés vivent dans les namespaces des applications
+  # consommatrices (`forgejo`, demain `authentik`), jamais dans `cnpg-system` où vit cet objet.
+  # Une liste explicite serait à maintenir à chaque base ajoutée, et son oubli produirait une base
+  # non surveillée — silencieusement.
+  namespaceSelector:
+    any: true
+
+  # Label posé par l'opérateur sur TOUS les pods d'instance, quelle que soit la base. `cnpg.io/podRole`
+  # écarte les pods utilitaires (jobs d'initialisation, de jointure), qui n'exposent pas 9187.
+  selector:
+    matchLabels:
+      cnpg.io/podRole: instance
+
+  # Remonte le nom du `Cluster` en label de série (`cnpg_io_cluster`). Sans lui, toutes les bases
+  # se confondraient dans une même alerte et il faudrait remonter au `pod` pour savoir laquelle
+  # est en cause — or c'est précisément ce label que les règles utilisent pour distinguer les
+  # bases dont une sauvegarde est ATTENDUE des autres.
+  podTargetLabels:
+    - cnpg.io/cluster
+
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

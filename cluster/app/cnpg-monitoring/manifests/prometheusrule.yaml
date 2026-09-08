@@ -1,0 +1,140 @@
+# Alertes de sauvegarde des bases CloudNativePG.
+#
+# Principe directeur, hérité d'openbao-monitoring et de velero-monitoring : une chaîne de
+# sauvegarde échoue SILENCIEUSEMENT. Ces règles sont la contrepartie du retrait des PVC CNPG du
+# périmètre de copie kopia (`cluster/infra/velero/manifests/volume-policies.yaml`) : sans elles,
+# la base n'a plus qu'une seule chaîne de sauvegarde ET plus aucun moyen de voir qu'elle est morte.
+#
+# ⚠️ TROIS PIÈGES DE MÉTRIQUES, tous vérifiés sur l'instance `forgejo-db-1` en 1.30.0. Les trois
+# produisent, si on les ignore, soit une alerte qui hurle en permanence, soit une alerte muette.
+#
+#   1. `cnpg_pg_stat_archiver_seconds_since_last_archival` N'EST PAS un indicateur de fraîcheur.
+#      C'est le choix intuitif, et il est faux : PostgreSQL ne force un changement de segment sur
+#      `archive_timeout` (300 s ici) que s'il y a EU de l'activité WAL depuis le dernier. Une base
+#      au repos n'archive donc rien, indéfiniment — la valeur relevée sur une instance saine était
+#      de 144 221 s, soit 40 heures. Le bon signal d'une chaîne cassée est le BACKLOG
+#      (`pg_wal_archive_status{value="ready"}`), nul au repos et croissant dès que l'archivage
+#      échoue.
+#
+#   2. `cnpg_collector_last_available_backup_timestamp` VAUT 0, PAS « absent », quand aucune
+#      sauvegarde n'existe. Une règle en `time() - métrique > seuil` sans garde `> 0` se
+#      déclenche donc pour l'éternité sur toute base non sauvegardée — ici `authentik-db` et
+#      `pgsql-test`. C'est aussi pourquoi la forme `absent(...)` de VeleroNoBackupMetric ne se
+#      transpose pas telle quelle : la série existe, elle est simplement à zéro.
+#
+#   3. Les trois métriques `cnpg_collector_*_backup_timestamp` sont marquées **(Deprecated)** par
+#      l'amont depuis que la sauvegarde est passée aux plugins CNPG-I. Elles restent servies en
+#      1.30 et ce sont les SEULES à porter l'âge d'une sauvegarde de base côté instance — aucune
+#      métrique de remplacement n'existe, ni sur l'instance ni sur l'opérateur. À revérifier à
+#      chaque montée majeure de CNPG : leur disparition rendrait `CNPGBackupTooOld` muette sans
+#      qu'aucune alerte ne se déclenche.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cnpg-backup-alerts
+  namespace: cnpg-system
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cnpg.backup.rules
+      rules:
+        # --- Archivage WAL : la moitié continue de la chaîne ---
+
+        # LE signal d'une chaîne d'archivage morte. `ready` compte les segments présents dans
+        # `pg_wal/archive_status/` en attente d'archivage : un archiveur sain les draine en
+        # quelques secondes, il vaut donc 0 en régime normal ET sur une base au repos.
+        #
+        # Ce qu'il attrape, et que rien d'autre ne voit : credentials GCS invalides ou expirés,
+        # bucket supprimé ou droits IAM retirés, SealedSecret absent parce que la ligne du
+        # `kustomization.yaml` est restée commentée. Dans tous ces cas la base fonctionne
+        # normalement, les sauvegardes de base peuvent même réussir, et le PITR est perdu.
+        #
+        # ⚠️ Second effet, plus brutal : les segments non archivés ne sont jamais recyclés. Un
+        # archivage cassé finit par REMPLIR le PVC de la base, et un `pg_wal` plein arrête
+        # PostgreSQL. Cette alerte est donc aussi une alerte de disponibilité.
+        #
+        # `> 0` tenu 30 min plutôt qu'un seuil plus haut : sur ces volumétries (10Gi de
+        # métadonnées) un backlog qui persiste une demi-heure n'est jamais une pointe d'écriture.
+        # Sur une base réellement chargée, monter le seuil plutôt que raccourcir le `for`.
+        - alert: CNPGWalArchivingBacklog
+          expr: cnpg_collector_pg_wal_archive_status{value="ready"} > 0
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "cnpg : archivage WAL bloqué ({{ $labels.cnpg_io_cluster }})"
+            description: "Des segments WAL attendent d'être archivés depuis plus de 30 min. Le PITR est interrompu et pg_wal grossit sur le PVC de la base — un pg_wal plein arrête PostgreSQL. Diagnostic : `kubectl -n {{ $labels.namespace }} logs {{ $labels.pod }} -c plugin-barman-cloud` puis vérifier le Secret de credentials et les droits IAM sur le bucket."
+
+        # Complément de la précédente : elle attrape les échecs qui se RÉSORBENT — un retry qui
+        # finit par passer laisse le backlog à zéro et `CNPGWalArchivingBacklog` muette, alors
+        # qu'une chaîne qui échoue par intermittence est déjà en train de se dégrader.
+        - alert: CNPGWalArchivingFailing
+          expr: increase(cnpg_pg_stat_archiver_failed_count[1h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "cnpg : échecs d'archivage WAL ({{ $labels.cnpg_io_cluster }})"
+            description: "Au moins un archivage de segment a échoué dans la dernière heure. Sans suite, cela devient CNPGWalArchivingBacklog."
+
+        # --- Sauvegardes de base : la moitié périodique de la chaîne ---
+
+        # 36 h, seuil aligné sur `VeleroBackupTooOld` : laisse passer un décalage de la schedule
+        # quotidienne (02:00) sans crier, pas une journée entière sautée.
+        #
+        # ⚠️ La garde `> 0` est LOAD-BEARING (piège n°2 en tête de fichier) : sans elle, la règle
+        # se déclenche définitivement sur toute base sans sauvegarde configurée, dont la métrique
+        # vaut 0 et non « absent ».
+        - alert: CNPGBackupTooOld
+          expr: (time() - cnpg_collector_last_available_backup_timestamp > 129600) and cnpg_collector_last_available_backup_timestamp > 0
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "cnpg : aucune sauvegarde de base réussie depuis 36 h ({{ $labels.cnpg_io_cluster }})"
+            description: "La dernière sauvegarde de base réussie remonte à plus de 36 h alors que la ScheduledBackup est quotidienne. Diagnostic : `kubectl -n {{ $labels.namespace }} get backups.postgresql.cnpg.io` — NOM LONG obligatoire, `backups` seul est ambigu avec velero."
+
+        # La dernière TENTATIVE a échoué : l'échec est plus récent que le dernier succès. Se
+        # déclenche dès la première nuit ratée, sans attendre les 36 h de la règle précédente.
+        - alert: CNPGLastBackupFailed
+          expr: (cnpg_collector_last_failed_backup_timestamp > cnpg_collector_last_available_backup_timestamp) and cnpg_collector_last_failed_backup_timestamp > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cnpg : dernière sauvegarde de base en échec ({{ $labels.cnpg_io_cluster }})"
+            description: "La sauvegarde la plus récente a échoué et aucune n'a réussi depuis. Diagnostic : `kubectl -n {{ $labels.namespace }} describe backups.postgresql.cnpg.io`."
+
+        # --- Les deux angles morts ---
+
+        # Équivalent de `VeleroNoBackupMetric`, adapté au piège n°2 : la série n'est pas absente,
+        # elle est à ZÉRO. Sans cette règle, une base dont la sauvegarde n'a JAMAIS abouti est
+        # parfaitement silencieuse — `CNPGBackupTooOld` étant justement gardée par `> 0`.
+        #
+        # ⚠️ LISTE BLANCHE, sur le modèle d'`includedNamespaces` côté velero : la règle ne parle
+        # que des bases dont une sauvegarde est ATTENDUE. `authentik-db` et `pgsql-test` n'ont
+        # aujourd'hui aucune chaîne native et hurleraient en permanence. Contrepartie assumée et
+        # identique à celle de velero — mettre une base sous sauvegarde demande de l'ajouter ICI
+        # AUSSI, et rien ne le signale.
+        - alert: CNPGNoBackupYet
+          expr: cnpg_collector_last_available_backup_timestamp{cnpg_io_cluster=~"forgejo-db"} == 0
+          for: 24h
+          labels:
+            severity: warning
+          annotations:
+            summary: "cnpg : aucune sauvegarde de base n'a jamais abouti ({{ $labels.cnpg_io_cluster }})"
+            description: "Cette base est censée être sauvegardée mais aucune sauvegarde n'a jamais réussi depuis 24 h. Tant que c'est le cas, CNPGBackupTooOld est aveugle — sa garde `> 0` l'empêche de se déclencher. Causes usuelles : ligne `forgejo-db-gcs.sealed.yaml` restée commentée dans le kustomization, ou `spec.plugins` absent du Cluster."
+
+        # Plus aucune instance CNPG n'est scrapée : toutes les règles ci-dessus deviennent muettes
+        # d'un coup. Formulé en `absent(...)` sur une métrique servie inconditionnellement plutôt
+        # qu'en `up{job=...}` — le label `job` d'un PodMonitor dépend de la façon dont
+        # prometheus-operator le dérive, et une règle qui vise un `job` inexistant ne se déclenche
+        # jamais tout en paraissant correcte.
+        - alert: CNPGMetricsAbsent
+          expr: absent(cnpg_collector_pg_wal_archive_status)
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "cnpg : plus aucune instance PostgreSQL n'est scrapée"
+            description: "Aucune métrique d'instance CNPG depuis 1 h : toutes les alertes de sauvegarde sont aveugles. Causes usuelles : PodMonitor `cnpg-instances` supprimé ou privé de son label `release: kube-prometheus-stack`, ou plus aucun pod d'instance en vie."

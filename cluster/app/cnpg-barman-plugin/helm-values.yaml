@@ -1,0 +1,66 @@
+# helm-values — chart `plugin-barman-cloud` (sauvegarde native PostgreSQL vers stockage objet).
+#
+# Le chart ne prend AUCUNE configuration de bucket : la destination, les credentials et la
+# rétention vivent dans des CRs `ObjectStore`, namespacées, écrites dans le `manifests/` de
+# l'application qui possède la base (cf. `cluster/app/forgejo/manifests/forgejo-db-objectstore.yaml`).
+# Ce fichier ne règle donc que le Deployment du plugin lui-même.
+
+replicaCount: 1
+
+logLevel: info
+
+# --- CRD ---
+# `objectstores.barmancloud.cnpg.io`, rendue par le chart. Laissée à `true` : ArgoCD rend le chart
+# avec `--include-crds`, la CRD fait partie de l'ensemble désiré et est réconciliée à chaque sync.
+# ⚠️ Ne PAS la couper en pensant « la CRD est déjà là » : elle sortirait de l'ensemble désiré et
+# `prune: true` la supprimerait — emportant les `ObjectStore` avec elle.
+crds:
+  create: true
+
+# --- Ressources ---
+# Le Deployment est un serveur gRPC CNPG-I : il ne transporte AUCUNE donnée de sauvegarde. Le
+# travail réel (upload barman-cloud, archivage WAL) est fait par le conteneur SIDECAR injecté dans
+# chaque pod d'instance PostgreSQL, dont les ressources se règlent par ObjectStore
+# (`spec.instanceSidecarConfiguration.resources`), pas ici.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+# --- Contextes de sécurité ---
+# Défauts du chart, explicités : ils sont déjà stricts (rootless 10001, rootfs en lecture seule,
+# toutes capabilities retirées, seccomp RuntimeDefault). Écrits ici pour que la posture du
+# composant se lise sans aller ouvrir le values.yaml amont, et qu'un relâchement futur soit un
+# diff visible.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+      - ALL
+
+# --- Service ---
+# ⚠️ NE PAS TOUCHER AU NOM. Le values.yaml amont le dit en capitales : `barman-cloud` est câblé en
+# dur dans les `Certificate` cert-manager rendus par le chart (le nom DNS du certificat serveur en
+# dérive). Le renommer casse le mTLS opérateur ↔ plugin, et le symptôme n'est pas une erreur de
+# déploiement mais des Clusters dont le plugin reste injoignable.
+service:
+  name: barman-cloud
+  port: 9090
+
+# --- Observabilité : hors composant ---
+# Le chart n'expose pas de métriques applicatives et ne pose ni ServiceMonitor ni PodMonitor. Ce
+# qu'on veut surveiller, ce n'est de toute façon pas ce Deployment mais l'ÉTAT DES SAUVEGARDES,
+# qui se lit sur les instances PostgreSQL (`cnpg_pg_stat_archiver_*`,
+# `cnpg_collector_last_available_backup_timestamp`). C'est le rôle du composant frère
+# [cnpg-monitoring](../cnpg-monitoring/README.md).
