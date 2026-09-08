@@ -7,7 +7,9 @@ quel ordre, à quel instant, et avec quoi commencer quand il ne reste rien.
 
 Cette page est le **plan**. L'[exercice](forgejo-pra-exercice.md) en est l'épreuve — un plan jamais
 joué n'est pas un plan, c'est une intention. Tous les chiffres et tous les messages d'erreur d'ici
-sont **relevés au drill du 2026-09-08**, pas supposés. Ce qui n'a pas été éprouvé est signalé.
+sont **relevés lors des cinq exercices du 2026-09-08**, pas supposés ; le détail de chaque passage
+est dans le [journal](forgejo-pra-exercice.md#journal-des-exercices). Ce qui n'a **pas** été éprouvé
+est signalé comme tel — et il en reste.
 
 Ce document ne remplace ni [`velero-script.sh`](../script/velero-script.sh) ni
 [`cnpg-barman-plugin-script.sh`](../script/cnpg-barman-plugin-script.sh) : chacun sait conduire sa
@@ -263,22 +265,17 @@ sur l'âge du dernier archivage — cf. [cnpg-monitoring](../cluster/app/cnpg-mo
 
 ### RTO
 
-**Mesuré au drill du 2026-09-08**, sur une instance quasi vide (1,6 Mio de PVC, 2 dépôts, 2
-comptes) :
-
-| Étape | Durée |
-| --- | --- |
-| Sauvegarde velero manuelle (102 objets, 1 volume) | 17 s |
-| Sauvegarde de base CNPG manuelle | 11 s |
-| Restauration velero (45 objets, 1 volume) | ~45 s |
-| `bootstrap.recovery` jusqu'à `Cluster in healthy state` | ~60 s |
-| Redémarrage de Forgejo une fois la base là | immédiat |
+**Non mesuré à volumétrie réelle, et c'est le point.** Les durées relevées lors des cinq exercices
+du 2026-09-08 sont consignées dans le
+[journal de l'exercice](forgejo-pra-exercice.md#journal-des-exercices), avec l'état de l'instance
+sur laquelle elles ont été prises — **1,6 Mio, 2 dépôts, 2 comptes**. Repère : `up` de bout en bout
+tourne en **~3 min**.
 
 > [!IMPORTANT]
-> **Ces durées sont un plancher, pas une promesse.** Elles ne contiennent aucun transfert réel :
-> le PVC pesait 1,6 Mio. À volumétrie de production, ce sont les temps de lecture du bucket GCS qui
-> dominent, et rien ici ne les mesure. Le RTO **utile** est celui du temps de décision — choisir la
-> sauvegarde, vérifier la fenêtre, suspendre l'auto-sync — qui n'a pas été chronométré non plus.
+> **Ce sont des planchers, pas des promesses.** Elles ne contiennent aucun transfert réel. À
+> volumétrie de production, ce sont les temps de lecture du bucket GCS qui dominent, et rien ici ne
+> les mesure. Le RTO **utile** est celui du temps de décision — choisir la sauvegarde, vérifier la
+> fenêtre, suspendre l'auto-sync — qui n'a jamais été chronométré non plus.
 
 ---
 

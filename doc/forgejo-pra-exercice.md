@@ -573,17 +573,77 @@ curl -sk --resolve forgejo-preprod.lan.wittner.tech:443:192.168.1.50 \
 > Si les deux moitiés n'étaient pas cohérentes, le mot de passe passerait et la session boucherait
 > indéfiniment. Aucun contrôle automatisé ne teste cela.
 
-## Relevé du 2026-09-08
+## Journal des exercices
 
-Sauvegarde `manual-bdjbd` (fin `15:50:07Z`, 1 volume), fenêtre barman
-`15:02:11Z → 15:50:41Z`.
+**À compléter à chaque passage.** Un exercice non consigné ne prouve rien six mois plus tard : on
+ne sait plus s'il a été joué, ni sur quelle volumétrie, ni jusqu'où.
+
+### Les passages
+
+| # | Date | Conduite | Sauvegarde consommée | Vérifications | Résultat |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 2026-09-08 | manuelle, exploratoire | `manual-bdjbd` (15:50:07Z) | partielles — `git fsck` et `doctor` **non joués** | reprise OK, exercice interrompu avant la fin |
+| 2 | 2026-09-08 | `up` + `verify` | `manual-bdjbd` | 6 familles / 6 | **OK** |
+| 3 | 2026-09-08 | `drill --fresh` | `manual-fnmdv` (17:01:47Z), créée par le drill | 6 / 6 | **OK** |
+| 4 | 2026-09-08 | `prepare run` + `drill` | `manual-qs7c7` (17:05:52Z) | 6 / 6 | **OK** |
+| 5 | 2026-09-08 | manuelle, commande par commande | `manual-qs7c7` | 6 / 6 **+ connexion à l'interface** | **OK** |
+
+Le passage **1** est celui qui a produit toutes les trouvailles du plan : le `FATAL` de
+`recovery_target_time`, les `ownerReferences` effacées par velero, l'adoption du PVC orphelin. Les
+suivants les vérifient.
+
+Le passage **5** est le seul à avoir validé la chaîne **de bout en bout** : se connecter à
+l'interface met d'accord le hash venu de la base (barman), le `SECRET_KEY` venu de l'`app.ini`
+(PVC) et la route. Aucun contrôle automatisé ne fait ça.
+
+> [!NOTE]
+> `--fresh` (passage 3) a depuis été **retiré** : fabriquer sa propre condition d'exécution fait de
+> l'exercice le juge de lui-même. La préparation vit maintenant dans
+> [`forgejo-pra-prepare-script.sh`](../script/forgejo-pra-prepare-script.sh).
+
+### L'instance éprouvée
+
+Ces cinq passages ont tous tourné sur la **même** instance, quasi vide. C'est la limite de tout ce
+qui précède.
+
+| Grandeur | Valeur au 2026-09-08 |
+| --- | --- |
+| Comptes | 2 |
+| Dépôts | 2 (`forgejo_admin/test_repo`, `jbwittner/test_repo`) |
+| Issues | 0 |
+| Commits, tous dépôts confondus | 3 |
+| Occupation réelle de `/data` | **1,6 Mio** |
+| Volume réellement copié par kopia | **1 072 125 octets** |
+| PVC déclarés | 100 Gi (`forgejo-data`) + 10 Gi (base) |
+| Groupe de volumes immobilisé pendant l'exercice | **110 Gi** (`thinProvision: "no"`) |
+| Durée du parcours kopia | ~17 s |
+
+### Durées mesurées
+
+⚠️ **Des planchers, pas des promesses.** Aucun transfert significatif n'y figure : le PVC pesait
+1,6 Mio. À volumétrie réelle, ce sont les temps de lecture du bucket GCS qui domineraient, et rien
+ici ne les mesure.
+
+| Étape | Durée |
+| --- | --- |
+| Sauvegarde velero manuelle | 15–17 s (79 à 102 objets, 1 volume) |
+| Sauvegarde de base CNPG manuelle | 10–11 s |
+| `Restore` velero | ~45 s (45 à 47 objets, 1 volume repris) |
+| `bootstrap.recovery` → `Cluster in healthy state` | ~50–60 s |
+| Redémarrage de Forgejo une fois la base là | immédiat |
+| `up` de bout en bout | **~3 min** |
+
+Le RTO **utile** — choisir la sauvegarde, vérifier la fenêtre, suspendre l'auto-sync, décider — n'a
+jamais été chronométré.
+
+### Sortie type
 
 ```
 ==> Pré-requis
-  ok   sauvegarde velero : manual-bdjbd (fin 2026-09-08T15:50:07Z, 1 volume(s))
-  ok   fenêtre barman     : 2026-09-08T15:02:11Z → 2026-09-08T15:50:41Z
+  ok   sauvegarde velero : manual-qs7c7 (fin 2026-09-08T17:05:52Z, 1 volume(s))
+  ok   fenêtre barman     : 2026-09-08T15:02:11Z → 2026-09-08T17:06:00Z
 ==> 3/7 Restauration velero → forgejo-preprod
-  ok   restore pra-forgejo-8qppt : Completed, 1 volume(s) réellement repris
+  ok   restore pra-forgejo-xxxxx : Completed, 1 volume(s) réellement repris
 ==> 5/7 Base par bootstrap.recovery
     cluster : Setting up primary
     cluster : Waiting for the instances to become active
@@ -611,16 +671,6 @@ Sauvegarde `manual-bdjbd` (fin `15:50:07Z`, 1 volume), fenêtre barman
   ok   HTTP 200 en direct sur le Gateway (192.168.1.80)
   note HTTP 404 via le reverse proxy LAN (192.168.1.50)
 ```
-
-**Durées** — instance de 1,6 Mio, ce sont des planchers, pas des promesses :
-
-| Étape | Durée |
-| --- | --- |
-| Sauvegarde velero manuelle (102 objets, 1 volume) | 17 s |
-| Sauvegarde de base CNPG manuelle | 11 s |
-| `Restore` velero (45 objets, 1 volume repris) | ~45 s |
-| `bootstrap.recovery` → `Cluster in healthy state` | ~60 s |
-| `up` de bout en bout | ~3 min |
 
 ## Exposer réellement sur le LAN
 
