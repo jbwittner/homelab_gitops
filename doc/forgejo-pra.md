@@ -62,11 +62,31 @@ sur `forgejo-db-manual-pljw7` : `online: true`, `beginLSN 0/2E000028 → endLSN 
 > repos**. Cela valide le mécanisme, pas le comportement sous charge d'écriture — le mode de panne
 > ne se manifeste que si une écriture croise le parcours.
 >
-> **Le correctif structurel existe et n'est pas câblé.** `openebs lvm-localpv` sait faire des
-> snapshots LVM et les CRD `volumesnapshots` sont installées, mais **aucune `VolumeSnapshotClass`
-> n'est déclarée** : le chemin CSI est fermé aujourd'hui. Avec elle, `snapshotVolumes: true` plus
-> le data mover donnerait un vrai point-dans-le-temps et l'étalement disparaîtrait. Les hooks
-> velero, eux, ne servent à rien ici : Forgejo n'a pas de commande de gel.
+> **Le correctif structurel est FERMÉ, et ce n'est pas faute d'avoir essayé.** L'idée est bonne :
+> un snapshot LVM est atomique, velero téléverserait depuis lui et l'étalement disparaîtrait. Le
+> chemin a été câblé et mesuré le 2026-09-08 — il ne marche pas sur cette StorageClass.
+>
+> Le snapshot d'un LV **épais** se crée (`readyToUse: true` en moins de dix secondes,
+> `snapSize` honoré à 20 %), mais en provisionner un volume est refusé :
+>
+> ```
+> ProvisioningFailed: rpc error: code = InvalidArgument
+> desc = snapshot snapshot-2041e0f8-… is not of thin type
+> ```
+>
+> `lvm-localpv` n'accepte comme `dataSource` que des snapshots **thin**. Et le data mover de velero
+> fait exactement cela : snapshot, puis PVC temporaire provisionné depuis le snapshot pour le
+> téléverser. La seconde étape échoue. La `VolumeSnapshotClass` a donc été retirée plutôt que
+> laissée en place — elle n'aurait produit que des snapshots verts et non restaurables.
+>
+> **Rouvrir ce chemin exige `thinProvision: "yes"`**, qui ne convertit pas les volumes existants :
+> seconde StorageClass et migration volume par volume. Ce n'est plus un réglage, c'est un chantier.
+>
+> Les hooks velero, eux, ne servent à rien ici : Forgejo n'a pas de commande de gel.
+>
+> **Conclusion opérationnelle : l'étalement reste, et la détection reste le `git fsck` de
+> l'[exercice](forgejo-pra-exercice.md).** C'est ce qui rend ce contrôle load-bearing plutôt que
+> décoratif.
 
 ### Faut-il couper Forgejo pendant la copie ? Non
 
@@ -575,5 +595,6 @@ Traefik.
 - **Le comportement sous charge d'écriture.** `git fsck` et `forgejo doctor` sont joués à chaque
   exercice et passent — mais sur une forge au repos. L'étalement de la copie kopia (§1) ne se
   manifeste que si une écriture croise le parcours, et rien ici ne le provoque.
-- **Le chemin CSI snapshot**, qui supprimerait cet étalement. Aucune `VolumeSnapshotClass` n'est
-  déclarée : c'est le principal levier d'amélioration identifié, et il n'est pas engagé.
+- **Le chemin CSI snapshot**, qui supprimerait cet étalement : **mesuré fermé** le 2026-09-08
+  (`snapshot … is not of thin type`). Le rouvrir demande de migrer la StorageClass en thin, ce qui
+  est un chantier de stockage, pas un réglage de sauvegarde.

@@ -7,14 +7,14 @@ kind: Kustomization
 # `openebs-monitoring` (CRDs prometheus-operator absentes à ce stade).
 #
 # Ordre déclaratif via sync-waves de ressource (pas via l'ordre de cette liste) :
-#   namespace (-1) → DaemonSet de bootstrap du VG (0) → StorageClass (1)
-#   → VolumeSnapshotClass (2).
+#   namespace (-1) → DaemonSet de bootstrap du VG (0) → StorageClass (1).
+#
+# ⚠️ PAS de `VolumeSnapshotClass`, et c'est un constat de MESURE, pas un oubli — voir README
+# §Contraintes. Elle a été déclarée puis retirée le 2026-09-08 : sur cette StorageClass en
+# provisionnement ÉPAIS, le driver crée bien un snapshot (qui passe `Ready`) mais REFUSE ensuite
+# d'en provisionner un volume — `snapshot <id> is not of thin type`. Une classe qui produit des
+# snapshots verts et non restaurables est pire que pas de classe du tout.
 resources:
   - namespace.yaml
   - storageclass.yaml
   - vg-bootstrap-daemonset.yaml
-  # Capacité de snapshot CSI du moteur LVM. INERTE tant que personne ne crée de `VolumeSnapshot` :
-  # elle ne change ni le provisionnement, ni les volumes existants. Elle existe pour permettre à
-  # velero de copier depuis un instantané plutôt que depuis un système de fichiers vivant — bascule
-  # qui n'est PAS faite (cf. l'en-tête du fichier).
-  - volumesnapshotclass.yaml

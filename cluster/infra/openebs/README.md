@@ -59,6 +59,29 @@ qu'après le stack d'observabilité.
   amortisseur, pas une garantie, et il ne dispense pas d'avoir un VG partout.
 - Ne pas toucher `lvm-localpv.crds` dans `helm-values.yaml` (cf. commentaires du fichier :
   doublon avec le sous-chart `openebs-crds`).
+> [!CAUTION]
+> **Les snapshots CSI sont INUTILISABLES sur cette StorageClass, et l'échec ne se voit qu'à la
+> restauration.** Mesuré le 2026-09-08 : une `VolumeSnapshotClass` a été déclarée, un PVC de 1Gi
+> snapshoté, puis restauré. Le snapshot est bien créé et passe `readyToUse: true` en moins de dix
+> secondes ; le `LVMSnapshot` correspondant est `Ready`, avec un `snapSize` de 214 958 080 octets
+> (les 20 % demandés). **Mais provisionner un volume depuis ce snapshot est refusé :**
+>
+> ```
+> ProvisioningFailed: rpc error: code = InvalidArgument
+> desc = snapshot snapshot-2041e0f8-… is not of thin type
+> ```
+>
+> `lvm-localpv` n'accepte comme `dataSource` que des snapshots **thin**. Sur un LV épais il en
+> fabrique un, le déclare prêt, et refuse de le relire — un snapshot **vert et non restaurable**.
+>
+> La `VolumeSnapshotClass` a donc été **retirée** : advertiser une capacité dont le chemin de
+> retour est fermé est pire que ne pas l'avoir. Conséquence directe, velero ne peut pas copier
+> depuis un instantané et reste sur un parcours de système de fichiers vivant — cf.
+> [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md) §1.
+>
+> **Rouvrir ce chemin exige de passer en `thinProvision: "yes"`**, ce qui ne convertit PAS les
+> volumes existants : il faudrait une seconde StorageClass et une migration volume par volume.
+
 - **Le nom `openebs-lvm-thin` est historique** : la StorageClass est aujourd'hui en
   provisionnement **épais** (`thinProvision: "no"` — chaque PV réserve sa taille dans le VG
   immédiatement). Passer en thin change le comportement de saturation, pas le nom : renommer la
