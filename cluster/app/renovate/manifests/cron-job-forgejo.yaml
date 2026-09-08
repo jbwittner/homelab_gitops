@@ -14,11 +14,11 @@ kind: CronJob
 metadata:
   name: renovate-forgejo
 spec:
-  # 02:00 et non 01:00 : décalé d'une heure par rapport au bot GitHub. Les deux consomment le même
+  # 01:00 et non 02:00 : décalé d'une heure par rapport au bot GitHub. Les deux consomment le même
   # quota d'API github.com pour les lookups de releases (`RENOVATE_GITHUB_COM_TOKEN` est présent
   # dans les DEUX Secrets, y compris celui-ci). `concurrencyPolicy: Forbid` ne protège de rien
   # ici — il s'applique par CronJob et n'empêche pas deux CronJobs distincts de tourner ensemble.
-  schedule: "0 2 * * *"
+  schedule: "0 1 * * *"
   timeZone: "Europe/Paris"
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3

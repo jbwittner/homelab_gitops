@@ -14,11 +14,11 @@ spec:
   # dans renovate.json, pas par la cadence du cron. Un run quotidien évite d'ajouter
   # jusqu'à 7 jours d'attente par-dessus le cooldown.
   #
-  # ⚠️ 01:00 et non 02:00 pour ne PAS chevaucher le bot Forgejo : les deux consomment le même
+  # ⚠️ 02:00 et non 01:00 pour ne PAS chevaucher le bot Forgejo : les deux consomment le même
   # quota d'API github.com pour les lookups de releases (`RENOVATE_GITHUB_COM_TOKEN` est présent
   # dans les deux Secrets). `concurrencyPolicy: Forbid` ne protège de rien ici — il s'applique
   # par CronJob et n'empêche pas deux CronJobs distincts de tourner ensemble.
-  schedule: "0 1 * * *"
+  schedule: "0 2 * * *"
   timeZone: "Europe/Paris"
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3

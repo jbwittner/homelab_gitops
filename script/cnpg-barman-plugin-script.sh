@@ -86,6 +86,8 @@ ni `barman-cloud-*` — tout passe par kubectl et jq).
   cnpg-barman-plugin-script.sh list [motif]
       Bases sous sauvegarde, sauvegardes, schedules. La fenêtre de récupération est lue sur
       l'ObjectStore, PAS sur le Cluster (dont les champs de sauvegarde valent null avec le plugin).
+      Chaque sauvegarde porte deux plages : PLAGE-UTC = début → fin de la copie ; PITR-UTC =
+      ce qui est restaurable DEPUIS elle (fin de la copie → dernier point garanti par l'ObjectStore).
 
   cnpg-barman-plugin-script.sh show <backup> [-n ns]
       Détail d'une sauvegarde : LSN et WAL de début/fin, durée, erreur, fenêtre de l'ObjectStore.
@@ -100,7 +102,9 @@ ni `barman-cloud-*` — tout passe par kubectl et jq).
           --name X          nom du cluster restauré (défaut : <cluster>-restore)
           --immediate       s'arrêter dès la cohérence atteinte (pas de rejeu de WAL)
           --target-time T   PITR à une date (RFC3339, dans la fenêtre de récupération)
-          --backup-id ID    repartir d'une sauvegarde de base précise (cf. `show`)
+          --backup-id ID    REPARTIR d'une sauvegarde de base précise (cf. `show`). ⚠️ Seul, il
+                            rejoue ensuite tout le WAL et atterrit au même endroit que sans
+                            option. Pour l'état À cette sauvegarde : `--backup-id ID --immediate`
           --no-archive      clone jetable : pas de spec.plugins, donc aucun archivage WAL
 
   cnpg-barman-plugin-script.sh delete <backup> [-n ns]
@@ -242,10 +246,17 @@ wait_phase() {
 
 # Formatage relatif d'un timestamp RFC3339 et durée lisible, partagés par tous les tableaux.
 JQ_LIB='
+  # CNPG écrit ses timestamps tantôt en secondes entières, tantôt avec des fractions
+  # (`.status.stoppedAt` en porte). `fromdateiso8601` refuse les secondes fractionnaires : la
+  # troncature est faite ici, une fois, plutôt que dans chaque appelant.
+  def epoch($t):
+    if $t == null or $t == "" then null
+    else ($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) end;
+
   def rel($t):
-    if $t == null or $t == "" then "-"
+    if epoch($t) == null then "-"
     else
-      (($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) - now) as $d
+      (epoch($t) - now) as $d
       | (if $d < 0 then -$d else $d end) as $a
       | (if   $a < 3600  then "\(($a/60)    | floor) min"
          elif $a < 86400 then "\(($a/3600)  | floor) h"
@@ -254,14 +265,31 @@ JQ_LIB='
     end;
 
   def span($a; $b):
-    if $a == null or $b == null or $a == "" or $b == "" then "-"
+    if epoch($a) == null or epoch($b) == null then "-"
     else
-      (($b | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)
-       - ($a | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) as $s
+      (epoch($b) - epoch($a)) as $s
       | if   $s < 60   then "\($s)s"
         elif $s < 3600 then "\(($s/60)   | floor)m\($s % 60)s"
         else                "\(($s/3600) | floor)h\((($s % 3600)/60) | floor)m" end
     end;
+
+  # Horodatage absolu, en UTC — comme tout ce que sert l’API et comme ce qu’affiche `show`.
+  # Surtout PAS converti en heure locale : non étiquetée, elle se comparerait de travers aux
+  # timestamps bruts lus juste à côté (`kubectl get -o yaml`, `show`, les logs du sidecar).
+  # `gmtime` explicite plutôt que `strftime` sur un nombre : le second n’accepte un entier que
+  # depuis jq 1.6.
+  def clock($t):
+    if epoch($t) == null then "-" else (epoch($t) | gmtime | strftime("%m-%d %H:%M")) end;
+
+  # Plage d’exécution d’une copie. La date n’est répétée sur la borne haute que si elle change —
+  # une sauvegarde de nuit qui déborde sur le lendemain doit se voir, les autres n’ont pas à
+  # payer la largeur de colonne.
+  def plage($a; $b):
+    if   epoch($a) == null then "-"
+    elif epoch($b) == null then "\(clock($a)) → …"
+    elif (epoch($a) | gmtime | strftime("%m-%d")) == (epoch($b) | gmtime | strftime("%m-%d"))
+      then "\(clock($a)) → \(epoch($b) | gmtime | strftime("%H:%M"))"
+    else "\(clock($a)) → \(clock($b))" end;
 
   # Entrée barman du `spec.plugins`, ou null. Toute la sauvegarde tient dans cette entrée :
   # sans elle la base reste hors périmètre, quels que soient les ObjectStore et les
@@ -348,14 +376,25 @@ cmd_list() {
     echo "    (aucune)"
   else
     {
-      printf 'NS\tNOM\tCLUSTER\tPHASE\tMETHODE\tCREEE\tDUREE\tBACKUP-ID\tSOURCE\tERREUR\n'
-      jq -r --arg pat "$pattern" "$JQ_LIB"'
-        [ .items[] | select("\(.metadata.namespace)/\(.metadata.name)/\(.spec.cluster.name)" | contains($pat)) ]
+      printf 'NS\tNOM\tCLUSTER\tPHASE\tMETHODE\tCREEE\tPLAGE-UTC\tDUREE\tPITR-UTC\tBACKUP-ID\tSOURCE\tERREUR\n'
+      jq -r --arg pat "$pattern" --argjson cl "$cl" --argjson os "$os" "$JQ_LIB"'
+        ( [ $cl.items[] | { key: "\(.metadata.namespace)/\(.metadata.name)", value: . } ] | from_entries ) as $clusters
+        | ( [ $os.items[] | { key: "\(.metadata.namespace)/\(.metadata.name)", value: . } ] | from_entries ) as $stores
+        | [ .items[] | select("\(.metadata.namespace)/\(.metadata.name)/\(.spec.cluster.name)" | contains($pat)) ]
         | sort_by(.metadata.creationTimestamp) | reverse
         | .[]
         | . as $b
         | ( [ $b.metadata.ownerReferences[]? | select(.kind == "ScheduledBackup") ] | first ) as $own
         | ( $b.metadata.annotations["homelab.wittner.tech/derived-from-schedule"] ) as $der
+        # Chaîne Backup → Cluster → ObjectStore → fenêtre, refaite ici : la borne haute du PITR
+        # ne vit NI sur le Backup NI sur le Cluster (piège n°1), et le `serverName` sous lequel
+        # la chercher est LU sur le Cluster, jamais déduit du nom du Backup.
+        | ( $clusters["\($b.metadata.namespace)/\($b.spec.cluster.name)"] ) as $c
+        | ( $stores["\($b.metadata.namespace)/\(barman($c).parameters.barmanObjectName // "")"] ) as $store
+        | ( if $c == null or $store == null then null
+            else ($store.status.serverRecoveryWindow[server($c)] // null) end ) as $win
+        # Borne basse du PITR = fin de CETTE copie : avant elle, cette base ne peut rien rejouer.
+        | ( $b.status.stoppedAt ) as $from
         | [ $b.metadata.namespace,
             $b.metadata.name,
             $b.spec.cluster.name,
@@ -364,12 +403,42 @@ cmd_list() {
             ($b.status.phase // "-"),
             ($b.spec.method // "-"),
             rel($b.metadata.creationTimestamp),
+            plage($b.status.startedAt; $b.status.stoppedAt),
             span($b.status.startedAt; $b.status.stoppedAt),
+            # Une copie non `completed` n’ouvre aucune plage : `walArchivingFailing` a bien une
+            # `stoppedAt`, et afficher une plage à partir d’elle annoncerait restaurable ce qui
+            # ne l’est pas (le WAL de fin manque).
+            (if   $b.status.phase != "completed" then "-"
+             elif $win == null or epoch($from) == null then "-"
+             # Le status de l’ObjectStore est rafraîchi par le plugin, pas à la seconde : une copie
+             # qui vient de finir est déjà `completed` alors que `lastSuccessfulBackupTime` pointe
+             # encore la précédente. Rendre la plage telle quelle afficherait une borne haute
+             # ANTÉRIEURE à la borne basse — un intervalle vide, donc « rien de restaurable » sur
+             # la sauvegarde la plus fraîche.
+             elif (epoch($win.lastSuccessfulBackupTime) == null
+                   or epoch($from) > epoch($win.lastSuccessfulBackupTime))
+               then "\(clock($from)) → …"
+             else "\(clock($from)) → \(clock($win.lastSuccessfulBackupTime))"
+                  # Copie antérieure au début de la fenêtre : les WAL qui la prolongeaient sont
+                  # partis en rétention, la base seule ne rejoue plus rien.
+                  + (if (epoch($win.firstRecoverabilityPoint) != null
+                         and epoch($from) < epoch($win.firstRecoverabilityPoint))
+                     then " ⚠" else "" end)
+             end),
             ($b.status.backupId // "-"),
             (if $own then $own.name elif $der then "manuel (\($der))" else "manuel" end),
             (($b.status.error // "") | if . == "" then "" else (.[0:60]) end) ]
         | @tsv' <<<"$bk"
     } | column -t -s $'\t'
+    echo "    PLAGE-UTC = début → fin de la copie. PITR-UTC = plage restaurable DEPUIS cette copie."
+    # La borne haute n'est PAS le dernier point rejouable : c'est le dernier point GARANTI par le
+    # status de l'ObjectStore. Le rejeu va en réalité jusqu'au dernier WAL archivé, qui est plus
+    # récent — le plugin ne l'expose nulle part. D'où « au moins », et non « jusqu'à ».
+    echo "    Bornes en UTC (mm-jj hh:mm), comme les timestamps bruts de l'API. La borne haute est"
+    echo "    « lastSuccessfulBackupTime » : le dernier point GARANTI. Le rejeu va au moins jusque-là,"
+    echo "    et en pratique jusqu'au dernier WAL archivé — que le plugin n'expose nulle part."
+    echo "    « ⚠ » : copie antérieure au « firstRecoverabilityPoint » — ses WAL sont partis en rétention."
+    echo "    « … » : borne pas encore connue — copie en cours, ou status de l'ObjectStore en retard."
     echo "    Détail d'une sauvegarde (LSN, WAL, fenêtre) : cnpg-barman-plugin-script.sh show <nom>"
   fi
 
@@ -660,17 +729,23 @@ $(jq -r '.[] | "         " + .metadata.name' <<<"$sb")" ;;
 # `serverName` explicites qui empêchent le cluster restauré d'écraser sa propre source.
 cmd_restore() {
   local wanted="" newname="" archive=1
-  local rt_json='null'
+  # ⚠️ Les trois cibles se COMPOSENT, elles ne s'excluent pas — et c'est la raison d'être de ces
+  # trois variables plutôt qu'un seul `rt_json` réécrit à chaque option. La CRD est explicite :
+  # `backupID` est « the ID of the backup from which to START the recovery process », un point de
+  # DÉPART ; `targetImmediate` est « end recovery as soon as a consistent state is reached », le
+  # point d'ARRÊT. Le défaut, lui, est d'appliquer TOUT le WAL disponible.
+  # Conséquence : `--backup-id` SEUL ne rend pas l'état de cette sauvegarde-là. Il repart d'elle et
+  # rejoue jusqu'au bout de l'archive — donc il atterrit au même endroit que sans option du tout.
+  # Pour obtenir l'état À cette sauvegarde, il faut `--backup-id X --immediate`.
+  local rt_immediate=0 rt_time="" rt_backup=""
 
   while (( $# )); do
     case "$1" in
       -n|--namespace) NAMESPACE="${2:-}"; [[ -n "$NAMESPACE" ]] || usage; shift 2 ;;
       --name)         newname="${2:-}"; [[ -n "$newname" ]] || usage; shift 2 ;;
-      --immediate)    rt_json='{"targetImmediate":true}'; shift ;;
-      --target-time)  [[ -n "${2:-}" ]] || usage
-                      rt_json="$(jq -nc --arg t "$2" '{targetTime:$t}')"; shift 2 ;;
-      --backup-id)    [[ -n "${2:-}" ]] || usage
-                      rt_json="$(jq -nc --arg i "$2" '{backupID:$i}')"; shift 2 ;;
+      --immediate)    rt_immediate=1; shift ;;
+      --target-time)  [[ -n "${2:-}" ]] || usage; rt_time="$2"; shift 2 ;;
+      --backup-id)    [[ -n "${2:-}" ]] || usage; rt_backup="$2"; shift 2 ;;
       --no-archive)   archive=0; shift ;;
       -h|--help)      usage 0 ;;
       -*)             die "Option inconnue : $1" ;;
@@ -679,6 +754,20 @@ cmd_restore() {
     esac
   done
   [[ -n "$wanted" ]] || usage
+
+  [[ -z "$rt_time" || $rt_immediate -eq 0 ]] \
+    || die "--target-time et --immediate se contredisent : l'un demande de rejouer JUSQU'À une
+       date, l'autre de s'arrêter dès la cohérence atteinte. Choisir."
+
+  local rt_json='null'
+  if [[ -n "$rt_backup" || -n "$rt_time" || $rt_immediate -eq 1 ]]; then
+    rt_json="$(jq -nc \
+      --arg b "$rt_backup" --arg t "$rt_time" --argjson imm "$rt_immediate" '
+        {}
+        | (if $b != "" then .backupID = $b else . end)
+        | (if $t != "" then .targetTime = $t else . end)
+        | (if $imm == 1 then .targetImmediate = true else . end)')"
+  fi
 
   local target ns cluster
   target="$(resolve_cluster "$wanted")"
