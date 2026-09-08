@@ -36,10 +36,10 @@ spec:
         releaseName: cert-manager
         valueFiles:
           - $values/cluster/infra/cert-manager/helm-values.yaml
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/infra/cert-manager/manifests
   destination:

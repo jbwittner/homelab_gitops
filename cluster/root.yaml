@@ -20,7 +20,7 @@ spec:
   # ⚠️ Ce fichier s'appelle `root.yaml` et NON `root.bootstrap.yaml` : avec ce dernier nom il
   # matcherait son propre glob et l'Application se gérerait elle-même.
   source:
-    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    repoURL: git@github.com:jbwittner/homelab_gitops.git
     targetRevision: main
     path: cluster
     directory:

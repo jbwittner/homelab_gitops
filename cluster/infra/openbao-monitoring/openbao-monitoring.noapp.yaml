@@ -34,7 +34,7 @@ spec:
   # à froid cette Application reste en erreur jusqu'à l'arrivée de kube-prometheus-stack, puis
   # se répare seule (`selfHeal`). Aucun geste manuel, personne n'attend derrière.
   source:
-    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    repoURL: git@github.com:jbwittner/homelab_gitops.git
     targetRevision: main
     path: cluster/infra/openbao-monitoring/manifests
   destination:

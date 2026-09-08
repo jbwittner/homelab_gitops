@@ -78,6 +78,21 @@ restreindre sans toucher aux accès : `RENOVATE_AUTODISCOVER_FILTER`.
 seul moment où le périmètre réel devient visible : relire la liste avant de merger. Si elle est
 trop large, corriger les accès du compte bot plutôt que de fermer les PR une par une.
 
+### `homelab_gitops` est un dépôt privé
+
+Le dépôt scanné par le bot GitHub est **privé**. Aucune conséquence sur ce composant : le PAT est
+un **fine-grained PAT** dont les permissions sont déjà scopées au dépôt (§Droits du token), et un
+fine-grained PAT lit un dépôt privé sans réglage supplémentaire — **à la seule condition que
+`homelab_gitops` figure dans sa liste « Repository access »** côté GitHub. C'est la case à revoir
+en premier si le bot se met à rendre un `404` sur le dépôt : un dépôt privé hors périmètre du
+jeton répond `404` et non `403`, donc le message ne dit pas « accès refusé » mais « inexistant ».
+
+⚠️ Cela ne concerne **pas** le `RENOVATE_GITHUB_COM_TOKEN` du Secret **Forgejo** : il ne sert qu'aux
+lookups de releases publiques upstream, et reste sans aucune permission.
+
+⚠️ Cela ne concerne pas non plus ArgoCD, qui lit le même dépôt par un canal entièrement distinct —
+une deploy key SSH read-only, cf. [argocd](../../infra/argocd/README.md) §Accès au dépôt privé.
+
 ### Le `renovate.json` racine n'est pas hérité
 
 Il ne s'applique qu'à `homelab_gitops`. Les dépôts Forgejo ont chacun le leur, créé par la PR

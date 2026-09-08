@@ -42,7 +42,8 @@ configMapGenerator:
       #
       # Le fichier atterrit dans le volume `config` monté en lecture seule sur /config, où
       # l'initContainer ne recopie que `config.yaml` — il n'entre jamais dans `/opt/data`. Son
-      # contenu est chiffré et déjà public dans Git : rien de neuf n'est exposé.
+      # contenu est chiffré et déjà présent dans Git : rien de neuf n'est exposé. (Le dépôt est
+      # privé depuis, mais l'argument ne reposait pas là-dessus — il repose sur le chiffrement.)
       #
       # Alternative écartée : `replacements` copiant le nom d'un ConfigMap généré dans une
       # annotation du pod template. Kustomize y résout le nom AVANT d'appliquer le suffixe de

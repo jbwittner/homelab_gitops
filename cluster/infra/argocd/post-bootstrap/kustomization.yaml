@@ -28,4 +28,11 @@ resources:
 #   - argocd-notifications.sealed.yaml
   # --- DÉSACTIVÉ : authentik non déployé. ---
 #   - argocd-oidc.sealed.yaml
+  # `repo-homelab-gitops.sealed.yaml` : credential SSH (deploy key read-only) avec lequel
+  # `argocd-repo-server` clone CE dépôt, privé depuis le passage en visibilité restreinte.
+  # ⚠️ Il ne suffit PAS à l'amorçage : à ce moment-là ni la CRD `SealedSecret` n'existe, ni le
+  # dépôt n'est lisible. Le Secret est posé à la main avant `kubectl apply -f cluster/root.yaml`
+  # (cf. README §Accès au dépôt privé), et ce SealedSecret ne fait que le REPRENDRE en gestion —
+  # ce que permet l'annotation `sealedsecrets.bitnami.com/managed` qu'il porte.
+  - repo-homelab-gitops.sealed.yaml
   - argocd-httproute.yaml

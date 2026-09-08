@@ -12,7 +12,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    repoURL: git@github.com:jbwittner/homelab_gitops.git
     targetRevision: main
     path: cluster/app/renovate/manifests
   destination:

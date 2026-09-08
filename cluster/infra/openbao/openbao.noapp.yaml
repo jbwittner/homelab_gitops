@@ -30,12 +30,12 @@ spec:
         releaseName: openbao
         valueFiles:
           - $values/cluster/infra/openbao/helm-values.yaml
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
     # Ressources annexes : namespace + HTTPRoute (le chart sait générer un HTTPRoute,
     # mais pas avec les champs explicites qu'exige ArgoCD — cf. README).
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/infra/openbao/manifests
   destination:

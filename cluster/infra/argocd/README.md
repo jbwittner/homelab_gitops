@@ -13,21 +13,27 @@ sealed-secrets, DR) : [doc/runbook-bootstrap.md](../../../doc/runbook-bootstrap.
 
 ```bash
 # 1. Installer Argo (server-side OBLIGATOIRE — CRDs trop grosses sinon).
-#    Repo public → clone HTTPS anonyme, aucun credential requis.
+#    Ce geste-ci s'exécute depuis un clone LOCAL : il est indifférent à la visibilité du dépôt.
 kubectl apply -k cluster/infra/argocd/manifests --server-side --force-conflicts
 
 # 2. Attendre les pods
 kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
-# 3. Mot de passe admin initial (à changer ensuite, cf. §Compte admin local)
+# 3. Credential du dépôt — ⚠️ LE DÉPÔT EST PRIVÉ, ce geste n'est pas optionnel et doit précéder
+#    l'étape 6 : sans lui `root.yaml` échoue dès son premier fetch, et rien ne se déploie.
+#    Procédure complète (génération de la deploy key, scellement) : §Accès au dépôt privé.
+kubectl apply -f cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml \
+  --server-side --force-conflicts
+
+# 4. Mot de passe admin initial (à changer ensuite, cf. §Compte admin local)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d ; echo
 
-# 4. Accès UI au bootstrap : la HTTPRoute n'est même pas posée à ce stade (elle est dans
+# 5. Accès UI au bootstrap : la HTTPRoute n'est même pas posée à ce stade (elle est dans
 #    post-bootstrap/, appliquée par Argo en wave -1) et ne routera qu'après gateway-api
 #    + cert-manager. Port-forward, donc.
 kubectl -n argocd port-forward svc/argocd-server 8080:443
 
-# 5. Lancer le tier-1 → ArgoCD déploie tout le reste dans l'ordre des sync-waves
+# 6. Lancer le tier-1 → ArgoCD déploie tout le reste dans l'ordre des sync-waves
 kubectl apply -f cluster/root.yaml
 ```
 
@@ -48,6 +54,12 @@ kubectl apply -f cluster/root.yaml
   triggers, souscriptions globales (cf. §Notifications)
 - `post-bootstrap/argocd-httproute.yaml` — UI via `shared-gw` (cf.
   [doc/reseau.md](../../../doc/reseau.md))
+- `post-bootstrap/repo-homelab-gitops.sealed.yaml` — `SealedSecret` `repo-homelab-gitops`, le
+  credential SSH avec lequel `argocd-repo-server` clone **ce dépôt**, privé (cf. §Accès au dépôt
+  privé). ⚠️ Il ne suffit pas à l'amorçage : le Secret est d'abord posé à la main (étape 3 du
+  TL;DR), ce SealedSecret ne fait que le **reprendre en gestion**
+- `post-bootstrap/repo-homelab-gitops.secret.example.yaml` — template de scellement, versionné et
+  sans valeur, porteur de la procédure. Jamais dans `kustomization.yaml`
 - `manifests/argocd-notifications-secret.yaml` — patch qui pose
   `sealedsecrets.bitnami.com/managed: "true"` sur le Secret livré **vide** par l'upstream, sans
   quoi le contrôleur sealed-secrets refuse d'y écrire (cf. §Notifications)
@@ -93,6 +105,145 @@ kubectl apply -f cluster/root.yaml
 > autonomes, qui écraseraient en silence les clés que l'upstream pourrait y ajouter un jour
 > (`argocd-cm` en porte déjà 9 : `resource.exclusions` et les
 > `resource.customizations.ignoreResourceUpdates.*`).
+
+## Accès au dépôt privé
+
+`jbwittner/homelab_gitops` est **privé**. Le clone HTTPS anonyme d'avant ne fonctionne plus : les
+32 `repoURL` du dépôt sont en `git@github.com:jbwittner/homelab_gitops.git` et
+`argocd-repo-server` s'authentifie avec une **deploy key SSH read-only**, portée par le Secret
+`repo-homelab-gitops` (`argocd.argoproj.io/secret-type: repository`, ns `argocd`).
+
+> [!WARNING]
+> **C'est le point de défaillance unique du moteur GitOps.** Si ce Secret disparaît ou si la deploy
+> key est révoquée côté GitHub, **toutes** les Applications tombent en `ComparisonError` d'un coup
+> — `argocd` compris, puisqu'il est self-managed. Autrement dit : l'outil avec lequel on
+> diagnostiquerait est aussi la victime. Symptôme côté logs :
+> `kubectl -n argocd logs deploy/argocd-repo-server` en erreur d'authentification SSH.
+
+**Pourquoi un geste manuel dans le bootstrap.** Le credential doit exister **avant le premier fetch
+d'ArgoCD** : à cet instant ni la CRD `SealedSecret` (posée en wave `-8`) n'existe, ni le dépôt
+n'est lisible. Un `SealedSecret` ne peut donc pas servir à ce moment-là. On casse l'œuf-poule avec
+l'annotation `sealedsecrets.bitnami.com/managed: "true"` posée sur le Secret manuel : le contrôleur
+sealed-secrets accepte alors d'écrire dans un objet qu'il n'a pas créé, et
+`post-bootstrap/repo-homelab-gitops.sealed.yaml` le **reprend en gestion** dès la wave `-1`. Après
+quoi la rotation repasse entièrement par Git. Même mécanique que
+`manifests/argocd-notifications-secret.yaml` (cf. §Notifications).
+
+⚠️ `--server-side` sur ce `kubectl apply` n'est pas cosmétique : en client-side, kubectl recopie
+l'objet entier — donc la **clé privée en clair** — dans l'annotation
+`kubectl.kubernetes.io/last-applied-configuration`, que le scellement ne nettoie jamais. Réparation
+si le geste a déjà été fait sans le drapeau :
+
+```bash
+kubectl -n argocd annotate secret repo-homelab-gitops \
+  kubectl.kubernetes.io/last-applied-configuration-
+```
+
+**`known_hosts` : rien à faire.** L'install upstream épinglé livre `argocd-ssh-known-hosts-cm` avec
+la clé hôte `github.com ssh-ed25519` **identique** à celle que sert `api.github.com/meta`. C'est la
+raison pour laquelle la deploy key est générée en `ed25519` et non en RSA.
+
+### Génération / rotation
+
+Procédure complète en commentaires dans
+`post-bootstrap/repo-homelab-gitops.secret.example.yaml`. En résumé :
+
+```bash
+# 1. Générer la paire de clés DANS LE DOSSIER COURANT — se placer à la RACINE du dépôt, les deux
+#    noms n'y sont gitignorés que là (`.gitignore` racine, lignes `argocd-deploy-key` et
+#    `argocd-deploy-key.pub`). Ailleurs dans l'arbre, la clé PRIVÉE serait suivie par Git.
+cd "$(git rev-parse --show-toplevel)"
+ssh-keygen -t ed25519 -C "argocd@bleu-kalecgos" -f ./argocd-deploy-key -N ""
+# → produit ./argocd-deploy-key (privée, 0600) et ./argocd-deploy-key.pub (publique)
+
+#    `-f ./argocd-deploy-key` : le chemin RELATIF est ce qui écrit dans le dossier courant.
+#    Sans `./`, ssh-keygen écrit quand même là, mais un nom absolu ou un `~/` enverrait la clé
+#    hors de la zone gitignorée. `-N ""` : pas de passphrase — ArgoCD lit la clé sans interaction.
+#    Vérifier que Git les ignore bien AVANT d'aller plus loin :
+git check-ignore -v argocd-deploy-key argocd-deploy-key.pub   # doit rendre 2 lignes
+
+# 2. Récupérer la clé PUBLIQUE à coller sur GitHub
+cat argocd-deploy-key.pub
+#    GitHub → dépôt → Settings → Deploy keys → Add deploy key, « Allow write access » DÉCOCHÉ.
+#    ⚠️ En rotation : AJOUTER la nouvelle clé avant de supprimer l'ancienne, sinon fenêtre
+#    d'indisponibilité pendant laquelle plus rien ne synchronise.
+
+# 3. Template → clair (gitignoré par *.secret.yaml) → cluster → scellé
+cp cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.example.yaml \
+   cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml
+# y coller la clé PRIVÉE, puis :
+kubectl apply -f cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml \
+  --server-side --force-conflicts
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml \
+  > cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.sealed.yaml
+rm cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml
+rm argocd-deploy-key argocd-deploy-key.pub
+```
+
+⚠️ Le `SealedSecret` est chiffré pour le couple (`repo-homelab-gitops`, `argocd`) : le renommer ou
+le déplacer de namespace le rend indéchiffrable. ⚠️ Vérifier le **contenu** du `.sealed.yaml`, pas
+son existence — un fichier scellé vide ne fait pas échouer `kustomize build`, il ne rend rien.
+
+⚠️ Le champ `url` du Secret doit être **strictement** la chaîne des `repoURL`, suffixe `.git`
+compris : ArgoCD apparie credential et source par égalité d'URL normalisée. Un décalage ne produit
+aucune erreur de configuration, juste un clone anonyme qui échoue.
+
+### Vérifier
+
+> [!WARNING]
+> **Ne PAS vérifier avec un `git` nu dans le pod.**
+>
+> ```bash
+> kubectl -n argocd exec deploy/argocd-repo-server -- git ls-remote git@github.com:… # ✗ INUTILE
+> ```
+>
+> Cette commande rend **toujours** `Permission denied (publickey)`, y compris quand tout est
+> correct. ArgoCD n'écrit jamais la deploy key sur le disque du conteneur : il la matérialise à la
+> volée par un `GIT_SSH_COMMAND` propre à chacun de ses clones. Un `git` lancé à la main dans le
+> pod n'hérite de rien et teste le vide. C'est un faux négatif, pas un symptôme — et il coûte du
+> temps parce qu'il ressemble exactement à une clé non enregistrée.
+
+**1. La deploy key est-elle acceptée par GitHub ?** Depuis le poste, avec la clé sortie du Secret :
+
+```bash
+K=$(mktemp) && kubectl -n argocd get secret repo-homelab-gitops \
+  -o jsonpath='{.data.sshPrivateKey}' | base64 -d > "$K" && chmod 600 "$K"
+ssh -T -i "$K" -o IdentitiesOnly=yes -o BatchMode=yes git@github.com
+GIT_SSH_COMMAND="ssh -i $K -o IdentitiesOnly=yes" \
+  git ls-remote git@github.com:jbwittner/homelab_gitops.git HEAD
+rm -f "$K"
+```
+
+Attendu : `Hi jbwittner/homelab_gitops! You've successfully authenticated…` puis le SHA de `HEAD`.
+Le message nomme **le dépôt** et non le compte : c'est la signature d'une deploy key (une clé de
+compte répondrait `Hi jbwittner!`). `-o IdentitiesOnly=yes` est load-bearing — sans lui, l'agent
+SSH du poste propose ta clé personnelle et le test réussit **sans avoir rien prouvé** sur la deploy
+key.
+
+⚠️ `mktemp` puis `rm` : la clé privée transite par le disque du poste le temps du test.
+
+**2. ArgoCD, lui, voit-il le credential ?** C'est la seule vérification qui exerce le vrai chemin :
+
+```bash
+argocd repo list            # CONNECTION STATUS = Successful
+# ou UI : Settings → Repositories
+```
+
+**3. Bout en bout** — aucune Application en `ComparisonError` :
+
+```bash
+kubectl -n argocd annotate app root argocd.argoproj.io/refresh=hard --overwrite
+kubectl -n argocd get applications
+kubectl -n argocd logs deploy/argocd-repo-server --tail=50 | grep -i 'ssh\|auth\|fatal'
+```
+
+**4. Le `SealedSecret` a bien repris l'objet posé à la main** (sinon la rotation par Git est un
+leurre : le Secret reste celui du bootstrap) :
+
+```bash
+kubectl -n argocd get secret repo-homelab-gitops -o jsonpath='{.metadata.ownerReferences}'
+```
 
 ## Contraintes — self-management
 

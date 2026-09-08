@@ -37,7 +37,7 @@ spec:
   # (`manifests/dashboard-velero.yaml`) : le câblage côté Grafana appartient au composant qui
   # porte Grafana, comme pour argocd. Ici on ne pose que ce qui produit la donnée.
   source:
-    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    repoURL: git@github.com:jbwittner/homelab_gitops.git
     targetRevision: main
     path: cluster/infra/velero-monitoring/manifests
   destination:

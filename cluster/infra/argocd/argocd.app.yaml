@@ -14,7 +14,7 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/infra/argocd/manifests     # MÊME dossier que l'apply manuel du bootstrap
     # ⚠️ Tout ce qui dépend d'une CRD du tier-1 est DEHORS de `manifests/`, volontairement : ce
@@ -24,7 +24,7 @@ spec:
     # Argo, lui, les applique bien : à son tour de sync (wave -1) les deux CRDs sont posées
     # depuis longtemps. Sans cette source, `argocd-notifications-secret` et le clientSecret OIDC
     # restent vides (les deux fonctionnalités échouent silencieusement) et l'UI n'est pas routée.
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/infra/argocd/post-bootstrap
   destination:

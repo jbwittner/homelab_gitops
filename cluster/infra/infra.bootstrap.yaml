@@ -16,7 +16,7 @@ spec:
   # Le glob ne matche PAS ce fichier, qui porte le suffixe distinct '*.bootstrap.yaml'.
   project: default
   source:
-    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    repoURL: git@github.com:jbwittner/homelab_gitops.git
     targetRevision: main
     path: cluster/infra
     directory:

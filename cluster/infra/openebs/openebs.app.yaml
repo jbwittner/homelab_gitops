@@ -36,10 +36,10 @@ spec:
         releaseName: openebs
         valueFiles:
           - $values/cluster/infra/openebs/helm-values.yaml
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
-    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+    - repoURL: git@github.com:jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/infra/openebs/manifests
   destination:
