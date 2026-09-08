@@ -38,7 +38,7 @@ spec:
         # hash (cf. kustomization.yaml), donc éditer `config/config.yaml` renomme le volume et
         # déclenche le rollout — sans quoi la recopie n'aurait lieu à aucun moment.
         - name: seed-config
-          image: busybox:1.37.0
+          image: busybox:1.38.0
           command:
             - sh
             - -c
