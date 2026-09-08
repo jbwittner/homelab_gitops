@@ -30,6 +30,25 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   > - `restore` **n'envoie rien au cluster**, il **imprime un manifeste**. Une restauration CNPG
   >   n'est pas un événement mais un `Cluster` neuf en `bootstrap.recovery` — donc un état
   >   désiré, donc du Git. C'est la règle GitOps qui s'applique, pas une limitation du script.
+  >   Redirigée, sa sortie ne contient **que** le manifeste : le récapitulatif part sur stderr.
+- [`forgejo-pra-prepare-script.sh`](forgejo-pra-prepare-script.sh) — **préparation** de l'épreuve
+  du PRA de forgejo : `check` (état, ne crée rien) et `run`. Rend les deux chaînes **alignables**
+  en créant une copie velero du PVC **puis** une sauvegarde de base CNPG — dans cet ordre, le
+  `pg_backup_stop` de la seconde forçant le basculement de WAL qui couvre l'instant de la
+  première. Inversé, il ne prépare rien et ne le dit pas.
+- [`forgejo-pra-script.sh`](forgejo-pra-script.sh) — **épreuve du PRA de forgejo** : `up`,
+  `verify`, `status`, `down`, `drill`. Restaure les deux chaînes (PVC par velero, base par
+  `bootstrap.recovery`) dans une préprod jetable `forgejo-preprod`, l'expose sur
+  `forgejo-preprod.lan.wittner.tech`, la vérifie, la détruit. Documentation complète dans
+  [`doc/forgejo-pra-exercice.md`](../doc/forgejo-pra-exercice.md).
+
+  > [!CAUTION]
+  > **C'est le SEUL script du dossier qui écrit dans le cluster.** Trois bornes le tiennent, et
+  > elles sont la condition de son existence :
+  > - il n'écrit que dans `forgejo-preprod`, un namespace qu'ArgoCD ne gère pas ;
+  > - il ne touche à **rien** dans `forgejo` — la production est lue, jamais modifiée ;
+  > - `down` fait partie de la procédure, pas des options : la préprod immobilise **110 Gi** de
+  >   groupe de volumes, la StorageClass étant en `thinProvision: "no"`.
 
 ## Contraintes
 

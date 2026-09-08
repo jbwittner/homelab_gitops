@@ -183,8 +183,27 @@ bloc YAML minuscule à clés majuscules, qu'elle figure ou non dans la liste des
 
 | Donnée | Chaîne | Cohérence | Rétention | Bucket |
 | --- | --- | --- | --- | --- |
-| PVC `forgejo-data` (100Gi) — dépôts, LFS, paquets, `app.ini` | velero / kopia, 03:00 | **crash** | 30 j (`ttl: 720h`) | `homelab-velero-backups-*` |
+| PVC `forgejo-data` (100Gi) — dépôts, LFS, paquets, `app.ini` | velero / kopia, 03:00 | **étalée** ⚠️ | 30 j (`ttl: 720h`) | `homelab-velero-backups-*` |
 | Base `forgejo-db` (10Gi) — issues, PR, comptes, sessions | barman-cloud (CNPG natif), 02:00 + WAL continu | **transaction** + PITR | 30 j (`retentionPolicy`) | bucket CNPG dédié |
+
+> [!WARNING]
+> **« Étalée » et non « cohérente-crash », et l'écart n'est pas cosmétique.** La copie kopia est un
+> **parcours du système de fichiers vivant** : aucun `hooks` sur la schedule, aucune annotation
+> `pre.hook.backup.velero.io` sur le pod, `snapshotVolumes: false` et **aucune
+> `VolumeSnapshotClass` déclarée** dans le cluster. Un crash donne un instantané *unique* de tout
+> le volume ; un parcours donne le fichier A lu à t₀ et le fichier B à t₀+5 min — il n'existe
+> aucun instant réel où le volume a ressemblé à sa copie.
+>
+> Le cas qui mord : un `git push` en vol, dont les `refs` sont copiées après leur mise à jour mais
+> avant les objets qu'elles désignent. `git fsck` l'attrape, et c'est pour cela qu'il est dans la
+> checklist de [`doc/forgejo-pra-exercice.md`](../../../doc/forgejo-pra-exercice.md).
+>
+> Le correctif structurel — `VolumeSnapshotClass` sur `openebs lvm-localpv`, puis
+> `snapshotVolumes: true` avec le data mover — **n'est pas engagé**. C'est le principal levier
+> d'amélioration identifié pour ce composant.
+>
+> La chaîne native de la base, elle, est bien à chaud au sens PostgreSQL : `pg_backup_start` /
+> `pg_backup_stop` encadrent la copie et les WAL de la fenêtre la rendent cohérente-TRANSACTION.
 
 > [!IMPORTANT]
 > **Le PVC de la base est explicitement EXCLU de la copie kopia**
@@ -215,6 +234,22 @@ Trois fichiers, indissociables. En retirer un ne produit pas une erreur mais une
 Ce que ni l'une ni l'autre ne couvre : **une lifecycle rule GCS** posée par erreur sur l'un des deux
 buckets. Les deux outils font leur propre GC, et aucune métrique du cluster ne verrait un bucket
 purgé sous eux.
+
+> [!IMPORTANT]
+> **Deux sauvegardes ne font pas un plan de reprise.** Le PRA du composant — quoi restaurer selon
+> le sinistre, dans quel ordre, à quel instant, et par quoi commencer quand il ne reste rien — vit
+> dans [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md). Il est **éprouvé** par
+> [`script/forgejo-pra-script.sh`](../../../script/forgejo-pra-script.sh), qui restaure les deux
+> chaînes dans une préprod jetable et la vérifie
+> ([`doc/forgejo-pra-exercice.md`](../../../doc/forgejo-pra-exercice.md)).
+>
+> Trois points de ce plan ne se déduisent d'aucun fichier de ce dossier :
+> - **les deux moitiés ne sont jamais cohérentes entre elles** — le PVC est figé à 03:00, la base
+>   se rejoue ; l'alignement se fait toujours en amenant la base à l'instant du PVC ;
+> - **la base à 02:00 et le PVC à 03:00, dans cet ordre**, parce que la sauvegarde de base doit
+>   précéder la copie du PVC — sinon le rejeu part de la veille ;
+> - **le point de reprise unique est une clé GCP**, pas une sauvegarde : sur un cluster reconstruit
+>   à neuf, le `SealedSecret` `velero-gcs` est indéchiffrable et plus rien ne se restaure.
 
 ## Placement
 
@@ -485,9 +520,13 @@ d'accueil de dépôts indexables.
   ne s'adresse qu'aux robots qui le respectent.
 - **La version minimale de TLS est celle du Gateway**, pas de ce composant
   (`infra/gateway-api/manifests/gateway.yaml`).
-- **Le PVC `forgejo-data` n'est copié qu'à chaud, donc de façon cohérente-crash** (cf. §Sauvegarde).
-  Un `git push` en cours au moment du scan kopia peut être capturé à moitié. Contrairement à la
-  base, il n'existe pas de chaîne native pour ce volume.
+- **Le PVC `forgejo-data` n'est copié qu'à chaud, sans aucun gel, donc de façon ÉTALÉE** — pas
+  même cohérente-crash (cf. §Sauvegarde). Un `git push` en cours au moment du parcours kopia peut
+  être capturé à moitié : `refs` mises à jour, objets pas encore copiés. Contrairement à la base,
+  il n'existe pas de chaîne native pour ce volume, et le chemin CSI snapshot qui supprimerait
+  l'étalement n'est pas câblé — aucune `VolumeSnapshotClass` n'est déclarée.
+  La détection est dans le `git fsck` de
+  [`doc/forgejo-pra-exercice.md`](../../../doc/forgejo-pra-exercice.md).
 
 ## Métriques
 
