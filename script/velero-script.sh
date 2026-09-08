@@ -22,11 +22,11 @@
 # titre que `bao operator unseal`.
 #
 # Usage, depuis n'importe où :
-#   cluster/infra/velero/velero-script.sh list [motif]
-#   cluster/infra/velero/velero-script.sh show <backup>
-#   cluster/infra/velero/velero-script.sh backup [schedule]
-#   cluster/infra/velero/velero-script.sh restore <backup> [-n ns[,ns]] [--overwrite]
-#   cluster/infra/velero/velero-script.sh delete <backup>
+#   script/velero-script.sh list [motif]
+#   script/velero-script.sh show <backup>
+#   script/velero-script.sh backup [schedule]
+#   script/velero-script.sh restore <backup> [-n ns[,ns]] [--overwrite]
+#   script/velero-script.sh delete <backup>
 #
 # Variables d'environnement :
 #   VELERO_NAMESPACE   namespace velero (défaut `velero`)

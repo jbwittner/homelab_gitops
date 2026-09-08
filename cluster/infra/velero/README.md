@@ -36,7 +36,9 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
 - `manifests/volume-policies.yaml` — ConfigMap `velero-volume-policies`, garde-fou du mode opt-out :
   ignore la copie des `emptyDir`. Référencée par la Schedule (`template.resourcePolicy`,
   `helm-values.yaml`) ; le raisonnement est commenté sur place
-- `velero-script.sh` — les gestes opérationnels : `list`, `show`, `backup`, `restore`, `delete`. Le
+- [`script/velero-script.sh`](../../../script/velero-script.sh) — **hors du composant**, dans le
+  dossier `script/` de la racine où vivent tous les utilitaires du repo : les gestes
+  opérationnels — `list`, `show`, `backup`, `restore`, `delete`. Le
   périmètre y est toujours **dérivé** (d'une Schedule pour un backup, du Backup source pour un
   restore) et jamais retapé ; le nombre de volumes copiés est affiché partout. Ce n'est **pas** la
   CLI `velero` — d'où le nom — tout passe par `kubectl` et `jq`. Détail en Opérations
@@ -213,11 +215,11 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   insuffisants sur le bucket.
 - **Le script `velero-script.sh`** couvre les gestes courants. Depuis la racine du repo :
   ```bash
-  cluster/infra/velero/velero-script.sh list                       # tableau de bord
-  cluster/infra/velero/velero-script.sh show <backup>              # détail d'une sauvegarde
-  cluster/infra/velero/velero-script.sh backup                     # sauvegarde manuelle
-  cluster/infra/velero/velero-script.sh restore <backup> -n <ns>   # restauration
-  cluster/infra/velero/velero-script.sh delete <backup>            # suppression définitive
+  script/velero-script.sh list                       # tableau de bord
+  script/velero-script.sh show <backup>              # détail d'une sauvegarde
+  script/velero-script.sh backup                     # sauvegarde manuelle
+  script/velero-script.sh restore <backup> -n <ns>   # restauration
+  script/velero-script.sh delete <backup>            # suppression définitive
   ```
   Variables communes : `VELERO_NAMESPACE` (défaut `velero`), `TIMEOUT` (1800 s), `DRY_RUN=1`
   (affiche le manifeste, n'envoie rien), `NO_WAIT=1` (crée et rend la main), `YES=1` (passe les
@@ -227,9 +229,9 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   n'est pas là.
 - **Lancer une sauvegarde à la main, au périmètre de la schedule** :
   ```bash
-  cluster/infra/velero/velero-script.sh backup              # schedule `velero-daily`, suit jusqu'à la fin
-  cluster/infra/velero/velero-script.sh backup autre-sched  # une autre schedule
-  DRY_RUN=1 cluster/infra/velero/velero-script.sh backup    # affiche le manifeste, ne crée rien
+  script/velero-script.sh backup              # schedule `velero-daily`, suit jusqu'à la fin
+  script/velero-script.sh backup autre-sched  # une autre schedule
+  DRY_RUN=1 script/velero-script.sh backup    # affiche le manifeste, ne crée rien
   ```
   Le script recopie `.spec.template` de la Schedule : le périmètre ne peut pas diverger de celui
   qui tourne chaque nuit. Il refuse de partir si le `BackupStorageLocation` n'est pas `Available`,
@@ -261,9 +263,9 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   ```
 - **Suivre les sauvegardes et leur contenu** :
   ```bash
-  cluster/infra/velero/velero-script.sh list            # sauvegardes, schedules, restaurations
-  cluster/infra/velero/velero-script.sh list manual     # filtre par sous-chaîne du nom
-  cluster/infra/velero/velero-script.sh show <backup>   # détail d'une sauvegarde
+  script/velero-script.sh list            # sauvegardes, schedules, restaurations
+  script/velero-script.sh list manual     # filtre par sous-chaîne du nom
+  script/velero-script.sh show <backup>   # détail d'une sauvegarde
   ```
   `list` donne trois tableaux. Pour chaque sauvegarde : phase, âge, expiration, **source**
   (`velero-daily` si elle vient de la schedule, `manuel (velero-daily)` si elle vient de `backup`,
@@ -293,7 +295,7 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
   à la synchro suivante (~1 min). Le seul chemin qui efface aussi le contenu est une
   `DeleteBackupRequest` — c'est exactement ce que fabriquent `velero backup delete` et :
   ```bash
-  cluster/infra/velero/velero-script.sh delete manual-xxxxx
+  script/velero-script.sh delete manual-xxxxx
   ```
   Le script refuse une sauvegarde `InProgress` (la supprimer en cours laisse des données
   orphelines dans le dépôt kopia), affiche ce qui va disparaître, et demande la **frappe exacte du
@@ -316,10 +318,10 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
 - **Restaurer** — restreindre le périmètre, ArgoCD reposant de toute façon ce qui est déclaré dans
   Git (cf. Contraintes) :
   ```bash
-  cluster/infra/velero/velero-script.sh restore manual-xxxxx                    # périmètre du backup
-  cluster/infra/velero/velero-script.sh restore manual-xxxxx -n test-nginx      # restreint
-  cluster/infra/velero/velero-script.sh restore manual-xxxxx -n test-nginx --overwrite
-  DRY_RUN=1 cluster/infra/velero/velero-script.sh restore manual-xxxxx -n test-nginx
+  script/velero-script.sh restore manual-xxxxx                    # périmètre du backup
+  script/velero-script.sh restore manual-xxxxx -n test-nginx      # restreint
+  script/velero-script.sh restore manual-xxxxx -n test-nginx --overwrite
+  DRY_RUN=1 script/velero-script.sh restore manual-xxxxx -n test-nginx
   ```
   Le périmètre est repris des `includedNamespaces` du **Backup source**, jamais retapé. Quatre
   garde-fous, chacun correspondant à un échec silencieux constaté :
