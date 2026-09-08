@@ -391,11 +391,11 @@ de 30 jours, soit **le 2026-10-08**.
 
 | # | Sinistre | Perdu | Restauré | Ordre |
 | --- | --- | --- | --- | --- |
-| **A** | Base corrompue ou supprimée, PVC intact | métadonnées | base seule, `bootstrap.recovery` | §9 étape B |
-| **B** | PVC perdu, base intacte | dépôts, LFS, paquets, `app.ini` | PVC seul, velero | §9 étape A |
-| **C** | Nœud `vert-ysondre` perdu | **les deux** — ils y sont co-localisés | les deux | §9, dans l'ordre |
-| **D** | Cluster entier perdu | tout | §4 d'abord, puis les deux | §9, après bootstrap |
-| **E** | Erreur humaine (dépôt supprimé, force-push) | un objet précis | PITR ciblé avant l'erreur | §9, `--target-time` |
+| **A** | Base corrompue ou supprimée, PVC intact | métadonnées | base seule, `bootstrap.recovery` | §8 étape B |
+| **B** | PVC perdu, base intacte | dépôts, LFS, paquets, `app.ini` | PVC seul, velero | §8 étape A |
+| **C** | Nœud `vert-ysondre` perdu | **les deux** — ils y sont co-localisés | les deux | §8, dans l'ordre |
+| **D** | Cluster entier perdu | tout | §4 d'abord, puis les deux | §8, après bootstrap |
+| **E** | Erreur humaine (dépôt supprimé, force-push) | un objet précis | PITR ciblé avant l'erreur | §8, `--target-time` |
 
 > [!NOTE]
 > **Le scénario C est le scénario nominal, pas le pire.** La base et l'applicatif sont
@@ -534,24 +534,64 @@ Vérifier que cet instant tombe dans la fenêtre affichée par `cnpg-barman-plug
 > script/cnpg-barman-plugin-script.sh backup     # pg_backup_stop force un basculement de WAL
 > ```
 
-### Étape A — le PVC et l'applicatif
+### Étape A — le PVC et l'applicatif (scénarios B, C, D)
+
+> [!CAUTION]
+> **Cette étape n'a jamais été jouée en place, et elle est plus dure que dans l'exercice.**
+> L'[exercice](forgejo-pra-exercice.md) restaure dans un namespace **vide** : c'est le cas facile.
+> Restaurer dans `forgejo`, où l'application tourne déjà, ajoute deux pièges qu'il ne rencontre
+> jamais.
+>
+> **Piège α — `existingResourcePolicy` non renseigné = « ignorer ce qui existe ».** Un `Restore`
+> lancé tel quel sur `forgejo` **saute en silence** tous les objets déjà présents. Il rendrait
+> `Completed` sans que rien n'ait bougé.
+>
+> **Piège β — le Deployment vivant bloque la restauration de la donnée.** La donnée kopia est
+> portée par le **Pod**. Si le Deployment tourne, le Pod restauré entre en collision avec
+> l'existant, il est ignoré — donc **pas de `PodVolumeRestore`, donc PVC vide**. C'est la raison
+> d'être du `scale --replicas=0` ci-dessous : il n'est pas là pour « éviter les écritures », il est
+> là pour **laisser la place au Pod restauré**.
 
 ```bash
-script/velero-script.sh show <backup>
+# 1. Couper la concurrence d ArgoCD. selfHeal reposerait ce que Git déclare PENDANT la restauration.
+kubectl -n argocd patch application forgejo --type=merge \
+  -p '{"spec":{"syncPolicy":{"automated":null}}}'
+
+# 2. Libérer la place — cf. piège β.
+kubectl -n forgejo scale deploy/forgejo --replicas=0
+
+# 3. ⚠️ IRRÉVERSIBLE. reclaimPolicy: Delete → la suppression du PVC DÉTRUIT le LV.
+#    À ne faire que si le volume est déjà perdu ou corrompu.
+kubectl -n forgejo delete pvc forgejo-data
+
+# 4. Restaurer. Pas de namespaceMapping : on revient chez soi.
 script/velero-script.sh restore <backup> -n forgejo
+
+# 5. Attendre que les octets soient écrits — c est la preuve, pas la phase du Restore.
+kubectl -n velero get podvolumerestores -l velero.io/restore-name=<restore> -o json \
+  | jq -r '[.items[] | {pod:.spec.pod.name, phase:.status.phase, octets:.status.progress}]'
+
+# 6. Le Pod restauré a fait son office : il n a plus de raison d exister.
+kubectl -n forgejo delete pod -l app.kubernetes.io/name=forgejo --field-selector=status.phase!=Running
+
+# 7. Remonter, puis rendre la main à ArgoCD.
+kubectl -n forgejo scale deploy/forgejo --replicas=1
+kubectl -n argocd patch application forgejo --type=merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
 ```
 
-⚠️ Le script **prévient** des Applications ArgoCD dont le `selfHeal` va reposer ce que Git déclare,
-en concurrence de la restauration. Suspendre l'auto-sync de `forgejo` le temps du restore, comme il
-l'indique.
-
-Point de contrôle : le nombre de volumes réellement repris. Une restauration `Completed` avec
+Point de contrôle : le **nombre de volumes réellement repris**. Une restauration `Completed` avec
 **zéro** volume signifie objets restaurés, **données absentes**.
 
-### Étape B — la base
+### Étape B — la base (scénario A)
+
+**Celle-ci est répétable sans risque, et devrait l'être.** Le `Cluster` de reprise est créé **à
+côté** de la base vivante, sous un autre nom : rien n'est perturbé tant qu'on ne bascule pas
+`helm-values.yaml` dessus. On peut donc la jouer sur la production, vérifier, puis jeter.
 
 ```bash
-# Nettoyer les orphelins CNPG restaurés à l'étape A (piège 3) — SINON le bootstrap n'a pas lieu.
+# Si l étape A a précédé : nettoyer les orphelins CNPG qu elle a restaurés (piège 3),
+# SINON le PVC forgejo-db-1 est adopté et le bootstrap.recovery n a pas lieu.
 kubectl -n forgejo delete pod/forgejo-db-1 pvc/forgejo-db-1 --ignore-not-found
 kubectl -n forgejo delete svc forgejo-db-r forgejo-db-ro forgejo-db-rw --ignore-not-found
 
@@ -615,6 +655,10 @@ Traefik.
 - **Le RTO à volumétrie réelle.** Les durées du §3 ont été relevées sur 1,6 Mio de données.
 - **La perte simultanée des deux buckets GCS.** Distincts, GC séparés — mais même projet, même
   compte.
+- **La restauration EN PLACE, dans `forgejo`** (§8 étape A). L'exercice restaure toujours à côté,
+  c'est-à-dire dans le cas facile. Les deux pièges de l'étape A — `existingResourcePolicy` qui
+  ignore l'existant, et le Deployment vivant qui empêche le `PodVolumeRestore` — sont **déduits du
+  mécanisme, pas mesurés**. L'étape B, elle, est répétable sans risque et devrait l'être.
 - **Le comportement sous charge d'écriture.** `git fsck` et `forgejo doctor` sont joués à chaque
   exercice et passent — mais sur une forge au repos. L'étalement de la copie kopia (§1) ne se
   manifeste que si une écriture croise le parcours, et rien ici ne le provoque.

@@ -151,24 +151,108 @@ Ils ne sont pas des précautions générales : chacun ferme un mode de panne obs
 > En régime établi, la sauvegarde de base de 02:00 fait ce second geste toute seule : une reprise
 > alignée est disponible **au lendemain matin**, sans préparation.
 
-## Ce que fait `up`, et pourquoi dans cet ordre
+## Ce que fait `up` — les commandes, une par une
+
+Ce que le script enchaîne, avec la commande équivalente. C'est aussi le mode d'emploi si l'on veut
+le faire **à la main** — pour comprendre, ou parce que quelque chose sort du cadre. Toutes les
+commandes ci-dessous ont été jouées le 2026-09-08.
+
+### 0 — Choisir la sauvegarde
+
+D'abord la **fenêtre PITR** : c'est elle qui borne ce que la base sait rejouer.
+
+```bash
+kubectl -n forgejo get objectstore forgejo-db-store -o json | jq '.status.serverRecoveryWindow'
+```
+
+`firstRecoverabilityPoint` est l'instant le plus ancien atteignable, `lastSuccessfulBackupTime`
+celui de la dernière sauvegarde de base. ⚠️ La fenêtre n'a pas la largeur de `retentionPolicy` :
+elle démarre à la naissance de la chaîne et s'élargit une nuit à la fois.
+
+Puis la sauvegarde velero dont l'instant de fin tombe **dedans** :
+
+```bash
+kubectl -n velero get backups.velero.io -o json | jq -r '
+  [ .items[]
+    | select((.spec.includedNamespaces // []) | index("forgejo"))
+    | { nom: .metadata.name, phase: .status.phase, fin: .status.completionTimestamp } ]
+  | sort_by(.fin) | reverse | .[0:6]'
+```
+
+Enfin, la vérification qui compte : **cette sauvegarde porte-t-elle des données ?** Sans
+node-agent, une sauvegarde velero passe au vert en ne copiant que les objets Kubernetes.
+
+```bash
+kubectl -n velero get podvolumebackups -l velero.io/backup-name=<backup> -o json | jq -r '
+  [ .items[] | { pod: .spec.pod.name, volume: .spec.volume, phase: .status.phase,
+                 mio: ((.status.progress.totalBytes // 0) / 1048576 | floor) } ]'
+```
 
 ### 1 — Namespace jetable
 
 `forgejo-preprod`, étiqueté `homelab.wittner.tech/drill=forgejo-pra`. Un seul à la fois : `up`
-refuse si le namespace existe déjà, sans quoi on finit par lire la mauvaise instance.
+refuse si le namespace existe déjà, sans quoi on finit par lire la mauvaise instance. Le label
+n'est pas décoratif — c'est la seule chose que `down` regarde avant de supprimer.
+
+```bash
+kubectl create namespace forgejo-preprod && \
+kubectl label ns forgejo-preprod homelab.wittner.tech/drill=forgejo-pra
+```
 
 ### 2 — Credential GCS et `ObjectStore`
 
 Les deux sont **recopiés** depuis `forgejo`, pas recréés. L'`ObjectStore` est une ressource
 **namespacée** et le plugin n'en lit que dans le namespace du `Cluster` : il ne se mutualise pas.
+Le `SealedSecret` de Git, lui, est chiffré pour le couple `(nom, forgejo)` et ne se déchiffre
+nulle part ailleurs.
 
-⚠️ `del(.metadata.namespace)` sur la copie est load-bearing : sans lui, `kubectl -n` est ignoré et
-l'objet repart dans `forgejo`.
+```bash
+kubectl -n forgejo get secret forgejo-db-gcs -o json \
+  | jq 'del(.status, .metadata.namespace, .metadata.uid, .metadata.resourceVersion,
+            .metadata.creationTimestamp, .metadata.ownerReferences, .metadata.managedFields,
+            .metadata.annotations, .metadata.labels)' \
+  | kubectl -n forgejo-preprod apply -f -
+
+kubectl -n forgejo get objectstore forgejo-db-store -o json \
+  | jq 'del(.status, .metadata.namespace, .metadata.uid, .metadata.resourceVersion,
+            .metadata.creationTimestamp, .metadata.generation, .metadata.ownerReferences,
+            .metadata.managedFields, .metadata.annotations)' \
+  | kubectl -n forgejo-preprod apply -f -
+```
+
+⚠️ Deux `del` sont load-bearing :
+- `.metadata.namespace` — sans lui, `kubectl -n` est **ignoré** et l'objet repart dans `forgejo` ;
+- `.metadata.annotations` — il retire `argocd.argoproj.io/tracking-id`. Copiée, ArgoCD croirait que
+  l'objet appartient à l'Application `forgejo` et chercherait à le réconcilier, donc à le supprimer.
 
 ### 3 — `Restore` velero vers `forgejo-preprod`
 
-Avec `namespaceMapping` et les exclusions du garde-fou 1.
+```bash
+kubectl create -f - <<'EOF'
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  generateName: pra-manuel-
+  namespace: velero
+  labels:
+    homelab.wittner.tech/drill: forgejo-pra
+spec:
+  backupName: <backup>
+  includedNamespaces: [forgejo]
+  namespaceMapping:
+    forgejo: forgejo-preprod
+  excludedResources:
+    - httproutes.gateway.networking.k8s.io
+    - ciliumnetworkpolicies.cilium.io
+    - ciliumendpoints.cilium.io
+    - clusters.postgresql.cnpg.io
+    - sealedsecrets.bitnami.com
+    - customresourcedefinitions.apiextensions.k8s.io
+    - endpointslices.discovery.k8s.io
+    - endpoints
+    - leases.coordination.k8s.io
+EOF
+```
 
 > [!IMPORTANT]
 > **Restaurer le PVC seul ne restaure aucune donnée.** La copie est en fs-backup (kopia) : la
@@ -178,6 +262,20 @@ Avec `namespaceMapping` et les exclusions du garde-fou 1.
 > C'est pour cela que la sauvegarde contient les Pods, et que le `Restore` ne filtre **pas** sur
 > `includedResources` : un `Restore` limité à `persistentvolumeclaims` crée un PVC **vide**, sans
 > un message.
+
+Attendre, puis vérifier que des octets ont réellement été écrits — c'est ça, la preuve :
+
+```bash
+while :; do
+  p="$(kubectl -n velero get restore <restore> -o jsonpath='{.status.phase}')"
+  case "$p" in Completed|PartiallyFailed|Failed|FailedValidation) echo "=> $p"; break;; esac
+  echo "phase=$p"; sleep 5
+done
+kubectl -n velero get podvolumerestores -l velero.io/restore-name=<restore> -o json \
+  | jq -r '[.items[] | {pod:.spec.pod.name, volume:.spec.volume, phase:.status.phase, octets:.status.progress}]'
+```
+
+Relevé au drill : `bytesDone: 1072125` sur `totalBytes: 1072125`.
 
 C'est aussi ici que reviennent les **`Secret` matérialisés** (`forgejo-admin`, `forgejo-secrets`,
 `forgejo-smtp`, `forgejo-db-app`…). Ils sont ce qui rend la reprise possible sans sealed-secrets —
@@ -196,17 +294,65 @@ et ce qui fait du bucket velero un magasin de secrets.
 > copie **cohérente-crash silencieusement substituée** à la reprise transactionnelle qu'on croyait
 > faire.
 
+Le constater, puis nettoyer :
+
+```bash
+kubectl -n forgejo-preprod get pvc forgejo-db-1 -o jsonpath='{.metadata.ownerReferences}{"\n"}'   # vide
+
+kubectl -n forgejo-preprod delete pod/forgejo-db-1 --wait=false && \
+kubectl -n forgejo-preprod delete pvc/forgejo-db-1 && \
+kubectl -n forgejo-preprod delete svc forgejo-db-r forgejo-db-ro forgejo-db-rw
+```
+
 ### 5 — La base, par `bootstrap.recovery`
 
-Le manifeste est **dérivé** du `Cluster` de production par
+Le script **dérive** le manifeste du `Cluster` de production par
 [`cnpg-barman-plugin-script.sh restore`](../script/cnpg-barman-plugin-script.sh) — jamais retapé —
-puis re-ciblé sur la préprod par `jq`.
+puis le re-cible par `jq` :
 
-Le nom `forgejo-db` est **conservé** dans le nouveau namespace, à dessein : le Deployment restauré
-cherche `forgejo-db-rw` et le Secret `forgejo-db-app`. Le garder évite de reconfigurer quoi que ce
-soit, donc d'introduire une divergence entre ce qu'on teste et ce qui tourne. Ce qui rend ce choix
-sûr, c'est `--no-archive` : sans `spec.plugins`, la préprod ne peut rien écrire sous le
-`serverName` de la production.
+```bash
+script/cnpg-barman-plugin-script.sh restore forgejo-db --name forgejo-db-pra --no-archive 2>/dev/null \
+  | jq '.metadata.namespace = "forgejo-preprod" | .metadata.name = "forgejo-db"' \
+  | kubectl apply -f -
+```
+
+À la main, la forme minimale équivalente :
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: forgejo-db
+  namespace: forgejo-preprod
+spec:
+  instances: 1
+  storage:
+    size: 10Gi
+  monitoring:
+    enablePodMonitor: false
+  bootstrap:
+    recovery:
+      source: origin
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: forgejo-db-store
+          serverName: forgejo-db
+EOF
+```
+
+Trois choix portent tout le poids :
+
+- **le nom `forgejo-db` est conservé** dans le nouveau namespace : le Deployment restauré cherche
+  `forgejo-db-rw` et le Secret `forgejo-db-app`. Le garder évite de reconfigurer quoi que ce soit,
+  donc d'introduire une divergence entre ce qu'on teste et ce qui tourne ;
+- **il n'y a pas de `spec.plugins`** — c'est ce qui rend le point précédent sûr : sans lui la
+  préprod n'archive rien, donc ne peut rien écrire sous le `serverName` de la production. Le
+  sidecar barman est quand même injecté, à partir de `externalClusters[].plugin` seul ;
+- **il n'y a pas de `recoveryTarget`** — voir l'encadré ci-dessous.
 
 > [!WARNING]
 > **Aucune cible PITR par défaut, et ce n'est pas un raccourci.** `recovery_target_time` exige un
@@ -223,19 +369,103 @@ sûr, c'est `--no-archive` : sans `spec.plugins`, la préprod ne peut rien écri
 > qui est le même, s'il n'y a rien eu depuis. `TARGET_TIME=<RFC3339>` force la cible quand on sait
 > qu'il y a eu des écritures.
 
+```bash
+while :; do
+  p="$(kubectl -n forgejo-preprod get cluster forgejo-db -o jsonpath='{.status.phase}')"
+  echo "$p"
+  case "$p" in "Cluster in healthy state") break;; esac
+  sleep 10
+done
+```
+
+Séquence attendue, ~1 min : `Setting up primary` → `Waiting for the instances to become active` →
+`Primary instance is being restarted without a switchover` → `Cluster in healthy state`.
+
 ### 6 — Neutralisations
 
-Garde-fou 2. Appliquées en patchant le Secret `forgejo-inline-config`, qui est la source de
-configuration lue par l'init-container.
+Garde-fou 2, et il y a **urgence** : le pod Forgejo repart tout seul dès que la base apparaît, avec
+la configuration de production. On patche `forgejo-inline-config`, la source lue par
+l'init-container.
+
+```bash
+kubectl -n forgejo-preprod patch secret forgejo-inline-config --type=merge -p "$(jq -n \
+  --arg server "$(printf 'APP_DATA_PATH=/data\nDISABLE_SSH=true\nDOMAIN=forgejo-preprod.lan.wittner.tech\nENABLE_PPROF=false\nHTTP_PORT=3000\nPROTOCOL=http\nROOT_URL=https://forgejo-preprod.lan.wittner.tech/\nSSH_DOMAIN=forgejo-preprod.lan.wittner.tech\nSSH_LISTEN_PORT=2222\nSSH_PORT=22\nSTART_SSH_SERVER=false' | base64 | tr -d '\n')" \
+  --arg mailer  "$(printf 'ENABLED=false' | base64 | tr -d '\n')" \
+  --arg webhook "$(printf 'ALLOWED_HOST_LIST=loopback' | base64 | tr -d '\n')" \
+  --arg mirror  "$(printf 'ENABLED=false\nENABLE_PUSH_MIRROR=false' | base64 | tr -d '\n')" \
+  --arg cron    "$(printf 'ENABLED=false' | base64 | tr -d '\n')" \
+  '{data:{server:$server, mailer:$mailer, webhook:$webhook, mirror:$mirror, cron:$cron}}')"
+```
 
 ⚠️ **`app.ini` n'est jamais relu à chaud** : il est composé au démarrage. C'est le
-`rollout restart` qui applique les neutralisations, pas le patch.
+`rollout restart` de l'étape 7 qui applique les neutralisations, pas le patch.
 
-### 7 — Exposition LAN et filtrage réseau
+### 7 — Exposition LAN, filtrage réseau, redémarrage
 
-`HTTPRoute` sur le listener **`https-internal`** (`*.lan.wittner.tech`), jamais `https-public`.
-Plus une `CiliumNetworkPolicy` qui n'autorise en sortie que le DNS et le port 5432 de sa propre
-base : les neutralisations refusent la fonctionnalité, la policy refuse le paquet.
+La `CiliumNetworkPolicy` d'abord : les réglages d'`app.ini` n'agiront qu'au prochain démarrage, la
+policy agit tout de suite.
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: forgejo-pra
+  namespace: forgejo-preprod
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo
+  ingress:
+    - fromEntities: [ingress, host, remote-node]
+      toPorts:
+        - ports: [{ port: "3000", protocol: TCP }]
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports: [{ port: "53", protocol: UDP }]
+          rules:
+            dns: [{ matchPattern: "*" }]
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: forgejo-preprod
+            cnpg.io/cluster: forgejo-db
+      toPorts:
+        - ports: [{ port: "5432", protocol: TCP }]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: forgejo-pra
+  namespace: forgejo-preprod
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: shared-gw
+      namespace: gateway
+      sectionName: https-internal
+  hostnames: [forgejo-preprod.lan.wittner.tech]
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: forgejo-http
+          port: 3000
+          weight: 1
+EOF
+
+kubectl -n forgejo-preprod rollout restart deploy/forgejo && \
+kubectl -n forgejo-preprod rollout status deploy/forgejo --timeout=300s
+```
+
+⚠️ Listener **`https-internal`** (`*.lan.wittner.tech`), **jamais `https-public`** : le hostname
+public appartient à la production, et deux routes sur le même hostname se partagent le trafic.
 
 ## La checklist — `verify`
 
@@ -258,6 +488,90 @@ C'est elle, le test. Six familles, sortie **2** si l'une échoue.
 Le contrôle **C « disque == base »** est celui qui distingue une restauration alignée d'une
 restauration bancale. Les autres vérifient chaque moitié ; celui-ci vérifie qu'elles se
 rejoignent.
+
+### Les mêmes contrôles, à la main
+
+```bash
+POD=$(kubectl -n forgejo-preprod get pod -l app.kubernetes.io/name=forgejo \
+        -o jsonpath='{.items[0].metadata.name}')
+```
+
+**A — la donnée du PVC est revenue.** Les dépôts sur le disque, et surtout les **quatre secrets
+cryptographiques** : générés au premier démarrage et écrits *sur le volume*, sans eux les sessions,
+les jetons d'API et les objets LFS déjà en base ne sont plus déchiffrables.
+
+```bash
+kubectl -n forgejo-preprod exec "$POD" -c forgejo -- sh -c '
+  ls -d /data/git/gitea-repositories/*/*.git 2>/dev/null
+  grep -cE "^(SECRET_KEY|INTERNAL_TOKEN|JWT_SECRET|LFS_JWT_SECRET) =" /data/gitea/conf/app.ini'
+```
+
+**B — les dépôts sont intègres.** Le contrôle le plus important : la copie kopia est un parcours du
+système de fichiers vivant, elle peut capturer les `refs` après leur mise à jour mais avant les
+objets qu'elles désignent. `git fsck` est la seule chose qui attrape ça.
+
+```bash
+kubectl -n forgejo-preprod exec "$POD" -c forgejo -- sh -c '
+  for r in /data/git/gitea-repositories/*/*.git; do
+    printf "%s : " "$r"
+    if git -C "$r" fsck --no-progress --no-dangling >/dev/null 2>&1; then
+      echo "OK ($(git -C "$r" rev-list --all --count) commits, $(git -C "$r" for-each-ref | wc -l) refs)"
+    else
+      echo "CORROMPU"
+    fi
+  done'
+```
+
+**C — la base, et son accord avec le disque.** Le second bloc doit rendre exactement les dépôts vus
+en A.
+
+```bash
+kubectl -n forgejo-preprod exec forgejo-db-1 -c postgres -- psql -U postgres -d app -c \
+  'select (select count(*) from "user") as comptes, (select count(*) from repository) as depots, (select count(*) from issue) as issues;'
+kubectl -n forgejo-preprod exec forgejo-db-1 -c postgres -- psql -U postgres -d app -c \
+  'select owner_name, name from repository order by 1;'
+```
+
+⚠️ `-U postgres`, pas `-U app` : la connexion locale par socket passe en authentification `peer`,
+et le conteneur tourne en `postgres`.
+
+**D — Forgejo se déclare cohérent.** Attrape ce que ni le disque ni la base ne montrent seuls, par
+exemple une ligne pointant un fichier absent.
+
+```bash
+kubectl -n forgejo-preprod exec "$POD" -c forgejo -- \
+  gitea doctor check --run check-db-consistency,check-db-version,storages
+```
+
+⚠️ Le binaire s'appelle bien `gitea` dans l'image Forgejo — c'est historique.
+
+**E — la copie est muette.** Lecture **section par section** : un `grep "^ENABLED = false"`
+matcherait indifféremment `[mailer]`, `[mirror]` et `[cron]`, et les trois se valideraient
+mutuellement.
+
+```bash
+kubectl -n forgejo-preprod exec "$POD" -c forgejo -- cat /data/gitea/conf/app.ini \
+  | awk '/^\[/{s=$0} s ~ /^\[(mailer|mirror|cron|webhook|server)\]$/ && /^(ENABLED|ENABLE_PUSH_MIRROR|ALLOWED_HOST_LIST|ROOT_URL) =/ {print s, $0}'
+```
+
+Attendu, six lignes : mailer `false`, mirror `false` ×2, cron `false`, webhook `loopback`, et
+`ROOT_URL` pointant la préprod.
+
+**F — elle répond.**
+
+```bash
+curl -sk --resolve forgejo-preprod.lan.wittner.tech:443:192.168.1.80 \
+  -o /dev/null -w 'gateway=%{http_code}\n' https://forgejo-preprod.lan.wittner.tech/
+curl -sk --resolve forgejo-preprod.lan.wittner.tech:443:192.168.1.50 \
+  -o /dev/null -w 'proxy=%{http_code}\n'   https://forgejo-preprod.lan.wittner.tech/
+```
+
+> [!TIP]
+> **Le contrôle qui vaut tous les autres : se connecter à l'interface.** Il valide trois choses
+> venues de trois sources différentes — le mot de passe par le hash de la **base** (barman), le
+> cookie de session par le `SECRET_KEY` de l'**`app.ini`** (PVC), et la page par le `HTTPRoute`.
+> Si les deux moitiés n'étaient pas cohérentes, le mot de passe passerait et la session boucherait
+> indéfiniment. Aucun contrôle automatisé ne teste cela.
 
 ## Relevé du 2026-09-08
 
@@ -342,6 +656,13 @@ la création, utilisé ou non.
 
 ```bash
 script/forgejo-pra-script.sh down     # confirmation par frappe du nom du namespace
+```
+
+À la main :
+
+```bash
+kubectl delete ns forgejo-preprod --wait=false && \
+kubectl -n velero delete restore -l homelab.wittner.tech/drill=forgejo-pra
 ```
 
 > [!WARNING]
