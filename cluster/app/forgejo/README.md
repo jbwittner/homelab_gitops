@@ -35,7 +35,8 @@ box, plus d'IP d'origine publiée — cf. [§Réseau](#le-ssh-a-été-coupé).
   **plus les en-têtes de sécurité** (HSTS, `nosniff`, `Referrer-Policy`) posés par un filtre
   `ResponseHeaderModifier` — cf. §Exposition publique
 - `manifests/forgejo-netpol.yaml` — `CiliumNetworkPolicy` ingress **et** egress du pod
-  applicatif — cf. §Exposition publique
+  applicatif. Porte aussi l'ouverture du port 3000 au namespace `renovate` — cf. §Exposition
+  publique
 - `manifests/forgejo-robots.yaml` — ConfigMap du `robots.txt`, monté sur `/data/gitea/robots.txt`
   par `extraVolumes` / `extraContainerVolumeMounts` — cf. §Exposition publique
 - `manifests/forgejo-admin.secret.example.yaml` — template de scellement **versionné et vide de
@@ -366,9 +367,12 @@ Donc : enrôler juste après le sync, pas le lendemain.
 Une seule `CiliumNetworkPolicy` sélectionne le pod applicatif, dans les deux directions — donc
 tout ce qui n'y figure pas est refusé.
 
-- **Ingress** : port 3000 depuis les entités `ingress` / `host` / `remote-node` seulement (le
-  proxy du Gateway et les sondes du kubelet). **Une seule règle** — celle du port 2222 est partie
-  avec le clone SSH.
+- **Ingress** : deux règles, toutes deux sur le port 3000. La première ouvre aux entités
+  `ingress` / `host` / `remote-node` (le proxy du Gateway et les sondes du kubelet) ; la seconde
+  aux pods du namespace `renovate` — le bot [renovate](../renovate/README.md) joint l'API **et**
+  clone en interne par le Service `forgejo-http`, sans repasser par l'edge. C'est le seul pod du
+  cluster à atteindre l'UI. ⚠️ Retirer cette seconde règle ne dégrade pas le bot, elle le coupe,
+  en timeout muet. La règle du port 2222, elle, est partie avec le clone SSH.
 - **Egress** : DNS, la base CNPG, et `0.0.0.0/0` **moins** les plages privées. Le pod ne peut
   donc joindre ni l'API Kubernetes, ni un autre service du cluster, ni une machine du LAN — mais
   garde ce dont Forgejo a besoin : cloner un dépôt distant, livrer un webhook, joindre un relais

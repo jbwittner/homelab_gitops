@@ -35,7 +35,8 @@ spec:
     #     hostNetwork), le trafic proxifié peut se présenter en `host`/`remote-node` plutôt qu'en
     #     `ingress`.
     # ⚠️ Conséquence assumée : un pod en hostNetwork sur un nœud du cluster peut joindre ce port.
-    # Ce qui compte ici est ce qui est FERMÉ — aucun autre pod du cluster n'atteint l'UI.
+    # Ce qui compte ici est ce qui est FERMÉ — hors le bot Renovate (règle suivante), aucun pod du
+    # cluster n'atteint l'UI.
     - fromEntities:
         - ingress
         - host
@@ -45,13 +46,33 @@ spec:
             - port: "3000"
               protocol: TCP
 
-    # ⚠️ Il n'y a plus qu'UNE règle d'ingress, et c'est le signe que le SSH est coupé. Une règle
-    # ouvrait auparavant le port 2222 à une liste d'entités large (`world`, `cluster`, `host`,
+    # --- API + git : le bot Renovate, depuis le ns `renovate` ---
+    # Contrepartie du choix « endpoint in-cluster » du CronJob `renovate-forgejo`
+    # (cf. cluster/app/renovate/manifests/cron-job-forgejo.yaml) : le bot joint l'API par le
+    # Service `forgejo-http`, et le `git clone`/`git push` par la même adresse grâce à
+    # `RENOVATE_GIT_URL: endpoint`. Rien ne passe par l'edge Cloudflare.
+    #
+    # ⚠️ Retirer cette règle ne dégrade pas le bot, elle le COUPE — et le mode d'échec est un
+    # timeout muet côté Renovate, pas un 403.
+    #
+    # Sélection par namespace et non par label de pod : le pod est créé par un CronJob, ses labels
+    # (`job-name`, `controller-uid`) changent à chaque run. Le ns `renovate` ne contient que les
+    # deux bots, la portée reste donc étroite.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: renovate
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+
+    # ⚠️ Il n'y a AUCUNE règle sur le port 2222, et c'est le signe que le SSH est coupé. Une
+    # règle ouvrait auparavant ce port à une liste d'entités large (`world`, `cluster`, `host`,
     # `remote-node`), le filtrage par source étant délégué à `service.ssh.loadBalancerSourceRanges`.
-    # Elle a été retirée avec le clone SSH le 2026-09-06 : le pod ne reçoit plus rien d'autre que
-    # le trafic du Gateway sur 3000. La remettre fait partie de la procédure de rétablissement
-    # écrite dans helm-values.yaml, section « SSH : coupé » — et sans elle, un SSH rétabli échoue
-    # en timeout muet.
+    # Elle a été retirée avec le clone SSH le 2026-09-06 : le pod ne reçoit plus que du 3000, du
+    # Gateway et du bot Renovate. La remettre fait partie de la procédure de rétablissement écrite
+    # dans helm-values.yaml, section « SSH : coupé » — et sans elle, un SSH rétabli échoue en
+    # timeout muet.
 
   egress:
     # --- DNS ---

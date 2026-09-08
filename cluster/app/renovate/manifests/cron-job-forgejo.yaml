@@ -1,0 +1,85 @@
+# Bot Renovate de la forge auto-hébergée **Forgejo**. Son jumeau pour github.com est
+# `cron-job-github.yaml` : deux CronJobs et non un seul parce que `platform` est un réglage
+# GLOBAL de Renovate, pas un réglage par dépôt — un même run ne peut pas parler aux deux forges.
+#
+# ⚠️ Les deux fichiers portent le MÊME tag d'image, et ce n'est pas cosmétique : le manager
+# `kubernetes` de `renovate.json` (racine) voit les deux, et le bump de `renovate/renovate` arrive
+# en une seule PR touchant les deux lignes, automergée. Les désaligner casse cette propriété.
+#
+# ⚠️ Ce CronJob DÉPEND d'une règle d'ingress dans la CiliumNetworkPolicy du composant forgejo
+# (`cluster/app/forgejo/manifests/forgejo-netpol.yaml`, règle « bot Renovate »). Le pod Forgejo est
+# default-deny en ingress : sans cette règle, ce bot échoue en TIMEOUT MUET, pas en 403.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate-forgejo
+spec:
+  # 02:00 et non 01:00 : décalé d'une heure par rapport au bot GitHub. Les deux consomment le même
+  # quota d'API github.com pour les lookups de releases (`RENOVATE_GITHUB_COM_TOKEN` est présent
+  # dans les DEUX Secrets, y compris celui-ci). `concurrencyPolicy: Forbid` ne protège de rien
+  # ici — il s'applique par CronJob et n'empêche pas deux CronJobs distincts de tourner ensemble.
+  schedule: "0 2 * * *"
+  timeZone: "Europe/Paris"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 300
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: renovate
+              image: renovate/renovate:44.14.10
+              # Pas d'`args` : le périmètre vient de l'autodiscover (voir plus bas), donc des
+              # accès du compte bot dans Forgejo — pas de ce fichier.
+              env:
+                - name: LOG_LEVEL
+                  value: info
+                - name: RENOVATE_PLATFORM
+                  value: forgejo
+                # Service posé par le chart Forgejo (`<releaseName>-http`), joint EN INTERNE.
+                #
+                # ⚠️ Le `/` final compte, et l'URL ne porte PAS `/api/v1` : Renovate suffixe
+                # lui-même le chemin d'API.
+                #
+                # ⚠️ `http://` en clair, assumé : le pod Forgejo parle http dans le cluster
+                # (`gitea.config.server.PROTOCOL: http`, TLS terminé au Gateway). Le jeton
+                # transite donc en clair sur le réseau de pods.
+                - name: RENOVATE_ENDPOINT
+                  value: "http://forgejo-http.forgejo.svc.cluster.local:3000/"
+                # LOAD-BEARING. Par défaut Renovate clone via le `clone_url` que renvoie l'API du
+                # dépôt, et Forgejo le bâtit sur son `ROOT_URL` — c'est-à-dire l'URL PUBLIQUE
+                # https://forgejo.wittner.tech. Sans cette variable, l'API serait bien jointe en
+                # interne, mais le `git clone` et le `git push` repartiraient par le tunnel
+                # Cloudflare : trajet inutile, et soumis au plafond de 100 Mo par requête du plan
+                # gratuit (cf. forgejo/manifests/forgejo-httproute.yaml).
+                # `endpoint` reconstruit l'URL git depuis RENOVATE_ENDPOINT : tout reste interne.
+                - name: RENOVATE_GIT_URL
+                  value: endpoint
+                # Contrairement au bot GitHub (liste explicite en args) : tous les dépôts visibles
+                # par le compte bot sont scannés. Le périmètre se règle donc DANS Forgejo, par les
+                # accès donnés à ce compte — un dépôt créé demain sera pris d'office.
+                # Pour le restreindre sans toucher aux accès : RENOVATE_AUTODISCOVER_FILTER.
+                - name: RENOVATE_AUTODISCOVER
+                  value: "true"
+                - name: RENOVATE_GIT_AUTHOR
+                  value: "renovate <renovate@wittner.tech>"
+                # Plafonne le heap V8 sous la limite du conteneur : Node déclenche un GC au lieu
+                # de se faire tuer par le cgroup (exit 137, logs trompeurs car ils semblent complets).
+                - name: NODE_OPTIONS
+                  value: "--max-old-space-size=2048"
+              # ⚠️ Deux clés, DEUX jetons différents (à la différence de `renovate-github` côté
+              # GitHub, qui porte le même PAT deux fois) : RENOVATE_TOKEN est le jeton Forgejo,
+              # RENOVATE_GITHUB_COM_TOKEN un PAT github.com servant UNIQUEMENT aux lookups de
+              # releases. Cf. renovate-forgejo.secret.example.yaml.
+              envFrom:
+                - secretRef:
+                    name: renovate-forgejo
+              resources:
+                requests:
+                  memory: 1Gi
+                  cpu: 100m
+                limits:
+                  memory: 3Gi
+          restartPolicy: Never
