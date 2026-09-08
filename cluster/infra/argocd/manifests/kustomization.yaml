@@ -22,7 +22,7 @@ namespace: argocd
 # Si les pods crash-loop après upgrade, bumper le tag vX.Y.Z ici.
 resources:
   - namespace.yaml
-  - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.5.0/manifests/install.yaml
+  - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.5.2/manifests/install.yaml
   - cluster-bleu-kalecgos.yaml
 patches:
   - path: argocd-cmd-params-cm.yaml
