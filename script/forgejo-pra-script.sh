@@ -631,6 +631,16 @@ cmd_status() {
 cmd_down() {
   kubectl get ns "$NS" >/dev/null 2>&1 || { log "Aucune préprod à détruire."; return 0; }
 
+  # ⚠️ Le label est la SEULE chose qui distingue une préprod jetable d un namespace vivant. Le
+  # vérifier plutôt que se fier au nom protège aussi de `PREPROD_NAMESPACE=argocd` et de tout
+  # namespace qui porterait par hasard le nom attendu.
+  local drill
+  drill="$(kubectl get ns "$NS" -o jsonpath='{.metadata.labels.homelab\.wittner\.tech/drill}' 2>/dev/null || true)"
+  [[ "$drill" == "forgejo-pra" ]] \
+    || die "Le namespace « $NS » ne porte pas le label homelab.wittner.tech/drill=forgejo-pra :
+       il n a PAS été créé par cet exercice. Refus de le supprimer.
+       Si c est bien une préprod à jeter, la supprimer à la main en connaissance de cause."
+
   log "Destruction de la préprod « $NS »"
   kubectl -n "$NS" get pvc -o custom-columns=NOM:.metadata.name,TAILLE:.spec.resources.requests.storage \
     --no-headers 2>/dev/null | sed 's/^/    PVC /'
@@ -665,6 +675,16 @@ cmd_drill() {
 # --- Aiguillage ------------------------------------------------------------------------------------
 
 require_bins kubectl jq curl base64 awk
+
+# ⚠️ GARDE-FOU RACINE, et il ferme un chemin qui menait à la destruction de la production.
+# Sans lui, `PREPROD_NAMESPACE=forgejo` retourne l exercice contre la prod : l étape 4 supprime
+# `pvc/forgejo-db-1` — le volume de la base, avec `reclaimPolicy: Delete` — et `down` supprime le
+# namespace entier. Le pire était le message : `up` refusait bien de partir, mais en disant « le
+# namespace existe déjà, la détruire d abord : down ». Il DIRIGEAIT vers la suppression.
+[[ "$NS" != "$SRC_NS" ]] || die "PREPROD_NAMESPACE ne peut pas valoir « $SRC_NS ».
+       Ce script écrirait alors dans la PRODUCTION : suppression du PVC de la base, neutralisation
+       de la configuration, coupure réseau. La reprise EN PLACE est une autre procédure, qui
+       suspend l auto-sync et ne fait rien de tout cela — doc/forgejo-pra.md §8."
 
 case "${1:-}" in
   up)     shift; cmd_up "$@" ;;

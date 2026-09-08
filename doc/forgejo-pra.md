@@ -178,6 +178,29 @@ PVC     ────────────────────────
 > S'il n'y a eu aucune écriture depuis l'instant du PVC, **c'est le même état** — l'alignement est
 > obtenu sans la cible. Le `FATAL` ci-dessus est donc le signal « il n'y avait rien à rejouer »,
 > pas une sauvegarde cassée.
+>
+> ⚠️ **Mais sans cible, on ne choisit pas où l'on atterrit.** barman reprend la **dernière**
+> sauvegarde de base du bucket, puis rejoue tout le WAL disponible. Relevé au drill manuel du
+> 2026-09-08 :
+>
+> ```
+> 17:05:52  ← copie velero du PVC
+> 17:05:56  sauvegarde de base    ┐ pg_backup_start
+> 17:06:00  terminée              ┘ pg_backup_stop → bascule de WAL forcée
+>              ▲ c'est CELLE-CI que barman a reprise
+> ```
+>
+> La base restaurée était donc à 17:06:00 et le PVC à 17:05:52 : **la base était 8 secondes en
+> AVANCE sur le disque** — le mauvais sens (§2). Rien n'a cassé parce que rien n'avait été écrit
+> entre les deux, mais l'alignement venait de l'absence d'écritures, pas de la procédure.
+>
+> Les deux régimes sont complémentaires, et c'est ce qui rend l'ensemble tenable : le cas où la
+> cible est nécessaire est exactement celui où elle est atteignable.
+>
+> | Forge | `--target-time` | Alignement |
+> | --- | --- | --- |
+> | **au repos** | impossible (`FATAL` — aucun commit à atteindre) | **gratuit**, rien n'a bougé |
+> | **écrite** | nécessaire, et il **fonctionne** (des commits existent) | obtenu par la cible |
 
 ---
 
