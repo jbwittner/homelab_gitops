@@ -68,6 +68,49 @@ sur `forgejo-db-manual-pljw7` : `online: true`, `beginLSN 0/2E000028 → endLSN 
 > le data mover donnerait un vrai point-dans-le-temps et l'étalement disparaîtrait. Les hooks
 > velero, eux, ne servent à rien ici : Forgejo n'a pas de commande de gel.
 
+### Faut-il couper Forgejo pendant la copie ? Non
+
+La question revient naturellement, et la réponse est non — mais pas pour la raison qu'on croit.
+« Il n'y a qu'un utilisateur » ne suffit pas : ce qui compte est **qui écrit à 03:00**, humain ou
+non. État vérifié le 2026-09-08 :
+
+| Écrivain potentiel | État réel |
+| --- | --- |
+| `renovate-forgejo` — pousse des branches dans la forge | **pas déployé** (ligne commentée dans `cluster/app/renovate/manifests/kustomization.yaml`). Une fois activé : `schedule: "0 2 * * *"`, soit **une heure avant**, pour ~40 s de run — mesuré sur le bot GitHub |
+| `renovate-github` | 01:00, et il pousse sur **GitHub**, pas ici |
+| Crons internes de Forgejo | tous aux défauts amont — la section `[cron*]` d'`app.ini` est **vide** |
+| L'humain | le seul écrivain réaliste à 03:00 |
+
+Et le parcours kopia dure **17 s** sur la volumétrie actuelle.
+
+Parmi les crons internes, ceux qui tournent la nuit **suppriment** des fichiers
+(`cleanup_packages`, `archive_cleanup`) : une suppression qui croise le parcours donne un fichier
+de cache présent ou absent, pas un dépôt corrompu. Le seul qui **réécrit des `.pack`** — donc le
+seul réellement dangereux — est `git_gc_repos`, désactivé par défaut en amont.
+
+> [!NOTE]
+> C'est la seule donnée de cette section **non vérifiée dans le cluster** : Forgejo ne journalise
+> pas l'enregistrement de ses tâches cron, et la valeur n'apparaît pas dans `app.ini` puisqu'elle
+> est au défaut. L'affirmation repose sur le défaut amont, pas sur une mesure.
+
+**Pourquoi couper serait pire que le mal :**
+
+- interruption toutes les nuits, d'une durée qui croît avec le volume — exactement ce qu'on
+  cherche à éviter sur 100Gi ;
+- **les hooks velero ne savent pas le faire** : ils exécutent une commande *dans* le conteneur, ils
+  ne peuvent pas passer un Deployment à 0. Il faudrait un orchestrateur externe (scale down →
+  Backup → scale up) ;
+- cet orchestrateur peut échouer **entre** les deux étapes et laisser Forgejo à 0 replica jusqu'à
+  ce que quelqu'un s'en aperçoive. C'est un mode de panne pire que celui qu'il corrige.
+
+**Les trois déclencheurs qui changeraient la réponse** — et dans les trois cas le correctif reste
+le snapshot CSI, pas la coupure :
+
+1. `renovate-forgejo` activé **et** replanifié sur 03:00 ;
+2. `[cron.git_gc_repos] ENABLED = true` ;
+3. la forge grossit assez pour que le parcours dure des minutes, auquel cas le risque devient la
+   fenêtre 02:00–03:00 où renovate écrit.
+
 ### Et elles ne sont pas cohérentes entre elles
 
 > [!CAUTION]
