@@ -672,6 +672,62 @@ jamais été chronométré.
   note HTTP 404 via le reverse proxy LAN (192.168.1.50)
 ```
 
+## Quand le rejouer, et ce qu'on surveille entre deux
+
+**Tous les trimestres, à la main.** Pas de cron, pas de CronJob, pas de RBAC privilégié : le
+rapport valeur/effort est mauvais pour une forge mono-utilisateur, et l'automatisation coûterait
+plus que le geste qu'elle remplace.
+
+```bash
+script/forgejo-pra-prepare-script.sh check   # l exercice peut-il partir ?
+script/forgejo-pra-script.sh drill           # ~4 min, se démonte seul
+```
+
+### L'exercice EST la surveillance
+
+Il n'y a rien à surveiller en continu du côté de l'étalement de la copie kopia (cf.
+[plan §1](forgejo-pra.md)). Aucune métrique ne le voit : une copie étalée produit une sauvegarde
+`Completed`, de taille normale, à l'heure. **Le seul détecteur est le `git fsck` de la checklist**,
+et il ne parle qu'au moment où on le lance.
+
+D'où la règle : on ne surveille pas le problème, **on rejoue l'exercice**.
+
+### Les signaux qui font passer de « trimestriel » à « maintenant »
+
+Relevés au 2026-09-08, avec la valeur du jour comme point de comparaison.
+
+| Signal | Où le lire | Valeur actuelle | Seuil |
+| --- | --- | --- | --- |
+| Durée du parcours kopia | `startTimestamp` → `completionTimestamp` du `Backup` velero | **12 à 22 s** | au-delà de ~2 min |
+| Occupation réelle du volume | `kubectl -n forgejo exec deploy/forgejo -c forgejo -- du -sh /data` | **1,6 Mio** | au-delà de ~1 Gio |
+| `[cron.git_gc_repos]` | défaut amont, absent d'`app.ini` | **désactivé** | s'il passe à `true` — seul cron qui réécrit des `.pack` |
+| Nombre d'utilisateurs | — | **1** | dès qu'un second pousse la nuit |
+| Un `drill` qui sort en **2** sur `git fsck` | la checklist elle-même | jamais arrivé | **jamais toléré** — le symptôme est déjà là |
+
+La durée du parcours est le signal le plus direct : **c'est exactement la fenêtre d'exposition**.
+Une écriture qui ne la croise pas ne peut rien casser.
+
+> [!NOTE]
+> **Activer `renovate-forgejo` n'est PAS un déclencheur, et l'améliore même.** Sa `schedule` est
+> `0 2 * * *` — une heure avant velero, pour ~40 s de run (mesuré sur le bot GitHub). Il écrirait
+> dans la forge chaque nuit, donc du WAL serait produit et archivé : la fenêtre PITR cesserait
+> d'être figée entre deux sauvegardes de base, et `--target-time` redeviendrait utilisable
+> (cf. [plan §1](forgejo-pra.md), régime « forge écrite »).
+>
+> Le déclencheur serait de **déplacer son horaire** sur 03:00.
+
+### Ce qu'on a décidé de ne pas faire
+
+| | Pourquoi pas |
+| --- | --- |
+| Couper Forgejo pendant la copie | tranché au [plan §1](forgejo-pra.md) : les hooks velero ne savent pas scaler un Deployment, et l'orchestrateur externe qu'il faudrait peut laisser la forge à 0 replica |
+| Snapshot CSI | **mesuré fermé** — `snapshot … is not of thin type` sur une StorageClass épaisse |
+| Migrer la StorageClass en thin | chantier de stockage, à arbitrer pour lui-même et pas comme correctif de sauvegarde |
+| Mettre le `drill` en cron | image, RBAC privilégié, et un CronJob qui teste la reprise du cluster depuis le cluster |
+
+**Décision au 2026-09-08 : on reste ainsi.** Le risque résiduel est une écriture qui croise 17
+secondes, sur une forge à un seul utilisateur. Il est connu, borné, et détecté par l'exercice.
+
 ## Exposer réellement sur le LAN
 
 Le `HTTPRoute` posé par `up` est `Accepted` / `ResolvedRefs`, et la préprod répond **200 en
