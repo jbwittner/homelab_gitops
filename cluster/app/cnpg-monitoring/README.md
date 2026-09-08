@@ -76,15 +76,16 @@ alerte qui hurle en permanence, soit une alerte muette.
 | `CNPGWalArchivingFailing` | warning | Échecs d'archivage qui se **résorbent** — invisible du backlog, mais déjà une dégradation |
 | `CNPGBackupTooOld` | critical | Aucune sauvegarde de base réussie depuis 36 h (schedule quotidienne à 02:00). Seuil aligné sur `VeleroBackupTooOld` |
 | `CNPGLastBackupFailed` | warning | La tentative la plus récente a échoué : se déclenche dès la première nuit ratée |
-| `CNPGNoBackupYet` | warning | Une base **attendue sous sauvegarde** n'en a jamais réussi une. Comble l'angle mort de la garde `> 0` de `CNPGBackupTooOld` |
-| `CNPGMetricsAbsent` | critical | Plus aucune instance scrapée : les cinq autres sont aveugles d'un coup |
+| `CNPGNoBackupYet` | warning | Le plugin est câblé sur une base mais aucune sauvegarde n'a jamais réussi. Comble l'angle mort de la garde `> 0` de `CNPGBackupTooOld` |
+| `CNPGBackupChainAbsent` | critical | Les métriques du plugin ont disparu pour une base attendue : `spec.plugins` retiré, sidecar mort. Elle n'est plus sauvegardée par **rien** — son PVC est aussi hors kopia |
+| `CNPGMetricsAbsent` | critical | Plus aucune instance scrapée : les six autres sont aveugles d'un coup |
 
 > [!WARNING]
-> **`CNPGNoBackupYet` fonctionne en liste blanche** (`cnpg_io_cluster=~"forgejo-db"`), sur le modèle
-> d'`includedNamespaces` côté velero. Elle ne parle que des bases dont une sauvegarde est
-> **attendue** — `authentik-db` et `pgsql-test` n'ont aucune chaîne native et hurleraient en
-> permanence. Contrepartie assumée et identique à celle de velero : **mettre une base sous
-> sauvegarde demande de l'ajouter ici aussi, et rien ne le signale.**
+> **`CNPGBackupChainAbsent` est la seule règle à nommer les bases en dur**
+> (`cnpg_io_cluster="forgejo-db"`), parce qu'`absent()` perd les labels. **Mettre une base sous
+> sauvegarde demande de l'ajouter ici, et rien ne le signale.** Les autres règles s'en dispensent :
+> les métriques du plugin n'existent que là où `spec.plugins` est câblé, donc l'intention est
+> portée par le `Cluster` lui-même.
 
 `CNPGMetricsAbsent` est formulée en `absent(...)` sur une métrique servie inconditionnellement,
 plutôt qu'en `up{job=...}` : le label `job` d'un PodMonitor dépend de la façon dont
@@ -104,8 +105,11 @@ en paraissant correcte.
 - **Lire l'état de la chaîne à la main**, sans passer par Prometheus :
   ```bash
   kubectl get --raw "/api/v1/namespaces/forgejo/pods/forgejo-db-1:9187/proxy/metrics" \
-    | grep -E "archive_status|archiver_failed|last_available_backup"
+    | grep -E "archive_status|archiver_failed|^barman_cloud"
   ```
+  `^barman_cloud` filtre volontairement sur le préfixe du plugin : les
+  `cnpg_collector_*_backup_timestamp` homonymes sont les versions **dépréciées** et ne sont pas
+  celles que les règles interrogent.
 
 - **Ajouter une base à la liste blanche** : éditer le `cnpg_io_cluster=~"…"` de `CNPGNoBackupYet`
   dans `manifests/prometheusrule.yaml`. C'est le **quatrième** geste de la mise sous sauvegarde

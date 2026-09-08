@@ -82,22 +82,30 @@ mutualise pas entre applications. Chaque base ajoutée veut le sien, **et** son 
   Des `Certificate` qui restent `False` = cert-manager absent ou en erreur : le plugin démarre
   quand même et reste injoignable.
 
-- **Vérifier qu'une base est bien prise en charge** — le sidecar doit apparaître dans le pod
-  d'instance, et le `Cluster` doit lister le plugin :
+- **Vérifier qu'une base est bien prise en charge** :
   ```bash
-  kubectl -n forgejo get pod forgejo-db-1 -o jsonpath='{.spec.containers[*].name}{"\n"}'
+  # ⚠️ Le sidecar est un INIT-CONTAINER (sidecar natif Kubernetes, `restartPolicy: Always`), pas un
+  # conteneur ordinaire. `.spec.containers` ne renvoie que `postgres` et donne l'impression qu'il
+  # manque.
+  kubectl -n forgejo get pod forgejo-db-1 \
+    -o jsonpath='{range .spec.initContainers[*]}{.name}{"\n"}{end}'
   kubectl -n forgejo get cluster forgejo-db -o jsonpath='{.status.pluginStatus}' | jq
   ```
+  `pluginStatus` doit lister `barman-cloud.cloudnative-pg.io` avec la capability
+  `TYPE_INSTANCE_SIDECAR_INJECTION`.
 
 - **Mettre une nouvelle base sous sauvegarde** — quatre gestes, dans cet ordre :
   1. bucket + compte de service côté repo **Terraform** (cf. §Contraintes de
      [forgejo](../forgejo/README.md) pour le contrat) ;
   2. `ObjectStore` + SealedSecret du credential dans le `manifests/` de l'application ;
-  3. `spec.plugins` sur le `Cluster` — ⚠️ **recrée le pod d'instance** (quelques secondes de
-     coupure SQL) ;
-  4. `ScheduledBackup`, puis ajouter la base à la liste blanche de l'alerte `CNPGNoBackupYet`
-     ([cnpg-monitoring](../cnpg-monitoring/README.md)) — sans ce dernier geste, une chaîne qui
-     n'aboutit jamais reste silencieuse.
+  3. `spec.plugins` sur le `Cluster` — ⚠️ **recrée le pod d'instance, avec ~200 s de coupure
+     SQL** : 180 s d'arrêt smart (`smartShutdownTimeout`, consommé en entier parce qu'un pool de
+     connexions applicatif ne se ferme jamais tout seul) puis ~20 s de redémarrage. Le `Cluster`
+     affiche « Primary instance is being restarted without a switchover » pendant tout ce temps —
+     c'est attendu, pas une panne ;
+  4. `ScheduledBackup`, puis ajouter la base à `CNPGBackupChainAbsent`
+     ([cnpg-monitoring](../cnpg-monitoring/README.md)) — c'est la **seule** alerte à nommer les
+     bases en dur, et sans ce geste un retrait futur de `spec.plugins` passerait inaperçu.
 
 - **Upgrade** : bumper `targetRevision` dans `cnpg-barman-plugin.app.yaml`, commit, push. Renovate
   le suit (manager `argocd`, motif `*.app.yaml`).

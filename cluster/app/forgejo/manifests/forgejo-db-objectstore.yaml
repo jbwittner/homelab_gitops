@@ -76,10 +76,12 @@ spec:
 
     wal:
       compression: gzip
-      # `maxParallel` laissé au défaut (1). PostgreSQL est réglé par CNPG avec
-      # `archive_timeout = 300` : un segment part toutes les 5 minutes au pire, même base au
-      # repos. C'est cette cadence qui rend l'alerte `CNPGWalArchivingStalled` fiable
-      # (cf. cnpg-monitoring) — un archivage mort se voit en une heure, pas au prochain écrit.
+      # `maxParallel` laissé au défaut (1). CNPG règle `archive_timeout = 300`, mais ⚠️ cela ne
+      # veut PAS dire qu'un segment part toutes les 5 minutes : PostgreSQL ne force un changement
+      # de segment sur ce délai que s'il y a EU de l'activité WAL depuis le précédent. Une base au
+      # repos n'archive rien, indéfiniment — mesuré à 40 h sur cette instance. C'est pour cette
+      # raison que la surveillance porte sur le BACKLOG (`CNPGWalArchivingBacklog`,
+      # cf. cnpg-monitoring) et non sur l'âge du dernier archivage.
 
   # --- Sidecar injecté dans les pods d'instance ---
   # C'est LUI qui fait le travail : `barman-cloud-wal-archive` à chaque segment, la sauvegarde de

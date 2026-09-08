@@ -26,9 +26,14 @@ spec:
   # lui. À partir de son application, l'archivage WAL est CONTINU (un segment toutes les 5 minutes
   # au pire, `archive_timeout = 300`), indépendamment de toute sauvegarde de base.
   #
-  # ⚠️ Le pod d'instance est RECRÉÉ à la pose de cette clé (ajout d'un conteneur) : c'est le seul
-  # moment d'indisponibilité de la bascule, quelques secondes, et Forgejo le traverse en erreurs
-  # 500 le temps que la connexion SQL revienne.
+  # ⚠️ Le pod d'instance est RECRÉÉ à la pose de cette clé (injection du sidecar) : c'est le seul
+  # moment d'indisponibilité de la bascule, et il dure **environ 200 s**, pas quelques secondes.
+  # Mesuré le 2026-09-08 : 180 s d'arrêt de PostgreSQL puis ~20 s de redémarrage. Les 180 s sont
+  # `smartShutdownTimeout` (défaut CNPG) — l'arrêt SMART attend que les clients ferment leurs
+  # connexions, or Forgejo maintient un pool de connexions inactives qui ne se ferment jamais
+  # d'elles-mêmes. Le délai est donc consommé EN ENTIER avant l'escalade en arrêt fast.
+  # Pendant ce temps le `Cluster` affiche « Primary instance is being restarted without a
+  # switchover » et Forgejo rend des erreurs 500. C'est le comportement attendu, pas une panne.
   #
   # ⚠️ Ne PAS écrire `spec.backup.barmanObjectStore` à la place : c'est le support IN-TREE, retiré
   # de CloudNativePG depuis la 1.26 (l'opérateur tourne en 1.30). Il serait accepté par la CRD et

@@ -680,12 +680,19 @@ rm cluster/app/forgejo/manifests/forgejo-db-gcs.secret.yaml ./cnpg-sa.json
 **Vérifier que la chaîne est vivante** — dans cet ordre, chaque étape conditionne la suivante :
 
 ```bash
-# a. Le sidecar barman-cloud est bien injecté dans le pod d'instance
-kubectl -n forgejo get pod forgejo-db-1 -o jsonpath='{.spec.containers[*].name}{"\n"}'
+# a. Le sidecar barman-cloud est bien injecté. ⚠️ Il est déclaré en INIT-CONTAINER (sidecar natif
+#    Kubernetes, `restartPolicy: Always`) et non en conteneur ordinaire : le chercher dans
+#    `.spec.containers` renvoie `postgres` seul et donne l'impression qu'il manque.
+kubectl -n forgejo get pod forgejo-db-1 \
+  -o jsonpath='{range .spec.initContainers[*]}{.name}{"\n"}{end}'   # attendu : plugin-barman-cloud
+kubectl -n forgejo get cluster forgejo-db -o jsonpath='{.status.pluginStatus}' | jq
 
-# b. L'archivage WAL ne prend pas de retard (`ready` doit rester à 0)
+# b. L'archivage WAL ne prend pas de retard : `ready` doit rester à 0 et `archiver_failed_count`
+#    ne pas monter. Un `ready` à 1 avec `failed_count` qui grimpe = destination ou credential
+#    invalides — PostgreSQL retente indéfiniment, rien n'est perdu, mais rien n'arrive non plus.
 kubectl get --raw "/api/v1/namespaces/forgejo/pods/forgejo-db-1:9187/proxy/metrics" \
-  | grep -E "archive_status|archiver_failed"
+  | grep -E "archive_status|archiver_failed|^barman_cloud"
+kubectl -n forgejo logs forgejo-db-1 -c plugin-barman-cloud --tail=20
 
 # c. Déclencher la première sauvegarde de base à la main — la ScheduledBackup n'a pas
 #    `immediate: true` (cf. le commentaire du fichier), elle attendra 02:00 sinon
