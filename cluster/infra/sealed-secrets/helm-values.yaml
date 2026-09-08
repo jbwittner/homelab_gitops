@@ -1,0 +1,44 @@
+# helm-values — contrôleur sealed-secrets.
+#
+# Ce fichier n'existe que pour UN réglage, et c'est un réglage de PLAN DE REPRISE, pas de
+# fonctionnement : il fige la clé de scellement.
+
+# --- Rotation de la clé : COUPÉE ---
+#
+# POURQUOI. La clé privée du contrôleur est le seul état non reconstructible du cluster
+# (cf. README §Contraintes) ; elle est sauvegardée HORS LIGNE, dans un gestionnaire de secrets.
+# Une sauvegarde hors ligne est un instantané : elle ne suit pas une clé qui change.
+#
+# Par défaut, le contrôleur génère une NOUVELLE clé tous les 30 jours. L'ancienne est conservée
+# dans le cluster et continue de déchiffrer, mais la nouvelle devient celle du CHIFFREMENT. Tout
+# `SealedSecret` scellé après une rotation est donc illisible avec une sauvegarde antérieure.
+#
+# ⚠️ ET RIEN NE LE SIGNALE. En fonctionnement normal le contrôleur détient toutes ses clés et
+# déchiffre tout : le parc paraît sain. L'écart n'apparaît qu'à la RESTAURATION sur un cluster
+# neuf — c'est-à-dire au pire moment, avec le message `no key could decrypt secret` sur les
+# scellés récents et sur eux seuls. Une sauvegarde partielle est plus dangereuse qu'une absence de
+# sauvegarde : elle en a l'apparence.
+#
+# CE QU'ON PERD EN COUPANT : peu. La rotation NE RE-SCELLE PAS les `SealedSecret` existants — elle
+# ne change que la clé des nouveaux. Sa valeur de sécurité suppose qu'on re-scelle tout le parc à
+# chaque rotation, ce que personne ne fait ici. On échange donc une rotation sans effet réel contre
+# une propriété de reprise vérifiable : UNE clé, sauvegardée UNE fois.
+#
+# L'alternative — garder la rotation et re-sauvegarder la clé tous les 30 jours — est un geste
+# calendaire sans rappel. Il serait oublié, et l'oubli est invisible jusqu'à la reprise.
+#
+# État au 2026-09-08 : une seule clé, `sealed-secrets-key7t2db`, créée le 2026-08-29T20:34:17Z avec
+# le cluster. Les dix `SealedSecret` du dépôt ont tous été scellés avec elle. La première rotation
+# serait tombée vers le 2026-09-28 ; ce réglage la supprime avant qu'elle n'ait lieu.
+#
+# ⚠️ SI CE RÉGLAGE EST UN JOUR RETIRÉ, la sauvegarde hors ligne cesse d'être suffisante le jour
+# de la rotation suivante, sans autre signal. Le geste de sauvegarde redeviendrait périodique.
+#
+# --- Sur les guillemets ---
+# Le values.yaml amont insiste : « To disable use "0", with quotes! ». Vérifié par rendu du chart
+# 2.19.3 : `"0"` et `0` produisent le MÊME argument (`--key-renew-period "0"`), le garde du
+# template ayant changé. Les guillemets sont conservés quand même — ils sont la forme documentée en
+# amont, et un bump qui restaurerait l'ancien garde ferait silencieusement disparaître l'argument
+# d'un entier `0` (`{{- if .Values.keyrenewperiod }}` est FAUX pour l'entier zéro). Le coût de les
+# garder est nul ; celui de les retirer est une rotation qui reprend sans que rien ne le dise.
+keyrenewperiod: "0"
