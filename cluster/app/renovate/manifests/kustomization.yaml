@@ -3,5 +3,18 @@ kind: Kustomization
 namespace: renovate
 resources:
   - namespace.yaml
-  - renovate.externalsecret.yaml
+  #
+  # --- PAT GitHub : migration openbao → sealed-secrets, EN DEUX TEMPS -------------------------
+  #
+  # Les deux lignes ci-dessous visent le même Secret `renovate-env` et ne peuvent pas coexister.
+  # Tant que `renovate-env.sealed.yaml` n'existe pas, c'est l'ExternalSecret qui est actif :
+  # un `resources:` pointant un fichier absent fait échouer le `kustomize build` ENTIER, et
+  # l'Application partirait en `ComparisonError` — ni le namespace ni le CronJob ne seraient posés.
+  #
+  # Bascule (un seul commit, cf. README §Câblage du secret) : produire le .sealed.yaml avec
+  # kubeseal, puis échanger les commentaires des deux lignes.
+  - renovate-env.sealed.yaml
+  #
+  # ⚠️ `renovate-env.secret.example.yaml` ne va JAMAIS ici : il ne contient que des `REMPLACER`.
+  #
   - cron-job.yaml

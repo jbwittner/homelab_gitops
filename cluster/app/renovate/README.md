@@ -17,8 +17,13 @@ avoir 7 jours révolus avant qu'une branche ou une PR soit créée.
   `restartPolicy: Never`. Dépôts ciblés en `args`, configuration du bot via `env` + `envFrom`
   (secret `renovate-env`)
 - `manifests/namespace.yaml` — ns `renovate` (`sync-wave: -1`)
-- `manifests/renovate.externalsecret.yaml` — `ExternalSecret` `renovate-env` (PAT GitHub), servi par
-  [openbao](../../infra/openbao/README.md)
+- `manifests/renovate-env.sealed.yaml` — `SealedSecret` `renovate-env` (PAT GitHub), déchiffré par
+  [sealed-secrets](../../infra/sealed-secrets/README.md). **Absent du repo tant que le scellement
+  n'a pas été fait** — cf. §Câblage du secret
+- `manifests/renovate-env.secret.example.yaml` — template de scellement, versionné et sans valeur.
+  Jamais dans `kustomization.yaml`
+- `manifests/renovate.externalsecret.yaml` — ancien canal : `ExternalSecret` servi par
+  [openbao](../../infra/openbao/README.md). Encore actif tant que le `SealedSecret` n'existe pas
 - `manifests/kustomization.yaml` — assemblage
 
 ## Contraintes
@@ -35,16 +40,66 @@ avoir 7 jours révolus avant qu'une branche ou une PR soit créée.
 
 ### Câblage du secret
 
-Le PAT vit dans openbao — **rien à committer**, l'`ExternalSecret` qui le pointe est déjà dans
-le repo. Une seule entrée au coffre alimente les **deux** variables attendues par Renovate
-(`RENOVATE_TOKEN` pour la plateforme, `RENOVATE_GITHUB_COM_TOKEN` pour les lookups de releases) :
+Canal : **sealed-secrets** (le `SealedSecret` porte la valeur chiffrée, pas un pointeur vers un
+coffre). Le contrôleur est en wave `-8`, donc bien avant cette app.
+
+Une seule entrée à fournir — le PAT GitHub — mais **deux clés** dans le Secret : Renovate attend le
+même token sous `RENOVATE_TOKEN` (plateforme) et `RENOVATE_GITHUB_COM_TOKEN` (lookups de releases
+sur github.com). Un `SealedSecret` chiffrant clé par clé, la valeur est saisie deux fois dans le
+template.
 
 ```bash
-kubectl -n openbao exec -ti openbao-0 -- \
-  bao kv put kv/homelab/renovate/github token=<PAT GitHub>
+# 1. Template en clair (gitignoré via *.secret.yaml)
+cp cluster/app/renovate/manifests/renovate-env.secret.example.yaml \
+   cluster/app/renovate/manifests/renovate-env.secret.yaml
+# renseigner les deux REMPLACER avec le MÊME PAT
+
+# 2. Sceller
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/app/renovate/manifests/renovate-env.secret.yaml \
+  > cluster/app/renovate/manifests/renovate-env.sealed.yaml
+
+# 3. Supprimer le clair
+rm cluster/app/renovate/manifests/renovate-env.secret.yaml
 ```
 
-Rotation : régénérer le PAT côté GitHub, refaire le `bao kv put` — les deux variables suivent.
+4. Dans `manifests/kustomization.yaml`, **échanger les deux lignes** — décommenter
+   `renovate-env.sealed.yaml`, commenter `renovate.externalsecret.yaml` — puis committer le tout
+   en un seul commit. Les deux visent le même Secret `renovate-env` et ne peuvent pas coexister.
+
+> [!WARNING]
+> Ne pas décommenter la ligne `renovate-env.sealed.yaml` avant que le fichier existe : un
+> `resources:` pointant un fichier absent fait échouer le `kustomize build` entier et
+> l'Application part en `ComparisonError`.
+
+Le `SealedSecret` est chiffré pour le couple (`renovate-env`, `renovate`) : le renommer ou changer
+son namespace le rend indéchiffrable.
+
+**Rotation** : régénérer le PAT côté GitHub, puis refaire les étapes 1→3. Le fichier scellé est
+remplacé en entier — il faut re-fournir les **deux** valeurs, un `SealedSecret` ne se relit pas.
+
+#### Migration depuis openbao
+
+L'ancien canal reste dans le repo (`renovate.externalsecret.yaml`, `deletionPolicy: Retain`).
+Récupérer le PAT en place avant de le retirer :
+
+```bash
+kubectl -n renovate get secret renovate-env -o jsonpath='{.data.RENOVATE_TOKEN}' | base64 -d
+# ou, côté coffre
+kubectl -n openbao exec -ti openbao-0 -- bao kv get -field=github_token kv/homelab/renovate
+```
+
+Grâce à `deletionPolicy: Retain`, le prune de l'`ExternalSecret` par Argo CD **ne supprime pas** le
+Secret : la bascule est sans coupure. Corollaire : un scellement raté ne se voit pas au prochain
+run, le Secret orphelin continuant de servir. Vérifier explicitement que le Secret est bien devenu
+propriété du `SealedSecret` :
+
+```bash
+kubectl -n renovate get sealedsecret renovate-env
+kubectl -n renovate get secret renovate-env -o jsonpath='{.metadata.ownerReferences}'
+```
+
+L'entrée `kv/homelab/renovate` du coffre peut être purgée une fois cette vérification faite.
 
 ### Droits du token
 

@@ -114,13 +114,23 @@ confirm() {
   [[ "$answer" == "$expected" ]] || die "Annulé — rien n'a été créé."
 }
 
+# Durée écoulée, lisible : mm:ss, et h:mm:ss au-delà de l'heure.
+fmt_duration() {
+  local s="$1"
+  if (( s >= 3600 )); then
+    printf '%d:%02d:%02d' $(( s / 3600 )) $(( s % 3600 / 60 )) $(( s % 60 ))
+  else
+    printf '%02d:%02d' $(( s / 60 )) $(( s % 60 ))
+  fi
+}
+
 # Suit un objet jusqu'à une phase terminale. Renseigne la globale PHASE pour l'appelant.
 #   $1 kind (nom LONG)   $2 nom   $3 champ de progression ("" si l'objet n'en a pas)
 #   $4 phases terminales, séparées par « | » pour un motif `case`
 PHASE=""
 wait_phase() {
   local kind="$1" name="$2" field="$3" terminal="$4"
-  local deadline=$(( SECONDS + TIMEOUT )) line last="" obj cur total missing=0
+  local deadline=$(( SECONDS + TIMEOUT )) start=$SECONDS line last="" obj cur total missing=0
   PHASE=""
   while :; do
     if obj="$(kubectl -n "$NAMESPACE" get "$kind" "$name" -o json 2>/dev/null)"; then
@@ -148,8 +158,13 @@ wait_phase() {
     fi
 
     if [[ -t 1 ]]; then
-      # Terminal : une seule ligne réécrite en place.
-      printf '\r%s   ' "$line"
+      # Terminal : une seule ligne réécrite en place. Le chronomètre n'est ajouté QUE sur ce chemin :
+      # en sortie redirigée, il changerait à chaque tour et empilerait une ligne toutes les 5 s.
+      if [[ -n "${SHOW_ELAPSED:-}" ]]; then
+        printf '\r%s  écoulé=%s   ' "$line" "$(fmt_duration $(( SECONDS - start )))"
+      else
+        printf '\r%s   ' "$line"
+      fi
     elif [[ "$line" != "$last" ]]; then
       # Redirigé (cron, CI, `| tee`) : le retour chariot empilerait des lignes illisibles —
       # on n'écrit donc qu'aux CHANGEMENTS d'état.
@@ -365,7 +380,7 @@ cmd_show() {
 # --- backup -----------------------------------------------------------------------------------
 
 cmd_backup() {
-  local schedule="${1:-$DEFAULT_SCHEDULE}" bsl manifest backup pvb
+  local schedule="${1:-$DEFAULT_SCHEDULE}" bsl manifest backup pvb started
 
   kubectl -n "$NAMESPACE" get schedules.velero.io "$schedule" >/dev/null 2>&1 \
     || die "Schedule '$schedule' absente du namespace '$NAMESPACE'. Schedules connues :
@@ -421,10 +436,15 @@ $(kubectl -n "$NAMESPACE" get schedules.velero.io -o name 2>/dev/null || echo ' 
   fi
 
   log "Suivi (Ctrl-C interrompt l'affichage, PAS la sauvegarde)…"
-  wait_phase backups.velero.io "$backup" itemsBackedUp 'Completed|PartiallyFailed|Failed|FailedValidation'
+  # Chronomètre : une sauvegarde manuelle sert justement à MESURER (comparer à la nuit précédente,
+  # dimensionner TIMEOUT). Le compteur d'éléments n'y suffit pas — il stagne pendant la copie des PV.
+  started=$SECONDS
+  SHOW_ELAPSED=1 wait_phase backups.velero.io "$backup" itemsBackedUp \
+    'Completed|PartiallyFailed|Failed|FailedValidation'
 
   pvb="$(volumes_json podvolumebackups velero.io/backup-name "$backup")"
   volumes_summary <<<"$pvb"
+  printf '    durée   : %s\n' "$(fmt_duration $(( SECONDS - started )))"
 
   case "$PHASE" in
     Completed)
