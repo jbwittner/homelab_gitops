@@ -798,17 +798,24 @@ cmd_restore() {
       )
     }')"
 
-  log "Manifeste de restauration — À COMMITTER, rien n'a été envoyé au cluster"
-  printf '    source        : %s/%s (serverName « %s »)\n' "$ns" "$cluster" "$srv"
-  printf '    destination   : %s/%s (serverName « %s »)\n' "$ns" "$newname" \
-    "$( (( archive )) && echo "$newname" || echo 'aucun — archivage désactivé' )"
-  printf '    objectStore   : %s\n' "$osname"
-  printf '    fenêtre PITR  : %s → %s\n' \
-    "$(jq -r '.firstRecoverabilityPoint // "-"' <<<"$win")" \
-    "$(jq -r '.lastSuccessfulBackupTime // "-"' <<<"$win")"
-  printf '    cible         : %s\n' \
-    "$( [[ "$rt_json" == "null" ]] && echo 'dernier WAL archivé (fin de la fenêtre)' || jq -c . <<<"$rt_json" )"
-  echo
+  # ⚠️ TOUT le cadre humain part sur stderr, et STDOUT ne porte QUE le manifeste. C'est ce qui
+  # rend la commande pipeable (`> cluster.json`, `| kubectl apply -f -`, `| yq -P`) : un récapitulatif
+  # mélangé au manifeste produirait un fichier invalide, et le découper à coups de `sed` serait la
+  # première chose à casser au prochain changement de libellé. L'indentation décorative n'est
+  # ajoutée que si stdout EST un terminal — redirigé, le manifeste sort brut.
+  log "Manifeste de restauration — À COMMITTER, rien n'a été envoyé au cluster" >&2
+  {
+    printf '    source        : %s/%s (serverName « %s »)\n' "$ns" "$cluster" "$srv"
+    printf '    destination   : %s/%s (serverName « %s »)\n' "$ns" "$newname" \
+      "$( (( archive )) && echo "$newname" || echo 'aucun — archivage désactivé' )"
+    printf '    objectStore   : %s\n' "$osname"
+    printf '    fenêtre PITR  : %s → %s\n' \
+      "$(jq -r '.firstRecoverabilityPoint // "-"' <<<"$win")" \
+      "$(jq -r '.lastSuccessfulBackupTime // "-"' <<<"$win")"
+    printf '    cible         : %s\n' \
+      "$( [[ "$rt_json" == "null" ]] && echo 'dernier WAL archivé (fin de la fenêtre)' || jq -c . <<<"$rt_json" )"
+    echo
+  } >&2
 
   if [[ "$rt_json" == *targetTime* ]]; then
     warn "--target-time doit tomber DANS la fenêtre ci-dessus. En dehors, le rejeu s'arrête où il"
@@ -826,11 +833,19 @@ cmd_restore() {
   warn "     rôle applicatif dessus — les identifiants de la source ne sont pas conservés."
   echo
 
-  jq . <<<"$manifest" \
-    | sed 's|^|  |'
-  echo
-  echo "  Destination suggérée : cluster/app/<application>/manifests/${newname}.yaml"
-  echo "  (puis l'ajouter au kustomization.yaml du même dossier)"
+  if [[ -t 1 ]]; then
+    jq . <<<"$manifest" | sed 's|^|  |'
+    echo
+    echo "  Destination suggérée : cluster/app/<application>/manifests/${newname}.yaml"
+    echo "  (puis l'ajouter au kustomization.yaml du même dossier)"
+  else
+    jq . <<<"$manifest"
+    {
+      echo
+      echo "  Destination suggérée : cluster/app/<application>/manifests/${newname}.yaml"
+      echo "  (puis l'ajouter au kustomization.yaml du même dossier)"
+    } >&2
+  fi
 }
 
 # --- delete -----------------------------------------------------------------------------------
