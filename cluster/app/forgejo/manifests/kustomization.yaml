@@ -11,6 +11,22 @@ resources:
   # seulement le pod Forgejo qui attend son secret (CreateContainerConfigError, `secretKeyRef`
   # `forgejo-admin` introuvable) — un échec local et lisible.
   - forgejo-admin.sealed.yaml
+  # --- Sauvegarde native de la base (cf. README §Sauvegarde) ---
+  # ⚠️ Ligne à DÉCOMMENTER une fois la clé du compte de service GCP scellée (README §Câblage du
+  # credential GCS). Même raison que pour `forgejo-admin.sealed.yaml` : un `resources:` qui pointe
+  # un fichier absent fait échouer le `kustomize build` ENTIER.
+  #
+  # ⚠️ Tant qu'elle est commentée, l'`ObjectStore` et la `ScheduledBackup` ci-dessous sont posés
+  # mais INOPÉRANTS : le sidecar barman-cloud ne trouve pas son Secret et l'archivage WAL échoue en
+  # boucle. Le symptôme n'est pas un pod en erreur mais `cnpg_pg_stat_archiver_failed_count` qui
+  # monte, et `pg_wal` qui grossit sur le PVC de la base — c'est exactement ce que l'alerte
+  # `CNPGWalArchivingFailing` de [cnpg-monitoring](../../cnpg-monitoring/README.md) attrape.
+  - forgejo-db-gcs.sealed.yaml
+  #
+  # Destination (bucket, credentials, rétention) et sauvegardes de base quotidiennes. Ces deux-là
+  # sont inertes sans le `spec.plugins` de `forgejo-db.yaml` — les trois se déplacent ensemble.
+  - forgejo-db-objectstore.yaml
+  - forgejo-db-scheduledbackup.yaml
   - forgejo-httproute.yaml
   # Filtrage réseau du pod (ingress + egress). ⚠️ Le retirer ne « désactive » pas une protection
   # au sens habituel : il rouvre au pod TOUT le LAN et TOUS les services du cluster.

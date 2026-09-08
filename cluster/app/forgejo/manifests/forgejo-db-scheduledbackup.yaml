@@ -1,0 +1,67 @@
+# Sauvegarde de base quotidienne de `forgejo-db` vers le bucket décrit par
+# `forgejo-db-objectstore.yaml`.
+#
+# À ne pas confondre avec l'ARCHIVAGE WAL, qui est continu et n'a pas d'objet : il démarre dès que
+# `spec.plugins` est posé sur le `Cluster` (cf. forgejo-db.yaml) et tourne toutes les 5 minutes au
+# pire (`archive_timeout = 300`, réglé par CNPG). Les deux sont indissociables — une sauvegarde de
+# base sans WAL ne restaure qu'un instantané, des WAL sans sauvegarde de base ne restaurent rien —
+# et c'est leur combinaison qui donne le PITR.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: forgejo-db-daily
+  namespace: forgejo
+  labels:
+    app.kubernetes.io/name: forgejo
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: database
+spec:
+  # ⚠️ CRON À SIX CHAMPS — le premier est les SECONDES. C'est la robfig/cron de Go, pas la syntaxe
+  # crontab d'un CronJob Kubernetes. Écrit à cinq champs (`0 2 * * *`), il est accepté par l'API et
+  # se décale silencieusement d'un cran : le `0` initial serait lu comme les secondes, `2` comme
+  # les minutes, et la sauvegarde tournerait toutes les heures à HH:02:00.
+  #
+  # 02:00 et non 03:00 : la schedule velero part à 03:00 sur le même nœud, et le PVC de 100Gi de
+  # Forgejo y passe en lecture intégrale. Décaler évite de superposer les deux sur un stockage
+  # node-local unique. Une heure de marge suffit largement pour 10Gi de métadonnées.
+  schedule: "0 0 2 * * *"
+
+  cluster:
+    name: forgejo-db
+
+  # `plugin` — et non `barmanObjectStore`, qui désigne le support IN-TREE, déprécié depuis
+  # CloudNativePG 1.26 et retiré depuis. C'est cette valeur qui aiguille vers le sidecar
+  # barman-cloud injecté par [cnpg-barman-plugin](../../cnpg-barman-plugin/README.md).
+  method: plugin
+  pluginConfiguration:
+    # Nom du plugin CNPG-I, pas celui de l'ObjectStore : la destination est déjà résolue par le
+    # `spec.plugins` du `Cluster` (paramètre `barmanObjectName`). En remettre un ici n'est pas
+    # nécessaire — et un `barmanObjectName` divergent des deux côtés produirait deux destinations
+    # pour une même base.
+    name: barman-cloud.cloudnative-pg.io
+
+  # ⚠️ PAS de `online` / `onlineConfiguration` ici, et ce n'est pas un oubli : la CRD réserve ces
+  # deux champs au mode `volumeSnapshot` (« Whether the default type of backup WITH VOLUME
+  # SNAPSHOTS is online/hot »). Une sauvegarde barman-cloud est TOUJOURS à chaud — le sidecar
+  # encadre la copie par `pg_backup_start` / `pg_backup_stop` et attend l'archivage du WAL de fin
+  # de lui-même. Les poser ici donnerait deux réglages d'apparence load-bearing qui ne gouvernent
+  # rien.
+  #
+  # C'est cette copie à chaud qui est la raison d'être du fichier : cohérente-TRANSACTION, là où
+  # le PVC copié par kopia était cohérente-crash.
+
+  # `self` : l'objet `Backup` produit appartient à cette ScheduledBackup. Supprimer la schedule
+  # emporte donc les objets `Backup` — mais PAS les données dans le bucket, qui ne relèvent que de
+  # `retentionPolicy`. Le choix évite d'accumuler des `Backup` orphelins qu'ArgoCD ne gère pas.
+  backupOwnerReference: self
+
+  # ⚠️ NE PAS mettre `immediate: true` ici. Contrairement au `skipImmediately` de velero, ce champ
+  # n'est pas consommé par le contrôleur — il reste dans la spec et ne crée donc pas de boucle avec
+  # `selfHeal`. Mais il déclenche une sauvegarde à chaque RECRÉATION de l'objet, y compris celles
+  # qu'ArgoCD provoque en renommant ou en re-posant la ressource. La première sauvegarde se
+  # déclenche à la main (cf. README §Opérations), une seule fois.
+  #
+  # Pas de `target` : laissé vide, il retombe sur `cluster.spec.backup.target`, lui-même à
+  # `prefer-standby` par défaut côté CNPG. Avec `instances: 1` il n'y a AUCUN standby, la
+  # sauvegarde part donc du primaire dans tous les cas — écrire `primary` ici ne changerait rien
+  # aujourd'hui et deviendrait un réglage à réexaminer si la base passait en HA.

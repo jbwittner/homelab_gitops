@@ -24,7 +24,16 @@ box, plus d'IP d'origine publiée — cf. [§Réseau](#le-ssh-a-été-coupé).
 - `manifests/namespace.yaml` — ns `forgejo` (wave -1)
 - `manifests/forgejo-db.yaml` — `Cluster` CNPG (l'opérateur génère le service `forgejo-db-rw`
   et le secret `forgejo-db-app`), **co-localisé avec le pod Forgejo** par
-  `affinity.additionalPodAffinity` — cf. §Placement
+  `affinity.additionalPodAffinity` — cf. §Placement. Porte aussi le `spec.plugins` qui met la base
+  sous **archivage WAL continu** — cf. §Sauvegarde
+- `manifests/forgejo-db-objectstore.yaml` — `ObjectStore` barman-cloud : bucket GCS, credentials,
+  rétention 30 j — cf. §Sauvegarde
+- `manifests/forgejo-db-scheduledbackup.yaml` — sauvegarde de base quotidienne à 02:00
+  (⚠️ cron à **six** champs) — cf. §Sauvegarde
+- `manifests/forgejo-db-gcs.secret.example.yaml` — template **versionné et vide** du credential
+  GCS. Scellé **à part** du template multi-documents des trois autres Secrets, pour que tourner la
+  clé GCP n'oblige pas à re-fournir le mot de passe admin et les quatre secrets cryptographiques —
+  cf. §Câblage du credential GCS
 - `manifests/forgejo-admin.secret.yaml` — template **en clair, gitignoré** (`*.secret.yaml`) des
   **trois** Secrets du composant, en trois documents YAML : `forgejo-admin`
   (`username` / `password`, requis au démarrage), `forgejo-secrets` (les quatre secrets
@@ -71,11 +80,10 @@ box, plus d'IP d'origine publiée — cf. [§Réseau](#le-ssh-a-été-coupé).
 > la foulée — sans ces options, le chemin décrit dans
 > [`argocd-cm`](../../infra/argocd/manifests/argocd-cm.yaml) s'applique ici tel quel.
 
-- **`forgejo` n'est PAS dans le périmètre de sauvegarde velero.** La liste
-  `includedNamespaces` de la schedule quotidienne est une **liste blanche** et ne contient
-  aujourd'hui que `test-nginx` (cf. [`velero`](../../infra/velero/README.md)). Tant que
-  `forgejo` n'y est pas ajouté, ni le PVC ni la base ne sont sauvegardés, et **rien ne le
-  signale**. C'est la décision à prendre en premier après la mise en service — voir Opérations.
+- **La sauvegarde du composant passe par DEUX chaînes distinctes, et pas par une seule.** Le PVC
+  `forgejo-data` est copié par kopia dans le périmètre velero ; la base `forgejo-db` a sa propre
+  chaîne native barman-cloud et est **explicitement exclue** de kopia. Aucune des deux ne couvre ce
+  que couvre l'autre — cf. §Sauvegarde.
 - Le mot de passe de la base n'est **pas** géré ici : il vient du secret auto-généré par CNPG
   (`forgejo-db-app`). Ne pas le sceller, ne pas le figer. Le **seul** secret scellé du composant
   est le compte d'administration.
@@ -168,6 +176,45 @@ Ces trois réglages passent par `gitea.config`, qui est un **passe-plat vers `ap
 liste fermée de paramètres du chart : toute section du
 [Configuration Cheat Sheet](https://forgejo.org/docs/v15.0/admin/config-cheat-sheet/) s'y écrit en
 bloc YAML minuscule à clés majuscules, qu'elle figure ou non dans la liste des paramètres du chart.
+
+## Sauvegarde
+
+**Deux chaînes, deux domaines de données, aucune redondance entre elles.**
+
+| Donnée | Chaîne | Cohérence | Rétention | Bucket |
+| --- | --- | --- | --- | --- |
+| PVC `forgejo-data` (100Gi) — dépôts, LFS, paquets, `app.ini` | velero / kopia, 03:00 | **crash** | 30 j (`ttl: 720h`) | `homelab-velero-backups-*` |
+| Base `forgejo-db` (10Gi) — issues, PR, comptes, sessions | barman-cloud (CNPG natif), 02:00 + WAL continu | **transaction** + PITR | 30 j (`retentionPolicy`) | bucket CNPG dédié |
+
+> [!IMPORTANT]
+> **Le PVC de la base est explicitement EXCLU de la copie kopia**
+> ([`volume-policies.yaml`](../../infra/velero/manifests/volume-policies.yaml), règle `pvcLabels`),
+> alors même que le namespace `forgejo` est dans `includedNamespaces`. Ce n'est pas un oubli : une
+> copie kopia d'un volume PostgreSQL vivant vaut un `kill -9` suivi d'un redémarrage, quand la
+> sauvegarde native encadre la copie par `pg_backup_start` / `pg_backup_stop`. Les **objets**
+> Kubernetes du namespace (dont le `Cluster` et ses Secrets auto-générés) restent, eux, sauvegardés
+> par velero — ce sont eux qui permettent de **recréer** la base ; le natif la **remplit**.
+
+Trois fichiers, indissociables. En retirer un ne produit pas une erreur mais une chaîne inerte :
+
+- `forgejo-db.yaml` → `spec.plugins` avec `isWALArchiver: true` — **c'est cette clé qui met la base
+  sous sauvegarde**. Sans elle, rien n'archive. Sans `isWALArchiver`, les sauvegardes de base
+  partent mais aucun WAL ne les complète : elles sont vertes et le PITR n'existe pas.
+- `forgejo-db-objectstore.yaml` → où, avec quelles clés, pour combien de temps.
+- `forgejo-db-scheduledbackup.yaml` → la sauvegarde de base quotidienne. ⚠️ Son `schedule` est un
+  cron **à six champs** (les secondes en premier, robfig/cron de Go) : écrit à cinq champs, il est
+  accepté et se décale silencieusement d'un cran.
+
+> [!CAUTION]
+> **Ce qui rend l'exclusion de kopia défendable, ce sont les alertes** de
+> [cnpg-monitoring](../cnpg-monitoring/README.md) — `CNPGWalArchivingBacklog`,
+> `CNPGBackupTooOld`, `CNPGNoBackupYet`. Les supprimer laisserait la base avec une chaîne unique
+> **et** aucun moyen de la voir mourir. Les deux décisions se tiennent ensemble, exactement comme
+> pour [openbao](../../infra/openbao/README.md).
+
+Ce que ni l'une ni l'autre ne couvre : **une lifecycle rule GCS** posée par erreur sur l'un des deux
+buckets. Les deux outils font leur propre GC, et aucune métrique du cluster ne verrait un bucket
+purgé sous eux.
 
 ## Placement
 
@@ -438,7 +485,9 @@ d'accueil de dépôts indexables.
   ne s'adresse qu'aux robots qui le respectent.
 - **La version minimale de TLS est celle du Gateway**, pas de ce composant
   (`infra/gateway-api/manifests/gateway.yaml`).
-- **`forgejo` n'est toujours pas sauvegardé** (cf. Contraintes).
+- **Le PVC `forgejo-data` n'est copié qu'à chaud, donc de façon cohérente-crash** (cf. §Sauvegarde).
+  Un `git push` en cours au moment du scan kopia peut être capturé à moitié. Contrairement à la
+  base, il n'existe pas de chaîne native pour ce volume.
 
 ## Métriques
 
@@ -574,6 +623,96 @@ Vérification, une fois scellé et le pod redémarré : les sessions ouvertes et
 existants doivent **survivre**. C'est la preuve que les valeurs injectées sont bien celles qui
 étaient déjà en place.
 
+### Câblage du credential GCS
+
+Canal **sealed-secrets**, mais **fichier scellé distinct** de `forgejo-admin.sealed.yaml`. Un
+`SealedSecret` ne se relit pas : mélanger les deux obligerait, à chaque rotation de la clé GCP, à
+re-fournir *aussi* le mot de passe admin et les quatre secrets cryptographiques — c'est-à-dire à
+courir le risque décrit en capitales dans `forgejo-admin.secret.example.yaml`. Deux cycles de vie
+différents, deux fichiers.
+
+> [!IMPORTANT]
+> **Le bucket et le compte de service ne sont pas déclarés ici : ils vivent dans le repo
+> Terraform**, comme ceux de velero et d'openbao. Le contrat attendu :
+> - un bucket **dédié** (distinct de `homelab-velero-backups-*` et du bucket de snapshots openbao —
+>   les trois chaînes font chacune leur propre GC, et une lifecycle rule posée pour l'une casse les
+>   restaurations des autres) ;
+> - un compte de service lié à `roles/storage.objectAdmin` **sur ce bucket**.
+>
+> Rien côté `cluster/` ne vérifie ce contrat. La seule preuve que les deux repos s'accordent est
+> une première sauvegarde qui aboutit.
+
+```bash
+# 1. Reporter le nom du bucket produit par Terraform dans l'ObjectStore (`destinationPath`)
+$EDITOR cluster/app/forgejo/manifests/forgejo-db-objectstore.yaml   # gs://REMPLACER/
+
+# 2. Émettre une clé pour le compte de service — le seul geste manuel, une clé JSON ne se sort pas
+#    d'un état Terraform sans l'y stocker en clair
+gcloud iam service-accounts keys create ./cnpg-sa.json \
+  --iam-account=<compte-de-service-cnpg>@homelab-499008.iam.gserviceaccount.com
+
+# 3. Recopier le template versionné et y coller le JSON ENTIER, tel que téléchargé
+cp cluster/app/forgejo/manifests/forgejo-db-gcs.secret.example.yaml \
+   cluster/app/forgejo/manifests/forgejo-db-gcs.secret.yaml
+$EDITOR cluster/app/forgejo/manifests/forgejo-db-gcs.secret.yaml
+
+# 4. Sceller — le chiffré est lié au couple (forgejo-db-gcs, forgejo)
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/app/forgejo/manifests/forgejo-db-gcs.secret.yaml \
+  > cluster/app/forgejo/manifests/forgejo-db-gcs.sealed.yaml
+
+# 5. DÉCOMMENTER la ligne `forgejo-db-gcs.sealed.yaml` dans manifests/kustomization.yaml,
+#    committer le scellé, pousser.
+
+# 6. Forcer ArgoCD à relire le dépôt sans attendre son cycle de polling (3 min par défaut).
+#    `refresh=hard` et non `normal` : il invalide le CACHE DE MANIFESTES du repo-server. Ici le
+#    changement porte sur le `kustomization.yaml` — une ligne décommentée qui ajoute une
+#    ressource — et c'est exactement le cas où un refresh `normal` peut resservir le rendu
+#    précédent. `--overwrite` est requis : l'annotation est consommée puis reposée à chaque
+#    déclenchement.
+kubectl -n argocd annotate app forgejo argocd.argoproj.io/refresh=hard --overwrite
+kubectl -n argocd get app forgejo              # SYNC STATUS doit repasser Synced
+
+# 7. Une fois l'archivage vérifié (ci-dessous), détruire les deux seules copies en clair
+rm cluster/app/forgejo/manifests/forgejo-db-gcs.secret.yaml ./cnpg-sa.json
+```
+
+**Vérifier que la chaîne est vivante** — dans cet ordre, chaque étape conditionne la suivante :
+
+```bash
+# a. Le sidecar barman-cloud est bien injecté dans le pod d'instance
+kubectl -n forgejo get pod forgejo-db-1 -o jsonpath='{.spec.containers[*].name}{"\n"}'
+
+# b. L'archivage WAL ne prend pas de retard (`ready` doit rester à 0)
+kubectl get --raw "/api/v1/namespaces/forgejo/pods/forgejo-db-1:9187/proxy/metrics" \
+  | grep -E "archive_status|archiver_failed"
+
+# c. Déclencher la première sauvegarde de base à la main — la ScheduledBackup n'a pas
+#    `immediate: true` (cf. le commentaire du fichier), elle attendra 02:00 sinon
+kubectl -n forgejo create -f - <<'EOF'
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  generateName: forgejo-db-manual-
+  namespace: forgejo
+spec:
+  cluster:
+    name: forgejo-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+EOF
+
+# d. ⚠️ NOM LONG obligatoire : `kubectl get backups` répond pour CNPG *ou* velero selon le
+#    contexte, et la réponse « No resources found » ressemble à « rien n'a tourné »
+kubectl -n forgejo get backups.postgresql.cnpg.io
+```
+
+Un `Backup` en `failed` juste après l'installation = credential absent, mal collé (JSON tronqué),
+ou droits IAM insuffisants sur le bucket. Le symptôme côté base n'est pas un pod en erreur mais
+`cnpg_pg_stat_archiver_failed_count` qui monte — ce que
+[`CNPGWalArchivingFailing`](../cnpg-monitoring/README.md) attrape.
+
 ### Mailer
 
 Configuré sur **Brevo** (`smtp-relay.brevo.com:587`, STARTTLS), bloc `mailer:` de `gitea.config`
@@ -613,11 +752,10 @@ relais, avec des identifiants distincts.
   l'init-container `configure-gitea` réaligne le compte sur la valeur du Secret à chaque
   démarrage — c'est le redémarrage qui applique la rotation, pas le commit.
 
-- **Mettre la forge sous sauvegarde** (à décider explicitement, cf. Contraintes) : ajouter
-  `forgejo` à `schedules.daily.template.includedNamespaces` dans
-  [`velero/helm-values.yaml`](../../infra/velero/helm-values.yaml), puis vérifier au backup
-  suivant la présence des `podvolumebackups` attendus — un pour `forgejo-data`, un pour le PVC
-  du pod CNPG :
+- **Vérifier la copie kopia du PVC** — depuis l'exclusion des volumes CNPG, la sauvegarde velero du
+  namespace `forgejo` doit contenir **exactement un** `podvolumebackup` : celui de `forgejo-data`.
+  Deux signifierait que la règle `pvcLabels` ne matche plus ; zéro, que node-agent est absent et
+  que la sauvegarde est verte et vide.
   ```bash
   kubectl -n velero get podvolumebackups -l velero.io/backup-name=<backup>
   ```

@@ -19,6 +19,48 @@ spec:
     # attachements sont sur le PVC `forgejo-data`, pas ici.
     size: 10Gi
 
+  # --- Sauvegarde native ---
+  #
+  # C'est CETTE clé qui met la base sous sauvegarde, pas l'`ObjectStore` ni la `ScheduledBackup` :
+  # elle injecte le sidecar barman-cloud dans le pod d'instance et bascule `archive_command` vers
+  # lui. À partir de son application, l'archivage WAL est CONTINU (un segment toutes les 5 minutes
+  # au pire, `archive_timeout = 300`), indépendamment de toute sauvegarde de base.
+  #
+  # ⚠️ Le pod d'instance est RECRÉÉ à la pose de cette clé (ajout d'un conteneur) : c'est le seul
+  # moment d'indisponibilité de la bascule, quelques secondes, et Forgejo le traverse en erreurs
+  # 500 le temps que la connexion SQL revienne.
+  #
+  # ⚠️ Ne PAS écrire `spec.backup.barmanObjectStore` à la place : c'est le support IN-TREE, retiré
+  # de CloudNativePG depuis la 1.26 (l'opérateur tourne en 1.30). Il serait accepté par la CRD et
+  # ne sauvegarderait rien.
+  #
+  # Les trois pièces sont indissociables et se déplacent ensemble :
+  #   - cette clé                              → archivage WAL continu
+  #   - forgejo-db-objectstore.yaml            → où, avec quelles clés, pour combien de temps
+  #   - forgejo-db-scheduledbackup.yaml        → sauvegardes de base quotidiennes
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      # ⚠️ LOAD-BEARING. Sans `isWALArchiver: true`, le plugin est chargé mais `archive_command`
+      # n'est pas réécrite : les sauvegardes de base partiraient bien dans le bucket, sans aucun
+      # WAL pour les compléter. Elles seraient vertes, et le PITR silencieusement inexistant.
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: forgejo-db-store
+
+  # --- Métriques ---
+  # Expose le collecteur sur le port `metrics` (9187) de chaque pod d'instance. C'est là que se
+  # lisent `cnpg_pg_stat_archiver_*` et `cnpg_collector_last_available_backup_timestamp`, donc
+  # tout ce qui permet de voir mourir la chaîne de sauvegarde.
+  #
+  # ⚠️ `enablePodMonitor` reste à FALSE, et c'est délibéré : l'opérateur poserait bien un
+  # PodMonitor, mais sans le label `release: kube-prometheus-stack` qu'exige le sélecteur de
+  # Prometheus — il ne serait jamais scrapé, et rien ne le dirait. Le PodMonitor est donc écrit à
+  # la main dans [cnpg-monitoring](../../cnpg-monitoring/README.md), comme celui de
+  # velero-monitoring. Les métriques, elles, sont servies sans condition par le collecteur : il
+  # n'y a rien à activer ici.
+  monitoring:
+    enablePodMonitor: false
+
   # --- Co-localisation avec Forgejo ---
   #
   # Ce n'est pas une optimisation de latence, c'est une réduction du domaine de panne. Le stockage
