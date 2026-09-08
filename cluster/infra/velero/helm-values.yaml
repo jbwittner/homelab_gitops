@@ -133,11 +133,21 @@ schedules:
       # Contrepartie assumée — un composant ajouté au cluster n'est PAS couvert tant que son
       # namespace n'est pas ajouté à cette liste, et rien ne le signale.
       #
-      # Périmètre de départ volontairement réduit à un namespace JETABLE : il sert à prouver la
-      # chaîne complète (BSL → kopia → restauration) sans mettre les bases dans la boucle. Élargir
-      # ensuite, un namespace à la fois, en vérifiant à chaque ajout la présence des
+      # Périmètre actuel : `forgejo`. Ce qui y est réellement copié par kopia, c'est le PVC
+      # `forgejo-data` (100Gi) — dépôts Git, LFS, registre de paquets et surtout l'`app.ini` qui
+      # porte les quatre secrets cryptographiques de la forge. C'est LA donnée sans alternative
+      # native du cluster.
+      #
+      # ⚠️ Le PVC de la base `forgejo-db` n'en fait PAS partie, bien que le namespace soit listé :
+      # `manifests/volume-policies.yaml` exclut les volumes de toute base CloudNativePG de la
+      # copie de données, au profit de la sauvegarde native barman-cloud (cohérente-transaction +
+      # PITR). Les OBJETS du namespace, eux, sont bien sauvegardés — Cluster, Secrets, PVC. Le
+      # raisonnement complet est dans le ConfigMap et dans le README, §Contraintes.
+      #
+      # Élargir ensuite, un namespace à la fois, en vérifiant à chaque ajout la présence des
       # `podvolumebackups` attendus :
-      #   - authentik  (PVC Postgres CNPG 5Gi — copie cohérente-crash, cf. README)
+      #   - authentik  (⚠️ sa base CNPG serait exclue par la même règle et n'a pas encore
+      #                d'ObjectStore : l'ajouter ici ne la sauvegarderait PAS)
       #   - monitoring (27Gi dont 20Gi de TSDB Prometheus, reconstructible)
       #
       # ⚠️ `openbao` N'EST PAS UN CANDIDAT : il a été mis dans cette liste, puis retiré, et le

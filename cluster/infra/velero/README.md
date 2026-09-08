@@ -114,12 +114,28 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   déclaratif équivalent est le flag serveur `--schedule-skip-immediately=true`. Corollaire : créer
   ou recréer la Schedule déclenche une sauvegarde immédiate.
 - **La schedule fonctionne en liste blanche : ce qui n'est pas listé n'est pas sauvegardé, sans le
-  dire.** `includedNamespaces` ne contient aujourd'hui que `test-nginx` — périmètre de mise en
-  route, choisi jetable pour éprouver la chaîne complète (BSL → kopia → restauration) sans engager
-  les bases. **Ajouter un composant au cluster ne l'ajoute pas aux sauvegardes** : c'est un geste
-  explicite dans `helm-values.yaml`. Candidats connus, à ouvrir un par un : `authentik` (Postgres
-  CNPG 5Gi), `monitoring` (27Gi, dont 20Gi de TSDB Prometheus reconstructible). `openbao` n'en est
-  **pas** un — exclusion motivée, cf. la contrainte plus haut.
+  dire.** `includedNamespaces` ne contient aujourd'hui que **`forgejo`**. **Ajouter un composant au
+  cluster ne l'ajoute pas aux sauvegardes** : c'est un geste explicite dans `helm-values.yaml`.
+  Candidats connus, à ouvrir un par un : `authentik` (Postgres CNPG 5Gi — ⚠️ lire la contrainte
+  suivante avant), `monitoring` (27Gi, dont 20Gi de TSDB Prometheus reconstructible). `openbao`
+  n'en est **pas** un — exclusion motivée, cf. la contrainte plus haut.
+- **Les PVC des bases CloudNativePG sont exclus de la copie de données** (`volume-policies.yaml`,
+  règle `pvcLabels: {app.kubernetes.io/managed-by: cloudnative-pg}`, 2026-09-08). Même arbitrage
+  que pour openbao : la sauvegarde native barman-cloud
+  ([cnpg-barman-plugin](../../app/cnpg-barman-plugin/README.md)) est cohérente-**transaction** et
+  donne le PITR, là où kopia ne peut copier le volume que de façon cohérente-crash. Garder les deux
+  ne serait pas une ceinture et des bretelles mais un second chemin de restauration à moitié
+  fiable, payé à chaque nuit par la lecture intégrale du volume.
+  - Ce qui tient la décision, exactement comme pour openbao : les alertes de
+    [cnpg-monitoring](../../app/cnpg-monitoring/README.md) (`CNPGWalArchivingBacklog`,
+    `CNPGBackupTooOld`, `CNPGNoBackupYet`…). Les supprimer rend l'exclusion indéfendable.
+  - ⚠️ **Règle cluster-wide, sur un label que l'opérateur pose sur tous ses PVC** — pas une
+    exception par base, qui se ferait oublier à la suivante. Corollaire : le jour où `authentik`
+    entre dans `includedNamespaces`, sa base ne sera couverte par **rien** tant qu'elle n'aura pas
+    son propre `ObjectStore`, cette règle l'ayant déjà sortie de kopia.
+  - Portée : `skip` ne concerne que la **copie de données**. Le `Cluster`, ses Secrets
+    auto-générés et le PVC lui-même restent sauvegardés en tant qu'objets, donc restaurables — ce
+    sont eux qui permettent de **recréer** la base, les données natives la **remplissent**.
 - **Le TTL de 30 jours est une fenêtre de récupération, pas un réglage de taille.** Le raccourcir
   rend peu d'espace : kopia déduplique et ne stocke que des deltas, donc trente snapshots
   quotidiens d'une donnée stable ne pèsent pas trente fois un snapshot. Et l'espace d'un backup
