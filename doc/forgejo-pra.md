@@ -93,7 +93,7 @@ sur `forgejo-db-manual-pljw7` : `online: true`, `beginLSN 0/2E000028 → endLSN 
 ### Faut-il couper Forgejo pendant la copie ? Non
 
 La question revient naturellement, et la réponse est non — mais pas pour la raison qu'on croit.
-« Il n'y a qu'un utilisateur » ne suffit pas : ce qui compte est **qui écrit à 03:00**, humain ou
+« Il n'y a qu'un utilisateur » ne suffit pas : ce qui compte est **qui écrit à 03:00 UTC**, humain ou
 non. État vérifié le 2026-09-08 :
 
 | Écrivain potentiel | Horaire | État réel |
@@ -244,7 +244,7 @@ PVC, et le plus près possible.** Trois raisons indépendantes, toutes dans ce s
    Du disque en avance sur la base se rattrape. De la base en avance sur le disque casse.
 
 3. **Contention d'E/S.** Documentée dans `forgejo-db-scheduledbackup.yaml` : velero lit le PVC de
-   100Gi à 03:00, sur le **même nœud** et le même stockage node-local que la base. L'heure d'écart
+   100Gi à 03:00 UTC, sur le **même nœud** et le même stockage node-local que la base. L'heure d'écart
    n'est pas décorative.
 
 ---

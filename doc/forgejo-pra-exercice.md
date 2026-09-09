@@ -132,7 +132,7 @@ Ils ne sont pas des précautions générales : chacun ferme un mode de panne obs
 >
 > Deux causes, toutes deux normales :
 > - la chaîne barman est plus **jeune** que la dernière sauvegarde velero (relevé le 2026-09-08 :
->   sauvegarde velero à 03:00, fenêtre barman ouverte à 15:02 — aucun recouvrement) ;
+>   sauvegarde velero à 03:00 UTC, fenêtre barman ouverte à 15:02 UTC — aucun recouvrement) ;
 > - aucun WAL n'a été archivé **après** l'instant du PVC. Sur une base au repos, aucun ne l'est :
 >   `archive_timeout` ne force un basculement que s'il y a eu de l'activité.
 >
