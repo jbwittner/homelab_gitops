@@ -589,6 +589,8 @@ ne sait plus s'il a été joué, ni sur quelle volumétrie, ni jusqu'où.
 | 5 | 2026-09-08 | manuelle, commande par commande | `manual-qs7c7` | 6 / 6 **+ connexion à l'interface** | **OK** |
 | 6 | 2026-09-09 | **EN PLACE, sur la production** — `prepare run` + §8 étape A, PVC détruit | `manual-v4tgs` (09:46:29Z) + base `forgejo-db-manual-jhch7` | empreintes avant/après, `git fsck`, alignement base↔disque | **OK au troisième essai** — les deux premiers ont rendu un PVC vide |
 | 7 | 2026-09-09 | **ÉTAPES A ET B EN PLACE** — PVC **et** base détruits, reprise sous le nom d'origine | `manual-dclcd` (10:44:37Z) + base `forgejo-db-manual-2kc7q` | clone de validation, empreintes, alignement base↔disque, `healthz` | **OK, après un défaut IAM bloquant** |
+| 8 | 2026-09-09 | **NAMESPACE ENTIER DÉTRUIT** — `delete namespace forgejo`, les deux volumes avec | `manual-jxlb9` (12:33:10Z) + base `forgejo-db-manual-kksjk` | empreintes, `git fsck`, alignement base↔disque, `healthz`, alertes | **OK en 7 min 14 s** |
+| 9 | 2026-09-09 | drill standard, contrôle de non-régression après exclusion des Secrets | `manual-7xsl8` (13:26:06Z) | 6 familles / 6 | **OK** |
 
 Le passage **1** est celui qui a produit toutes les trouvailles du plan : le `FATAL` de
 `recovery_target_time`, les `ownerReferences` effacées par velero, l'adoption du PVC orphelin. Les
@@ -597,6 +599,43 @@ suivants les vérifient.
 Le passage **5** est le seul à avoir validé la chaîne **de bout en bout** : se connecter à
 l'interface met d'accord le hash venu de la base (barman), le `SECRET_KEY` venu de l'`app.ini`
 (PVC) et la route. Aucun contrôle automatisé ne fait ça.
+
+Le passage **8** est le plus proche d'un sinistre réel : plus de namespace, plus de volumes, plus
+d'inventaire. Il a produit trois enseignements qu'aucun passage antérieur ne pouvait donner.
+
+**L'ordre de reprise n'est pas celui des étapes A puis B.** Un namespace vide est le cas FACILE
+pour velero — celui du drill. On restaure donc d'abord, et on répare ensuite : velero recrée le
+`Namespace`, le PVC et sa donnée, mais il restaure aussi l'**objet** PVC de la base (vide, les
+volumes CloudNativePG étant exclus de la copie) et le `Cluster` tel qu'il était. CNPG adopte ce
+volume vide et démarre dessus — `bootstrap.recovery` n'a jamais lieu. C'est le piège n°3 du plan,
+observé en direct. Il faut purger ces orphelins **avant** de rendre la main à ArgoCD.
+
+**Ce qui disparaît n'est pas la donnée, c'est l'inventaire.** Juste après le crash,
+`cnpg-barman-plugin-script.sh list` affiche « (aucune) » partout. Le catalogue vit dans Kubernetes,
+les données dans le bucket, et rien dans le cluster ne peut confirmer qu'elles existent encore : la
+reprise est la seule preuve. Pire, l'`ObjectStore` recréé ne publie que la génération courante —
+`forgejo-db` et `-v3` sont toujours dans le bucket mais n'apparaissent plus nulle part. Chaque bump
+de `serverName` dégrade donc l'inventaire, ce qui est un argument sérieux contre les bumps gratuits.
+
+**Une restauration velero orpheline les `SealedSecret`.** Les `Secret` restaurés arrivent sans
+`ownerReference`, et le contrôleur refuse alors de s'approprier un objet préexistant. Les quatre
+`SealedSecret` sont restées en `Synced=False`, l'Application `forgejo` en `Degraded` pendant 40 min,
+et une rotation faite dans Git n'aurait plus rien propagé — en silence. Corrigé en excluant des
+sauvegardes les seuls Secrets que Git reproduit (label `velero.io/exclude-from-backup` porté par la
+`SealedSecret`), le drill les recopiant désormais lui-même vers la préprod. Le passage **9** est le
+contrôle de non-régression de ce changement.
+
+> [!NOTE]
+> **Alternative pesée et écartée : déclarer `forgejo-preprod` dans ArgoCD en permanence**, arrêtée,
+> avec ses propres `SealedSecret` scellés pour ce namespace. Elle supprimerait le `copy_object` et
+> serait plus cohérente avec la règle « GitOps, jamais d'impératif ». Trois coûts l'ont fait
+> écarter : elle ferait dormir en permanence dans le cluster une seconde copie des identifiants SMTP
+> et des quatre clés cryptographiques, alors qu'aujourd'hui cette exposition ne dure que le temps de
+> l'exercice ; elle retirerait la propriété « jetable » sur laquelle repose le garde-fou de `down`
+> (qui refuse de supprimer un namespace sans le label `homelab.wittner.tech/drill`) ; et elle
+> imposerait de tourner chaque secret à deux endroits, faute de quoi l'exercice éprouverait des
+> identifiants qui ne sont plus ceux de la production. À rouvrir si le `copy_object` devient
+> lourd — pas avant.
 
 Le passage **7** est le seul à avoir touché **les deux chaînes**, et le seul à avoir trouvé un
 défaut qui rendait le PRA **inopérant** plutôt qu'imparfait : le compte de service GCP n'avait que

@@ -549,6 +549,69 @@ Vérifier que cet instant tombe dans la fenêtre affichée par `cnpg-barman-plug
 > script/cnpg-barman-plugin-script.sh backup     # pg_backup_stop force un basculement de WAL
 > ```
 
+### Étape N — perte du namespace entier
+
+> [!IMPORTANT]
+> **Jouée le 2026-09-09 : `kubectl delete namespace forgejo`, les deux volumes détruits avec.**
+> Reprise complète en **7 min 14 s** (crash 12:36:23 → forge à 200 en 12:43:37), données identiques
+> à l'empreinte. Ce scénario n'était PAS jouable le matin même : il a fallu le `bootstrap.recovery`
+> permanent, le correctif IAM `storage.buckets.get` et les deux chaînes éprouvées séparément.
+>
+> **L'ORDRE EST TOUT, et il n'est pas celui des étapes A puis B.** Le namespace vide est le cas
+> FACILE pour velero (celui du drill), donc on restaure d'abord et on répare ensuite.
+
+```bash
+# 1. Couper ArgoCD sur les TROIS niveaux (cf. étape A, piège d) — forgejo-monitoring compris.
+for a in root app forgejo forgejo-monitoring; do
+  kubectl -n argocd patch application $a --type=merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+done
+
+# 2. Bumper les DEUX serverName, et SEULEMENT MAINTENANT — cf. encadre ci-dessous.
+#    Committer, POUSSER, puis ATTENDRE qu ArgoCD ait vu la revision.
+
+# 3. Restaurer velero. Il recree le Namespace lui-meme : rien a creer a la main.
+script/velero-script.sh restore <backup> -n forgejo
+
+# 4. ⚠️ PURGER LES ORPHELINS CNPG — piege n°3, observe en direct le 2026-09-09.
+#    velero restaure l OBJET PVC forgejo-db-1 (10 Gi, VIDE : volume-policies exclut les volumes
+#    CloudNativePG) et le Cluster tel qu il etait. CNPG adopte ce volume vide et demarre dessus,
+#    donc bootstrap.recovery N A JAMAIS LIEU. Le pod part en CrashLoopBackOff — visible ici, mais
+#    il aurait pu donner une base d apparence saine et vide.
+kubectl -n forgejo delete cluster forgejo-db          # emporte le pod et le PVC
+kubectl -n forgejo delete svc forgejo-db-r forgejo-db-ro forgejo-db-rw --ignore-not-found
+
+# 5. Rendre la main a ArgoCD : il recree le Cluster depuis Git, en bootstrap.recovery.
+#    Controle : le pod doit s appeler <cluster>-1-full-recovery-*, JAMAIS -1-initdb-*.
+
+# 6. Sauvegarde de base IMMEDIATE sur la nouvelle generation, puis redemarrer la forge.
+script/cnpg-barman-plugin-script.sh backup
+kubectl -n forgejo delete pod -l app.kubernetes.io/name=forgejo
+```
+
+> [!WARNING]
+> **Ce que la perte du namespace fait disparaître, et qui n'est pas la donnée.**
+>
+> **L'inventaire local, en entier.** Juste après le crash, `cnpg-barman-plugin-script.sh list`
+> affiche « (aucune) » partout — bases, sauvegardes, schedules. C'est le corollaire du piège n°4 :
+> le catalogue vit dans Kubernetes, les données vivent dans le bucket. Rien dans le cluster ne peut
+> confirmer que les sauvegardes existent encore ; **la reprise est la seule preuve**. C'est
+> exactement la situation d'un vrai sinistre, et le moment où l'on est le plus tenté de conclure au
+> pire.
+>
+> **Les fenêtres des générations ANTÉRIEURES.** L'`ObjectStore` recréé ne publie dans
+> `status.serverRecoveryWindow` que ce que le cluster courant archive — après la reprise du
+> 2026-09-09, seule `forgejo-db-v4` y figurait, alors que `forgejo-db` et `-v3` sont toujours dans
+> le bucket. Leurs données restent restaurables en nommant explicitement le `serverName` dans
+> `externalClusters`, mais **plus aucun inventaire local ne dit qu'elles existent**. Seul
+> `gcloud storage ls` le dirait. C'est un argument de poids contre les bumps de génération
+> gratuits : chacun dégrade l'inventaire.
+
+> [!CAUTION]
+> **Le bump de `serverName` se fait APRÈS la destruction, jamais avant.** Appliqué à un cluster
+> vivant, il le fait archiver immédiatement sous la nouvelle génération, qui cesse d'être vide — et
+> la reprise échoue ensuite sur « Expected empty archive ». C'est le sort de `forgejo-db-v2` le
+> 2026-09-09, brûlé par un `initdb` accidentel de quelques minutes.
+
 ### Étape A — le PVC et l'applicatif (scénarios B, C, D)
 
 > [!CAUTION]
