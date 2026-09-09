@@ -26,8 +26,12 @@
 # dernière valeur, sans trou visible dans les courbes.
 #
 # Ce que ce dashboard ne montre PAS, à dessein :
-#   - les PULL REQUESTS. Forgejo n'expose aucune métrique de PR — `gitea_issues` ne compte que
-#     les issues. Ce n'est pas un oubli de requête, la donnée n'existe pas.
+#   - les PULL REQUESTS À PART. ⚠️ Elles ne sont pas absentes : dans Forgejo une PR EST une ligne
+#     de la table `issue` (`is_pull = true`), et le collecteur compte cette table SANS filtrer
+#     (`models/activities/statistic.go` : `Table("issue").GroupBy("is_closed")`). Les séries
+#     `gitea_issues*` additionnent donc issues ET PR, y compris `issues_by_repository`, et une PR
+#     fusionnée compte comme FERMÉE. Aucune requête ne peut les séparer — la distinction n'existe
+#     qu'en base. C'est la raison des libellés « + PR » dans les panneaux.
 #   - le trafic HTTP (requêtes, codes de retour, latence). Le collecteur n'expose que des
 #     comptages d'objets ; il n'y a ni histogramme de requêtes ni compteur de clones.
 #   - la base PostgreSQL — dashboard « PostgreSQL — cnpg », variable `forgejo-db`
@@ -361,7 +365,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`gitea_issues_open`. Les pull requests ne sont PAS comptées : Forgejo n'expose aucune métrique de PR (cf. en-tête du fichier).",
+          "description": "`gitea_issues_open` — ⚠️ issues ET pull requests confondues. Le collecteur compte la table `issue` sans filtrer `is_pull`, et une PR y est une ligne comme une autre. Rien ne permet de les séparer côté métriques.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -417,7 +421,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Issues ouvertes",
+          "title": "Ouverts (issues + PR)",
           "type": "stat"
         },
         {
@@ -669,7 +673,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ `gitea_issues` compte les issues, PAS les pull requests — Forgejo n'expose aucune métrique de PR. Un dépôt qui ne travaille qu'en PR reste donc plat ici, ce qui n'est pas une panne.",
+          "description": "⚠️ Ces courbes additionnent issues ET pull requests : dans Forgejo une PR est une ligne de la table `issue` (`is_pull = true`) et le collecteur compte la table entière. Deux conséquences avant de lire un chiffre — une PR FUSIONNÉE compte comme « fermée », et un dépôt qui ne travaille qu'en PR fait quand même monter ces courbes. Les séparer demanderait une autre source que `/metrics` (cf. README §Métriques).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -806,7 +810,7 @@ data:
               "refId": "E"
             }
           ],
-          "title": "Issues",
+          "title": "Issues et pull requests",
           "type": "timeseries"
         },
         {
@@ -814,7 +818,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Répartition des issues par dépôt. ⚠️ Ce panneau dépend de `[metrics] ENABLED_ISSUE_BY_REPOSITORY`, posé dans helm-values.yaml : coupé, la métrique `gitea_issues_by_repository` n'est pas émise du tout et le tableau est vide sans erreur. Le label `repository` porte le nom COMPLET (`propriétaire/dépôt`), et il fait entrer des noms de dépôts privés dans Prometheus — c'est la contrepartie assumée de ce panneau, et la raison pour laquelle `ENABLED_ISSUE_BY_LABEL` reste coupé.",
+          "description": "Répartition par dépôt — ⚠️ issues ET pull requests, ouvertes comme fermées (la requête amont ne filtre ni `is_pull` ni `is_closed`). ⚠️ Ce panneau dépend de `[metrics] ENABLED_ISSUE_BY_REPOSITORY`, posé dans helm-values.yaml : coupé, la métrique `gitea_issues_by_repository` n'est pas émise du tout et le tableau est vide sans erreur. Le label `repository` porte le nom COMPLET (`propriétaire/dépôt`), et il fait entrer des noms de dépôts privés dans Prometheus — c'est la contrepartie assumée de ce panneau, et la raison pour laquelle `ENABLED_ISSUE_BY_LABEL` reste coupé.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -842,7 +846,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Issues"
+                  "options": "Issues + PR"
                 },
                 "properties": [
                   {
@@ -868,7 +872,7 @@ data:
             "footer": {
               "countRows": false,
               "fields": [
-                "Issues"
+                "Issues + PR"
               ],
               "reducer": [
                 "sum"
@@ -879,7 +883,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Issues"
+                "displayName": "Issues + PR"
               }
             ]
           },
@@ -899,7 +903,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Issues par dépôt",
+          "title": "Issues et PR par dépôt",
           "transformations": [
             {
               "id": "organize",
@@ -917,7 +921,7 @@ data:
                 },
                 "renameByName": {
                   "repository": "Dépôt",
-                  "Value": "Issues"
+                  "Value": "Issues + PR"
                 }
               }
             }

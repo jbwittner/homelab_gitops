@@ -657,9 +657,23 @@ cumulés : `rate()` et `increase()` n'ont aucun sens dessus, et **la fréquence 
 charge SQL directe**. D'où l'`interval: 60s` du ServiceMonitor — le premier levier si la base
 souffre est de le porter à `5m`.
 
-Il n'y a **ni métrique de pull request** (`gitea_issues` ne compte que les issues), **ni compteur
-de requêtes HTTP, de clones ou de latence**. Le collecteur ne sait que compter des objets. Tout ce
-qui relève du trafic reste hors de portée de cette source.
+> [!WARNING]
+> **Les pull requests sont comptées avec les issues, et rien ne les sépare.** Dans Forgejo une PR
+> **est** une ligne de la table `issue` (`is_pull = true`), et le collecteur compte cette table
+> sans filtrer (`models/activities/statistic.go` :
+> `Select("COUNT(*) …").Table("issue").GroupBy("is_closed")`). Donc `gitea_issues`,
+> `gitea_issues_open`, `gitea_issues_closed` **et** `gitea_issues_by_repository` additionnent les
+> deux — et une PR **fusionnée** compte comme « fermée ». Les panneaux du dashboard portent le
+> libellé « + PR » pour cette raison.
+>
+> Séparer les deux demanderait une **autre source** : `/metrics` ne le peut pas, quelle que soit la
+> requête PromQL. La seule voie sans nouveau composant serait un `customQueriesConfigMap` sur le
+> `Cluster` CNPG (SQL sur `issue.is_pull` / `pull_request.has_merged`, exporté par le collecteur
+> d'instance déjà scrapé) — au prix d'un **couplage au schéma de Forgejo**, qui casserait en
+> silence à un bump majeur. Non fait, décision ouverte.
+
+Il n'y a par ailleurs **aucun compteur de requêtes HTTP, de clones ou de latence** : le collecteur
+ne sait que compter des objets. Tout ce qui relève du trafic reste hors de portée de cette source.
 
 Deux réglages de cardinalité, posés dans `gitea.config.metrics` :
 
