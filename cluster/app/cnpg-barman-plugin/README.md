@@ -24,6 +24,13 @@ release, deux `targetRevision` suivis séparément par Renovate → deux Applica
 - `helm-values.yaml` — Deployment du plugin uniquement : ressources, contextes de sécurité, CRD.
   Aucune configuration de bucket n'y vit
 
+L'état des sauvegardes se lit dans le dashboard « Sauvegardes PostgreSQL — barman-cloud »
+(`manifests/dashboard-cnpg-barman-plugin.yaml` de
+[kube-prometheus-stack](../kube-prometheus-stack/README.md)), pendant du dashboard velero. Il ne
+regarde pas ce Deployment — qui ne transporte aucune donnée — mais les métriques du **sidecar**
+servies sur l'endpoint 9187 de chaque pod d'instance, et les CRs `Backup` exposés par
+kube-state-metrics.
+
 ## Contraintes
 
 - **Le plugin DOIT tourner dans le namespace de l'opérateur** (`cnpg-system`) : c'est là que

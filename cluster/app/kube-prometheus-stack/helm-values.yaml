@@ -224,6 +224,9 @@ kube-state-metrics:
       - apiGroups: ["velero.io"]
         resources: ["backups", "podvolumebackups", "restores", "schedules"]
         verbs: ["list", "watch"]
+      - apiGroups: ["postgresql.cnpg.io"]
+        resources: ["clusters", "backups"]
+        verbs: ["list", "watch"]
   customResourceState:
     enabled: true
     config:
@@ -307,3 +310,101 @@ kube-state-metrics:
                   info:
                     labelsFromPath:
                       phase: [status, phase]
+
+          # --- Une série par objet Cluster (CloudNativePG) ---
+          #
+          # POURQUOI. Le collecteur d'instance (port 9187) ne parle que des instances qui RÉPONDENT :
+          # une base dont tous les pods sont morts disparaît de Prometheus au lieu de passer au
+          # rouge. Ces séries-ci viennent de l'API Kubernetes, pas de PostgreSQL — elles survivent
+          # à la base et sont la seule façon d'afficher « 0 instance prête sur 1 attendue ».
+          - groupVersionKind:
+              group: postgresql.cnpg.io
+              version: v1
+              kind: Cluster
+            metricNamePrefix: cnpg_cluster_object
+            labelsFromPath:
+              # ⚠️ `cnpg_cluster` et NON `cnpg_io_cluster` : ce dernier est le label posé par le
+              # PodMonitor sur les métriques du collecteur (cf. cnpg-monitoring/manifests/podmonitor.yaml).
+              # Deux sources, deux noms — c'est délibéré, une collision rendrait indistinguables
+              # des séries qui n'ont ni la même fraîcheur ni la même sémantique. Les requêtes qui
+              # croisent les deux passent par `label_replace`.
+              cnpg_cluster: [metadata, name]
+              # KSM n'ajoute PAS le namespace de la CR : le label `namespace` des séries qu'il
+              # produit est celui du pod kube-state-metrics (monitoring), posé au relabeling. Sans
+              # cette ligne, l'information « dans quel namespace vit cette base » est perdue.
+              db_namespace: [metadata, namespace]
+            metrics:
+              - name: info
+                help: "Cluster PostgreSQL existant (1 par objet Cluster)"
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      # Texte libre de l'opérateur (« Cluster in healthy state », « Setting up
+                      # primary »…), pas une énumération stable : à afficher, pas à comparer.
+                      phase: [status, phase]
+                      primary: [status, currentPrimary]
+              - name: instances
+                help: "Instances désirées"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, instances]
+                    nilIsZero: true
+              - name: ready_instances
+                help: "Instances prêtes"
+                each:
+                  type: Gauge
+                  gauge:
+                    # `nilIsZero` LOAD-BEARING : le champ est absent — pas à zéro — tant qu'aucune
+                    # instance n'est prête, c'est-à-dire exactement dans le cas qu'on veut voir.
+                    path: [status, readyInstances]
+                    nilIsZero: true
+
+          # --- Une série par objet Backup (CloudNativePG) ---
+          #
+          # Même raison que pour velero : les métriques du sidecar barman-cloud ne décrivent que la
+          # DERNIÈRE sauvegarde (`last_available_backup_timestamp`). La liste des sauvegardes
+          # existantes est une propriété d'OBJETS, et KSM est le seul chemin déclaratif vers un
+          # tableau « une ligne par sauvegarde ».
+          #
+          # ⚠️ Une sauvegarde reste restaurable après suppression de son CR `Backup` : les objets
+          # vivent dans le bucket, la rétention est réglée dans l'`ObjectStore`. Ce que ces séries
+          # décrivent, c'est l'INVENTAIRE KUBERNETES, pas le contenu du dépôt.
+          - groupVersionKind:
+              group: postgresql.cnpg.io
+              version: v1
+              kind: Backup
+            metricNamePrefix: cnpg_backup_object
+            labelsFromPath:
+              backup: [metadata, name]
+              db_namespace: [metadata, namespace]
+              cnpg_cluster: [spec, cluster, name]
+            metrics:
+              - name: info
+                help: "Sauvegarde CloudNativePG existante (1 par objet Backup)"
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      # En minuscules chez CloudNativePG (`completed`, `running`, `failed`) — là où
+                      # velero les capitalise. Les value mappings du dashboard suivent cette casse.
+                      phase: [status, phase]
+                      method: [status, method]
+                      # Nom de la sauvegarde dans le dépôt barman (`20260908T150207`) : c'est lui,
+                      # pas le nom du CR, qu'attend `barman-cloud-restore --backup-id`.
+                      backup_id: [status, backupId]
+              - name: start_time
+                help: "Début de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, startedAt]
+              - name: stop_time
+                help: "Fin de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    # Pas de `nilIsZero` : une sauvegarde en cours n'a pas encore ce champ, et une
+                    # valeur 0 s'afficherait en « 1970 » au lieu de rester vide.
+                    path: [status, stoppedAt]

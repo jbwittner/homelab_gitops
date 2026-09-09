@@ -44,6 +44,16 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - `manifests/dashboard-logs.yaml` — dashboard « Logs — applications » (datasource
   [Loki](../loki/README.md)) : débit, niveaux, erreurs, conteneurs les plus bavards, journal
   filtrable
+- `manifests/dashboard-velero.yaml` — dashboard « Sauvegardes — velero » : fraîcheur de la
+  dernière sauvegarde planifiée, résultats et durées, tableau une ligne par sauvegarde, copie
+  kopia des volumes, maintenance du dépôt, restaurations
+- `manifests/dashboard-cnpg.yaml` — dashboard « PostgreSQL — cnpg » : état des `Cluster`,
+  réplication, connexions, volumétrie, activité et cache, deadlocks et fichiers temporaires, âge
+  des XID, checkpoints et WAL, santé de l'opérateur. Variables Base / Base de données
+- `manifests/dashboard-cnpg-barman-plugin.yaml` — dashboard « Sauvegardes PostgreSQL —
+  barman-cloud » : fraîcheur et fenêtre PITR, tableau une ligne par base et une ligne par CR
+  `Backup`, archivage WAL, coût du sidecar. Pendant du dashboard velero pour la chaîne de
+  sauvegarde des bases — les deux ne se recouvrent pas
 - `manifests/dashboard-alertes.yaml` — dashboard « Alertes — cluster » : tuiles critiques /
   warnings / pending / chaîne d'alerting, tableau des alertes **firing et pending** avec leur
   ancienneté, historique par alerte, courbe par sévérité. Variables Composant (openbao / velero /
@@ -254,6 +264,53 @@ avant d'y toucher :
   d'où une variable `custom` et non un `label_values()`.
 - Le filtre **Niveau n'agit que sur le panneau Logs**, volontairement : appliqué partout, il
   ferait afficher zéro à la tuile « Erreurs/s » dès qu'on sélectionne `info`.
+
+### Objets exposés par kube-state-metrics
+
+Trois familles de CRs sont converties en séries par `kube-state-metrics.customResourceState`
+(`helm-values.yaml`) : `velero.io` (Backup, PodVolumeBackup) et `postgresql.cnpg.io`
+(Cluster, Backup). Chaque famille demande **deux** blocs, et l'oubli du second est silencieux :
+
+- `rbac.extraRules` — sans la règle `list`/`watch` sur le groupe d'API, KSM ne voit pas les CRs et
+  les séries restent vides **sans erreur dans les logs**
+- `customResourceState.config` — la définition des métriques
+
+Pourquoi ce détour plutôt que les métriques natives : celles des composants décrivent la
+**dernière** exécution (`velero_backup_tarball_size_bytes`,
+`barman_cloud_cloudnative_pg_io_last_available_backup_timestamp`) et sont écrasées à chaque
+passage. La liste des sauvegardes existantes est une propriété d'**objets** — KSM est le seul
+chemin déclaratif vers un tableau « une ligne par sauvegarde ».
+
+Deux pièges, tous deux vérifiés sur le cluster :
+
+- **KSM n'ajoute pas le namespace de la CR.** Le label `namespace` des séries produites est celui
+  du pod kube-state-metrics (`monitoring`), posé au relabeling. Les ressources CNPG déclarent donc
+  un `db_namespace: [metadata, namespace]` explicite ; les séries velero, plus anciennes, ne
+  l'ont pas et perdent l'information.
+- **Deux sources ne nomment pas la même base pareil.** KSM étiquette `cnpg_cluster`
+  (`labelsFromPath`), le collecteur d'instance étiquette `cnpg_io_cluster` (`podTargetLabels` du
+  PodMonitor de [cnpg-monitoring](../cnpg-monitoring/README.md)). C'est délibéré — les deux
+  sources n'ont ni la même fraîcheur ni la même sémantique, l'une survit à la mort de la base et
+  l'autre non. Les requêtes qui les croisent passent par `label_replace` ; sans lui la jointure
+  est vide, sans erreur.
+
+Valider un changement de cette configuration **avant** de le pousser (une config refusée fait
+planter KSM, donc tout le dashboarding cœur) :
+
+```sh
+yq '.["kube-state-metrics"].customResourceState.config' \
+  cluster/app/kube-prometheus-stack/helm-values.yaml > /tmp/crs.yaml
+kubectl config view --minify --flatten > /tmp/kubeconfig.yaml
+docker run --rm -p 18081:8080 -v /tmp/crs.yaml:/crs.yaml -v /tmp/kubeconfig.yaml:/kubeconfig.yaml \
+  registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0 \
+  --custom-resource-state-only --custom-resource-state-config-file=/crs.yaml \
+  --kubeconfig=/kubeconfig.yaml
+curl -s localhost:18081/metrics | grep '^cnpg_'
+```
+
+Le binaire ne valide la config qu'**après** avoir joint l'API : lancé sans cluster accessible, il
+échoue sur la connexion avant d'avoir regardé le fichier. C'est pourquoi la commande ci-dessus
+utilise le vrai kubeconfig — en lecture seule (`list`/`watch`).
 
 ### Dashboard « Alertes — cluster »
 

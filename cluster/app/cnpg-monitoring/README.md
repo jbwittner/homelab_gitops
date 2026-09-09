@@ -117,10 +117,12 @@ en paraissant correcte.
 
 ## Non retenu
 
-- **Un dashboard Grafana.** Sa place serait
+- **Un dashboard Grafana.** Sa place est
   [kube-prometheus-stack](../kube-prometheus-stack/README.md), comme pour velero et argocd : le
   câblage côté Grafana appartient au composant qui porte Grafana. Ici on ne pose que ce qui produit
-  le signal.
+  le signal. Les deux dashboards y vivent désormais — « PostgreSQL — cnpg » et « Sauvegardes
+  PostgreSQL — barman-cloud » — et ils consomment le PodMonitor de ce composant : le supprimer les
+  vide en même temps qu'il rend les alertes muettes.
 - **Des alertes de santé PostgreSQL** (réplication, connexions, taille de base). Ce composant ne
   couvre que la **sauvegarde** — c'est ce qui justifie l'exclusion de velero. Le reste serait un
   ajout confortable, sans rien qui en dépende.

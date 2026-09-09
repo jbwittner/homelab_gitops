@@ -29,5 +29,7 @@ resources:
   - dashboard-ressources-volumes.yaml
   - dashboard-logs.yaml
   - dashboard-velero.yaml
+  - dashboard-cnpg.yaml
+  - dashboard-cnpg-barman-plugin.yaml
   - dashboard-alertes.yaml
   - servicemonitors-argocd.yaml

@@ -22,6 +22,13 @@ déclarées par les applications consommatrices — aujourd'hui
 - [`cnpg-monitoring`](../cnpg-monitoring/README.md) — PodMonitor + alertes sur l'état de cette
   chaîne. **Load-bearing** : les PVC des bases CNPG sont exclus de la copie kopia de velero, ces
   alertes sont ce qui rend l'exclusion défendable.
+- [`kube-prometheus-stack`](../kube-prometheus-stack/README.md) — porte le dashboard
+  « PostgreSQL — cnpg » (`manifests/dashboard-cnpg.yaml`), qui lit le PodMonitor de
+  `cnpg-monitoring` et les CRs `Cluster` exposés par kube-state-metrics. ⚠️ Les métriques de
+  l'opérateur lui-même ne sont **pas** scrapées : `helm-values.yaml` n'active pas
+  `monitoring.podMonitorEnabled`, et l'activer ne suffirait pas — le PodMonitor rendu par le chart
+  ne porte pas le label `release: kube-prometheus-stack` qu'attend le sélecteur de Prometheus.
+  Ce que le dashboard sait dire de l'opérateur vient donc de kube-state-metrics et de cadvisor.
 
 ## Contraintes
 
