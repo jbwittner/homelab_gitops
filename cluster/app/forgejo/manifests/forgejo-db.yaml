@@ -19,6 +19,41 @@ spec:
     # attachements sont sur le PVC `forgejo-data`, pas ici.
     size: 10Gi
 
+  # --- Reprise depuis le bucket ---
+  #
+  # ⚠️ CE BLOC N'EST LU QU'À LA CRÉATION DU CLUSTER. Sur un cluster déjà bootstrappé, CNPG ne le
+  # relit jamais : il est inerte tant que le `Cluster` existe, et ne reprend un sens que le jour où
+  # on le SUPPRIME pour le reconstruire depuis les sauvegardes. Ce n'est donc pas un résidu à
+  # nettoyer — c'est la procédure de reprise, écrite à l'avance et versionnée.
+  #
+  # POURQUOI IL EST ICI plutôt que dans un manifeste `forgejo-db-restore.yaml` : `forgejo-db-rw` et
+  # `forgejo-db-app` sont DÉRIVÉS du nom du `Cluster`. Une reprise sous un autre nom obligerait à
+  # suivre dans `helm-values.yaml` (`gitea.config.database.HOST` et `additionalConfigFromEnvs`), à
+  # chaque sinistre, et le nom dériverait un peu plus à chaque fois. En reprenant SOUS LE MÊME NOM,
+  # la forge n'a jamais rien à changer : c'est le `serverName` qui porte les générations.
+  #
+  # ⚠️ `cnpg-barman-plugin-script.sh restore` REFUSE de générer ce manifeste sous le nom de sa
+  # source, et il a raison : il ne peut pas garantir que le `serverName` d'ÉCRITURE sera bumpé. Ce
+  # bump est fait plus bas, à la main. Sans lui, le cluster repris archiverait par-dessus les WAL
+  # dont il vient et détruirait sa propre source (piège n°6 du script).
+  #
+  # Pas de `recoveryTarget` : on rejoue TOUT le WAL disponible et on atterrit au dernier point
+  # archivé. Un `targetTime` figé dans Git serait faux dès la reprise suivante. Pour viser un
+  # instant précis — l'alignement avec le PVC du §1 du plan — le passer à la main au moment de la
+  # reprise, puis le retirer.
+  bootstrap:
+    recovery:
+      source: origin
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: forgejo-db-store
+          # serverName de LECTURE : celui de la génération PRÉCÉDENTE, où sont les sauvegardes à
+          # rejouer. À faire suivre d'une génération à chaque reprise, avec celui d'écriture.
+          serverName: forgejo-db
+
   # --- Sauvegarde native ---
   #
   # C'est CETTE clé qui met la base sous sauvegarde, pas l'`ObjectStore` ni la `ScheduledBackup` :
@@ -51,6 +86,19 @@ spec:
       isWALArchiver: true
       parameters:
         barmanObjectName: forgejo-db-store
+        # ⚠️ serverName d'ÉCRITURE, explicite et OBLIGATOIREMENT distinct de celui lu par
+        # `bootstrap.recovery` ci-dessus. Omis, il vaudrait le nom du `Cluster` (`forgejo-db`) :
+        # le cluster repris archiverait alors par-dessus les WAL de sa source et DÉTRUIRAIT la
+        # sauvegarde dont il vient. C'est le piège n°6 de `cnpg-barman-plugin-script.sh`, et c'est
+        # la seule raison pour laquelle le script refuse de restaurer sous le nom d'origine.
+        #
+        # ⚠️ À INCRÉMENTER À CHAQUE REPRISE (v2 → v3 → …), en recopiant l'ancienne valeur dans
+        # `externalClusters[0].plugin.parameters.serverName`. Les deux se déplacent ensemble.
+        #
+        # ⚠️ Juste après une reprise, ce serverName n'a AUCUNE sauvegarde de base : la fenêtre PITR
+        # de la nouvelle génération est vide jusqu'à la première. En prendre une IMMÉDIATEMENT —
+        # `script/cnpg-barman-plugin-script.sh backup` — sans attendre la ScheduledBackup.
+        serverName: forgejo-db-v2
 
   # --- Métriques ---
   # Expose le collecteur sur le port `metrics` (9187) de chaque pod d'instance. C'est là que se
