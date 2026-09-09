@@ -4,3 +4,4 @@ pub-cert.pem
 *sealed-secrets-key*.yaml
 argocd-deploy-key
 argocd-deploy-key.pub
+.DS_Store

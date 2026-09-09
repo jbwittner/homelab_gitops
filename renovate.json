@@ -9,8 +9,7 @@
   "internalChecksFilter": "strict",
   "ignorePaths": [
     "archive/**",
-    "docs/**",
-    "examples/**"
+    "doc/**"
   ],
   "argocd": {
     "managerFilePatterns": ["/\\.app\\.yaml$/", "/\\.appset\\.yaml$/"]

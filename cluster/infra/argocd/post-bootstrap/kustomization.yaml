@@ -16,15 +16,15 @@ namespace: argocd
 # notifications (Grafana) et l'annotation `managed` du Secret de notifications sont dans ce cas :
 # inertes tant que leur interlocuteur n'existe pas, mais sans conséquence sur le démarrage d'Argo.
 resources:
-  # --- À DÉCOMMENTER APRÈS SCELLEMENT. Les deux fichiers `.sealed.yaml` ne sont pas dans le
-  # repo : ils se produisent avec `kubeseal` depuis le cluster (procédures dans le README,
-  # §Notifications et §SSO). Une ligne pointant un fichier absent casse `kustomize build` et met
-  # l'Application self-managed en erreur — d'où les lignes commentées plutôt que des squelettes
-  # à faux chiffré, que le contrôleur rejetterait de toute façon.
+  # --- À DÉCOMMENTER QUAND LEUR INTERLOCUTEUR EXISTE. Les deux fichiers `.sealed.yaml` SONT
+  # dans le repo (scellés), mais restent hors du build tant que leur destinataire est absent :
+  # authentik pour l'OIDC, une clé d'API Grafana pour les notifications. Procédures dans le
+  # README, §Notifications et §SSO.
   #
   # `argocd-notifications.sealed.yaml` : clé `grafana-api-key`. Sans lui, le
   # notifications-controller tourne avec un Secret vide → aucune annotation Grafana (échec
-  # silencieux). Son consommateur (kube-prometheus-stack) est de toute façon en `.noapp.yaml`.
+  # silencieux). ⚠️ Son consommateur, kube-prometheus-stack, est bien DÉPLOYÉ
+  # (`kube-prometheus-stack.app.yaml`) : c'est la clé d'API Grafana qui reste à produire.
 #   - argocd-notifications.sealed.yaml
   # --- DÉSACTIVÉ : authentik non déployé. ---
 #   - argocd-oidc.sealed.yaml

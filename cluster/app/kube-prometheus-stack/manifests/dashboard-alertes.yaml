@@ -545,14 +545,14 @@ data:
           {
             "allValue": ".*",
             "current": {},
-            "description": "Filtre par PRÉFIXE d'alertname, et non par namespace : les règles bâties sur absent() ne portent que les labels de leurs matchers, donc plusieurs alertes openbao n'ont aucun label namespace. Filtrer par namespace en masquerait la moitié sans le dire.",
+            "description": "Filtre par PRÉFIXE d'alertname, et non par namespace : les règles bâties sur absent() ne portent que les labels de leurs matchers, donc plusieurs alertes bâties sur absent() (CNPGMetricsAbsent, ForgejoDeploymentMissing) n'ont aucun label namespace. Filtrer par namespace en masquerait la moitié sans le dire.",
             "hide": 0,
             "includeAll": true,
             "label": "Composant",
             "multi": true,
             "name": "composant",
             "options": [],
-            "query": "OpenBao : OpenBao.*, Velero : Velero.*, OpenEBS : OpenEBS.*, Kubernetes (chart) : Kube.*",
+            "query": "CNPG : CNPG.*, Forgejo : Forgejo.*, Velero : Velero.*, OpenEBS : OpenEBS.*, Kubernetes (chart) : Kube.*",
             "queryValue": "",
             "skipUrlSync": false,
             "type": "custom"

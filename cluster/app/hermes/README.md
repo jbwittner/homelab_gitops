@@ -6,7 +6,7 @@
 c'est-à-dire le seul mode d'Hermes qui soit un service long. Un `StatefulSet` mono-replica porte
 trois choses dans le même conteneur, supervisées par s6-overlay :
 
-- la **passerelle messagerie** (Telegram par défaut) — aucun port entrant ;
+- la **passerelle messagerie** (**Discord** : `DISCORD_ALLOWED_USERS` dans `manifests/config/hermes.env`, seule plateforme câblée) — aucun port entrant ;
 - le **serveur d'API OpenAI-compatible** sur `8642`, protégé par `API_SERVER_KEY` ;
 - le **dashboard web** sur `9119`, derrière la gate d'authentification de l'image.
 
@@ -21,9 +21,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 
 ## Fichiers
 
-- `hermes.app.yaml` — Application (archétype (c), path → `manifests/`). Livré en
-  **`.noapp.yaml`** : le glob de `app.bootstrap.yaml` ne le ramasse pas tant qu'il n'est pas
-  renommé (cf. §Activation).
+- `hermes.app.yaml` — Application (archétype (c), path → `manifests/`). **Actif** : le glob
+  `{*.app.yaml,*.appset.yaml}` de `app.bootstrap.yaml` le ramasse.
 - `manifests/namespace.yaml` — ns `hermes` (`sync-wave: -1`), **sans** label PodSecurity
   restrictif
 - `manifests/hermes-env.sealed.yaml` — `SealedSecret` : `API_SERVER_KEY` et identifiants du
@@ -33,13 +32,20 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   dashboard), assemblé en ConfigMap par le `configMapGenerator` du `kustomization.yaml`
 - `manifests/config/hermes.env` — variables d'environnement **non secrètes** du conteneur
   (`KEY=value`), assemblées en ConfigMap `hermes-vars` et injectées par `envFrom`
+- `manifests/config/profile` — profil shell semé par l'initContainer, également monté par le
+  `configMapGenerator`
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`,
   initContainer de semis du `config.yaml`
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
 - `manifests/hermes-httproute.yaml` — `hermes.lan.wittner.tech` → dashboard,
   `hermes-api.lan.wittner.tech` → API
-- `manifests/kustomization.yaml` — assemblage. **Aucune `CiliumNetworkPolicy`** : ce composant
-  est l'instance à sortie libre, cf. §Le jumeau contraint.
+- `manifests/kustomization.yaml` — assemblage. **Aucune `CiliumNetworkPolicy`** : ce composant est
+  l'instance à sortie libre (cf. §Contraintes).
+
+> [!NOTE]
+> Ce composant a eu un **jumeau contraint** (`hermes-close`), destiné à comparer la même image sous
+> politique réseau restrictive. Il a été **supprimé depuis** ; les renvois à un « §Le jumeau
+> contraint » qui traînaient dans cette page n'avaient plus de cible.
 
 ## Contraintes
 
@@ -51,9 +57,9 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 > kube) et l'absence de tout RBAC associé.
 >
 > Il n'y en a **pas de troisième** : cette instance a un accès sortant libre. Le rayon d'action de
-> l'agent est donc le pod *et tout ce que le réseau lui laisse joindre*. C'est délibéré et c'est
-> le sujet de l'expérience (§Le jumeau contraint) — mais ça reste la raison pour laquelle son
-> dashboard et son API ne sortent pas du listener `https-internal`.
+> l'agent est donc le pod *et tout ce que le réseau lui laisse joindre*. C'est délibéré — mais ça
+> reste la raison pour laquelle son dashboard et son API ne sortent pas du listener
+> `https-internal`.
 
 - **Le conteneur démarre en root, et c'est voulu.** s6-overlay chown `/opt/data` au premier boot
   puis descend sur l'uid 10000 pour chaque service supervisé. Poser `runAsNonRoot: true` casse le
@@ -112,8 +118,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   silencieusement les rotations de secret sans effet jusqu'au prochain redémarrage.
 - **Le PVC est RWO** : le pod sortant doit mourir avant que le nouveau monte le volume. Les
   rollouts ne sont pas sans coupure.
-- **L'identifiant de modèle du ConfigMap (`gpt-5.1`) est à confirmer** contre le compte OpenAI
-  réellement utilisé. Un id invalide ne bloque pas le démarrage du pod : il fait échouer le
+- **L'identifiant de modèle du ConfigMap (`gpt-5.6-terra`, `manifests/config/config.yaml:37`) est
+  à confirmer** contre le compte OpenAI réellement utilisé. Un id invalide ne bloque pas le démarrage du pod : il fait échouer le
   premier tour d'agent.
 
 ## Opérations
@@ -122,7 +128,8 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 
 Canal **sealed-secrets** (cf. [sealed-secrets](../../infra/sealed-secrets/README.md)). Le template
 en clair `manifests/hermes-env.secret.yaml` est gitignoré (`*.secret.yaml`) ; le remplir, sceller,
-supprimer le clair, puis décommenter la ligne correspondante du `kustomization.yaml` :
+supprimer le clair. La ligne `hermes-env.sealed.yaml` est **déjà active** dans le
+`kustomization.yaml` — il n'y a rien à décommenter :
 
 ```bash
 # 1. Remplir les valeurs REMPLACER du template
@@ -140,23 +147,12 @@ kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets 
   < cluster/app/hermes/manifests/hermes-env.secret.yaml \
   > cluster/app/hermes/manifests/hermes-env.sealed.yaml
 
-# 3. Jeter le clair, décommenter hermes-env.sealed.yaml dans kustomization.yaml, committer
+# 3. Jeter le clair, puis committer le seul fichier scellé
 rm cluster/app/hermes/manifests/hermes-env.secret.yaml
 ```
 
 Le `SealedSecret` est chiffré pour le couple (`hermes-env`, `hermes`) : le renommer ou le déplacer
 de namespace exige de le resceller.
-
-### Activation
-
-Le composant est livré désactivé. Pour qu'ArgoCD le ramasse :
-
-```bash
-git mv cluster/app/hermes/hermes.noapp.yaml cluster/app/hermes/hermes.app.yaml
-```
-
-Ne le faire qu'une fois `hermes-env.sealed.yaml` en place, sinon le pod reste en
-`CreateContainerConfigError` (le `envFrom` pointe un Secret absent).
 
 ### État & accès
 

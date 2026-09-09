@@ -12,7 +12,7 @@
 # l'impression que la panne ne survient qu'« après un déploiement » — c'est l'initContainer qui
 # restaure la version de Git, non estampillée, à chaque démarrage.
 #
-# 39 = version courante de l'image v2026.8.27 (`config_defaults.py:3847`). À relire lors d'un
+# 39 = version courante de l'image v2026.8.31 (`config_defaults.py:3847`). À relire lors d'un
 # bump majeur de l'image : une valeur trop haute ferait sauter des migrations légitimes.
 _config_version: 39
 

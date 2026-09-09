@@ -52,9 +52,13 @@ box, plus d'IP d'origine publiée — cf. [§Réseau](#le-ssh-a-été-coupé).
   toute valeur** : la copie de référence du clair `*.secret.yaml`, qui est gitignoré et supprimé
   après `kubeseal`. Il ne porte aucun secret et n'est **pas** dans le `kustomization.yaml` — il se
   recopie, il ne s'applique pas — cf. §Câblage des secrets
-- `manifests/kustomization.yaml` — assemblage. La ligne `forgejo-admin.sealed.yaml` y est
-  **commentée** tant que le scellement n'a pas eu lieu : un `resources:` pointant un fichier
-  absent fait échouer le `kustomize build` entier, donc l'Application
+- `manifests/forgejo-admin.sealed.yaml` — les **trois** Secrets scellés d'un coup. Les trois
+  portent `velero.io/exclude-from-backup` — cf. §Sauvegarde
+- `manifests/forgejo-db-gcs.sealed.yaml` — credential GCS scellé, également exclu des sauvegardes
+- `manifests/kustomization.yaml` — assemblage. Les lignes `forgejo-admin.sealed.yaml` et
+  `forgejo-db-gcs.sealed.yaml` y sont **actives** : le scellement a eu lieu. Une ligne pointant un
+  fichier absent ferait échouer le `kustomize build` entier, donc l'Application — c'est pourquoi
+  on ne décommente que dans le commit qui produit le fichier
 
 ## Contraintes
 
@@ -98,9 +102,10 @@ box, plus d'IP d'origine publiée — cf. [§Réseau](#le-ssh-a-été-coupé).
   le pool LB-IPAM, aucune annonce L2, aucun endpoint puisque le serveur SSH ne démarre plus.
   ⚠️ Ne pas le repasser en `LoadBalancer` en croyant nettoyer une incohérence — cela rouvrirait
   une exposition sans rien derrière.
-- **`gitea.config.server.PROTOCOL: http` avec `ROOT_URL: https://…` est voulu** : TLS est terminé
-  au Gateway. Aligner `PROTOCOL` sur `https` ferait attendre à Forgejo un certificat qu'il n'a
-  pas.
+- **`gitea.config.server.PROTOCOL` n'est PAS posé, et c'est voulu** : la valeur par défaut (`http`)
+  est la bonne, TLS étant terminé au Gateway alors que `ROOT_URL` est en `https://`. La clé n'existe
+  que sous forme de commentaire dans `helm-values.yaml` (§`server`), justement pour que personne ne
+  l'« aligne » sur `https` — ce qui ferait attendre à Forgejo un certificat qu'il n'a pas.
 - L'inscription libre est coupée (`service.DISABLE_REGISTRATION: true`) : l'instance est sur un
   hostname public.
 - **Un seul replica.** Forgejo n'est pas HA-ready et le chart refuse plusieurs configurations
@@ -251,6 +256,43 @@ purgé sous eux.
 >   précéder la copie du PVC — sinon le rejeu part de la veille ;
 > - **le point de reprise unique est une clé GCP**, pas une sauvegarde : sur un cluster reconstruit
 >   à neuf, le `SealedSecret` `velero-gcs` est indéchiffrable et plus rien ne se restaure.
+
+### Les générations de `serverName`
+
+`manifests/forgejo-db.yaml` porte, en plus de l'archivage, **la procédure de reprise écrite à
+l'avance** : un bloc `bootstrap.recovery` + `externalClusters`. Il est **inerte tant que le
+`Cluster` existe** — `bootstrap` n'est lu qu'à la création — et ne reprend un sens que le jour où on
+supprime le `Cluster` pour le reconstruire depuis le bucket. Ce n'est donc pas un résidu à nettoyer.
+
+Reprendre **sous le même nom** (`forgejo-db`) évite de suivre `forgejo-db-rw` et `forgejo-db-app`
+dans `helm-values.yaml` à chaque sinistre. Ce sont donc **deux `serverName`** qui portent les
+générations, et ils se déplacent ensemble :
+
+| Rôle | Où | Valeur au 2026-09-09 |
+|---|---|---|
+| **lecture** — la génération qui porte les sauvegardes à rejouer | `externalClusters[0].plugin.parameters.serverName` | `forgejo-db-v4` |
+| **écriture** — où le cluster repris archivera | `spec.plugins[].parameters.serverName` | `forgejo-db-v5` |
+
+> [!CAUTION]
+> **Toute reprise impose de bumper les deux (v5 → v6, et v4 → v5 en lecture), et le bump se fait
+> APRÈS la destruction du `Cluster`, jamais avant.** Deux raisons, et ce n'est pas la plus intuitive
+> qui contraint :
+> 1. omis ou identique à la source, `serverName` vaudrait le nom du `Cluster` et le cluster repris
+>    archiverait **par-dessus** les WAL dont il vient ;
+> 2. surtout, `barman-cloud-check-wal-archive` refuse de démarrer sur un prefix **non vide**, quelle
+>    que soit la filiation — « `Expected empty archive` ». La cible doit n'avoir **jamais servi**.
+>
+> Bumper pendant que le cluster vit le fait archiver dans la seconde sous la nouvelle génération,
+> qui cesse d'être vide : elle est alors **brûlée définitivement**. C'est le sort de
+> `forgejo-db-v2`, consommé par un `initdb` accidentel de quelques minutes.
+>
+> ⚠️ Juste après une reprise, la nouvelle génération n'a **aucune** sauvegarde de base : sa fenêtre
+> PITR est vide. En prendre une immédiatement (`script/cnpg-barman-plugin-script.sh backup`) sans
+> attendre la `ScheduledBackup`.
+
+La procédure complète est en
+[`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md) §8 — étape B (reprise en place) et étape N
+(perte du namespace entier).
 
 ## Placement
 
@@ -597,7 +639,8 @@ kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets 
   < cluster/app/forgejo/manifests/forgejo-admin.secret.yaml \
   > cluster/app/forgejo/manifests/forgejo-admin.sealed.yaml
 
-# 3. Jeter le clair, décommenter forgejo-admin.sealed.yaml dans kustomization.yaml, committer
+# 3. Jeter le clair, puis committer le scellé. La ligne est DÉJÀ décommentée dans
+#    kustomization.yaml — il n'y a plus rien à y faire.
 rm cluster/app/forgejo/manifests/forgejo-admin.secret.yaml
 ```
 
@@ -684,7 +727,8 @@ différents, deux fichiers.
 
 ```bash
 # 1. Reporter le nom du bucket produit par Terraform dans l'ObjectStore (`destinationPath`)
-$EDITOR cluster/app/forgejo/manifests/forgejo-db-objectstore.yaml   # gs://REMPLACER/
+$EDITOR cluster/app/forgejo/manifests/forgejo-db-objectstore.yaml
+#    Déjà renseigné : gs://homelab-cnpg-backups-8b8ff253/forgejo/
 
 # 2. Émettre une clé pour le compte de service — le seul geste manuel, une clé JSON ne se sort pas
 #    d'un état Terraform sans l'y stocker en clair
@@ -701,8 +745,8 @@ kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets 
   < cluster/app/forgejo/manifests/forgejo-db-gcs.secret.yaml \
   > cluster/app/forgejo/manifests/forgejo-db-gcs.sealed.yaml
 
-# 5. DÉCOMMENTER la ligne `forgejo-db-gcs.sealed.yaml` dans manifests/kustomization.yaml,
-#    committer le scellé, pousser.
+# 5. Committer le scellé, pousser. La ligne `forgejo-db-gcs.sealed.yaml` est DÉJÀ active dans
+#    manifests/kustomization.yaml (elle a été décommentée lors du premier scellement).
 
 # 6. Forcer ArgoCD à relire le dépôt sans attendre son cycle de polling (3 min par défaut).
 #    `refresh=hard` et non `normal` : il invalide le CACHE DE MANIFESTES du repo-server. Ici le

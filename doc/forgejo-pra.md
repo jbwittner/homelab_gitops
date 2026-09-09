@@ -7,7 +7,7 @@ quel ordre, à quel instant, et avec quoi commencer quand il ne reste rien.
 
 Cette page est le **plan**. L'[exercice](forgejo-pra-exercice.md) en est l'épreuve — un plan jamais
 joué n'est pas un plan, c'est une intention. Tous les chiffres et tous les messages d'erreur d'ici
-sont **relevés lors des cinq exercices du 2026-09-08**, pas supposés ; le détail de chaque passage
+sont **relevés lors des dix passages des 2026-09-08 et 09**, pas supposés ; le détail de chaque passage
 est dans le [journal](forgejo-pra-exercice.md#journal-des-exercices). Ce qui n'a **pas** été éprouvé
 est signalé comme tel — et il en reste.
 
@@ -283,7 +283,7 @@ sur l'âge du dernier archivage — cf. [cnpg-monitoring](../cluster/app/cnpg-mo
 
 ### RTO
 
-**Non mesuré à volumétrie réelle, et c'est le point.** Les durées relevées lors des cinq exercices
+**Non mesuré à volumétrie réelle, et c'est le point.** Les durées relevées lors des dix passages
 du 2026-09-08 sont consignées dans le
 [journal de l'exercice](forgejo-pra-exercice.md#journal-des-exercices), avec l'état de l'instance
 sur laquelle elles ont été prises — **1,6 Mio, 2 dépôts, 2 comptes**. Repère : `up` de bout en bout
@@ -359,11 +359,12 @@ kubectl get secrets -n sealed-secrets \
 
 ### Ce que velero emporte, et qui change tout
 
-Relevé sur `velero-daily-20260908030037` (namespace `forgejo`, 102 objets) :
+Relevé sur `velero-daily-20260908030037` (namespace `forgejo`, 102 objets), **corrigé des
+exclusions posées le 2026-09-09** :
 
 | Type | Nb | Ce qui compte |
 | --- | --- | --- |
-| `v1/Secret` | 10 | `forgejo-admin`, `forgejo-secrets`, `forgejo-smtp`, `forgejo-db-app`, `forgejo-db-ca`, `forgejo-db-server`, `forgejo-db-replication`, `forgejo-init`, `forgejo-inline-config`, `forgejo` |
+| `v1/Secret` | 7 | `forgejo-db-app`, `forgejo-db-ca`, `forgejo-db-server`, `forgejo-db-replication`, `forgejo-init`, `forgejo-inline-config`, `forgejo` |
 | `v1/Pod` | 2 | **porteurs de la donnée fs-backup** — cf. §7 piège 1 |
 | `v1/PersistentVolumeClaim` | 2 | `forgejo-data`, `forgejo-db-1` |
 | `postgresql.cnpg.io/v1/Cluster` | 1 | de quoi **recréer** la base ; le natif la **remplit** |
@@ -371,13 +372,29 @@ Relevé sur `velero-daily-20260908030037` (namespace `forgejo`, 102 objets) :
 | `bitnami.com/v1alpha1/SealedSecret` | 3 | inutilisables si la clé du contrôleur a changé |
 
 > [!IMPORTANT]
-> **Les `Secret` sont sauvegardés matérialisés — c'est ce qui rend une reprise possible, et c'est
-> aussi une propriété de sécurité du bucket.** Deux conséquences opposées :
-> - **En reprise, on ne dépend pas de sealed-secrets.** Un contrôleur réinstallé à neuf ne
->   déchiffre plus les trois `SealedSecret` de Git, et le pod resterait en
->   `CreateContainerConfigError`. Les `Secret` de la sauvegarde velero ferment ce trou.
-> - **Le bucket velero est un magasin de secrets.** Accès IAM, pas de copie locale qui traîne, pas
->   de partage.
+> **Quatre `Secret` ont été RETIRÉS des sauvegardes le 2026-09-09, et la reprise dépend donc de
+> sealed-secrets.** `forgejo-admin`, `forgejo-secrets`, `forgejo-smtp` et `forgejo-db-gcs` portent
+> désormais le label `velero.io/exclude-from-backup: "true"`, posé sur le `template` de leur
+> `SealedSecret` (`forgejo-admin.sealed.yaml`, `forgejo-db-gcs.sealed.yaml`).
+>
+> **Ce n'est pas une économie, c'est une correction.** Un `Secret` restauré par velero arrive sans
+> `ownerReference` ; le contrôleur refuse alors de s'approprier un objet préexistant — « already
+> exists and is not managed by SealedSecret » — la `SealedSecret` reste en `Synced=False` et le
+> `Secret` devient **orphelin**. Une rotation faite dans Git ne se propage plus, en silence.
+> Constaté après la reprise d'un namespace détruit.
+>
+> Deux conséquences, à connaître avant une reprise réelle :
+> - **La clé de scellement est sur le chemin critique.** Un contrôleur sealed-secrets réinstallé à
+>   neuf ne déchiffre plus rien, et le pod reste en `CreateContainerConfigError`. La sauvegarde
+>   velero ne ferme plus ce trou : c'est la restauration de la clé qui le ferme
+>   (§`runbook-bootstrap`, étape 3). **Les trois `SealedSecret` sont bien dans la sauvegarde — ce
+>   sont les `Secret` matérialisés qui n'y sont plus, et ils sont inutilisables sans la clé.**
+> - **L'exercice recopie ces quatre `Secret` à la main.** `script/forgejo-pra-script.sh:87`
+>   (`SRC_SEALED_SECRETS`) les copie explicitement vers la préprod, et échoue si l'un manque. La
+>   préprod ne les tient donc ni de Git ni de velero.
+>
+> **Le bucket velero reste un magasin de secrets** pour les sept qui subsistent (`forgejo-db-app`
+> et la PKI CNPG en particulier) : accès IAM, pas de copie locale qui traîne, pas de partage.
 
 ### Le PVC de la base n'est plus copié par kopia
 
@@ -392,10 +409,11 @@ de 30 jours, soit **le 2026-10-08**.
 
 ### Ce que rien ne contient
 
-- **`forgejo-db-gcs`** — le credential du bucket barman. **Absent de la sauvegarde du 2026-09-08
-  03:00** (vérifié : créé le même jour vers 14:51, après le passage de velero). Les suivantes le
-  contiennent. Une reprise depuis une sauvegarde antérieure ne pourra pas lire le bucket barman
-  sans réémettre une clé.
+- **`forgejo-db-gcs`** — le credential du bucket barman. **Exclu des sauvegardes depuis le
+  2026-09-09** (`forgejo-db-gcs.sealed.yaml`), et déjà absent de celle du 2026-09-08 03:00 pour une
+  autre raison (créé le même jour vers 14:51, après le passage de velero). Aucune sauvegarde velero
+  ne le contient donc plus : il vient de Git par sealed-secrets, ou d'une clé réémise à la main.
+  C'est le premier `Secret` à vérifier en reprise — sans lui, rien ne lit le bucket barman.
 - **Les couplages hors dépôt** (§8) : routeur Traefik, tunnel Cloudflare, DNS.
 - **Une lifecycle rule GCS posée par erreur** sur l'un des deux buckets. Les deux outils font leur
   propre GC ; aucune métrique du cluster ne verrait un bucket purgé sous eux.
@@ -411,6 +429,7 @@ de 30 jours, soit **le 2026-10-08**.
 | **C** | Nœud `vert-ysondre` perdu | **les deux** — ils y sont co-localisés | les deux | §8, dans l'ordre |
 | **D** | Cluster entier perdu | tout | §4 d'abord, puis les deux | §8, après bootstrap |
 | **E** | Erreur humaine (dépôt supprimé, force-push) | un objet précis | PITR ciblé avant l'erreur | §8, `--target-time` |
+| **F** | Namespace `forgejo` détruit | tout le namespace, `ObjectStore` compris | tout, dans l'ordre | §8 **étape N** |
 
 > [!NOTE]
 > **Le scénario C est le scénario nominal, pas le pire.** La base et l'applicatif sont
@@ -489,6 +508,15 @@ prendre la place de l'original archive ses WAL **par-dessus** ceux dont il vient
 
 `cnpg-barman-plugin-script.sh restore` écrit toujours un `serverName` explicite **des deux côtés**.
 
+> [!CAUTION]
+> **Ce raisonnement sur l'écrasement n'est PAS ce qui contraint réellement.** Testé le 2026-09-09
+> en reprenant dans son propre prefix : refusé, alors même qu'aucun écrasement n'est possible (un
+> cluster repris garde le system identifier de sa source et promeut sur une nouvelle timeline, dont
+> les WAL portent un préfixe distinct). `barman-cloud-check-wal-archive` ne raisonne pas sur la
+> filiation : il exige un **archive vide**, point — « WAL archive check failed for server `<nom>`:
+> Expected empty archive ». La cible du bump doit donc n'avoir **jamais servi**, pas seulement être
+> différente de la source. Un `serverName` où quoi que ce soit a été archivé est brûlé pour de bon.
+
 > **Bonne nouvelle vérifiée au drill :** `--no-archive` (qui supprime `spec.plugins`) **n'empêche
 > pas la reprise**. Le sidecar `plugin-barman-cloud` est injecté dans le pod de recovery à partir
 > de `externalClusters[].plugin` seul — l'init-container était présent et sorti en `exit 0`. Un
@@ -561,7 +589,7 @@ Vérifier que cet instant tombe dans la fenêtre affichée par `cnpg-barman-plug
 > FACILE pour velero (celui du drill), donc on restaure d'abord et on répare ensuite.
 
 ```bash
-# 1. Couper ArgoCD sur les TROIS niveaux (cf. étape A, piège d) — forgejo-monitoring compris.
+# 1. Couper ArgoCD sur les TROIS niveaux (cf. étape A, piège δ) — forgejo-monitoring compris.
 for a in root app forgejo forgejo-monitoring; do
   kubectl -n argocd patch application $a --type=merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
 done
@@ -603,8 +631,12 @@ kubectl -n forgejo delete pod -l app.kubernetes.io/name=forgejo
 > 2026-09-09, seule `forgejo-db-v4` y figurait, alors que `forgejo-db` et `-v3` sont toujours dans
 > le bucket. Leurs données restent restaurables en nommant explicitement le `serverName` dans
 > `externalClusters`, mais **plus aucun inventaire local ne dit qu'elles existent**. Seul
-> `gcloud storage ls` le dirait. C'est un argument de poids contre les bumps de génération
-> gratuits : chacun dégrade l'inventaire.
+> `gcloud storage ls` le dirait.
+>
+> ⚠️ **Cette perte n'a lieu QUE si l'`ObjectStore` est recréé**, ce qui n'arrive qu'à la perte du
+> namespace entier — pas à une reprise en place. Vérifié au passage 10 : après une reprise ordinaire,
+> `forgejo-db-v4` et `-v5` figurent **toutes deux** dans `serverRecoveryWindow`. L'argument contre
+> les bumps gratuits reste valable, mais il est plus étroit qu'il n'y paraît.
 
 > [!CAUTION]
 > **Le bump de `serverName` se fait APRÈS la destruction, jamais avant.** Appliqué à un cluster
@@ -658,13 +690,13 @@ kubectl -n forgejo exec $P -c forgejo -- sh -c 'find /data -type f | wc -l; du -
 kubectl -n forgejo exec $P -c forgejo -- find /data/git/gitea-repositories -maxdepth 2 -name '*.git'
 kubectl -n forgejo exec $P -c forgejo -- sha256sum /data/jwt/private.pem /data/gitea/conf/app.ini
 
-# 1. Couper ArgoCD sur les TROIS niveaux, de haut en bas — cf. piege d.
+# 1. Couper ArgoCD sur les TROIS niveaux, de haut en bas — cf. piege delta (§étape A).
 #    Couper le seul « forgejo » ne tient pas : le parent le repose en quelques secondes.
 for a in root app forgejo; do
   kubectl -n argocd patch application $a --type=merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
 done
 
-# 2. Reproduire les conditions du namespace vide — cf. piege g.
+# 2. Reproduire les conditions du namespace vide — cf. piege gamma (§étape A).
 #    SUPPRIMER le Deployment et ses ReplicaSets, et non les mettre a zero : un RS a desired=0
 #    supprime le Pod restaure avant que node-agent ait ecrit le moindre octet.
 kubectl -n forgejo delete deploy/forgejo
@@ -740,8 +772,10 @@ volumétrie réelle : à 1,6 Mio, la copie kopia est du bruit devant les temps f
 > **Ce qui porte les générations, c'est le `serverName`**, explicite des deux côtés — lecture dans
 > `externalClusters`, écriture dans `plugins`. Le bump d'écriture est LOAD-BEARING : sans lui, le
 > cluster repris archiverait par-dessus les WAL de sa source et détruirait la sauvegarde dont il
-> vient. C'est la seule raison pour laquelle `cnpg-barman-plugin-script.sh restore` REFUSE de
-> générer un manifeste homonyme — il ne peut pas garantir ce bump.
+> vient. C'est l'une des DEUX raisons pour lesquelles `cnpg-barman-plugin-script.sh restore` REFUSE
+> de générer un manifeste homonyme — il ne peut pas garantir ce bump. La seconde, éprouvée le
+> 2026-09-09 et plus contraignante encore, est un contrôle EN DUR de `barman-cloud-check-wal-archive`
+> décrit juste en dessous : elle interdit tout prefix non vide, y compris le sien.
 >
 > ⚠️ **La cible du bump doit n'avoir JAMAIS servi.** barman refuse de démarrer sur un prefix non
 > vide : « WAL archive check failed for server `<nom>`: Expected empty archive ». Un `serverName`
@@ -772,48 +806,58 @@ kubectl apply -f /tmp/check.json     # puis vérifier, puis : kubectl -n forgejo
 #### La reprise réelle, en place
 
 ```bash
-# 1. Couper ArgoCD sur les TROIS niveaux (cf. étape A, piège d).
+# 1. Couper ArgoCD sur les TROIS niveaux (cf. étape A, piège δ).
 for a in root app forgejo; do
   kubectl -n argocd patch application $a --type=merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
 done
 
-# 2. Bumper les DEUX serverName dans cluster/app/forgejo/manifests/forgejo-db.yaml :
+# 2. DETRUIRE, AVANT tout bump. IRREVERSIBLE : le PVC de la base part avec.
+#    ⚠️ L ordre porte tout le poids de la procedure. Bumper pendant que le cluster VIT le fait
+#    archiver dans la seconde sous la generation d ECRITURE, qui cesse alors d etre vide — et la
+#    reprise echoue ensuite sur « Expected empty archive », la generation etant brulee pour de
+#    bon. C est exactement le sort de forgejo-db-v2 le 2026-09-09.
+kubectl -n forgejo delete cluster forgejo-db
+
+# 3. Bumper seulement MAINTENANT les DEUX serverName dans
+#    cluster/app/forgejo/manifests/forgejo-db.yaml :
 #    ecriture (plugins)          -> une generation JAMAIS UTILISEE
-#    lecture  (externalClusters) -> la generation qui porte les sauvegardes
+#    lecture  (externalClusters) -> celle qui portait les sauvegardes, c est-a-dire celle qui
+#                                   etait en ECRITURE jusqu a la ligne precedente.
 #    Committer ET POUSSER.
 
-# 3. ⚠️ ATTENDRE qu ArgoCD ait vu la nouvelle revision AVANT de detruire quoi que ce soit.
+# 4. ⚠️ ATTENDRE qu ArgoCD ait vu la nouvelle revision AVANT de retablir la synchro.
 #    Une sync forcee juste apres un push utilise la revision EN CACHE — c est ce qui a produit
 #    un initdb sur une base vide le 2026-09-09.
 kubectl -n argocd patch application forgejo --type=merge \
   -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'
 kubectl -n argocd get app forgejo -o jsonpath='{.status.sync.revisions}'   # doit contenir le SHA pousse
 
-# 4. Retablir ArgoCD, puis detruire. IRREVERSIBLE : le PVC de la base part avec.
+# 5. Retablir ArgoCD : il recree le Cluster, qui part en bootstrap.recovery.
 for a in root app forgejo; do
   kubectl -n argocd patch application $a --type=merge \
     -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
 done
-kubectl -n forgejo delete cluster forgejo-db
 
-# 5. ArgoCD recree le Cluster en bootstrap.recovery. Controle : le pod doit s appeler
-#    <cluster>-1-full-recovery-*, et NON <cluster>-1-initdb-*.
+# 6. Controle : le pod doit s appeler <cluster>-1-full-recovery-*, et NON <cluster>-1-initdb-*.
 kubectl -n forgejo get pods | grep -E "full-recovery|initdb"
 
-# 6. ⚠️ Si le Job de reprise echoue et qu on corrige la spec, SUPPRIMER LE JOB : le template d un
+# 7. ⚠️ Si le Job de reprise echoue et qu on corrige la spec, SUPPRIMER LE JOB : le template d un
 #    Job est IMMUABLE, ses pods de retry rejouent l ancienne valeur indefiniment.
 kubectl -n forgejo delete job forgejo-db-1-full-recovery
 
-# 7. ⚠️ SAUVEGARDE DE BASE IMMEDIATE. La nouvelle generation n a aucun point de reprise tant
+# 8. ⚠️ SAUVEGARDE DE BASE IMMEDIATE. La nouvelle generation n a aucun point de reprise tant
 #    qu elle n en a pas une : sa fenetre PITR est vide.
 script/cnpg-barman-plugin-script.sh backup
 
-# 8. Redemarrer Forgejo : le secret forgejo-db-app a ete regenere, le pod porte l ancien.
+# 9. Redemarrer Forgejo : le secret forgejo-db-app a ete regenere, le pod porte l ancien.
 #    Symptome sinon : /api/healthz rend 424 indefiniment.
 kubectl -n forgejo delete pod -l app.kubernetes.io/name=forgejo
 ```
 
-Après reprise, les deux générations coexistent dans l'ObjectStore et l'ancienne reste restaurable :
+Après reprise, les deux générations coexistent dans l'ObjectStore et l'ancienne reste restaurable.
+Relevé après la reprise du 2026-09-09, qui portait alors `forgejo-db` → `-v3` ; les générations
+**courantes sont `forgejo-db-v4` en lecture et `forgejo-db-v5` en écriture**
+(`cluster/app/forgejo/manifests/forgejo-db.yaml`) :
 
 ```
 forgejo-db     2026-09-08T15:02:11Z → 2026-09-09T10:44:44Z

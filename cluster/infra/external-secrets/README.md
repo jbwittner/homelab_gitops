@@ -1,8 +1,25 @@
 # external-secrets
 
+> [!IMPORTANT]
+> **Composant DÉSACTIVÉ, et les deux extrémités du pont sont mortes.**
+>
+> - Le fichier est `external-secrets.noapp.yaml` : le glob `{*.app.yaml,*.appset.yaml}` de
+>   [`infra.bootstrap.yaml`](../infra.bootstrap.yaml) ne le ramasse pas. **Rien n'est déployé** —
+>   `kubectl -n argocd get app external-secrets` ne rend rien.
+> - [openbao](../../../archive/openbao/README.md), qui fournissait le `ClusterSecretStore`, est
+>   **archivé** (`archive/openbao/openbao.noapp.yaml`).
+> - Il n'existe **aucun `ExternalSecret` actif** dans le dépôt. Les quatre fichiers qui subsistent
+>   (`cloudflare-api-token`, `grafana-oidc`, `grafana-admin`, `alertmanager-smtp`) sont tous
+>   commentés dans leur `kustomization.yaml`.
+>
+> **Le seul canal de secrets actif est [sealed-secrets](../sealed-secrets/README.md).** Cette page
+> est conservée telle quelle : elle décrit ce qu'il faudrait remonter, et pourquoi le store porte
+> ce nom. Tout ce qui suit est au présent parce que c'est une **spécification de remise en
+> service**, pas un état.
+
 ## Rôle
 
-Pont entre [openbao](../openbao/README.md) et Kubernetes : lit les secrets du coffre et les
+Pont entre [openbao](../../../archive/openbao/README.md) et Kubernetes : lit les secrets du coffre et les
 matérialise en `Secret` natifs, que les composants consomment sans rien savoir de leur origine.
 C'est le **second canal de secrets** du repo, à côté de
 [sealed-secrets](../sealed-secrets/README.md) — critère de choix entre les deux :
@@ -15,7 +32,8 @@ en consommera il lui faudra son propre contrôleur — donc une migration en `Ap
 
 ## Fichiers
 
-- `external-secrets.app.yaml` — `Application`, wave `-7`, destination `bleu-kalecgos`
+- `external-secrets.noapp.yaml` — `Application`, wave `-7`, destination `bleu-kalecgos`.
+  **Extension `.noapp.yaml` : non déployé.** La remettre à `.app.yaml` est le geste d'activation
 - `helm-values.yaml` — CRDs par le chart, RBAC `serviceaccounts/token`, cache de tokens,
   ServiceMonitor
 - `manifests/namespace.yaml` — ns `external-secrets` (wave -1), sans label PodSecurity
@@ -120,5 +138,5 @@ différences pour un spoke, toutes deux dues au fait que le coffre vit sur le hu
   ```bash
   kubectl -n monitoring annotate externalsecret grafana-oidc force-sync=$(date +%s) --overwrite
   ```
-- **Upgrade** : bumper `targetRevision` dans `external-secrets.app.yaml`. Les CRDs sont livrées
+- **Upgrade** : bumper `targetRevision` dans `external-secrets.noapp.yaml`. Les CRDs sont livrées
   par le chart, donc mises à jour avec.

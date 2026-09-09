@@ -47,9 +47,11 @@ kubectl apply -f cluster/root.yaml
 - `manifests/argocd-cmd-params-cm.yaml` — patch `server.insecure: "true"` (TLS terminé au
   Gateway) + `controller.diff.server.side: "true"` (cf. §Diff)
 - `manifests/argocd-cm.yaml` — patch de la config ArgoCD : `url` externe, status badge,
-  `oidc.config` (SSO authentik)
+  `application.resourceTrackingMethod: annotation`. ⚠️ Le bloc `oidc.config` (SSO authentik) y est
+  **commenté** : authentik est archivé
 - `manifests/argocd-rbac-cm.yaml` — patch RBAC : défaut `role:readonly`, groupe authentik
-  `app-argocd-admin` → `role:admin`
+  `app-argocd-admin` → `role:admin`. ⚠️ **Non appliqué** : la ligne est commentée dans
+  `manifests/kustomization.yaml`, le patch n'ayant de sens qu'avec le SSO
 - `manifests/argocd-notifications-cm.yaml` — patch notifications : service Grafana, templates,
   triggers, souscriptions globales (cf. §Notifications)
 - `post-bootstrap/argocd-httproute.yaml` — UI via `shared-gw` (cf.
@@ -64,11 +66,11 @@ kubectl apply -f cluster/root.yaml
   `sealedsecrets.bitnami.com/managed: "true"` sur le Secret livré **vide** par l'upstream, sans
   quoi le contrôleur sealed-secrets refuse d'y écrire (cf. §Notifications)
 - `post-bootstrap/argocd-oidc.sealed.yaml` — `SealedSecret` `argocd-oidc`, clé `client-secret`
-  (OIDC). **Absent du repo tant qu'il n'est pas scellé** (cf. §SSO), ligne commentée dans le
-  `kustomization.yaml`
+  (OIDC). **Présent dans le repo, mais sa ligne reste commentée** dans le `kustomization.yaml` :
+  le SSO est désactivé faute d'authentik (cf. §SSO)
 - `post-bootstrap/argocd-notifications.sealed.yaml` — `SealedSecret`
-  `argocd-notifications-secret`, clé `grafana-api-key`. **Absent du repo tant qu'il n'est pas
-  scellé** (cf. §Notifications), ligne commentée dans le `kustomization.yaml`
+  `argocd-notifications-secret`, clé `grafana-api-key`. **Présent dans le repo, ligne également
+  commentée** (cf. §Notifications)
 - `manifests/cluster-bleu-kalecgos.yaml` — Secret de cluster qui **nomme le cluster local**
   `bleu-kalecgos` (sans lui : entrée `in-cluster` codée en dur). Aucun credential dedans → clair,
   rien à sceller (cf. §Nommage du cluster local)
@@ -89,8 +91,11 @@ kubectl apply -f cluster/root.yaml
 >
 > | Objet | CRD posée par | Wave |
 > |---|---|---|
-> | `SealedSecret` (OIDC, notifications) | [sealed-secrets](../sealed-secrets/README.md) | `-8` |
+> | `SealedSecret` (`repo-homelab-gitops`) | [sealed-secrets](../sealed-secrets/README.md) | `-8` |
 > | `HTTPRoute` (UI) | [gateway-api](../gateway-api/README.md) | `-10` |
+>
+> ⚠️ Seul `repo-homelab-gitops.sealed.yaml` est effectivement dans le `kustomization.yaml` ; ceux
+> d'OIDC et des notifications sont présents dans le dossier mais **commentés**.
 >
 > Les deux arrivent donc **après** l'amorçage manuel, mais **avant** la wave `-1` où Argo
 > synchronise cette Application : le tour de piste est complet, la route et les secrets sont
@@ -199,8 +204,8 @@ aucune erreur de configuration, juste un clone anonyme qui échoue.
 > kubectl apply -f cluster/root.yaml --server-side --force-conflicts
 > ```
 >
-> Vécu au passage en dépôt privé : les 32 `repoURL` étaient en SSH dans Git, les 21 Applications
-> enfants avaient été mises à jour par `root`… et `root` lui-même clonait encore en HTTPS. Tout
+> Vécu au passage en dépôt privé : les `repoURL` étaient en SSH dans Git (**29** aujourd'hui), les
+> Applications enfants avaient été mises à jour par `root`… et `root` lui-même clonait encore en HTTPS. Tout
 > était `Synced`/`Healthy` — parce que le dépôt était **encore public** et que le clone anonyme
 > marchait toujours. Le flip de visibilité aurait cassé le tier-1, donc l'arbre entier, sans
 > qu'aucune vérification préalable n'ait rien vu. Contrôle qui l'attrape :
@@ -324,8 +329,8 @@ donc inutile (ceux déjà en place ne gênent pas — ils documentent l'appliqu�
 > [!IMPORTANT]
 > Ce n'est **pas** un substitut à `ignoreDifferences` : le server-side diff supprime les diffs
 > dus aux defaults d'un **schéma**, pas ceux dus à une valeur écrite par un **contrôleur** après
-> coup (le `caBundle` d'[openbao](../openbao/README.md), le `/data` d'un token de
-> [argocd-manager](../argocd-manager/README.md)). Ces exceptions-là restent nécessaires.
+> coup (le `caBundle` d'un webhook, le `/data` d'un token de ServiceAccount). Ces exceptions-là
+> restent nécessaires.
 
 Le flag est lu comme **variable d'environnement** par le controller : un changement de la
 ConfigMap ne prend effet qu'au redémarrage du pod.
@@ -430,7 +435,16 @@ donc pas, et le mot de passe survit aux syncs comme aux redémarrages.
 Désactiver complètement le compte local (`admin.enabled: "false"` dans `argocd-cm`) n'a de sens
 qu'une fois le SSO rétabli — voir ci-dessous. En l'état ce serait se verrouiller dehors.
 
-## SSO — authentik (OIDC)
+## SSO — authentik (OIDC) — DÉSACTIVÉ
+
+> [!IMPORTANT]
+> **Le SSO n'est pas actif.** [authentik](../../../archive/authentik/README.md) est archivé, donc :
+> le bloc `oidc.config` d'`argocd-cm.yaml` est commenté, le patch `argocd-rbac-cm.yaml` n'est pas
+> dans le `kustomization.yaml`, et `argocd-oidc.sealed.yaml` — bien que présent dans le dossier —
+> reste commenté lui aussi. **Le compte local `admin` est aujourd'hui le seul moyen d'entrer.**
+>
+> La procédure ci-dessous reste la spécification de remise en service, à jouer telle quelle le jour
+> où un fournisseur OIDC revient.
 
 Login via authentik. Le Provider / Application / groupe côté authentik est géré en
 **Terraform** (autre repo). Contrat : `clientID=argocd`, issuer

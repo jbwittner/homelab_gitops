@@ -3,12 +3,19 @@
 ## Rôle
 
 Mises à jour de dépendances automatisées via [Renovate](https://docs.renovatebot.com/) en mode
-self-hosted. **Deux** bots tournent dans ce composant, un par forge :
+self-hosted. **Deux** bots sont écrits dans ce composant, un par forge — mais **un seul est
+déployé aujourd'hui** :
 
-| CronJob            | Forge                          | Périmètre                     | Secret                 | Heure |
-| ------------------ | ------------------------------ | ----------------------------- | ---------------------- | ----- |
-| `renovate-github`  | github.com                     | liste explicite (`args`)      | `renovate-github`         | 01:00 |
-| `renovate-forgejo` | [forgejo](../forgejo/README.md) | autodiscover (accès du bot)   | `renovate-forgejo` | 02:00 |
+| CronJob            | Forge                          | Périmètre                     | Secret                 | Heure (Europe/Paris) | État |
+| ------------------ | ------------------------------ | ----------------------------- | ---------------------- | ----- | --- |
+| `renovate-github`  | github.com                     | liste explicite (`args`)      | `renovate-github`         | **02:00** | **déployé** |
+| `renovate-forgejo` | [forgejo](../forgejo/README.md) | autodiscover (accès du bot)   | `renovate-forgejo` | **01:00** | **non déployé** — ligne commentée dans `kustomization.yaml`, faute de `SealedSecret` |
+
+> [!NOTE]
+> `kubectl -n renovate get cronjob` ne rend donc qu'**une** ligne. Pour activer le second, produire
+> `manifests/renovate-forgejo.sealed.yaml` et décommenter **les deux** lignes correspondantes
+> (`renovate-forgejo.sealed.yaml` et `cron-job-forgejo.yaml`) dans le même commit — cf.
+> §Câblage des secrets.
 
 **Pourquoi deux et pas un** : `platform` est un réglage **global** de Renovate, pas un réglage par
 dépôt. Un même run ne peut pas parler aux deux forges — il faut deux exécutions, deux jetons, deux
@@ -28,13 +35,16 @@ avoir 7 jours révolus avant qu'une branche ou une PR soit créée. ⚠️ Ce fi
 - `manifests/cron-job-forgejo.yaml` — `CronJob` du bot **Forgejo**. Pas d'`args` (autodiscover),
   endpoint interne, `RENOVATE_GIT_URL: endpoint` (secret `renovate-forgejo`)
 - `manifests/namespace.yaml` — ns `renovate` (`sync-wave: -1`)
-- `manifests/renovate-github.sealed.yaml` — `SealedSecret` du bot GitHub. **Absent du repo tant que
-  le scellement n'a pas été fait** — cf. §Câblage des secrets
-- `manifests/renovate-forgejo.sealed.yaml` — `SealedSecret` du bot Forgejo. Idem
+- `manifests/renovate-github.sealed.yaml` — `SealedSecret` du bot GitHub. **Présent et actif** dans
+  `kustomization.yaml`
+- `manifests/renovate-forgejo.sealed.yaml` — `SealedSecret` du bot Forgejo. **Absent du repo tant
+  que le scellement n'a pas été fait** — cf. §Câblage des secrets
 - `manifests/*.secret.example.yaml` — templates de scellement, versionnés et sans valeur. Jamais
   dans `kustomization.yaml`
-- `manifests/kustomization.yaml` — assemblage. Les **deux** lignes `*.sealed.yaml` y sont
-  commentées tant que les fichiers n'existent pas
+- `manifests/kustomization.yaml` — assemblage. La ligne `renovate-github.sealed.yaml` est
+  **active** ; celles du bot Forgejo (`renovate-forgejo.sealed.yaml` et `cron-job-forgejo.yaml`)
+  restent **commentées** tant que le fichier scellé n'existe pas — un `resources:` pointant un
+  fichier manquant fait échouer le `kustomize build` entier
 
 ## Contraintes
 
@@ -42,7 +52,7 @@ avoir 7 jours révolus avant qu'une branche ou une PR soit créée. ⚠️ Ce fi
   `kubernetes` de `renovate.json` (`managerFilePatterns: /manifests/.+\.yaml$/`) voit les deux
   fichiers, donc le bump de `renovate/renovate` arrive en **une** PR touchant les deux lignes,
   automergée. Les désaligner casse cette propriété.
-- **Les crons sont décalés (01:00 / 02:00) exprès.** Les deux bots consomment le **même** quota
+- **Les crons sont décalés (Forgejo 01:00, GitHub 02:00) exprès.** Les deux bots consomment le **même** quota
   d'API github.com pour les lookups de releases — `RENOVATE_GITHUB_COM_TOKEN` est présent dans les
   deux Secrets, y compris celui de Forgejo. ⚠️ `concurrencyPolicy: Forbid` ne protège de rien ici :
   il s'applique **par CronJob** et n'empêche pas deux CronJobs distincts de tourner ensemble.
@@ -125,17 +135,19 @@ Canal : **sealed-secrets** (le `SealedSecret` porte la valeur chiffrée, pas un 
 coffre). Le contrôleur est en wave `-8`, donc bien avant cette app.
 
 > [!WARNING]
-> **État actuel : aucun des deux `SealedSecret` n'existe.** Les deux lignes sont commentées dans
-> `kustomization.yaml`, donc aucun Secret n'est produit par ce dépôt.
+> **État actuel : `renovate-github` est scellé et actif ; `renovate-forgejo` n'existe toujours
+> pas.** Seul le bot GitHub est donc produit par ce dépôt, et seule sa ligne est décommentée dans
+> `kustomization.yaml`.
 >
-> Le bot GitHub tournait jusqu'ici sur un Secret nommé **`renovate-env`** — un **orphelin** laissé
-> dans le cluster par l'ancien `ExternalSecret` openbao (`deletionPolicy: Retain`), que plus
-> personne ne gérait et que rien ne signalait. Le Secret attendu s'appelle désormais
-> `renovate-github` : l'orphelin ne correspond plus, et le Job échoue franchement en
-> `CreateContainerConfigError` tant que le scellement n'est pas fait. Le renommage a donc converti
-> une dérive silencieuse en panne visible — c'est voulu, mais **cela coupe le bot GitHub d'ici là**.
-> Premier chantier à solder ; récupérer le PAT dans l'orphelin avant de le purger (§Reste de
-> l'ancien canal openbao).
+> Historique, parce qu'il explique le nommage : le bot GitHub a tourné sur un Secret
+> **`renovate-env`** — un **orphelin** laissé dans le cluster par l'ancien `ExternalSecret` openbao
+> (`deletionPolicy: Retain`), que plus personne ne gérait et que rien ne signalait. Le renommage en
+> `renovate-github` a converti cette dérive silencieuse en panne visible
+> (`CreateContainerConfigError`), puis le scellement l'a soldée. **Reste à vérifier que l'orphelin
+> `renovate-env` a bien été purgé** (§Reste de l'ancien canal openbao).
+>
+> Le chantier ouvert est désormais le bot **Forgejo** : sceller `renovate-forgejo`, puis décommenter
+> `renovate-forgejo.sealed.yaml` **et** `cron-job-forgejo.yaml` dans le même commit.
 >
 > ⚠️ Un fichier scellé **vide** (0 octet) ne fait PAS échouer le `kustomize build` : kustomize
 > l'accepte et ne rend rien. Le dépôt est déjà tombé dans ce piège une fois — un fichier vide était

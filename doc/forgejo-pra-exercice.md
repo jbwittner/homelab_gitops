@@ -7,7 +7,7 @@ préprod jetable — `forgejo-preprod`, exposée sur `forgejo-preprod.lan.wittne
 détruisant.
 
 Le plan est dans [`forgejo-pra.md`](forgejo-pra.md). Cette page est son **épreuve**. Elle existe
-parce que ce composant a deux chaînes indépendantes et **six façons documentées d'obtenir une
+parce que ce composant a deux chaînes indépendantes et **sept façons documentées d'obtenir une
 restauration verte et fausse** : la présence d'objets dans deux buckets ne prouve ni que le PVC
 porte encore ses dépôts, ni que la base est cohérente avec lui, ni que les deux se rejoignent au
 même instant. Seule une restauration le prouve.
@@ -121,7 +121,7 @@ Ils ne sont pas des précautions générales : chacun ferme un mode de panne obs
 | --- | --- |
 | `kubectl`, `jq`, `curl` | tout passe par eux |
 | Une sauvegarde velero **dans la fenêtre PITR de barman** | sans recouvrement, les deux moitiés ne peuvent pas être alignées — voir ci-dessous |
-| Le Secret `forgejo-db-gcs` **vivant dans `forgejo`** | absent des sauvegardes antérieures au 2026-09-08 après-midi, et son `SealedSecret` est chiffré pour le couple (nom, namespace) : il ne se déchiffre pas ailleurs |
+| Les **quatre** Secrets `forgejo-db-gcs`, `forgejo-secrets`, `forgejo-smtp`, `forgejo-admin` **vivants dans `forgejo`** | tous `velero.io/exclude-from-backup` depuis le 2026-09-09 : aucune sauvegarde ne les porte plus. Leur `SealedSecret` est chiffré pour le couple (nom, namespace) et ne se déchiffre pas ailleurs — ils ne peuvent venir que du namespace de production |
 | ~110 Gi libres dans le groupe de volumes | `thinProvision: "no"` — le LV est réservé en entier. Relevé : 838 à 942 Gi libres par nœud |
 
 > [!WARNING]
@@ -199,19 +199,27 @@ kubectl create namespace forgejo-preprod && \
 kubectl label ns forgejo-preprod homelab.wittner.tech/drill=forgejo-pra
 ```
 
-### 2 — Credential GCS et `ObjectStore`
+### 2 — Les quatre Secrets et l'`ObjectStore`
 
-Les deux sont **recopiés** depuis `forgejo`, pas recréés. L'`ObjectStore` est une ressource
+Tous sont **recopiés** depuis `forgejo`, pas recréés. L'`ObjectStore` est une ressource
 **namespacée** et le plugin n'en lit que dans le namespace du `Cluster` : il ne se mutualise pas.
-Le `SealedSecret` de Git, lui, est chiffré pour le couple `(nom, forgejo)` et ne se déchiffre
+Les `SealedSecret` de Git, eux, sont chiffrés pour le couple `(nom, forgejo)` et ne se déchiffrent
 nulle part ailleurs.
 
+⚠️ **Quatre Secrets, pas un.** `forgejo-db-gcs`, `forgejo-secrets`, `forgejo-smtp` et
+`forgejo-admin` portent tous `velero.io/exclude-from-backup` : le `Restore` de l'étape 3 ne les
+ramène plus. Le script les copie explicitement (`SRC_SEALED_SECRETS`,
+[`forgejo-pra-script.sh:87`](../script/forgejo-pra-script.sh)) et **échoue si l'un manque**. La
+boucle ci-dessous montre le geste pour `forgejo-db-gcs` ; les trois autres se copient à l'identique.
+
 ```bash
-kubectl -n forgejo get secret forgejo-db-gcs -o json \
+for sec in forgejo-db-gcs forgejo-secrets forgejo-smtp forgejo-admin; do
+kubectl -n forgejo get secret "$sec" -o json \
   | jq 'del(.status, .metadata.namespace, .metadata.uid, .metadata.resourceVersion,
             .metadata.creationTimestamp, .metadata.ownerReferences, .metadata.managedFields,
             .metadata.annotations, .metadata.labels)' \
   | kubectl -n forgejo-preprod apply -f -
+done
 
 kubectl -n forgejo get objectstore forgejo-db-store -o json \
   | jq 'del(.status, .metadata.namespace, .metadata.uid, .metadata.resourceVersion,
@@ -277,9 +285,14 @@ kubectl -n velero get podvolumerestores -l velero.io/restore-name=<restore> -o j
 
 Relevé au drill : `bytesDone: 1072125` sur `totalBytes: 1072125`.
 
-C'est aussi ici que reviennent les **`Secret` matérialisés** (`forgejo-admin`, `forgejo-secrets`,
-`forgejo-smtp`, `forgejo-db-app`…). Ils sont ce qui rend la reprise possible sans sealed-secrets —
-et ce qui fait du bucket velero un magasin de secrets.
+C'est aussi ici que reviennent les **`Secret` matérialisés encore sauvegardés** — `forgejo-db-app`
+et la PKI CNPG (`forgejo-db-ca`, `-server`, `-replication`), plus `forgejo-init`,
+`forgejo-inline-config` et `forgejo`.
+
+⚠️ **`forgejo-admin`, `forgejo-secrets`, `forgejo-smtp` et `forgejo-db-gcs` ne reviennent PAS** :
+ils sont exclus des sauvegardes depuis le 2026-09-09, précisément parce qu'un `Secret` restauré par
+velero orpheline sa `SealedSecret` (cf. §Ce que le crash a appris). C'est l'étape 2 qui les a
+copiés — la reprise dépend donc de sealed-secrets, pas du bucket velero.
 
 ### 4 — Suppression des orphelins CNPG
 
@@ -340,11 +353,16 @@ spec:
         name: barman-cloud.cloudnative-pg.io
         parameters:
           barmanObjectName: forgejo-db-store
-          serverName: forgejo-db
+          # ⚠️ Génération de LECTURE. Elle se LIT sur le Cluster de production, jamais ne se
+          # déduit du nom (cf. 7ccfd86) — au 2026-09-09 c'est `forgejo-db-v4`, et elle bouge à
+          # chaque reprise :
+          #   kubectl -n forgejo get cluster forgejo-db \
+          #     -o jsonpath='{.spec.plugins[?(@.name=="barman-cloud.cloudnative-pg.io")].parameters.serverName}'
+          serverName: forgejo-db-v4
 EOF
 ```
 
-Trois choix portent tout le poids :
+Quatre choix portent tout le poids :
 
 - **le nom `forgejo-db` est conservé** dans le nouveau namespace : le Deployment restauré cherche
   `forgejo-db-rw` et le Secret `forgejo-db-app`. Le garder évite de reconfigurer quoi que ce soit,
@@ -615,8 +633,12 @@ observé en direct. Il faut purger ces orphelins **avant** de rendre la main à 
 `cnpg-barman-plugin-script.sh list` affiche « (aucune) » partout. Le catalogue vit dans Kubernetes,
 les données dans le bucket, et rien dans le cluster ne peut confirmer qu'elles existent encore : la
 reprise est la seule preuve. Pire, l'`ObjectStore` recréé ne publie que la génération courante —
-`forgejo-db` et `-v3` sont toujours dans le bucket mais n'apparaissent plus nulle part. Chaque bump
-de `serverName` dégrade donc l'inventaire, ce qui est un argument sérieux contre les bumps gratuits.
+`forgejo-db` et `-v3` sont toujours dans le bucket mais n'apparaissent plus nulle part.
+
+⚠️ Cette perte d'inventaire est propre à la **recréation de l'`ObjectStore`**, donc à la perte du
+namespace — pas à une reprise ordinaire. Vérifié au passage 10 : après une reprise en place, `-v4`
+et `-v5` figurent toutes deux dans `serverRecoveryWindow`. L'argument contre les bumps gratuits
+tient, mais sur un périmètre plus étroit qu'il n'y paraît.
 
 **Une restauration velero orpheline les `SealedSecret`.** Les `Secret` restaurés arrivent sans
 `ownerReference`, et le contrôleur refuse alors de s'approprier un objet préexistant. Les quatre
@@ -699,8 +721,8 @@ qui a réellement fonctionné, et les quatre pièges nommés. À rejouer à volu
 
 ### L'instance éprouvée
 
-Ces cinq passages ont tous tourné sur la **même** instance, quasi vide. C'est la limite de tout ce
-qui précède.
+Ces dix passages ont tourné sur la **même** instance, quasi vide — les passages 6 à 8 directement
+sur la production, en place. C'est la limite de tout ce qui précède.
 
 | Grandeur | Valeur au 2026-09-08 |
 | --- | --- |
@@ -884,7 +906,7 @@ restauration réelle en cours n'est jamais balayée.
 
 | Symptôme | Cause | Correctif |
 | --- | --- | --- |
-| `up` refuse : aucune sauvegarde dans la fenêtre | les deux chaînes ne se recouvrent pas | `velero-script.sh backup` puis `cnpg-barman-plugin-script.sh backup` |
+| `up` refuse : aucune sauvegarde dans la fenêtre | les deux chaînes ne se recouvrent pas | `forgejo-pra-prepare-script.sh run` — il fait les deux sauvegardes **dans le bon ordre** (velero, puis CNPG pour forcer la bascule de WAL) |
 | `Cluster` bloqué en `Setting up primary`, pods `*-full-recovery` en `Error` | cible PITR inatteignable, `recovery ended before configured recovery target was reached` | retirer `TARGET_TIME` — rejeu complet |
 | Base démarrée mais **vide** ou pod qui ne démarre pas | PVC `forgejo-db-1` orphelin adopté, `bootstrap.recovery` sauté | supprimer les orphelins CNPG **avant** de créer le `Cluster` (étape 4) |
 | `verify` : « aucun dépôt sur le disque » | `Restore` sans les Pods : la donnée kopia n'a pas suivi | ne pas filtrer sur `includedResources` |
