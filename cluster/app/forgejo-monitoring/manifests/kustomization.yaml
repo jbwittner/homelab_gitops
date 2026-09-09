@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: forgejo
+resources:
+  # Deux alertes de disponibilité, indissociables : une sur la valeur, sa complémentaire en
+  # `absent(...)`. Le raisonnement complet est en tête du fichier.
+  - prometheusrule.yaml

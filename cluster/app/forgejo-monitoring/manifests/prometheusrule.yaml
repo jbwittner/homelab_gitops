@@ -1,0 +1,74 @@
+# Alertes de disponibilité de la forge.
+#
+# POURQUOI CE COMPOSANT EXISTE, et pourquoi il n'existait pas avant : le 2026-09-09, pendant
+# l'exercice de reprise en place, Forgejo est resté INDISPONIBLE ~45 MINUTES — PVC détruit, base
+# détruite, Deployment supprimé — et **aucune alerte n'a sonné**. Ni celles du repo, ni les règles
+# par défaut de kube-prometheus-stack.
+#
+# ⚠️ LA CAUSE EST LE PIÈGE CENTRAL DE CE FICHIER : `KubeDeploymentReplicasMismatch` existe bien et
+# aurait couvert un Deployment en panne — mais la procédure de reprise SUPPRIME le Deployment. La
+# série `kube_deployment_status_replicas_available` disparaît alors entièrement, et une expression
+# qui compare une série absente ne se déclenche JAMAIS. Série absente ≠ série à zéro. C'est le même
+# angle mort que celui déjà traité côté sauvegardes par le couple
+# `VeleroBackupTooOld` / `VeleroNoBackupMetric` (velero-monitoring), et il se traite pareil : une
+# règle sur la valeur, et sa COMPLÉMENTAIRE en `absent(...)`. Les deux se déplacent ensemble ; en
+# garder une seule rouvre le trou.
+#
+# ⚠️ La source est kube-state-metrics, et NON `up{job="forgejo"}` : la forge n'est scrapée par
+# personne. Le chart sait exposer des métriques applicatives (`[metrics] TOKEN` dans helm-values),
+# mais aucun ServiceMonitor ne les collecte aujourd'hui. Le jour où l'on en pose un, `absent(up{
+# job="forgejo"} == 1)` deviendra une meilleure sonde — elle verrait un processus vivant mais muet,
+# ce que kube-state-metrics ne peut pas voir. En attendant, ces deux règles couvrent ce qui compte :
+# plus aucun pod ne sert.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: forgejo-alerts
+  namespace: forgejo
+  labels:
+    # ⚠️ OBLIGATOIRE : sélecteur du prometheus-operator (`ruleSelectorNilUsesHelmValues`). Sans ce
+    # label, l'objet est ignoré SANS ERREUR — la règle n'existe simplement jamais.
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: forgejo.rules
+      rules:
+        # Le Deployment existe et ne sert plus rien. Couvre le pod en CrashLoop, l'image cassée,
+        # le PVC injoignable, la base inaccessible (Forgejo rend 424 sur /api/healthz et le pod
+        # n'est jamais Ready).
+        #
+        # ⚠️ 10 min, et pas moins : la forge n'a qu'UN replica, donc toute mise à jour d'image la
+        # rend indisponible le temps du remplacement. Un seuil plus court transformerait chaque
+        # montée de version Renovate en alerte critique, et une alerte qu'on apprend à ignorer ne
+        # protège plus de rien. Un redémarrage normal observé tient en moins de 2 min.
+        - alert: ForgejoDown
+          expr: kube_deployment_status_replicas_available{namespace="forgejo", deployment="forgejo"} == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "forgejo : la forge ne répond plus"
+            description: "Le Deployment forgejo n'a plus aucun replica disponible depuis 10 min. Les dépôts Git, le registre de paquets et l'interface sont inaccessibles. Diagnostic : `kubectl -n forgejo get pods` puis `kubectl -n forgejo logs deploy/forgejo -c forgejo`. Si le pod est Running mais jamais Ready, interroger `/api/healthz` — un 424 désigne la base, pas la forge."
+
+        # Complément INDISPENSABLE de la précédente, et la seule des deux qui aurait sonné le
+        # 2026-09-09 : `== 0` ne peut rien dire d'une série qui n'existe plus. Le Deployment
+        # disparaît si on le supprime (procédure de reprise, §8 étape A du plan), si `prune`
+        # d'ArgoCD l'emporte à la suite d'une erreur de manifeste, ou si le namespace est détruit.
+        #
+        # ⚠️ Elle sonne AUSSI, légitimement, pendant un exercice de PRA — c'est la preuve qu'elle
+        # fonctionne, pas un faux positif. La faire taire pendant l'exercice se fait par un silence
+        # Alertmanager, jamais en allongeant `for`.
+        #
+        # Exposition connue et assumée : si kube-state-metrics tombe, TOUTES ses séries
+        # disparaissent et cette règle se déclenche sans que la forge ait bougé. C'est le prix de
+        # la forme `absent(...)`, et il est acceptable — l'inverse (rester muet quand l'objet
+        # disparaît) est exactement la panne qu'on vient de vivre. Le cas se reconnaît en une
+        # seconde : `TargetDown` et les autres alertes KSM sonnent en même temps.
+        - alert: ForgejoDeploymentMissing
+          expr: absent(kube_deployment_status_replicas_available{namespace="forgejo", deployment="forgejo"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "forgejo : le Deployment a disparu"
+            description: "kube-state-metrics ne rapporte plus aucun Deployment « forgejo » depuis 15 min : l'objet n'existe plus, il n'est pas seulement en panne. Attendu pendant un exercice de reprise (doc/forgejo-pra.md §8 étape A) ; sinon, vérifier qu'ArgoCD n'a pas pruné le composant — `kubectl -n argocd get app forgejo`. Si toutes les alertes kube-state-metrics sonnent ensemble, c'est KSM qui est tombé, pas la forge."

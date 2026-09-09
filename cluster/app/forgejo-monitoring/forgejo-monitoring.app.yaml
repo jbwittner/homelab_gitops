@@ -1,0 +1,36 @@
+# Volet observabilité de [forgejo](../forgejo/README.md) : les alertes de disponibilité de la
+# forge, séparées du composant principal pour la même raison que velero-monitoring et
+# cnpg-monitoring — ce sont des CRs `monitoring.coreos.com`, dont les CRDs n'existent pas au
+# bootstrap à froid. Les poser dans `forgejo/manifests` ferait échouer l'Application de la FORGE
+# tant que kube-prometheus-stack n'est pas là, c'est-à-dire mettre l'applicatif en dépendance de sa
+# propre surveillance.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo-monitoring
+  namespace: argocd
+  annotations:
+    # Wave 2, comme les composants frères : après les CRDs, sans ordre vis-à-vis de la forge —
+    # une alerte peut exister avant ce qu'elle surveille, elle sonnera, ce qui est correct.
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: forgejo-monitoring
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: forge
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/forgejo-monitoring/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: forgejo
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
