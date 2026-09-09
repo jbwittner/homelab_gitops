@@ -20,7 +20,7 @@ fait échouer la sauvegarde entière (`PartiallyFailed`). Une politique de volum
 `manifests/volume-policies.yaml`.
 
 Ce composant ne remplace pas les sauvegardes applicatives natives : les snapshots raft
-d'[openbao](../openbao/README.md) et les backups CNPG restent la voie de restauration *cohérente*
+d'[openbao](../../../archive/openbao/README.md) et les backups CNPG restent la voie de restauration *cohérente*
 d'une base ; velero est le filet de niveau cluster. Poussé à sa conclusion, ce raisonnement a sorti
 le namespace `openbao` du périmètre : quand la sauvegarde native est meilleure ET testée, le filet
 n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
@@ -100,12 +100,12 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   (`openbao-script.sh verify`). Ce que le retrait a coûté — un second domaine de panne, et la
   détection passive d'une chaîne morte en silence — est remplacé par les alertes
   `OpenBaoSnapshotTooOld` / `OpenBaoSnapshotMissing`
-  ([openbao-monitoring](../openbao-monitoring/README.md)). **Les deux décisions se tiennent
+  ([openbao-monitoring](../../../archive/openbao-monitoring/README.md)). **Les deux décisions se tiennent
   ensemble** : supprimer ces alertes rend l'exclusion indéfendable, remettre `openbao` dans la
   liste blanche revient sur une décision motivée. Corollaire à ne pas perdre : restaurer le PVC
   raft n'aurait de toute façon pas descellé le coffre — son contenu est chiffré, et les clés de
   descellement comme le token root ne sont dans **aucune** sauvegarde
-  (cf. [openbao](../openbao/README.md)).
+  (cf. [openbao](../../../archive/openbao/README.md)).
 - **Restaurer un namespace géré par ArgoCD entre en concurrence avec `selfHeal`.** Les objets
   déclarés dans Git y sont reposés par ArgoCD ; ce que velero apporte d'utile, ce sont les
   **données** (PV/PVC) et les objets qui n'existent pas dans Git. Restaurer un namespace entier
@@ -160,7 +160,7 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   alertes. L'autodétection du chart repose sur les Capabilities Helm, donc sur la présence des
   CRDs prometheus-operator au moment du rendu — non garantie au bootstrap, `kube-prometheus-stack`
   vivant dans le tier `app`, sans relation d'ordre avec `infra`. Même découpage que pour
-  [openbao](../openbao/README.md). En revanche `metrics.enabled` reste **vrai** ici : c'est lui qui
+  [openbao](../../../archive/openbao/README.md). En revanche `metrics.enabled` reste **vrai** ici : c'est lui qui
   crée le Service scrapé, et le couper viderait le ServiceMonitor du composant frère en silence.
   Dashboard Grafana : dossier *Wittnerlab*, « Sauvegardes — velero » (le ConfigMap est dans
   [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)).
@@ -203,7 +203,7 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   #    téléchargée. Ce sont les deux seules copies en clair de la clé privée du compte de service.
   rm cluster/infra/velero/manifests/velero-gcs.secret.yaml ./velero-sa.json
   ```
-  Contrairement aux secrets servis par [openbao](../openbao/README.md), un scellé se refait passer
+  Contrairement aux secrets servis par [openbao](../../../archive/openbao/README.md), un scellé se refait passer
   par Git : une rotation demande un commit. Révoquer l'ancienne clé côté GCP après coup
   (`gcloud iam service-accounts keys delete`).
 - **Vérifier que le bucket répond** — le BSL doit passer `Available` en moins d'une minute :

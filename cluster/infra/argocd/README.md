@@ -298,7 +298,7 @@ les **adopte**, et dès qu'ils sortent de l'ensemble désiré (un scale down suf
 les supprime.
 
 > [!WARNING]
-> Arrivé pour de vrai : le PVC `data-openbao-1` d'[openbao](../openbao/README.md), détruit par un
+> Arrivé pour de vrai : le PVC `data-openbao-1` d'[openbao](../../../archive/openbao/README.md), détruit par un
 > prune lors d'un passage de 2 à 1 replica — et avec lui le LV, `openebs-lvm-thin` étant en
 > `reclaimPolicy: Delete`. Le `persistentVolumeClaimRetentionPolicy: Retain` du StatefulSet **ne
 > protège pas de ce chemin** : il ne couvre que son propre garbage collector. Le coffre était

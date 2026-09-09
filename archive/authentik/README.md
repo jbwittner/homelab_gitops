@@ -3,12 +3,12 @@
 ## Rôle
 
 Identity Provider du homelab (SSO : OIDC, SAML, LDAP, proxy). Base de données PostgreSQL dédiée,
-portée par un `Cluster` CNPG (opérateur fourni par [`cnpg`](../cnpg/README.md)). Exposé
+portée par un `Cluster` CNPG (opérateur fourni par [`cnpg`](../../cluster/app/cnpg/README.md)). Exposé
 publiquement sur `https://authentik.wittner.tech` via `shared-gw` (listener `https-public`,
-cf. [doc/reseau.md](../../../doc/reseau.md)).
+cf. [doc/reseau.md](../../doc/reseau.md)).
 
-C'est le fournisseur d'identité de [`argocd`](../../infra/argocd/README.md) et de
-[`kube-prometheus-stack`](../kube-prometheus-stack/README.md) : les Providers, Applications et
+C'est le fournisseur d'identité de [`argocd`](../../cluster/infra/argocd/README.md) et de
+[`kube-prometheus-stack`](../../cluster/app/kube-prometheus-stack/README.md) : les Providers, Applications et
 groupes côté authentik sont gérés en **Terraform** (autre repo), pas ici.
 
 ## Fichiers
@@ -20,7 +20,7 @@ groupes côté authentik sont gérés en **Terraform** (autre repo), pas ici.
 - `manifests/authentik-db.yaml` — `Cluster` CNPG (l'opérateur génère le service
   `authentik-db-rw` et le secret `authentik-db-app`)
 - `manifests/authentik-secrets.externalsecret.yaml` — `ExternalSecret` `authentik-secrets`, clé
-  `secret-key`, servi par [openbao](../../infra/openbao/README.md)
+  `secret-key`, servi par [openbao](../openbao/README.md)
 - `manifests/authentik-httproute.yaml` — HTTPRoute → `shared-gw`
 - `manifests/kustomization.yaml` — assemblage
 

@@ -4,12 +4,12 @@
 
 Gestionnaire de secrets (fork libre de Vault), stockage **raft intégré**, un replica. C'est
 l'un des deux canaux de secrets du repo, à côté de
-[`sealed-secrets`](../sealed-secrets/README.md), et il porte la quasi-totalité d'entre eux — sept
+[`sealed-secrets`](../../cluster/infra/sealed-secrets/README.md), et il porte la quasi-totalité d'entre eux — sept
 des huit. Différence entre les deux : l'emplacement du chiffré, **dans Git** pour un `SealedSecret`,
 **dans le PVC** pour openbao. Il n'est pas consommé directement : c'est
-[external-secrets](../external-secrets/README.md) qui en tire des `Secret` Kubernetes natifs.
+[external-secrets](../../cluster/infra/external-secrets/README.md) qui en tire des `Secret` Kubernetes natifs.
 Critère de choix entre les deux canaux :
-[`doc/regles-gitops.md`](../../../doc/regles-gitops.md). UI exposée sur
+[`doc/regles-gitops.md`](../../doc/regles-gitops.md). UI exposée sur
 `openbao.lan.wittner.tech`, login humain en **SSO authentik** (OIDC), token root conservé en
 break-glass — cf. Opérations.
 
@@ -20,13 +20,13 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 
 | Chemin KV | Clés | Consommateur |
 |---|---|---|
-| `homelab/argocd/oidc` | `client-secret` | [argocd](../argocd/README.md) |
-| `homelab/argocd/notifications` | `grafana-api-key` | [argocd](../argocd/README.md) |
-| `homelab/authentik/secrets` | `secret-key` | [authentik](../../app/authentik/README.md) |
-| `homelab/cert-manager/cloudflare` | `api-token` | ~~cert-manager~~ — **plus consommé** : le token DNS-01 est passé au canal [sealed-secrets](../sealed-secrets/README.md). Chemin conservé le temps de valider la bascule, à purger ensuite |
-| `homelab/grafana/admin` | `admin-user`, `admin-password` | [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) |
-| `homelab/grafana/oidc` | `client-secret` | [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) |
-| `homelab/renovate/github` | `token` | [renovate](../../app/renovate/README.md) |
+| `homelab/argocd/oidc` | `client-secret` | [argocd](../../cluster/infra/argocd/README.md) |
+| `homelab/argocd/notifications` | `grafana-api-key` | [argocd](../../cluster/infra/argocd/README.md) |
+| `homelab/authentik/secrets` | `secret-key` | [authentik](../authentik/README.md) |
+| `homelab/cert-manager/cloudflare` | `api-token` | ~~cert-manager~~ — **plus consommé** : le token DNS-01 est passé au canal [sealed-secrets](../../cluster/infra/sealed-secrets/README.md). Chemin conservé le temps de valider la bascule, à purger ensuite |
+| `homelab/grafana/admin` | `admin-user`, `admin-password` | [kube-prometheus-stack](../../cluster/app/kube-prometheus-stack/README.md) |
+| `homelab/grafana/oidc` | `client-secret` | [kube-prometheus-stack](../../cluster/app/kube-prometheus-stack/README.md) |
+| `homelab/renovate/github` | `token` | [renovate](../../cluster/app/renovate/README.md) |
 
 ## Fichiers
 
@@ -41,7 +41,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 - `openbao-script.sh` — gestion des sauvegardes : `status`, `list`, `snapshot`, `fetch`, `check`,
   `verify`, `stop`, `restore`. Pas déployé, pas référencé par le `kustomization.yaml` : ce sont
   des ÉVÉNEMENTS (un snapshot, un restore), pas des états désirés — committés, ArgoCD les
-  rejouerait sans fin. Même statut que `velero-script.sh` côté [velero](../velero/README.md)
+  rejouerait sans fin. Même statut que `velero-script.sh` côté [velero](../../cluster/infra/velero/README.md)
 - `manifests/openbao-snapshot-s3.secret.yaml` — **clair, gitignoré** : template d'entrée de
   `kubeseal` pour les credentials S3 de la sauvegarde (`AWS_ACCESS_KEY_ID`,
   `AWS_SECRET_ACCESS_KEY`). Le produit scellé, `openbao-snapshot-s3.sealed.yaml`, est le seul des
@@ -83,9 +83,9 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   lieu de tomber à zéro. Toute règle d'alerte sur ce composant doit être écrite en `absent(…)`,
   jamais en `up == 0` (cf. [openbao-monitoring](../openbao-monitoring/README.md)).
 - **Le coffre n'est plus en amont de l'émission TLS.** Il l'a été : le token Cloudflare de
-  [cert-manager](../cert-manager/README.md) en venait, et au bootstrap à froid aucun certificat
+  [cert-manager](../../cluster/infra/cert-manager/README.md) en venait, et au bootstrap à froid aucun certificat
   wildcard ne s'émettait avant le descellement manuel — donc aucun listener TLS de `shared-gw`
-  n'était programmé. Ce token est repassé au canal [sealed-secrets](../sealed-secrets/README.md)
+  n'était programmé. Ce token est repassé au canal [sealed-secrets](../../cluster/infra/sealed-secrets/README.md)
   (wave `-8`) : l'émission TLS ne dépend plus d'un geste humain.
 - **Wave `1`, après openebs.** Le coffre a un PVC : sans la StorageClass par défaut il reste
   `Pending`. Cet ordre n'existe que parce qu'openbao est un composant d'**infra** — les
@@ -102,7 +102,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
      l'ensemble désiré (un scale down suffit) ; avec `reclaimPolicy: Delete` sur
      openebs-lvm-thin, le LV partait avec. Détruit en vrai une fois (`data-openbao-1`, puis
      reprovisionné à vide). Fermé par `application.resourceTrackingMethod: annotation` dans
-     [argocd](../argocd/README.md) (`manifests/argocd-cm.yaml`) — **la protection ne vit pas dans
+     [argocd](../../cluster/infra/argocd/README.md) (`manifests/argocd-cm.yaml`) — **la protection ne vit pas dans
      ce composant**.
   2. Le **GC du StatefulSet** (suppression du STS, passage à 0 replica) :
      `persistentVolumeClaimRetentionPolicy: Retain` des deux côtés, dans `helm-values.yaml`.
@@ -110,7 +110,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   ⚠️ Le point 2 ne protège **pas** du point 1 — c'est le piège, parce qu'il en donne
   l'impression. Ne retirer ni l'un ni l'autre.
 - **Le CronJob `openbao-snapshot` est la SEULE sauvegarde du coffre.** Le namespace `openbao` est
-  hors du périmètre de [velero](../velero/README.md), délibérément : `bao operator raft snapshot
+  hors du périmètre de [velero](../../cluster/infra/velero/README.md), délibérément : `bao operator raft snapshot
   save` produit une copie *cohérente-transaction*, là où kopia ne copierait le PVC que de façon
   *cohérente-crash*, et le snapshot est la seule des deux copies à être réellement testée
   (`openbao-script.sh verify`, cf. Opérations). Il n'y a donc **pas de filet** derrière ce CronJob :
@@ -138,7 +138,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   serveur, il ne configure rien à l'intérieur : méthode d'auth `kubernetes`, policies, roles et
   moteurs de secrets sont posés par le provider Terraform/OpenTofu qui gère déjà les providers
   OIDC authentik. Le **contrat** attendu par
-  [external-secrets](../external-secrets/README.md) — et sans lequel les sept `ExternalSecret`
+  [external-secrets](../../cluster/infra/external-secrets/README.md) — et sans lequel les sept `ExternalSecret`
   échouent en `permission denied` :
   - un moteur KV **v2** monté sur `kv` ;
   - **un mount d'auth `kubernetes` par cluster**, nommé `kubernetes-<cluster>` — une méthode
@@ -151,7 +151,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   - une policy en **lecture** sur `kv/data/homelab/*` attachée à ces roles ;
   - pour le **login humain**, un mount d'auth `oidc` pointant sur le Provider authentik
     `openbao`, plus le groupe externe `app-openbao-admin` et sa policy — sans lui, seul le token
-    root permet d'entrer. Détail : [`doc/openbao-terraform.md`](../../../doc/openbao-terraform.md) §5.
+    root permet d'entrer. Détail : [`openbao-terraform.md`](openbao-terraform.md) §5.
 
   Rien côté `cluster/` ne vérifie ce contrat : le repo GitOps déclare le consommateur, le repo
   Terraform déclare le producteur, et la seule preuve que les deux s'accordent est l'état
@@ -171,7 +171,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
   coffre dépend du coffre. C'est le seul `SealedSecret` prévu dans ce composant
   (`openbao-snapshot-s3`, cf. Fichiers et Opérations) : tout autre secret d'ici doit passer par
   le coffre. Même raisonnement pour le secret resté scellé — le Secret de cluster
-  du spoke (cf. [`doc/regles-gitops.md`](../../../doc/regles-gitops.md)).
+  du spoke (cf. [`doc/regles-gitops.md`](../../doc/regles-gitops.md)).
 - **L'agent injector n'est utilisé par aucun composant.** Il injecte des *fichiers dans des
   pods*, or les huit consommateurs du repo exigent tous un `Secret` natif (`existingSecret`,
   `secretKeyRef`, `envFrom`, `$secret:clé` d'ArgoCD, Secret de cluster). C'est ESO qui fait le
@@ -180,10 +180,10 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 ## SSO — authentik (OIDC)
 
 Login **humain** sur l'UI et sur la CLI `bao`, par le même fournisseur d'identité que
-[argocd](../argocd/README.md) et [grafana](../../app/kube-prometheus-stack/README.md). Le
+[argocd](../../cluster/infra/argocd/README.md) et [grafana](../../cluster/app/kube-prometheus-stack/README.md). Le
 Provider / Application / groupe côté authentik **et** le mount côté coffre sont posés par le repo
 **Terraform** (autre repo) : rien ici, le chart ne configure pas l'intérieur du coffre. Contrat —
-détail et code HCL dans [`doc/openbao-terraform.md`](../../../doc/openbao-terraform.md) §5 :
+détail et code HCL dans [`openbao-terraform.md`](openbao-terraform.md) §5 :
 
 | Élément | Valeur |
 |---|---|
@@ -202,7 +202,7 @@ Trois pièges, tous vérifiés à la connexion :
   consommateur *est* le coffre, la valeur vit déjà dans sa config d'auth. Pas d'`ExternalSecret`,
   pas d'entrée dans la table « Contenu du coffre » — et surtout pas de secret nécessaire au login
   rangé derrière ce login (règle anti-cycle de
-  [`doc/regles-gitops.md`](../../../doc/regles-gitops.md)).
+  [`doc/regles-gitops.md`](../../doc/regles-gitops.md)).
 - **Le token root reste le break-glass et ne se supprime pas** : l'OIDC ajoute un chemin d'entrée,
   il n'en retire aucun. authentik en panne — ou dont le `secret-key` vient justement du coffre —
   ne doit pas fermer la porte (cf. Contraintes, « Le SSO du coffre dépend d'un composant que le
@@ -249,7 +249,7 @@ Trois pièges, tous vérifiés à la connexion :
   valide mais le groupe n'a pas été reconnu — comparer au caractère près le nom du groupe
   authentik et l'alias côté coffre. Si la méthode **OIDC** n'apparaît pas dans le menu de l'UI,
   c'est le `listing_visibility = "unauth"` qui manque sur le mount. Table complète des
-  symptômes : [`doc/openbao-terraform.md`](../../../doc/openbao-terraform.md).
+  symptômes : [`openbao-terraform.md`](openbao-terraform.md).
 - **Sauvegarder le coffre** (à chaud, possible grâce au backend raft) :
   ```bash
   kubectl -n openbao exec -ti openbao-0 -- bao operator raft snapshot save /tmp/openbao.snap
@@ -261,7 +261,7 @@ Trois pièges, tous vérifiés à la connexion :
   homelab n'a ni bucket ni MinIO. Le jour où l'un des deux existe, c'est la voie à privilégier
   plutôt qu'un CronJob maison.
 - **Sceller les credentials S3 de la sauvegarde** — depuis la racine du repo, cert public récupéré
-  au préalable (cf. [sealed-secrets](../sealed-secrets/README.md)) :
+  au préalable (cf. [sealed-secrets](../../cluster/infra/sealed-secrets/README.md)) :
   ```bash
   # 1. Renseigner les deux valeurs dans le template en clair (gitignoré)
   $EDITOR cluster/infra/openbao/manifests/openbao-snapshot-gcs.secret.yaml
@@ -305,7 +305,7 @@ Trois pièges, tous vérifiés à la connexion :
   fouiller un coffre d'hier sans toucher la prod — conteneur `openbao-drill`, une seule instance à
   la fois, fermée par `stop`. Une instance descellée sert tous les secrets du homelab en clair sur
   `127.0.0.1:8210` : `status` la rappelle à chaque appel. Procédure manuelle et pièges détaillés :
-  [`doc/openbao-restore-local.md`](../../../doc/openbao-restore-local.md).
+  [`doc/openbao-restore-local.md`](../../doc/openbao-restore-local.md).
   ⚠️ Ne jamais tester un restore sur `openbao-0` : `snapshot restore` écrase tout le raft. C'est
   précisément ce que fait `openbao-script.sh restore`, réservé à une vraie reprise.
 - **Configurer le coffre** — c'est le **repo Terraform** qui pose l'auth `kubernetes`, le
@@ -327,7 +327,7 @@ Trois pièges, tous vérifiés à la connexion :
   ```
   ESO reprend la nouvelle valeur au prochain `refreshInterval` (1 h) ; pour l'appliquer tout de
   suite, voir « forcer un rafraîchissement » dans
-  [external-secrets](../external-secrets/README.md).
+  [external-secrets](../../cluster/infra/external-secrets/README.md).
 - **Upgrade** : bumper `targetRevision` dans `openbao.app.yaml`, commit, push. Le pod redémarre
   **scellé** — prévoir le descellement dans la foulée.
 - **Debug** :

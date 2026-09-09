@@ -1,5 +1,17 @@
 # Remonter un OpenBao en local depuis une sauvegarde
 
+> [!IMPORTANT]
+> **ARCHIVÉ — openbao n'est plus déployé.** Le composant vit dans
+> [`archive/openbao/`](../archive/openbao/README.md) (`openbao.noapp.yaml`), et
+> [external-secrets](../cluster/infra/external-secrets/README.md), qui consommait le coffre, est
+> lui aussi désactivé. Le seul canal de secrets actif est
+> [sealed-secrets](../cluster/infra/sealed-secrets/README.md) — cf.
+> [`regles-gitops.md`](regles-gitops.md).
+>
+> Cette page reste valable **telle quelle** pour vérifier un snapshot déjà pris : elle ne touche
+> pas au cluster et ne suppose que le fichier de snapshot, les clés de descellement et un
+> binaire `bao`. Les chemins ci-dessous ont été recalés vers `archive/openbao/`.
+
 ## Rôle
 
 Vérifier qu'une sauvegarde du coffre est **réellement restaurable**, en la remontant dans un
@@ -7,7 +19,7 @@ OpenBao jetable sur le poste, hors cluster. Le contenu d'OpenBao est la seule ch
 absente de Git : c'est la seule sauvegarde dont l'échec ne se verrait nulle part ailleurs.
 
 Les snapshots sont produits par le CronJob `snapshotAgent` de
-[`cluster/infra/openbao`](../cluster/infra/openbao/README.md) (tous les jours à 03:00, rétention
+[`archive/openbao`](../archive/openbao/README.md) (tous les jours à 03:00, rétention
 14 jours) et poussés dans le bucket GCS `homelab-openbao-snapshots-6d84c670`. **La présence d'un
 objet dans le bucket ne prouve rien** : ni que l'archive est complète, ni que la barrière de
 chiffrement est descellable, ni que la configuration posée par le repo Terraform y est. Seul un
@@ -21,11 +33,11 @@ touche le cluster.
 
 Cette page décrit la manipulation à la main, pour la comprendre et pour la conduire quand quelque
 chose sort du cadre. Au quotidien, tout est automatisé par
-[`cluster/infra/openbao/openbao-script.sh`](../cluster/infra/openbao/openbao-script.sh) :
+[`archive/openbao/openbao-script.sh`](../archive/openbao/openbao-script.sh) :
 
 ```bash
-cluster/infra/openbao/openbao-script.sh verify latest            # étapes 1 à 5, aucune clé requise
-cluster/infra/openbao/openbao-script.sh verify oldest --unseal   # + étapes 6 et 7
+archive/openbao/openbao-script.sh verify latest            # étapes 1 à 5, aucune clé requise
+archive/openbao/openbao-script.sh verify oldest --unseal   # + étapes 6 et 7
 ```
 
 Le script encapsule les pièges listés plus bas et compare tout seul la configuration de seal
@@ -45,7 +57,7 @@ snapshot exige de fermer le précédent. C'est ce qui évite de se retrouver ave
 locaux dont on ne sait plus lequel contient quoi — et de lire une valeur dans le mauvais.
 
 ```bash
-S=cluster/infra/openbao/openbao-script.sh
+S=archive/openbao/openbao-script.sh
 
 $S up oldest                 # monte, restaure, laisse tourner — instance SCELLÉE
 $S unseal                    # descelle (3 parts, saisie masquée) quand on a décidé de le faire
@@ -72,7 +84,7 @@ sachant ce qu'on jette.
 | **Le token root de PROD** | lire le contenu après descellement — requis seulement pour le test complet |
 
 Les parts et le token root vivent **hors cluster**, au coffre physique (cf.
-[`cluster/infra/openbao/README.md`](../cluster/infra/openbao/README.md) §Contraintes). Sans eux,
+[`archive/openbao/README.md`](../archive/openbao/README.md) §Contraintes). Sans eux,
 la procédure s'arrête à l'étape 5 — ce qui reste un test utile, voir §Deux niveaux de test.
 
 ## Deux niveaux de test
@@ -340,7 +352,7 @@ cd ~ && rm -rf ~/bao-drill
   pas une manipulation à faire sur un cluster vivant.
 - **La surveillance du CronJob lui-même.** Aucune alerte ne remonte aujourd'hui un
   `openbao-snapshot` en échec — le ServiceMonitor de
-  [openbao-monitoring](../cluster/infra/openbao-monitoring/README.md) ne porte que sur le serveur.
+  [openbao-monitoring](../archive/openbao-monitoring/README.md) ne porte que sur le serveur.
   Un snapshot qui cesse d'être produit ne se voit qu'en regardant le bucket.
 
 ## Table des symptômes

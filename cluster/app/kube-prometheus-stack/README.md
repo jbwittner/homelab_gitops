@@ -10,7 +10,15 @@ authentifié par un **compte admin local** dont le mot de passe est porté par u
 Prometheus et Alertmanager restent internes (non exposés).
 
 Ce composant porte aussi tout le **câblage Grafana des composants tiers** : datasource
-[Loki](../loki/README.md), dashboards maison, ServiceMonitors ArgoCD.
+**Loki**, dashboards maison, ServiceMonitors ArgoCD.
+
+> [!WARNING]
+> **Ni Loki ni Alloy ne sont déployés par ce dépôt.** La datasource Loki est bien déclarée dans
+> `helm-values.yaml` (`url: http://loki-gateway.loki.svc.cluster.local`), et les dashboards de logs
+> l'interrogent — mais aucun composant de `cluster/` ne pose ce service. Tant qu'il n'existe pas,
+> le dashboard « Logs — applications » et la datasource restent **vides**, sans erreur visible
+> ailleurs. Les mentions de `loki` et `alloy` ci-dessous décrivent donc un câblage **attendu**, pas
+> un état.
 
 ## Fichiers
 
@@ -27,7 +35,7 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - `manifests/grafana-admin.sealed.yaml` — `SealedSecret` `grafana-admin`, clés `admin-user` /
   `admin-password` : le **seul** identifiant d'accès à Grafana
 - `manifests/grafana-oidc.externalsecret.yaml` — `ExternalSecret` `grafana-oidc`, clé `client-secret`,
-  servi par [openbao](../../infra/openbao/README.md). **Non référencé dans `kustomization.yaml`**
+  servi par [openbao](../../../archive/openbao/README.md). **Non référencé dans `kustomization.yaml`**
   tant que le SSO est commenté (cf. § SSO)
 - `manifests/grafana-admin.externalsecret.yaml` — ancien canal openbao du compte admin,
   **non référencé** : remplacé par le `SealedSecret` ci-dessus, les deux visent le même `Secret`
@@ -44,7 +52,7 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - `manifests/dashboard-ressources-volumes.yaml` — même famille, axe stockage : remplissage et
   inodes par PVC, projection avant saturation, pool LVM, cycle de vie PVC/PV
 - `manifests/dashboard-logs.yaml` — dashboard « Logs — applications » (datasource
-  [Loki](../loki/README.md)) : débit, niveaux, erreurs, conteneurs les plus bavards, journal
+  **Loki**) : débit, niveaux, erreurs, conteneurs les plus bavards, journal
   filtrable
 - `manifests/dashboard-velero.yaml` — dashboard « Sauvegardes — velero » : fraîcheur de la
   dernière sauvegarde planifiée, résultats et durées, tableau une ligne par sauvegarde, copie
@@ -83,9 +91,9 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   [sealed-secrets](../../infra/sealed-secrets/README.md), seul état non reconstructible du cluster.
 - Tout ServiceMonitor destiné à ce Prometheus doit porter le label
   `release: kube-prometheus-stack` (`serviceMonitorSelectorNilUsesHelmValues`) — vaut aussi pour
-  [loki](../loki/README.md), [alloy](../alloy/README.md),
+  **loki**, **alloy**,
   [openebs-monitoring](../../infra/openebs-monitoring/README.md) et
-  [openbao-monitoring](../../infra/openbao-monitoring/README.md).
+  [openbao-monitoring](../../../archive/openbao-monitoring/README.md).
 - Grafana est en `deploymentStrategy: Recreate` : son PVC est RWO node-local, un rollout en
   rolling update produirait un double-mount.
 - Ne pas mettre `disable_login_form: true` : le formulaire local est aujourd'hui le seul moyen
@@ -251,9 +259,9 @@ la trentaine de dashboards du chart.
 ### Logs — datasource Loki
 
 La datasource `Loki` est déclarée dans `helm-values.yaml` (`grafana.additionalDataSources`), et
-non côté composant [loki](../loki/README.md) : le câblage Grafana d'un composant tiers vit ici,
+non côté composant **loki** : le câblage Grafana d'un composant tiers vit ici,
 comme les dashboards et ServiceMonitors ArgoCD. Les logs sont collectés par
-[alloy](../alloy/README.md). Vérification : Connections → Data sources → Loki → **Save & test**,
+**alloy**. Vérification : Connections → Data sources → Loki → **Save & test**,
 puis Explore avec une requête du type `{namespace="argocd"}`.
 
 Le dashboard « Logs — applications » filtre par namespace / pod / conteneur, plus une variable
@@ -267,7 +275,7 @@ avant d'y toucher :
   `level` d'une ligne JSON, le `level=` d'un logfmt, ou devine sur une ligne libre. Rien à
   configurer par application, et `warning` est normalisé en `warn`. Ce que Loki ne sait pas
   classer devient `unknown` — une application dont tout le volume est `unknown` gagnerait à
-  émettre des logs structurés. Dépend de `discover_log_levels` côté [loki](../loki/README.md).
+  émettre des logs structurés. Dépend de `discover_log_levels` côté **loki**.
 - `detected_level` est une **métadonnée structurée**, pas un label : elle se filtre après le
   sélecteur (`| detected_level=~"…"`, jamais dans `{}`) et n'apparaît pas dans l'API des labels,
   d'où une variable `custom` et non un `label_values()`.
@@ -323,7 +331,7 @@ utilise le vrai kubeconfig — en lecture seule (`list`/`watch`).
 
 ### Dashboard « Alertes — cluster »
 
-Vue unique sur les règles de tous les composants — [openbao-monitoring](../../infra/openbao-monitoring/README.md),
+Vue unique sur les règles de tous les composants — [openbao-monitoring](../../../archive/openbao-monitoring/README.md),
 [velero-monitoring](../../infra/velero-monitoring/README.md),
 [openebs-monitoring](../../infra/openebs-monitoring/README.md) et celles du chart. Il ne lit
 **aucune** métrique d'application : uniquement `ALERTS` et `ALERTS_FOR_STATE`, synthétisées par

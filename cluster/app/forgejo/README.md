@@ -234,7 +234,7 @@ Trois fichiers, indissociables. En retirer un ne produit pas une erreur mais une
 > [cnpg-monitoring](../cnpg-monitoring/README.md) — `CNPGWalArchivingBacklog`,
 > `CNPGBackupTooOld`, `CNPGNoBackupYet`. Les supprimer laisserait la base avec une chaîne unique
 > **et** aucun moyen de la voir mourir. Les deux décisions se tiennent ensemble, exactement comme
-> pour [openbao](../../infra/openbao/README.md).
+> pour [openbao](../../../archive/openbao/README.md).
 
 Ce que ni l'une ni l'autre ne couvre : **une lifecycle rule GCS** posée par erreur sur l'un des deux
 buckets. Les deux outils font leur propre GC, et aucune métrique du cluster ne verrait un bucket
@@ -982,7 +982,7 @@ deux rescellé donne une forge qui envoie et un alerting muet — ou l'inverse, 
 
 - **SSO OIDC via authentik** — le chart sait déclarer une source OAuth2
   (`gitea.oauth[]`, appliquée par `forgejo admin auth add-oauth`), mais
-  [`authentik`](../authentik/README.md) n'est pas déployé aujourd'hui (son Application est en
+  [`authentik`](../../../archive/authentik/README.md) n'est pas déployé aujourd'hui (son Application est en
   `.noapp.yaml`, et le bloc `oidc.config` d'ArgoCD est commenté pour la même raison). À rouvrir
   avec lui, pas avant.
 - **Forgejo Actions** — le moteur est actif côté serveur, mais aucun `forgejo-runner` n'est

@@ -2,8 +2,9 @@
 
 ## Rôle
 
-Les **procédures** du homelab : ce qui se fait à la main, sous stress ou une fois par an, et qui ne
-tient ni dans un README de composant ni dans un script.
+Les **règles** et les **procédures** du homelab : ce qui vaut pour tout le dépôt, et ce qui se fait
+à la main — sous stress ou une fois par an — sans tenir dans un README de composant ni dans un
+script.
 
 La frontière avec le reste du dépôt :
 
@@ -11,7 +12,7 @@ La frontière avec le reste du dépôt :
 | --- | --- |
 | `cluster/**/README.md` | ce que le composant **est**, et pourquoi il est réglé ainsi |
 | `script/` | ce qui se **tape souvent**, automatisé |
-| `doc/` | ce qui se **conduit**, en plusieurs étapes, avec des décisions entre les étapes |
+| `doc/` | ce qui **vaut pour tout le dépôt** (règles, conventions, réseau), et ce qui se **conduit** en plusieurs étapes avec des décisions entre elles |
 
 Un README de composant décrit un état ; une procédure d'ici décrit un **enchaînement**, avec ses
 points de contrôle et ses pièges d'ordre. C'est la seule raison d'être de ce dossier — sans quoi
@@ -19,16 +20,30 @@ ces pages iraient dans le README du composant concerné.
 
 ## Contenu
 
-- [`openbao-restore-local.md`](openbao-restore-local.md) — remonter un snapshot OpenBao dans une
-  instance jetable **hors cluster**, pour prouver qu'il est réellement restaurable. Ne touche
-  rien du cluster. Automatisé par
-  [`openbao-script.sh verify`](../archive/openbao/README.md).
+### Règles et conventions — valables partout
+
+- [`regles-gitops.md`](regles-gitops.md) — les règles **non négociables** : aucune donnée hors
+  GitOps, les cinq gestes impératifs assumés, et le canal de secrets (sealed-secrets, désormais le
+  seul).
+- [`conventions.md`](conventions.md) — la forme d'un composant : arbre `cluster/`, suffixes
+  `.app.yaml` / `.noapp.yaml`, archétypes, sync-waves, règle README.
+- [`reseau.md`](reseau.md) — le `shared-gw`, ses deux listeners, ce qui est exposé, le DNS — et le
+  **reverse proxy `192.168.1.50`**, sans lequel un `HTTPRoute` sain répond 404.
+
+### Procédures
+
+- [`runbook-bootstrap.md`](runbook-bootstrap.md) — **bootstrap et reprise à froid** du cluster, en
+  huit étapes et quatre gestes manuels irréductibles. La valeur de cette page est l'ordre des
+  dépendances, pas les commandes.
 - [`forgejo-pra.md`](forgejo-pra.md) — le **plan de reprise** de la forge : ce qui est perdu selon
-  le sinistre, dans quel ordre remonter, et les cinq pièges qui rendent une restauration
+  le sinistre, dans quel ordre remonter, et les **sept** pièges qui rendent une restauration
   silencieusement fausse.
 - [`forgejo-pra-exercice.md`](forgejo-pra-exercice.md) — **l'exercice** qui éprouve ce plan :
   restaurer les deux chaînes dans un namespace `forgejo-preprod`, l'exposer sur
-  `forgejo-preprod.lan.wittner.tech`, vérifier, détruire.
+  `forgejo-preprod.lan.wittner.tech`, vérifier, détruire. Contient le **journal des dix passages**.
+- [`openbao-restore-local.md`](openbao-restore-local.md) — ⚠️ **composant archivé** : remonter un
+  snapshot OpenBao dans une instance jetable hors cluster. Conservé pour mémoire, cf.
+  [`archive/openbao/`](../archive/openbao/README.md).
 
 ## Contraintes
 

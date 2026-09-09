@@ -198,7 +198,7 @@ est libre.
 ### Passer le dashboard sur OIDC
 
 L'auth basic est le minimum viable pour un accès LAN. Pour brancher
-[authentik](../authentik/README.md) une fois celui-ci actif, remplacer les trois variables
+[authentik](../../../archive/authentik/README.md) une fois celui-ci actif, remplacer les trois variables
 `HERMES_DASHBOARD_BASIC_AUTH_*` par `HERMES_DASHBOARD_OIDC_ISSUER` +
 `HERMES_DASHBOARD_OIDC_CLIENT_ID` (le fournisseur `dashboard_auth/self_hosted` s'active à leur
 seule présence), et resceller.

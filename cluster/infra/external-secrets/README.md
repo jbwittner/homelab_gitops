@@ -127,7 +127,7 @@ différences pour un spoke, toutes deux dues au fait que le coffre vit sur le hu
   | Message | Cause |
   |---|---|
   | `permission denied` | policy/role manquant côté openbao, ou mauvais mount |
-  | `Vault is sealed` / `503` | coffre scellé — le desceller (cf. [openbao](../openbao/README.md)) |
+  | `Vault is sealed` / `503` | coffre scellé — le desceller (cf. [openbao](../../../archive/openbao/README.md)) |
   | `cannot get ClusterSecretStore` | le store n'est pas encore synchronisé (wave 1) |
 - **Vérifier l'état du pont** :
   ```bash

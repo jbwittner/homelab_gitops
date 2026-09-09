@@ -8,8 +8,8 @@ dans le ns `test-nginx` :
 
 - **nginx** — le workload tourne et se joint ;
 - **lvm-test** — un PVC sur `openebs-lvm-thin` est provisionné et monté
-  ([openebs](../../infra/openebs/README.md)) ;
-- **cluster-example** — un `Cluster` CNPG démarre ([cnpg](../cnpg/README.md)).
+  ([openebs](../../cluster/infra/openebs/README.md)) ;
+- **cluster-example** — un `Cluster` CNPG démarre ([cnpg](../../cluster/app/cnpg/README.md)).
 
 ## Fichiers
 
@@ -34,4 +34,4 @@ dans le ns `test-nginx` :
   Attendu : pods `Running`, PVC `Bound`, Cluster « in healthy state ».
 - **Réinitialiser un test** : retirer la ressource du manifeste, commit, push (le prune la
   supprime), puis la remettre — jamais de `kubectl delete` manuel
-  ([doc/regles-gitops.md](../../../doc/regles-gitops.md)).
+  ([doc/regles-gitops.md](../../doc/regles-gitops.md)).

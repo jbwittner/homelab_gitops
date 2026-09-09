@@ -11,7 +11,7 @@ au bootstrap — c'est toute la raison de la séparation.
 Le chart openbao sait générer ce ServiceMonitor
 (`serverTelemetry.serviceMonitor.enabled: true`), et c'est ce qui était en place tant qu'openbao
 vivait sous `cluster/app/` : le même app-of-apps synchronisait le coffre et
-[kube-prometheus-stack](../../app/kube-prometheus-stack/README.md), la CRD était donc là. Le
+[kube-prometheus-stack](../../cluster/app/kube-prometheus-stack/README.md), la CRD était donc là. Le
 passage du composant dans `cluster/infra/` a cassé cette relation — les sync-waves ne s'ordonnent
 qu'à l'intérieur d'un app-of-apps, `infra` et `app` se déroulent en parallèle — et la doc du
 chart est explicite sur ce qui arrive alors :
@@ -22,7 +22,7 @@ chart est explicite sur ce qui arrive alors :
 Le flag a donc été coupé pour débloquer la sync, et le coffre s'est retrouvé sans supervision.
 Le ServiceMonitor est réécrit à la main ici, à l'identique du template : même contenu, mais dans
 une Application qui a le droit d'échouer tant que le stack d'observabilité n'est pas là. Même
-schéma que [openebs-monitoring](../openebs-monitoring/README.md).
+schéma que [openebs-monitoring](../../cluster/infra/openebs-monitoring/README.md).
 
 ## Fichiers
 
@@ -57,7 +57,7 @@ schéma que [openebs-monitoring](../openebs-monitoring/README.md).
   `kube_cronjob_status_last_successful_time`, servie par kube-state-metrics. Procédure pour en
   ajouter : ci-dessous.
 - **`openbao.backup.rules` n'est pas un confort : c'est la contrepartie du retrait d'openbao du
-  périmètre [velero](../velero/README.md).** Le coffre n'a plus qu'une seule chaîne de sauvegarde,
+  périmètre [velero](../../cluster/infra/velero/README.md).** Le coffre n'a plus qu'une seule chaîne de sauvegarde,
   le CronJob `openbao-snapshot` ; ces deux règles sont ce qui détecte qu'elle s'est arrêtée. Les
   supprimer sans remettre `openbao` dans `includedNamespaces` laisserait le coffre sans sauvegarde
   **et** sans alerte — les deux décisions se tiennent ensemble.
