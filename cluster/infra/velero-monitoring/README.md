@@ -116,9 +116,12 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
 - **Vérifier que les cibles sont scrapées** :
   ```bash
   kubectl -n velero get servicemonitor,podmonitor,prometheusrule
-  kubectl -n monitoring exec -ti sts/prometheus-kube-prometheus-stack-prometheus -c prometheus -- \
-    wget -qO- 'http://localhost:9090/api/v1/targets?state=active' | grep -o 'velero[^"]*' | sort -u
+  kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 19090:9090 &
+  curl -s 'localhost:19090/api/v1/targets?state=active' | grep -o 'velero[^"]*' | sort -u
   ```
+  ⚠️ Pas de `kubectl exec` dans le conteneur `prometheus` : son image n'a **ni shell ni `wget`**
+  (`exec: "sh": executable file not found in $PATH`). Le seul accès à l'API passe par un
+  port-forward.
 - **Vérifier qu'une métrique existe vraiment avant d'écrire une règle dessus** — la seule façon de
   ne pas produire une alerte silencieuse :
   ```bash
@@ -129,8 +132,8 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
   ```
 - **Lister les alertes actives du groupe** :
   ```bash
-  kubectl -n monitoring exec -ti sts/prometheus-kube-prometheus-stack-prometheus -c prometheus -- \
-    wget -qO- 'http://localhost:9090/api/v1/rules?type=alert' | grep -o 'Velero[A-Za-z]*'
+  kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 19090:9090 &
+  curl -s 'localhost:19090/api/v1/rules?type=alert' | grep -o 'Velero[A-Za-z]*' | sort -u
   ```
 - **Éteindre une alerte de BSL restée allumée après un exercice** — le gauge d'un BSL supprimé n'est
   purgé que par un redémarrage du serveur (voir *Contraintes*) :

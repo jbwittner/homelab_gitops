@@ -675,11 +675,21 @@ Deux réglages de cardinalité, posés dans `gitea.config.metrics` :
 curl -sI https://forgejo.wittner.tech/metrics | head -3
 
 # 2. Sans token, en direct sur le pod : doit répondre 401
-kubectl -n forgejo exec deploy/forgejo -- wget -qS -O- http://localhost:3000/metrics 2>&1 | head -3
+#    (l'image Forgejo, elle, a bien un busybox)
+kubectl -n forgejo exec deploy/forgejo -- \
+  wget -S -q -O- http://localhost:3000/metrics 2>&1 | grep -i 'HTTP/'
 
 # 3. La cible côté Prometheus (doit être `up`, job `forgejo-http`)
-kubectl -n monitoring exec -ti sts/prometheus-kube-prometheus-stack-prometheus -c prometheus -- \
-  wget -qO- 'http://localhost:9090/api/v1/targets?state=active' | grep -o 'forgejo[^"]*'
+#    ⚠️ PAS de `kubectl exec` ici : l'image du conteneur `prometheus` n'a NI SHELL NI WGET
+#    (« exec: "sh": executable file not found in $PATH »). Port-forward obligatoire.
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 19090:9090 &
+curl -s 'localhost:19090/api/v1/targets?state=active' \
+  | python3 -c 'import json,sys; [print(t["labels"]["job"], t["health"], t.get("lastError","-")) \
+      for t in json.load(sys.stdin)["data"]["activeTargets"] if "forgejo" in t["labels"].get("job","")]'
+
+# 4. Les jauges elles-mêmes (préfixe gitea_, pas forgejo_)
+curl -s --get localhost:19090/api/v1/query \
+  --data-urlencode 'query=gitea_repositories' | python3 -m json.tool
 ```
 
 ⚠️ **Une cible en 401 ne vide pas le dashboard, elle le fige** : les jauges gardent leur dernière

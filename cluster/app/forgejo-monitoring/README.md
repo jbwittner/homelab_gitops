@@ -76,9 +76,12 @@ se déclenche jamais. **Série absente ≠ série à zéro.**
 - **Vérifier que les règles sont chargées** :
   ```bash
   kubectl -n forgejo get prometheusrule
-  kubectl -n monitoring exec -ti sts/prometheus-kube-prometheus-stack-prometheus -c prometheus -- \
-    wget -qO- 'http://localhost:9090/api/v1/rules?type=alert' | grep -o 'Forgejo[A-Za-z]*'
+  kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 19090:9090 &
+  curl -s 'localhost:19090/api/v1/rules?type=alert' | grep -o 'Forgejo[A-Za-z]*' | sort -u
   ```
+  ⚠️ Pas de `kubectl exec` dans le conteneur `prometheus` : son image n'a **ni shell ni `wget`**
+  (`exec: "sh": executable file not found in $PATH`). Le seul accès à l'API passe par un
+  port-forward.
 - **Éprouver `ForgejoDown` sans casser la forge** — un `scale --replicas=0` suffit, mais ⚠️
   `selfHeal` d'ArgoCD le remonte en quelques secondes : couper l'auto-sync des TROIS niveaux
   (`root`, `app`, `forgejo`) d'abord, comme pour la reprise (doc/forgejo-pra.md §8 étape A).
