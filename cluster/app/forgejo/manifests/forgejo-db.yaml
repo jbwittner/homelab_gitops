@@ -95,10 +95,18 @@ spec:
         # ⚠️ À INCRÉMENTER À CHAQUE REPRISE (v2 → v3 → …), en recopiant l'ancienne valeur dans
         # `externalClusters[0].plugin.parameters.serverName`. Les deux se déplacent ensemble.
         #
+        # ⚠️ ET LA CIBLE DOIT N'AVOIR JAMAIS SERVI, pas seulement être différente de la source :
+        # barman refuse de démarrer sur un prefix non vide — « WAL archive check failed for server
+        # <nom>: Expected empty archive ». Un `serverName` où quoi que ce soit a déjà été archivé,
+        # ne serait-ce que par un cluster jetable, est BRÛLÉ définitivement. Constaté le 2026-09-09 :
+        # `forgejo-db-v2` a été consommé par un `initdb` accidentel de quelques minutes, ce qui a
+        # fait échouer la reprise suivante — d'où le saut direct à v3. En cas de doute sur un
+        # numéro, en prendre un neuf : ils ne coûtent rien, et vérifier coûte un aller-retour GCS.
+        #
         # ⚠️ Juste après une reprise, ce serverName n'a AUCUNE sauvegarde de base : la fenêtre PITR
         # de la nouvelle génération est vide jusqu'à la première. En prendre une IMMÉDIATEMENT —
         # `script/cnpg-barman-plugin-script.sh backup` — sans attendre la ScheduledBackup.
-        serverName: forgejo-db-v2
+        serverName: forgejo-db-v3
 
   # --- Métriques ---
   # Expose le collecteur sur le port `metrics` (9187) de chaque pod d'instance. C'est là que se
