@@ -747,6 +747,15 @@ volumétrie réelle : à 1,6 Mio, la copie kopia est du bruit devant les temps f
 > vide : « WAL archive check failed for server `<nom>`: Expected empty archive ». Un `serverName`
 > touché ne serait-ce qu'une fois est brûlé définitivement. Le 2026-09-09, `forgejo-db-v2` a été
 > consommé par un `initdb` accidentel de quelques minutes, d'où le saut direct à `v3`.
+>
+> ⚠️ **Et le bump n'est pas contournable par un raisonnement sur les timelines.** Testé le
+> 2026-09-09 en reprenant dans son PROPRE prefix (lecture et écriture sur `forgejo-db-v4`, une
+> filiation parfaitement légitime) : **refusé**, avec le même message. L'argument était pourtant
+> exact — un cluster repris conserve le system identifier de sa source et promeut sur une nouvelle
+> timeline, dont les WAL portent un préfixe de nom distinct, donc rien n'est écrasé au sens
+> littéral. Mais `barman-cloud-check-wal-archive` ne raisonne pas sur la filiation : il exige un
+> archive vide, point. La contrainte est un contrôle amont, pas une précaution de ce dépôt — et
+> c'est ce qui la rend non négociable.
 
 **La variante « à côté » reste utile, et devrait être jouée régulièrement.** Un `Cluster` de
 validation créé sous un autre nom avec `--no-archive` ne perturbe rien et n'écrit pas une ligne

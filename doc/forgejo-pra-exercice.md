@@ -591,6 +591,7 @@ ne sait plus s'il a été joué, ni sur quelle volumétrie, ni jusqu'où.
 | 7 | 2026-09-09 | **ÉTAPES A ET B EN PLACE** — PVC **et** base détruits, reprise sous le nom d'origine | `manual-dclcd` (10:44:37Z) + base `forgejo-db-manual-2kc7q` | clone de validation, empreintes, alignement base↔disque, `healthz` | **OK, après un défaut IAM bloquant** |
 | 8 | 2026-09-09 | **NAMESPACE ENTIER DÉTRUIT** — `delete namespace forgejo`, les deux volumes avec | `manual-jxlb9` (12:33:10Z) + base `forgejo-db-manual-kksjk` | empreintes, `git fsck`, alignement base↔disque, `healthz`, alertes | **OK en 7 min 14 s** |
 | 9 | 2026-09-09 | drill standard, contrôle de non-régression après exclusion des Secrets | `manual-7xsl8` (13:26:06Z) | 6 familles / 6 | **OK** |
+| 10 | 2026-09-09 | **le bump de serverName est-il obligatoire ?** reprise dans son propre prefix | base `forgejo-db-manual-pbm4b` sur `v4` | message barman, puis reprise de rattrapage sur `v5` | **REFUSÉ — la règle est générale** |
 
 Le passage **1** est celui qui a produit toutes les trouvailles du plan : le `FATAL` de
 `recovery_target_time`, les `ownerReferences` effacées par velero, l'adoption du PVC orphelin. Les
@@ -624,6 +625,28 @@ et une rotation faite dans Git n'aurait plus rien propagé — en silence. Corri
 sauvegardes les seuls Secrets que Git reproduit (label `velero.io/exclude-from-backup` porté par la
 `SealedSecret`), le drill les recopiant désormais lui-même vers la préprod. Le passage **9** est le
 contrôle de non-régression de ce changement.
+
+Le passage **10** répond à une question restée ouverte toute la journée : le bump de `serverName`
+est-il vraiment obligatoire à chaque reprise, ou seulement quand le prefix cible contient les WAL
+d'une base étrangère ? L'hypothèse était sérieuse — un cluster repris conserve le system identifier
+de sa source et promeut sur une **nouvelle timeline**, dont les WAL portent un préfixe de nom
+distinct (`00000002…` contre `00000001…`), donc rien n'est écrasé au sens littéral. Et le bump a un
+coût mesuré : il impose un commit en plein sinistre, et chaque génération efface les précédentes de
+`status.serverRecoveryWindow` quand l'`ObjectStore` est recréé.
+
+Reprise faite en lecture **et** écriture sur `forgejo-db-v4`, filiation parfaitement légitime.
+**Refusée**, avec le même message que pour un prefix étranger :
+
+```
+ERROR: WAL archive check failed for server forgejo-db-v4: Expected empty archive
+```
+
+L'enseignement n'est pas seulement « la règle tient » : c'est que la justification écrite jusque-là
+n'était pas la bonne. Le §8 invoquait le risque d'écraser la source (piège n°6 du script). Ce risque
+existe, mais ce n'est pas lui qui contraint — `barman-cloud-check-wal-archive` refuse un prefix non
+vide **sans considérer la filiation**. Les deux raisons mènent au même geste, mais seule la seconde
+résiste au raisonnement sur les timelines, et c'est elle qui est désormais écrite. Rattrapé par une
+reprise sur `v5`, base à `Cluster in healthy state` en 4 min.
 
 > [!NOTE]
 > **Alternative pesée et écartée : déclarer `forgejo-preprod` dans ArgoCD en permanence**, arrêtée,

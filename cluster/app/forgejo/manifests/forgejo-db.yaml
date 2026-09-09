@@ -87,10 +87,21 @@ spec:
       parameters:
         barmanObjectName: forgejo-db-store
         # ⚠️ serverName d'ÉCRITURE, explicite et OBLIGATOIREMENT distinct de celui lu par
-        # `bootstrap.recovery` ci-dessus. Omis, il vaudrait le nom du `Cluster` (`forgejo-db`) :
-        # le cluster repris archiverait alors par-dessus les WAL de sa source et DÉTRUIRAIT la
-        # sauvegarde dont il vient. C'est le piège n°6 de `cnpg-barman-plugin-script.sh`, et c'est
-        # la seule raison pour laquelle le script refuse de restaurer sous le nom d'origine.
+        # `bootstrap.recovery` ci-dessus.
+        #
+        # DEUX RAISONS, et ce n'est pas la plus intuitive qui contraint. La première est le piège
+        # n°6 de `cnpg-barman-plugin-script.sh` : omis, `serverName` vaudrait le nom du `Cluster`,
+        # et le cluster repris archiverait par-dessus les WAL de sa source. La seconde, ÉPROUVÉE le
+        # 2026-09-09, est un contrôle EN DUR de `barman-cloud-check-wal-archive` — il refuse de
+        # démarrer sur un prefix non vide, quelle que soit la filiation :
+        #
+        #   ERROR: WAL archive check failed for server <nom>: Expected empty archive
+        #
+        # ⚠️ NE PAS croire s'en dispenser par un raisonnement sur les timelines. Il est exact qu'un
+        # cluster repris conserve le system identifier de sa source et promeut sur une nouvelle
+        # timeline, dont les WAL portent un préfixe de nom distinct (`00000002…` contre
+        # `00000001…`) — il n'y a donc AUCUN écrasement au sens littéral. Testé quand même, en
+        # reprenant dans son propre prefix : REFUSÉ. barman ne raisonne pas sur la filiation.
         #
         # ⚠️ À INCRÉMENTER À CHAQUE REPRISE (v2 → v3 → …), en recopiant l'ancienne valeur dans
         # `externalClusters[0].plugin.parameters.serverName`. Les deux se déplacent ensemble.
