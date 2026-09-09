@@ -111,11 +111,34 @@ confirm() {
 
 # --- Lecture de l'état ---------------------------------------------------------------------------
 
-WIN="" WIN_FIRST="" WIN_LAST="" ALIGNED="" ALIGNED_AT=""
+WIN="" WIN_FIRST="" WIN_LAST="" ALIGNED="" ALIGNED_AT="" SRV=""
+
+# ⚠️ `serverName` SE LIT SUR LE CLUSTER, IL NE SE DÉDUIT PAS DE SON NOM. Il vaut le nom du Cluster
+# quand il est OMIS, mais un cluster repris en porte un explicite — la reprise sous le nom d'origine
+# fait justement porter les générations par ce champ (`forgejo-db`, puis `-v3`, `-v4`…). Le déduire
+# fait lire la fenêtre de la génération MORTE, et c'est un faux positif silencieux dans le pire sens
+# possible : les sauvegardes récentes sont déclarées « hors fenêtre », et le script désigne comme
+# alignable un couple OBSOLÈTE, sur lequel il ferait ensuite restaurer.
+#
+# Constaté le 2026-09-09, juste après la première reprise générationnelle : fenêtre affichée
+# 15:02→10:44 (génération `forgejo-db`, morte) au lieu de 11:34→12:33 (`forgejo-db-v3`, vivante),
+# et une sauvegarde velero de 10:44 retenue à la place de celle de 12:33 prise trente secondes plus
+# tôt. `cnpg-barman-plugin-script.sh` lit ce champ correctement depuis toujours et documente le
+# piège ; ce script-ci le déduisait.
+resolve_server_name() {
+  local cl_json srv
+  cl_json="$(kubectl -n "$SRC_NS" get clusters.postgresql.cnpg.io "$SRC_CLUSTER" -o json 2>/dev/null || echo '{}')"
+  srv="$(jq -r --arg p "barman-cloud.cloudnative-pg.io" --arg c "$SRC_CLUSTER" '
+      ([ .spec.plugins[]? | select(.name == $p) ] | first | .parameters.serverName) // $c' <<<"$cl_json")"
+  printf '%s' "$srv"
+}
 
 read_state() {
+  # Global : le serverName résolu est repris dans les messages, qui sinon nommeraient le CLUSTER et
+  # enverraient chercher la fenêtre sous la mauvaise clé — la confusion même que ce correctif règle.
+  SRV="$(resolve_server_name)"
   WIN="$(kubectl -n "$SRC_NS" get objectstores.barmancloud.cnpg.io "$SRC_STORE" \
-        -o jsonpath="{.status.serverRecoveryWindow.$SRC_CLUSTER}" 2>/dev/null || true)"
+        -o jsonpath="{.status.serverRecoveryWindow.$SRV}" 2>/dev/null || true)"
   if [[ -n "$WIN" ]]; then
     WIN_FIRST="$(jq -r '.firstRecoverabilityPoint // ""' <<<"$WIN")"
     WIN_LAST="$(jq -r '.lastSuccessfulBackupTime // ""' <<<"$WIN")"
@@ -143,7 +166,7 @@ cmd_check() {
 
   log "Fenêtre PITR de la base"
   if [[ -z "$WIN" ]]; then
-    ko "aucune fenêtre de récupération pour « $SRC_CLUSTER » sur l'ObjectStore « $SRC_STORE »"
+    ko "aucune fenêtre de récupération pour le serverName « $SRV » sur l'ObjectStore « $SRC_STORE »"
     warn "Le bucket barman ne contient AUCUNE sauvegarde de base exploitable. Ce n'est pas un
     problème de préparation : la chaîne native n'a jamais abouti.
     Diagnostic : script/cnpg-barman-plugin-script.sh list"
