@@ -588,6 +588,7 @@ ne sait plus s'il a été joué, ni sur quelle volumétrie, ni jusqu'où.
 | 4 | 2026-09-08 | `prepare run` + `drill` | `manual-qs7c7` (17:05:52Z) | 6 / 6 | **OK** |
 | 5 | 2026-09-08 | manuelle, commande par commande | `manual-qs7c7` | 6 / 6 **+ connexion à l'interface** | **OK** |
 | 6 | 2026-09-09 | **EN PLACE, sur la production** — `prepare run` + §8 étape A, PVC détruit | `manual-v4tgs` (09:46:29Z) + base `forgejo-db-manual-jhch7` | empreintes avant/après, `git fsck`, alignement base↔disque | **OK au troisième essai** — les deux premiers ont rendu un PVC vide |
+| 7 | 2026-09-09 | **ÉTAPES A ET B EN PLACE** — PVC **et** base détruits, reprise sous le nom d'origine | `manual-dclcd` (10:44:37Z) + base `forgejo-db-manual-2kc7q` | clone de validation, empreintes, alignement base↔disque, `healthz` | **OK, après un défaut IAM bloquant** |
 
 Le passage **1** est celui qui a produit toutes les trouvailles du plan : le `FATAL` de
 `recovery_target_time`, les `ownerReferences` effacées par velero, l'adoption du PVC orphelin. Les
@@ -596,6 +597,29 @@ suivants les vérifient.
 Le passage **5** est le seul à avoir validé la chaîne **de bout en bout** : se connecter à
 l'interface met d'accord le hash venu de la base (barman), le `SECRET_KEY` venu de l'`app.ini`
 (PVC) et la route. Aucun contrôle automatisé ne fait ça.
+
+Le passage **7** est le seul à avoir touché **les deux chaînes**, et le seul à avoir trouvé un
+défaut qui rendait le PRA **inopérant** plutôt qu'imparfait : le compte de service GCP n'avait que
+`roles/storage.objectAdmin`, donc pas `storage.buckets.get`. Conséquence — `barman-cloud-check-wal-archive`
+échoue en 403 sur tout `serverName` NEUF, c'est-à-dire sur tout cluster restauré. La chaîne savait
+restaurer, le cluster restauré ne savait pas se sauvegarder, et **rien ne pouvait le signaler** :
+sur un `serverName` déjà peuplé barman ne touche jamais au bucket, donc l'archivage courant était
+vert depuis le premier jour. Corrigé dans `homelab_terraform` (`legacyBucketReader`), vérifié après
+`apply`.
+
+Trois autres pièges, tous propres à la reprise en place :
+- **ArgoCD synchronise depuis sa révision en CACHE.** Une sync forcée juste après un `git push` a
+  appliqué l'ancien manifeste, donc `initdb` : une base **vide** à la place de la reprise. Toujours
+  attendre que `status.sync.revisions` porte le SHA poussé avant de détruire quoi que ce soit.
+- **Un `serverName` touché est brûlé.** Le cluster vide accidentel a archivé quelques WAL sous
+  `forgejo-db-v2`, ce qui a fait échouer la reprise suivante en « Expected empty archive ». D'où
+  `v3`. La cible d'un bump doit n'avoir jamais servi, pas seulement différer de la source.
+- **Le template d'un Job est immuable.** Corriger la spec du `Cluster` ne suffisait pas : le Job de
+  reprise rejouait `v2` à chaque retry. Il faut supprimer le Job.
+
+Ce que le passage 7 prouve, et qu'aucun autre ne prouvait : `HOST = forgejo-db-rw:5432` est resté
+**inchangé** de bout en bout. La reprise sous le nom d'origine tient sa promesse — la forge n'a
+rien à suivre.
 
 Le passage **6** est le premier joué **sur la production**, PVC détruit pour de bon. Il a coûté
 deux tentatives ratées avant de réussir, et c'est là tout son intérêt : les deux échecs venaient de
