@@ -52,7 +52,7 @@ spec:
           barmanObjectName: forgejo-db-store
           # serverName de LECTURE : celui de la génération PRÉCÉDENTE, où sont les sauvegardes à
           # rejouer. À faire suivre d'une génération à chaque reprise, avec celui d'écriture.
-          serverName: forgejo-db
+          serverName: forgejo-db-v3
 
   # --- Sauvegarde native ---
   #
@@ -106,7 +106,7 @@ spec:
         # ⚠️ Juste après une reprise, ce serverName n'a AUCUNE sauvegarde de base : la fenêtre PITR
         # de la nouvelle génération est vide jusqu'à la première. En prendre une IMMÉDIATEMENT —
         # `script/cnpg-barman-plugin-script.sh backup` — sans attendre la ScheduledBackup.
-        serverName: forgejo-db-v3
+        serverName: forgejo-db-v4
 
   # --- Métriques ---
   # Expose le collecteur sur le port `metrics` (9187) de chaque pod d'instance. C'est là que se
