@@ -16,22 +16,22 @@ resources:
   # `auth.generic_oauth` de helm-values.yaml (les trois vont ensemble). ---
   # - grafana-oidc.externalsecret.yaml
   #
-  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal openbao + external-secrets.
-  # Les deux ne peuvent pas coexister — ils visent le même Secret `grafana-admin`. ---
+  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal external-secrets. Vestige INERTE,
+  # le ClusterSecretStore visé n'existe plus. Les deux visent le même Secret `grafana-admin`. ---
   # - grafana-admin.externalsecret.yaml
   #
   # Credential SMTP d'Alertmanager : canal sealed-secrets (le SealedSecret porte la valeur, pas
   # un pointeur), comme grafana-admin ci-dessus et pour la même raison en plus forte — l'alerting
-  # doit parler quand le reste se tait, il ne peut pas dépendre d'un coffre descellé.
+  # doit parler quand le reste se tait, il ne peut pas dépendre d'un service tiers debout.
   #
   # ⚠️ Indissociable du `secrets:` et du bloc `config:` d'alertmanager dans helm-values.yaml : le
   # retirer ici en les laissant là-bas met le pod Alertmanager en ContainerCreating indéfiniment
   # (volume dont le Secret manque). Les trois se déplacent ensemble.
   - alertmanager-smtp.sealed.yaml
   #
-  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal openbao + external-secrets, jamais
-  # activé (openbao est dans archive/). Les deux ne peuvent pas coexister — ils visent le même
-  # Secret `alertmanager-smtp`. ---
+  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal external-secrets, jamais activé.
+  # Vestige INERTE, le ClusterSecretStore visé n'existe plus. Les deux visent le même Secret
+  # `alertmanager-smtp`. ---
   # - alertmanager-smtp.externalsecret.yaml
   - dashboard-talos-nodes.yaml
   - dashboard-argocd.yaml

@@ -34,10 +34,10 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   `https-internal`. ⚠️ **Aucune authentification derrière** — cf. § Accès
 - `manifests/grafana-admin.sealed.yaml` — `SealedSecret` `grafana-admin`, clés `admin-user` /
   `admin-password` : le **seul** identifiant d'accès à Grafana
-- `manifests/grafana-oidc.externalsecret.yaml` — `ExternalSecret` `grafana-oidc`, clé `client-secret`,
-  servi par [openbao](../../../archive/openbao/README.md). **Non référencé dans `kustomization.yaml`**
-  tant que le SSO est commenté (cf. § SSO)
-- `manifests/grafana-admin.externalsecret.yaml` — ancien canal openbao du compte admin,
+- `manifests/grafana-oidc.externalsecret.yaml` — `ExternalSecret` `grafana-oidc`, clé
+  `client-secret`. **Vestige de l'ancien canal de secrets externe : non référencé dans
+  `kustomization.yaml`, et le `ClusterSecretStore` qu'il vise n'existe plus** (cf. § SSO)
+- `manifests/grafana-admin.externalsecret.yaml` — même vestige pour le compte admin,
   **non référencé** : remplacé par le `SealedSecret` ci-dessus, les deux visent le même `Secret`
 - `manifests/dashboard-talos-nodes.yaml` — dashboard « Système — nœuds Talos » (sidecar, label
   `grafana_dashboard: "1"`) ; porte la couche d'annotations « Déploiements ArgoCD » (tags
@@ -66,8 +66,8 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   sauvegarde des bases — les deux ne se recouvrent pas
 - `manifests/dashboard-alertes.yaml` — dashboard « Alertes — cluster » : tuiles critiques /
   warnings / pending / chaîne d'alerting, tableau des alertes **firing et pending** avec leur
-  ancienneté, historique par alerte, courbe par sévérité. Variables Composant (openbao / velero /
-  openebs / chart) et Sévérité
+  ancienneté, historique par alerte, courbe par sévérité. Variables Composant (CNPG / Forgejo /
+  velero / openebs / chart) et Sévérité
 - `manifests/alertmanager-smtp.sealed.yaml` — `SealedSecret` `alertmanager-smtp`, clés
   `username` / `password` du relais SMTP. Monté en volume par `alertmanagerSpec.secrets` :
   Alertmanager lit le mot de passe dans un **fichier**, jamais depuis sa config
@@ -75,9 +75,9 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - `manifests/alertmanager-smtp.secret.example.yaml` — template **versionné et vide** du credential
   SMTP : la forme attendue, les noms de clés (⚠️ le nom de la clé est le nom du fichier monté) et
   les pièges. Le clair réel est gitignoré (`*.secret.yaml`)
-- `manifests/alertmanager-smtp.externalsecret.yaml` — ancien canal openbao du credential SMTP,
+- `manifests/alertmanager-smtp.externalsecret.yaml` — même vestige pour le credential SMTP,
   **non référencé** : remplacé par le `SealedSecret` ci-dessus, les deux visent le même `Secret`.
-  Jamais activé — openbao est dans `archive/`
+  Jamais activé
 - `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD
 - `manifests/kustomization.yaml` — assemblage
 
@@ -86,14 +86,15 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - Un fichier référencé mais absent casse `kustomize build` et met toute l'Application en erreur :
   garder la ligne **commentée** tant que le secret n'existe pas.
 - **Le compte admin est le seul accès à Grafana** tant que le SSO est commenté : perdre son mot
-  de passe, c'est perdre l'interface. Il vient du `SealedSecret`, donc de Git — il ne dépend plus
-  de l'état d'openbao, mais il dépend de la clé privée du contrôleur
+  de passe, c'est perdre l'interface. Il vient du `SealedSecret`, donc de Git — il ne dépend donc
+  d'aucun service tiers, mais il dépend de la clé privée du contrôleur
   [sealed-secrets](../../infra/sealed-secrets/README.md), seul état non reconstructible du cluster.
 - Tout ServiceMonitor destiné à ce Prometheus doit porter le label
   `release: kube-prometheus-stack` (`serviceMonitorSelectorNilUsesHelmValues`) — vaut aussi pour
-  **loki**, **alloy**,
-  [openebs-monitoring](../../infra/openebs-monitoring/README.md) et
-  [openbao-monitoring](../../../archive/openbao-monitoring/README.md).
+  [openebs-monitoring](../../infra/openebs-monitoring/README.md),
+  [velero-monitoring](../../infra/velero-monitoring/README.md),
+  [cnpg-monitoring](../cnpg-monitoring/README.md) et
+  [forgejo-monitoring](../forgejo-monitoring/README.md).
 - Grafana est en `deploymentStrategy: Recreate` : son PVC est RWO node-local, un rollout en
   rolling update produirait un double-mount.
 - Ne pas mettre `disable_login_form: true` : le formulaire local est aujourd'hui le seul moyen
@@ -110,9 +111,9 @@ Identifiant unique de l'interface : utilisateur **`admin`**, mot de passe porté
 `SealedSecret` `grafana-admin` (`manifests/grafana-admin.sealed.yaml`), consommé par
 `grafana.admin.existingSecret` dans `helm-values.yaml`.
 
-Le canal est **sealed-secrets** et non openbao : le mot de passe voyage dans Git sous forme
-chiffrée, il ne dépend donc pas d'un coffre descellé — ce qui compte pour la seule porte d'entrée
-d'un outil qu'on ouvre justement quand le reste va mal.
+Le canal est **sealed-secrets** : le mot de passe voyage dans Git sous forme chiffrée, il ne
+dépend donc d'aucun service tiers à interroger au moment du besoin — ce qui compte pour la seule
+porte d'entrée d'un outil qu'on ouvre justement quand le reste va mal.
 
 Création / rotation, **depuis la racine du repo** (le `.secret.yaml` est gitignoré) :
 
@@ -169,16 +170,21 @@ scopes `openid profile email groups`, redirect URI
 Mapping des groupes (claim `groups`, cf. `role_attribute_path` dans `helm-values.yaml`) :
 **`app-grafana-admin`** → rôle Admin, **`app-grafana-viewer`** → rôle Viewer, défaut Viewer.
 
-Réactivation : décommenter les trois morceaux, puis remettre le client-secret dans le coffre —
-c'est l'`ExternalSecret` `grafana-oidc` qui le sert.
+Réactivation : décommenter les trois morceaux, **puis sceller le client-secret** — le canal
+externe n'existe plus, `grafana-oidc.externalsecret.yaml` est un vestige inerte.
 
 ```bash
-kubectl -n openbao exec -ti openbao-0 -- \
-  bao kv put kv/homelab/grafana/oidc client-secret=<output terraform client_secret>
+# 1. Renseigner le client-secret dans un template en clair (gitignoré), puis :
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/app/kube-prometheus-stack/manifests/grafana-oidc.secret.yaml \
+  > cluster/app/kube-prometheus-stack/manifests/grafana-oidc.sealed.yaml
+rm cluster/app/kube-prometheus-stack/manifests/grafana-oidc.secret.yaml
 
-# ESO reprend la valeur au prochain refreshInterval (1 h) ; pour l'appliquer tout de suite :
-kubectl -n monitoring annotate externalsecret grafana-oidc force-sync=$(date +%s) --overwrite
+# 2. Référencer le scellé dans kustomization.yaml, DANS LE MÊME COMMIT.
 ```
+
+⚠️ Le fournisseur d'identité lui-même (authentik) est **archivé** : la réactivation suppose d'abord
+d'en remonter un.
 
 ### Scrape d'ArgoCD
 
@@ -331,7 +337,9 @@ utilise le vrai kubeconfig — en lecture seule (`list`/`watch`).
 
 ### Dashboard « Alertes — cluster »
 
-Vue unique sur les règles de tous les composants — [openbao-monitoring](../../../archive/openbao-monitoring/README.md),
+Vue unique sur les règles de tous les composants —
+[cnpg-monitoring](../cnpg-monitoring/README.md),
+[forgejo-monitoring](../forgejo-monitoring/README.md),
 [velero-monitoring](../../infra/velero-monitoring/README.md),
 [openebs-monitoring](../../infra/openebs-monitoring/README.md) et celles du chart. Il ne lit
 **aucune** métrique d'application : uniquement `ALERTS` et `ALERTS_FOR_STATE`, synthétisées par
@@ -344,7 +352,7 @@ seul moment où on l'ouvre.
   d'ici.
 - **Le tableau montre `pending` autant que `firing`**, et c'est le choix qui le rend utile. Une
   règle passe `pending` dès que sa condition est vraie et n'atteint `firing` qu'après son `for:` —
-  15 min pour la plupart, 3 h pour `OpenBaoSealedTooLong`. Limité à `firing`, le tableau restait
+  15 min pour la plupart, 1 h pour `CNPGBackupChainAbsent`. Limité à `firing`, le tableau restait
   vide pendant tout le quart d'heure suivant une panne, à côté d'une tuile affichant « 3 ».
 - **Récupérer l'état dans le tableau demande un `group_left`** : `ALERTS_FOR_STATE` porte l'âge
   sans le label `alertstate`, `ALERTS` porte l'état sans l'âge. D'où
@@ -362,9 +370,8 @@ seul moment où on l'ouvre.
   autre tuile de la page n'est alors digne de confiance, y compris les vertes.
 - **Le filtre Composant porte sur `alertname`, jamais sur `namespace`**, et ce n'est pas un
   raccourci : une règle bâtie sur `absent(...)` ne peut porter que les labels écrits dans ses
-  matchers. `OpenBaoNoActiveNode` sort avec `job` et sans `namespace`, `OpenBaoSnapshotTooOld`
-  avec `namespace` et `cronjob`. Un filtre par namespace masquerait la moitié des alertes du
-  coffre sans rien signaler.
+  matchers. `CNPGMetricsAbsent` et `ForgejoDeploymentMissing` sortent ainsi **sans** label
+  `namespace`. Un filtre par namespace en masquerait une partie sans rien signaler.
 - **`ALERTS_FOR_STATE` n'a pas le label `alertstate`**, `ALERTS` l'a : d'où le
   `and ignoring(alertstate)` du tableau. Une jointure `on(alertname)` mélangerait deux instances
   d'une même règle ; sans `ignoring`, elle ne matche rien — tableau vide, aucune erreur.
@@ -392,14 +399,12 @@ Les trois morceaux sont en place et indissociables — les déplacer ensemble, t
 > référencé dans le **même commit** que le `secrets:` qui le monte. Retirer l'un des trois en
 > laissant les autres reproduit exactement cette panne.
 
-**Le canal est sealed-secrets, pas openbao** — `alertmanager-smtp.externalsecret.yaml` est conservé
-mais non référencé. Deux raisons, et la seconde est la vraie :
-
-1. openbao est dans `archive/` ;
-2. surtout, faire dépendre l'alerting d'un coffre descellé le fait taire le jour où le coffre
-   tombe — et la panne d'openbao serait alors **l'alerte qui ne part pas**. Même argument que pour
-   le compte admin Grafana (§ Compte admin Grafana), en plus fort : Alertmanager est l'outil qui
-   doit parler quand le reste se tait.
+**Le canal est sealed-secrets** — `alertmanager-smtp.externalsecret.yaml` est conservé mais non
+référencé, et le store qu'il visait n'existe plus. Ce n'est pas seulement une conséquence de
+l'archivage : **faire dépendre l'alerting d'un service tiers le fait taire le jour où ce service
+tombe** — et cette panne-là serait précisément **l'alerte qui ne part pas**. Même argument que pour
+le compte admin Grafana (§ Compte admin Grafana), en plus fort : Alertmanager est l'outil qui doit
+parler quand le reste se tait.
 
 **Le credential est celui du mailer de Forgejo** (`gitea.config.mailer.USER`, relais Brevo) : un
 seul relais, une seule clé. ⚠️ La tourner chez Brevo casse les **deux**, et il faut resceller les

@@ -19,6 +19,7 @@ resources:
   # Rotation = kubeseal + commit (cf. README.md §Sceller le token).
   - cloudflare-api-token.sealed.yaml
   #
-  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal openbao + external-secrets. ---
-  # Les deux ne peuvent pas coexister — ils visent le même Secret `cloudflare-api-token`.
+  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal external-secrets. ---
+  # ⚠️ Vestige INERTE : le ClusterSecretStore qu'il vise n'existe plus dans le dépôt. Les deux ne
+  # pourraient de toute façon pas coexister — ils visent le même Secret `cloudflare-api-token`.
   # - cloudflare-api-token.externalsecret.yaml

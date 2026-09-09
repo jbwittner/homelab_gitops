@@ -130,7 +130,7 @@ un seul fichier à garder — mais aussi aucune génération de secours si celui
 
 1. **Le gestionnaire de mots de passe / stockage hors ligne** — source de vérité, hors cluster,
    hors Git. C'est la seule copie qui survit à la perte du nœud **et** à la perte du poste.
-   (Ce rôle était tenu par openbao, aujourd'hui [archivé](../archive/openbao/README.md).)
+   (Ce rôle a été tenu par un coffre déployé dans le cluster, retiré depuis.)
 2. **`sealed-secrets-key-${CLUSTER}.yaml` à la racine du clone** — copie de travail, couverte par
    `.gitignore`. Elle disparaît avec le clone : ce n'est **pas** un backup.
 3. **Le cluster encore en vie** — si le cluster n'est pas encore détruit, refaire le backup
@@ -644,8 +644,8 @@ fiche du cluster.
 
 ## Étape 8 — Sceller les secrets applicatifs (première construction)
 
-Un seul canal : **sealed-secrets**. Le second (openbao via external-secrets) n'existe plus — cf.
-[regles-gitops.md](regles-gitops.md).
+Un seul canal : **sealed-secrets**. Le second (un backend externe via external-secrets) n'existe
+plus — cf. [regles-gitops.md](regles-gitops.md).
 
 En **rebuild**, cette étape est déjà faite : les `*.sealed.yaml` du repo se déchiffrent seuls dès
 que la bonne clé est en place (étape 3). Elle ne sert qu'à une première construction ou à un

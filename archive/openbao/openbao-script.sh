@@ -18,7 +18,7 @@
 #   3. LES PIÈGES DE L'IMAGE COÛTENT CHACUN UN ALLER-RETOUR. Config montée dans `/openbao/config`
 #      = ignorée en silence ; `/openbao/data` n'existe pas ; `disable_mlock` n'existe plus en
 #      2.6.x ; le restore réussi affiche quand même `Error properly closing policy file`. Tout est
-#      encapsulé ici, et documenté dans doc/openbao-restore-local.md.
+#      encapsulé ici (la page doc/openbao-restore-local.md a depuis été supprimée).
 #   4. LE CONTRAT ESO NE SE DEVINE PAS. `--unseal` ne relit pas une liste de chemins écrite à la
 #      main : il la DÉRIVE des `ExternalSecret` du cluster et du `ClusterSecretStore`. Une liste
 #      retapée diverge — celle du README d'openbao a déjà divergé sur trois entrées.

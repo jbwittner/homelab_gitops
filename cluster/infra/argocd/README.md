@@ -76,11 +76,9 @@ kubectl apply -f cluster/root.yaml
   rien à sceller (cf. §Nommage du cluster local)
 > [!NOTE]
 > **Tous les secrets de ce composant passent par [sealed-secrets](../sealed-secrets/README.md).**
-> Ils transitaient auparavant par openbao + external-secrets ; ces deux composants sont
-> désactivés (`*.noapp.yaml`), donc la CRD `ExternalSecret` n'existe plus dans le cluster et les
-> manifestes correspondants ne s'appliquaient plus. Les valeurs restent au coffre côté openbao si
-> celui-ci est relancé un jour, mais la source de vérité du cluster est le `.sealed.yaml`
-> committé ici.
+> Ils transitaient auparavant par un backend de secrets externe, retiré du dépôt depuis : la CRD
+> `ExternalSecret` n'existe plus dans le cluster et les manifestes correspondants ne s'appliquaient
+> plus. La source de vérité est désormais le `.sealed.yaml` committé ici.
 
 > [!IMPORTANT]
 > **Deux dossiers, et la séparation est load-bearing.** `manifests/` est aussi la cible de
@@ -298,8 +296,8 @@ les **adopte**, et dès qu'ils sortent de l'ensemble désiré (un scale down suf
 les supprime.
 
 > [!WARNING]
-> Arrivé pour de vrai : le PVC `data-openbao-1` d'[openbao](../../../archive/openbao/README.md), détruit par un
-> prune lors d'un passage de 2 à 1 replica — et avec lui le LV, `openebs-lvm-thin` étant en
+> Arrivé pour de vrai : le PVC d'un StatefulSet, détruit par un prune lors d'un passage de 2 à 1
+> replica — et avec lui le LV, `openebs-lvm-thin` étant en
 > `reclaimPolicy: Delete`. Le `persistentVolumeClaimRetentionPolicy: Retain` du StatefulSet **ne
 > protège pas de ce chemin** : il ne couvre que son propre garbage collector. Le coffre était
 > vide ce jour-là ; il ne le sera pas toujours.

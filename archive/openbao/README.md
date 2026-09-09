@@ -14,8 +14,8 @@
 >
 > Ce README décrit donc un état **passé**, au présent. Il est conservé pour la procédure (init,
 > descellement, snapshot raft) au cas où le coffre serait remonté, et parce que
-> [`doc/openbao-restore-local.md`](../../doc/openbao-restore-local.md) reste utilisable tel quel
-> pour vérifier un snapshot déjà pris.
+> la procédure de vérification hors cluster (`doc/openbao-restore-local.md`) a été **supprimée**
+> avec le reste de la documentation openbao ; elle reste dans l'historique git.
 
 
 ## Rôle
@@ -323,7 +323,7 @@ Trois pièges, tous vérifiés à la connexion :
   fouiller un coffre d'hier sans toucher la prod — conteneur `openbao-drill`, une seule instance à
   la fois, fermée par `stop`. Une instance descellée sert tous les secrets du homelab en clair sur
   `127.0.0.1:8210` : `status` la rappelle à chaque appel. Procédure manuelle et pièges détaillés :
-  [`doc/openbao-restore-local.md`](../../doc/openbao-restore-local.md).
+  l'historique git (`doc/openbao-restore-local.md`, supprimé).
   ⚠️ Ne jamais tester un restore sur `openbao-0` : `snapshot restore` écrase tout le raft. C'est
   précisément ce que fait `openbao-script.sh restore`, réservé à une vraie reprise.
 - **Configurer le coffre** — c'est le **repo Terraform** qui pose l'auth `kubernetes`, le

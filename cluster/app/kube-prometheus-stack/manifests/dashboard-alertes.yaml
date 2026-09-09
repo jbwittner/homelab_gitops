@@ -17,7 +17,7 @@
 #
 #   1. LE TABLEAU MONTRE `pending` AUTANT QUE `firing`, et c'est le point le plus important de ce
 #      fichier. Une règle passe `pending` dès que sa condition est vraie, et n'arrive à `firing`
-#      qu'après son `for:` — 15 min pour la plupart, 3 h pour OpenBaoSealedTooLong. Un tableau
+#      qu'après son `for:` — 15 min pour la plupart, 1 h pour CNPGBackupChainAbsent. Un tableau
 #      limité à `firing` reste donc VIDE pendant tout le quart d'heure qui suit une panne, à côté
 #      d'une tuile qui affiche « 3 ». C'est l'état par lequel passe toute panne, celui qu'on
 #      regarde en premier, et l'omettre rendait le tableau inutile exactement quand il sert.
@@ -34,8 +34,8 @@
 #      `or vector(0)`, sur les tuiles comme sur la tuile Watchdog.
 #
 #   4. LES LABELS NE SONT PAS LES MÊMES D'UNE RÈGLE À L'AUTRE, et c'est structurel : `absent(...)`
-#      ne peut porter que les labels écrits dans ses matchers. `OpenBaoNoActiveNode` sort donc
-#      avec `job="openbao-active"` et SANS `namespace`, tandis que `OpenBaoSnapshotTooOld` sort
+#      ne peut porter que les labels écrits dans ses matchers. `CNPGMetricsAbsent` sort donc
+#      SANS `namespace`, tandis qu'une règle bâtie sur une métrique réelle sort
 #      avec `namespace` et `cronjob`. Conséquence directe : le filtre de ce dashboard porte sur
 #      `alertname` (préfixe du composant), jamais sur `namespace` — un filtre par namespace
 #      masquerait silencieusement la moitié des alertes du coffre.
@@ -77,7 +77,7 @@ data:
           }
         ]
       },
-      "description": "État et historique des alertes Prometheus (openbao, velero, openebs, règles du chart). Source : séries ALERTS / ALERTS_FOR_STATE.",
+      "description": "État et historique des alertes Prometheus (CNPG, Forgejo, velero, openebs, règles du chart). Source : séries ALERTS / ALERTS_FOR_STATE.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,

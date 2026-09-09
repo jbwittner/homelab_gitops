@@ -314,7 +314,7 @@ tourne en **~3 min**.
 > ```
 >
 > **La clé est sauvegardée hors ligne, dans un gestionnaire de secrets.** C'est ce qui rend la
-> reprise possible, et c'est la même posture que les parts de descellement d'openbao au coffre
+> reprise possible, et c'est la même posture que la clé sealed-secrets gardée hors ligne
 > physique : les deux seuls points du homelab dont la reprise ne se lit pas *dans* le homelab.
 
 ### Le geste, dans l'ordre

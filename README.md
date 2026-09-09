@@ -51,8 +51,8 @@ pour tout ce qui est dans `archive/`.
 | [openebs-monitoring](cluster/infra/openebs-monitoring/README.md) | 2 | alertes de remplissage des volumes |
 | [velero-monitoring](cluster/infra/velero-monitoring/README.md) | 2 | alertes sur les sauvegardes |
 
-*Non déployé :* [external-secrets](cluster/infra/external-secrets/README.md) (`.noapp.yaml`) — son
-coffre openbao est archivé.
+*Non déployé :* [external-secrets](cluster/infra/external-secrets/README.md) (`.noapp.yaml`) — le
+backend de secrets qu'il desservait a été retiré du dépôt.
 
 **Applications** — `cluster/app/`
 

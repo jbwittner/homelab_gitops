@@ -10,8 +10,7 @@
 # Secret pré-existant, produit par sealed-secrets (manifests/velero-gcs.sealed.yaml) et NON par le
 # chart : `secretContents` écrirait le credential en clair dans ce fichier, donc dans Git.
 # La clé DOIT s'appeler `cloud` ; pour le plugin GCP son contenu est la clé JSON d'un compte de
-# service (le fichier entier, tel que téléchargé), et non les clés HMAC d'interopérabilité S3
-# utilisées par la sauvegarde openbao.
+# service (le fichier entier, tel que téléchargé), et non des clés HMAC d'interopérabilité S3.
 credentials:
   useSecret: true
   existingSecret: velero-gcs
@@ -34,10 +33,9 @@ configuration:
     - name: default
       provider: gcp
       # ⚠️ Le bucket n'est PAS créé par ce composant : il est posé par le repo Terraform, avec le
-      # compte de service qui l'accède (README, Contraintes). Bucket DÉDIÉ, distinct de celui des
-      # snapshots openbao : les deux ont des cycles de vie et des rétentions différents, et velero
-      # fait son propre GC des backups expirés — un lifecycle GCS posé pour l'un casserait les
-      # restaurations de l'autre. Le suffixe aléatoire vient du côté Terraform (unicité globale des
+      # compte de service qui l'accède (README, Contraintes). Bucket DÉDIÉ, jamais partagé avec une
+      # autre chaîne de sauvegarde : velero fait son propre GC des backups expirés, et un lifecycle
+      # GCS posé pour un autre usage casserait ses restaurations. Le suffixe aléatoire vient du côté Terraform (unicité globale des
       # noms de bucket GCS) : le recopier tel quel, il n'est pas déductible.
       bucket: homelab-velero-backups-b788806f
       default: true
@@ -93,7 +91,7 @@ snapshotsEnabled: false
 # Le chart sait poser ServiceMonitor et PodMonitor, mais l'`autodetect` s'appuie sur les
 # Capabilities Helm — donc sur l'existence des CRDs prometheus-operator au moment du rendu, ce qui
 # n'est pas garanti au bootstrap (kube-prometheus-stack vit dans le tier `app`, sans relation
-# d'ordre avec `infra`). Coupé explicitement, comme dans openbao ; sa place est un composant frère
+# d'ordre avec `infra`). Coupé explicitement ; sa place est un composant frère
 # `velero-monitoring` le jour où on voudra alerter sur les échecs de sauvegarde.
 metrics:
   enabled: true          # port 8085 exposé, Service créé
@@ -165,23 +163,19 @@ schedules:
       # ⚠️ Toute base CNPG d'un namespace ajouté ici est exclue de kopia par la règle de
       #    volume-policies : sans ObjectStore à elle, l'ajouter ne la sauvegarderait PAS.
       #
-      # ⚠️ `openbao` N'EST PAS UN CANDIDAT : il a été mis dans cette liste, puis retiré, et le
-      # remettre serait revenir en arrière sur une décision motivée. Le coffre a sa propre chaîne —
-      # snapshot raft quotidien vers un bucket GCS distinct, avec des credentials distincts — et
-      # elle est MEILLEURE que ce que velero sait en faire : `bao operator raft snapshot save`
-      # produit une copie cohérente-transaction, là où kopia ne peut copier le PVC que de façon
-      # cohérente-crash. Elle est aussi la seule des deux à être testée pour de bon, l'instance
-      # jetable d'`openbao-script.sh verify` restaurant le snapshot et vérifiant son contenu contre
-      # le contrat dérivé des ExternalSecret du cluster.
+      # ⚠️ UN NAMESPACE PEUT ÊTRE RETIRÉ DE CETTE LISTE, et ça s'est déjà produit. Le critère :
+      # quand une chaîne native produit une copie cohérente-TRANSACTION là où kopia ne copie le PVC
+      # que de façon cohérente-CRASH, ET qu'elle est réellement testée, velero n'ajoute qu'une copie
+      # de moindre qualité — payée chaque nuit par la lecture intégrale du volume.
       #
-      # Ce que velero apportait malgré tout, et qu'il fallait remplacer AVANT de retirer openbao
-      # d'ici : un second domaine de panne, et surtout une détection passive d'une chaîne de
-      # sauvegarde morte en silence. C'était le rôle de `OpenBaoSnapshotTooOld` /
-      # `OpenBaoSnapshotMissing`. ⚠️ HISTORIQUE : openbao et openbao-monitoring ont été archivés le
-      # 2026-09-08 — ces alertes ne tournent plus, et il n'y a plus de coffre à sauvegarder.
+      # Ce que velero apporte malgré tout, et qu'il faut remplacer AVANT de retirer quoi que ce
+      # soit : un second domaine de panne, et surtout la détection passive d'une chaîne de
+      # sauvegarde morte en silence. C'est le rôle des alertes de cnpg-monitoring pour les PVC CNPG
+      # exclus par volume-policies.yaml. Les supprimer rendrait l'exclusion indéfendable.
       #
-      # Reste hors de portée des deux : une lifecycle rule GCS qui purgerait le bucket de snapshots,
-      # qu'aucune métrique du cluster ne voit. Seul un `verify` périodique y répond, et il est manuel.
+      # Reste hors de portée de tout ce qui précède : une lifecycle rule GCS posée par erreur, qui
+      # purgerait un bucket sans qu'aucune métrique du cluster ne le voie. Seule une restauration
+      # d'épreuve périodique y répond, et elle est manuelle (cf. doc/forgejo-pra-exercice.md).
       includedNamespaces:
         - forgejo
       snapshotVolumes: false   # cohérent avec snapshotsEnabled: false — les données passent par kopia

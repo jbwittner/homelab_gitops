@@ -40,7 +40,7 @@ qu'après le stack d'observabilité.
   StorageClass), disponibles dès le premier `kubectl apply`. Tout ce qui exige une CRD tierce va
   dans [openebs-monitoring](../openebs-monitoring/README.md) — une Application `openebs` bloquée
   sur un `ServiceMonitor` non résolu retiendrait derrière elle toutes les waves suivantes, à
-  commencer par [openbao](../../../archive/openbao/README.md) (wave 1) et son PVC.
+  commencer par [velero](../velero/README.md) (wave 1).
 - **Le VG n'est pas provisionné par le driver** : LocalPV-LVM l'exige préexistant. C'est le rôle
   du DaemonSet de bootstrap, seul état réel sur disque non réconciliable par GitOps.
 - **La partition brute `r-lvmpv` doit exister sur CHAQUE nœud** (prérequis de provisionnement,

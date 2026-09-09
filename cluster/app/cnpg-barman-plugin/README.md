@@ -192,4 +192,4 @@ script/cnpg-barman-plugin-script.sh show <backup>   # LSN, WAL, durée, destinat
   l'authentification passe par le nœud. Ici c'est une clé JSON scellée, comme pour velero.
 - **Un bucket par base.** `serverName` vaut le nom du `Cluster` quand il est omis : barman range
   déjà sous `<bucket>/<cluster>/`. Un bucket unique pour toutes les bases CNPG, distinct de celui
-  de velero et de celui d'openbao.
+  de velero — chaque chaîne fait son propre GC.

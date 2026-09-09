@@ -4,8 +4,8 @@
 
 Volet post-bootstrap de [velero](../velero/README.md) : ce qui rend les sauvegardes
 **observables**. Deux collecteurs et un jeu d'alertes, séparés du composant principal pour la même
-raison que [openbao-monitoring](../../../archive/openbao-monitoring/README.md) — ce sont des CRs
-`monitoring.coreos.com`, dont les CRDs n'existent pas au bootstrap à froid.
+raison que les autres `*-monitoring` du dépôt — ce sont des CRs `monitoring.coreos.com`, dont les
+CRDs n'existent pas au bootstrap à froid.
 
 Le **dashboard** Grafana ne vit pas ici mais dans
 [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)

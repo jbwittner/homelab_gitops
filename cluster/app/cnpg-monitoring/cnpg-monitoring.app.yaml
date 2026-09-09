@@ -4,7 +4,7 @@ metadata:
   name: cnpg-monitoring
   namespace: argocd
   annotations:
-    # Wave 2, comme velero-monitoring / openbao-monitoring / openebs-monitoring : ses objets sont
+    # Wave 2, comme velero-monitoring et openebs-monitoring : ses objets sont
     # des CRs `monitoring.coreos.com`, absentes au bootstrap à froid. Personne ne dépend de cette
     # wave, donc une sync en échec ne retient rien.
     argocd.argoproj.io/sync-wave: "2"
@@ -22,8 +22,8 @@ spec:
   # POURQUOI CE COMPOSANT EXISTE, ET POURQUOI IL EST LOAD-BEARING. Le PVC des bases CNPG a été
   # RETIRÉ du périmètre de copie kopia de velero
   # (`cluster/infra/velero/manifests/volume-policies.yaml`, règle `pvcLabels`) au profit de la
-  # sauvegarde native barman-cloud. C'est le même arbitrage que pour openbao — et, comme pour
-  # openbao, il n'est défendable QUE parce qu'une détection passive d'une chaîne native morte en
+  # sauvegarde native barman-cloud. Cet arbitrage n'est défendable QUE parce qu'une détection
+  # passive d'une chaîne native morte en
   # silence a été posée en face. Supprimer ce composant ne dégrade pas l'observabilité : il rend
   # l'exclusion de velero indéfendable. Les deux décisions se tiennent ensemble.
   #

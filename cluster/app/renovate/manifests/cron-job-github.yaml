@@ -51,7 +51,7 @@ spec:
                   value: "--max-old-space-size=2048"
               # ⚠️ Ce Secret s'appelait `renovate-env` jusqu'au renommage. Un objet de ce nom
               # traîne peut-être encore dans le namespace : c'est le Secret ORPHELIN laissé par
-              # l'ancien ExternalSecret openbao (`deletionPolicy: Retain`), et c'est lui qui
+              # l'ancien ExternalSecret (`deletionPolicy: Retain`), et c'est lui qui
               # servait ce bot. Il ne correspond plus. Tant que le SealedSecret `renovate-github`
               # n'est pas produit, ce Job échoue en `CreateContainerConfigError` — échec franc et
               # immédiat, à la différence de la situation d'avant où il tournait sur un Secret

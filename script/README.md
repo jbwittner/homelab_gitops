@@ -10,8 +10,7 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
 > [!NOTE]
 > **Une exception subsiste** : [`archive/openbao/openbao-script.sh`](../archive/openbao/openbao-script.sh),
 > parti dans `archive/` avec son composant. Il n'est plus maintenu et ne pilote plus rien de
-> déployé ; il reste utilisable pour vérifier un snapshot déjà pris
-> ([`doc/openbao-restore-local.md`](../doc/openbao-restore-local.md)).
+> déployé — la règle ne vaut que pour les scripts vivants.
 
 ## Contenu
 

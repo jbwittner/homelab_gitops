@@ -18,12 +18,12 @@ spec:
   #   - helm-values.yaml : BSL sur GCS, node-agent/kopia pour les données de PV, schedule
   #     quotidienne. Les snapshots CSI sont coupés (LVM localpv = snapshot node-local, inutile en DR).
   #   - manifests/ : le namespace (labellisé `privileged`) et le credential scellé du bucket.
-  #   - Wave `1`, comme openbao : velero n'a pas de PVC, mais il monte le Secret `velero-gcs`
+  #   - Wave `1` : velero n'a pas de PVC, mais il monte le Secret `velero-gcs`
   #     déchiffré par sealed-secrets (wave -8). Tant que le SealedSecret n'est pas committé, le
   #     Deployment reste en `ContainerCreating` sur un Secret absent — attendu, cf. README.
-  #   - Le credential est un SealedSecret et NON un ExternalSecret : velero est le moyen de
-  #     restaurer openbao. Le ranger dans le coffre qu'il restaure fermerait un cycle — un coffre
-  #     perdu emporterait alors aussi l'accès aux sauvegardes (règle anti-cycle, doc/regles-gitops.md).
+  #   - Le credential est un SealedSecret et NON un ExternalSecret : un secret dont dépend la
+  #     RESTAURATION ne peut pas vivre dans un système que la restauration doit reconstruire — on
+  #     fermerait un cycle (règle anti-cycle, doc/regles-gitops.md).
   #   - Pas de CreateNamespace : manifests/namespace.yaml crée le ns ET le labellise `privileged`,
   #     sans quoi le DaemonSet node-agent (hostPath sur /var/lib/kubelet) est rejeté par le
   #     PodSecurity `baseline` de Talos.

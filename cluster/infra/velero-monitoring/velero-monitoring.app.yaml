@@ -4,7 +4,7 @@ metadata:
   name: velero-monitoring
   namespace: argocd
   annotations:
-    # Wave 2, comme openbao-monitoring et openebs-monitoring : ses objets sont des CRs
+    # Wave 2, comme les autres composants *-monitoring : ses objets sont des CRs
     # `monitoring.coreos.com`, absentes au bootstrap à froid. Personne ne dépend de cette wave,
     # donc une sync en échec ne retient rien.
     argocd.argoproj.io/sync-wave: "2"
@@ -27,7 +27,7 @@ spec:
   # jouent qu'à l'intérieur d'un app-of-apps). Les flags sont donc coupés côté chart et les objets
   # écrits à la main ici — même contenu, mais dans une Application qui peut échouer sans
   # conséquence tant que le stack d'observabilité n'est pas là. Exactement le raisonnement
-  # d'[openbao-monitoring](../openbao-monitoring/README.md).
+  # des autres composants *-monitoring du dépôt.
   #
   # ⚠️ Dépendance CROSS-TIER (infra → app) : au bootstrap à froid cette Application reste en
   # erreur jusqu'à l'arrivée de kube-prometheus-stack, puis se répare seule (`selfHeal`).

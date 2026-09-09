@@ -52,11 +52,11 @@ le cluster et disparaît au premier rebuild. Interdit.
 ### Un seul canal actif : sealed-secrets
 
 > [!IMPORTANT]
-> **Le second canal est mort.** Ce dépôt a eu deux canaux — sealed-secrets, et openbao via
-> external-secrets. [openbao](../archive/openbao/README.md) est **archivé** et
+> **Le second canal est mort.** Ce dépôt a eu deux canaux : sealed-secrets, et un backend de
+> secrets externe consommé via external-secrets. Le backend a été **retiré du dépôt**, et
 > [external-secrets](../cluster/infra/external-secrets/README.md) est en `.noapp.yaml` : la CRD
 > `ExternalSecret` n'existe plus dans le cluster. Les quatre `*.externalsecret.yaml` qui subsistent
-> sont tous commentés dans leur `kustomization.yaml` et ne s'appliquent nulle part.
+> sont des **vestiges inertes** — non référencés, et pointant un `ClusterSecretStore` supprimé.
 >
 > **Tout secret est donc un `SealedSecret`.** Le critère de choix entre deux canaux n'a plus
 > d'objet ; ce qui suit décrit le canal restant.

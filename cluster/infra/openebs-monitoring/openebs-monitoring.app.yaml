@@ -4,7 +4,7 @@ metadata:
   name: openebs-monitoring
   namespace: argocd
   annotations:
-    # DERNIER de la partie infra (après openbao, wave 1) : rien ne dépend de ce composant, et il
+    # DERNIER de la partie infra (après velero, wave 1) : rien ne dépend de ce composant, et il
     # ne doit surtout pas être dans la même wave que `openebs` (0). Ses deux objets sont des CRs
     # `monitoring.coreos.com` : au bootstrap à froid la CRD n'existe pas encore, la sync échoue,
     # et une Application en échec en wave 0 retiendrait toute la suite — dont openebs lui-même.

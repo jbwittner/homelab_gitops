@@ -10,9 +10,8 @@ collecteur des instances PostgreSQL, et sept alertes sur l'état de la chaîne b
 > **Ce composant n'est pas un confort, il tient une décision.** Les PVC des bases CNPG ont été
 > **retirés du périmètre de copie kopia** de velero
 > ([`volume-policies.yaml`](../../infra/velero/manifests/volume-policies.yaml), règle `pvcLabels`)
-> au profit de la sauvegarde native. C'est le même arbitrage que pour
-> [openbao](../../../archive/openbao/README.md) — et, comme pour openbao, il n'est défendable **que**
-> parce qu'une détection passive d'une chaîne native morte en silence a été posée en face.
+> au profit de la sauvegarde native. Cet arbitrage n'est défendable **que** parce qu'une détection
+> passive d'une chaîne native morte en silence a été posée en face — c'est-à-dire ces alertes.
 > Supprimer ces alertes ne dégrade pas l'observabilité : cela rend l'exclusion indéfendable. Les
 > deux décisions se tiennent ensemble.
 

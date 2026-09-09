@@ -54,9 +54,10 @@ consomme (cf. [doc/reseau.md](../../../doc/reseau.md)).
   déchiffrable, et le renouvellement Let's Encrypt — silencieux, tous les 60 j — échoue sur un
   solver DNS-01 sans token. Cf. l'encadré CAUTION de
   [sealed-secrets](../sealed-secrets/README.md).
-- **La rotation du token est un commit.** Contrairement au canal openbao, changer le token impose
-  `kubeseal` + commit + sync. C'est le coût assumé de ce canal, en échange d'un token
-  déchiffrable dès la wave `-8` — donc sans attendre le descellement manuel d'openbao (wave `1`).
+- **La rotation du token est un commit.** Changer le token impose `kubeseal` + commit + sync,
+  là où un backend de secrets externe permettrait une rotation sans commit. C'est le coût assumé
+  de ce canal, en échange d'un token déchiffrable dès la wave `-8`, sans dépendre d'un service
+  tiers qui devrait lui-même être debout.
 
 ## Opérations
 
@@ -93,7 +94,7 @@ résout le DNS-01 → Let's Encrypt émet les wildcards → les `wildcard-*-tls`
 **Rotation** : régénérer le token côté Cloudflare, refaire les étapes 1→3, committer.
 
 > [!WARNING]
-> **Résidu de l'ancien canal openbao.** L'`ExternalSecret` qui servait ce token était en
+> **Résidu de l'ancien canal de secrets externe.** L'`ExternalSecret` qui servait ce token était en
 > `deletionPolicy: Retain` : le prune ArgoCD le retire, mais le `Secret` `cloudflare-api-token`
 > qu'il avait matérialisé **survit**. sealed-secrets refuse alors d'écrire par-dessus un Secret
 > dont il n'est pas propriétaire (`already exists and is not managed by SealedSecret`) :

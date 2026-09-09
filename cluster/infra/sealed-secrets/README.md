@@ -3,14 +3,12 @@
 ## Rôle
 
 Contrôleur [Bitnami sealed-secrets](https://github.com/bitnami/sealed-secrets) : déchiffre dans
-le cluster les `SealedSecret` committés dans Git. C'est l'un des **deux** canaux de secrets du
-repo, aux côtés d'[openbao](../../../archive/openbao/README.md) + [external-secrets](../external-secrets/README.md) —
-critère de choix : [doc/regles-gitops.md](../../../doc/regles-gitops.md). Il porte les secrets qui
-doivent être lisibles **en amont du coffre** dans le graphe de bootstrap : le Secret de cluster du
-spoke (requis avant le tier-1) et le token DNS de
-[cert-manager](../cert-manager/README.md) (wave `-5`, donc bien avant le descellement manuel
-d'openbao en wave `1`). Wave **-8** : le contrôleur précède tout SealedSecret consommé plus
-tard.
+le cluster les `SealedSecret` committés dans Git. C'est le **seul** canal de secrets du repo —
+règles : [doc/regles-gitops.md](../../../doc/regles-gitops.md). Il porte donc tout, y compris les
+secrets les plus en amont du graphe de bootstrap : le credential SSH du dépôt privé
+(`repo-homelab-gitops`, sans lequel ArgoCD ne clone rien) et le token DNS de
+[cert-manager](../cert-manager/README.md) (wave `-5`). Wave **-8** : le contrôleur précède tout
+SealedSecret consommé plus tard.
 
 ## Fichiers
 

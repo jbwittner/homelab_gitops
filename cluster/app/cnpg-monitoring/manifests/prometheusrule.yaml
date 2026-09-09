@@ -1,6 +1,6 @@
 # Alertes de sauvegarde des bases CloudNativePG.
 #
-# Principe directeur, hérité d'openbao-monitoring et de velero-monitoring : une chaîne de
+# Principe directeur, partagé avec velero-monitoring : une chaîne de
 # sauvegarde échoue SILENCIEUSEMENT. Ces règles sont la contrepartie du retrait des PVC CNPG du
 # périmètre de copie kopia (`cluster/infra/velero/manifests/volume-policies.yaml`) : sans elles,
 # la base n'a plus qu'une seule chaîne de sauvegarde ET plus aucun moyen de voir qu'elle est morte.

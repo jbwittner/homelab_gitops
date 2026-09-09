@@ -41,9 +41,11 @@ ces pages iraient dans le README du composant concerné.
 - [`forgejo-pra-exercice.md`](forgejo-pra-exercice.md) — **l'exercice** qui éprouve ce plan :
   restaurer les deux chaînes dans un namespace `forgejo-preprod`, l'exposer sur
   `forgejo-preprod.lan.wittner.tech`, vérifier, détruire. Contient le **journal des dix passages**.
-- [`openbao-restore-local.md`](openbao-restore-local.md) — ⚠️ **composant archivé** : remonter un
-  snapshot OpenBao dans une instance jetable hors cluster. Conservé pour mémoire, cf.
-  [`archive/openbao/`](../archive/openbao/README.md).
+
+> [!NOTE]
+> `openbao-restore-local.md` a été **supprimé** : il documentait la restauration d'un coffre qui
+> n'est plus déployé. Son contenu reste dans l'historique git, et le composant lui-même dans
+> [`archive/openbao/`](../archive/openbao/README.md).
 
 ## Contraintes
 

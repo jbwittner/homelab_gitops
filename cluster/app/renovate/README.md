@@ -140,11 +140,11 @@ coffre). Le contrôleur est en wave `-8`, donc bien avant cette app.
 > `kustomization.yaml`.
 >
 > Historique, parce qu'il explique le nommage : le bot GitHub a tourné sur un Secret
-> **`renovate-env`** — un **orphelin** laissé dans le cluster par l'ancien `ExternalSecret` openbao
+> **`renovate-env`** — un **orphelin** laissé dans le cluster par l'ancien `ExternalSecret`
 > (`deletionPolicy: Retain`), que plus personne ne gérait et que rien ne signalait. Le renommage en
 > `renovate-github` a converti cette dérive silencieuse en panne visible
 > (`CreateContainerConfigError`), puis le scellement l'a soldée. **Reste à vérifier que l'orphelin
-> `renovate-env` a bien été purgé** (§Reste de l'ancien canal openbao).
+> `renovate-env` a bien été purgé** (§Purger l'orphelin de l'ancien canal).
 >
 > Le chantier ouvert est désormais le bot **Forgejo** : sceller `renovate-forgejo`, puis décommenter
 > `renovate-forgejo.sealed.yaml` **et** `cron-job-forgejo.yaml` dans le même commit.
@@ -159,7 +159,7 @@ Une seule entrée à fournir — le PAT GitHub — mais **deux clés** : Renovat
 sous `RENOVATE_TOKEN` (plateforme) et `RENOVATE_GITHUB_COM_TOKEN` (lookups de releases sur
 github.com). Un `SealedSecret` chiffrant clé par clé, la valeur est saisie deux fois.
 
-⚠️ Ce Secret s'appelait `renovate-env` (nom hérité du canal openbao). Le renommage aligne la paire
+⚠️ Ce Secret s'appelait `renovate-env` (nom hérité de l'ancien canal). Le renommage aligne la paire
 `renovate-github` / `renovate-forgejo` — un nom par bot — mais **casse le lien avec l'objet orphelin
 du cluster**, qui porte encore l'ancien nom. Voir l'encadré ci-dessus.
 
@@ -209,14 +209,13 @@ réinstallé à neuf ne sait plus le déchiffrer.
 **Rotation** : régénérer le jeton côté forge, puis refaire les étapes 1→3. Le fichier scellé est
 remplacé en entier — il faut re-fournir **toutes** les clés, un `SealedSecret` ne se relit pas.
 
-#### Reste de l'ancien canal openbao
+#### Purger l'orphelin de l'ancien canal
 
-Le PAT GitHub est peut-être encore récupérable côté cluster ou coffre :
+Le PAT GitHub est peut-être encore récupérable dans l'orphelin resté au cluster :
 
 ```bash
 # ⚠️ `renovate-env` : l'ANCIEN nom. L'orphelin du cluster n'a pas été renommé avec le dépôt.
 kubectl -n renovate get secret renovate-env -o jsonpath='{.data.RENOVATE_TOKEN}' | base64 -d
-kubectl -n openbao exec -ti openbao-0 -- bao kv get -field=github_token kv/homelab/renovate
 ```
 
 Une fois le `SealedSecret` en place, vérifier que le Secret `renovate-github` existe bien et
@@ -227,11 +226,10 @@ kubectl -n renovate get sealedsecret renovate-github
 kubectl -n renovate get secret renovate-github -o jsonpath='{.metadata.ownerReferences}'
 ```
 
-Puis seulement, purger l'orphelin et l'entrée du coffre :
+Puis seulement, purger l'orphelin :
 
 ```bash
 kubectl -n renovate delete secret renovate-env          # l'ancien, plus référencé par personne
-# kv/homelab/renovate côté openbao
 ```
 
 ### Droits du token GitHub

@@ -22,15 +22,15 @@ metadata:
 #
 # C'est une course STRUCTURELLE, pas transitoire : décaler les horaires ne la ferme pas, un pod de
 # Job terminé restant visible aussi longtemps que son historique le retient. Elle a été trouvée sur
-# le `snapshot-dir` du CronJob `openbao-snapshot` (`velero-daily-20260815030017`), namespace depuis
-# sorti du périmètre — mais la règle n'était pas un correctif pour lui : elle vaut pour tout pod à
-# venir, et le prochain CronJob ajouté à la liste blanche la déclencherait à l'identique.
+# le `snapshot-dir` d'un CronJob de sauvegarde (`velero-daily-20260815030017`), dans un namespace
+# depuis sorti du périmètre — mais la règle n'était pas un correctif pour lui : elle vaut pour tout
+# pod à venir, et le prochain CronJob ajouté à la liste blanche la déclencherait à l'identique.
 #
 # Écrit ici, côté velero, et non en annotation `backup.velero.io/backup-volumes-excludes` sur les
 # pods concernés : une RÈGLE plutôt qu'une exception à reposer à chaque nouveau composant, sans
 # rien à retenir. La voie annotation est de toute façon souvent fermée, un chart n'exposant pas
-# nécessairement d'annotations sur son `podTemplate` — c'était le cas d'openbao-0.29.0, qui n'en
-# expose que sur l'objet CronJob (`snapshotAgent.annotations`), pas sur le template que lit velero.
+# nécessairement d'annotations sur son `podTemplate` — cas déjà rencontré sur un chart qui n'en
+# exposait que sur l'objet CronJob, pas sur le template que lit velero.
 #
 # Portée : `skip` ne concerne QUE la copie de données (fs-backup/kopia). Les objets Kubernetes
 # eux-mêmes (Pod, Job, ConfigMap…) restent sauvegardés, donc restaurables.
@@ -40,8 +40,8 @@ metadata:
 # SECONDE RÈGLE — les PVC des bases CloudNativePG sortent de la copie kopia (2026-09-08).
 #
 # Ce n'est PAS un correctif, c'est un arbitrage entre deux chaînes de sauvegarde concurrentes, et
-# c'est le même que celui déjà rendu pour openbao (cf. helm-values.yaml, « openbao N'EST PAS UN
-# CANDIDAT »). Une copie kopia d'un volume PostgreSQL vivant est cohérente-CRASH : elle vaut un
+# c'est le même arbitrage que celui décrit en helm-values.yaml (« UN NAMESPACE PEUT ÊTRE RETIRÉ DE
+# CETTE LISTE »). Une copie kopia d'un volume PostgreSQL vivant est cohérente-CRASH : elle vaut un
 # `kill -9` suivi d'un redémarrage, Postgres rejoue son WAL et s'en sort le plus souvent. La
 # sauvegarde native — sauvegarde de base barman-cloud encadrée par `pg_backup_start` /
 # `pg_backup_stop`, plus archivage WAL continu — est cohérente-TRANSACTION et donne en prime le
@@ -53,8 +53,8 @@ metadata:
 # lecture intégrale du volume de la base, sur un stockage node-local que le PVC de 100Gi de Forgejo
 # occupe déjà à 03:00.
 #
-# ⚠️ CE QUI TIENT CETTE DÉCISION. Exactement comme pour openbao, l'exclusion n'est défendable que
-# parce qu'une DÉTECTION PASSIVE d'une chaîne native morte en silence a été posée en face :
+# ⚠️ CE QUI TIENT CETTE DÉCISION. L'exclusion n'est défendable que parce qu'une DÉTECTION PASSIVE
+# d'une chaîne native morte en silence a été posée en face :
 # `CNPGWalArchivingBacklog`, `CNPGWalArchivingFailing`, `CNPGBackupTooOld` et `CNPGBackupChainAbsent`
 # (cluster/app/cnpg-monitoring/manifests/prometheusrule.yaml). Supprimer ces alertes rend cette
 # règle indéfendable — les deux décisions se tiennent ensemble.

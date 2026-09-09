@@ -209,8 +209,8 @@ StorageClass posée par `openebs`, est un composant d'**infra** — sinon sa dé
 
 ## Secrets d'un composant
 
-**Un seul canal actif** — sealed-secrets. Le second (openbao via external-secrets) est mort : les
-deux composants sont désactivés ou archivés, cf. [regles-gitops.md](regles-gitops.md).
+**Un seul canal actif** — sealed-secrets. Le second (un backend de secrets externe via
+external-secrets) n'existe plus, cf. [regles-gitops.md](regles-gitops.md).
 
 Trois fichiers, dans `manifests/` du composant qui **consomme** le secret :
 

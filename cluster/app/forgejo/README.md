@@ -233,8 +233,7 @@ Trois fichiers, indissociables. En retirer un ne produit pas une erreur mais une
 > **Ce qui rend l'exclusion de kopia défendable, ce sont les alertes** de
 > [cnpg-monitoring](../cnpg-monitoring/README.md) — `CNPGWalArchivingBacklog`,
 > `CNPGBackupTooOld`, `CNPGNoBackupYet`. Les supprimer laisserait la base avec une chaîne unique
-> **et** aucun moyen de la voir mourir. Les deux décisions se tiennent ensemble, exactement comme
-> pour [openbao](../../../archive/openbao/README.md).
+> **et** aucun moyen de la voir mourir. Les deux décisions se tiennent ensemble.
 
 Ce que ni l'une ni l'autre ne couvre : **une lifecycle rule GCS** posée par erreur sur l'un des deux
 buckets. Les deux outils font leur propre GC, et aucune métrique du cluster ne verrait un bucket
@@ -716,10 +715,9 @@ différents, deux fichiers.
 
 > [!IMPORTANT]
 > **Le bucket et le compte de service ne sont pas déclarés ici : ils vivent dans le repo
-> Terraform**, comme ceux de velero et d'openbao. Le contrat attendu :
-> - un bucket **dédié** (distinct de `homelab-velero-backups-*` et du bucket de snapshots openbao —
->   les trois chaînes font chacune leur propre GC, et une lifecycle rule posée pour l'une casse les
->   restaurations des autres) ;
+> Terraform**, comme celui de velero. Le contrat attendu :
+> - un bucket **dédié** (distinct de `homelab-velero-backups-*` — les deux chaînes font chacune
+>   leur propre GC, et une lifecycle rule posée pour l'une casse les restaurations de l'autre) ;
 > - un compte de service lié à `roles/storage.objectAdmin` **sur ce bucket**.
 >
 > Rien côté `cluster/` ne vérifie ce contrat. La seule preuve que les deux repos s'accordent est

@@ -19,11 +19,11 @@ sur un pod de Job déjà terminé, kubelet l'a même démonté avant que le node
 fait échouer la sauvegarde entière (`PartiallyFailed`). Une politique de volumes les ignore donc :
 `manifests/volume-policies.yaml`.
 
-Ce composant ne remplace pas les sauvegardes applicatives natives : les snapshots raft
-d'[openbao](../../../archive/openbao/README.md) et les backups CNPG restent la voie de restauration *cohérente*
-d'une base ; velero est le filet de niveau cluster. Poussé à sa conclusion, ce raisonnement a sorti
-le namespace `openbao` du périmètre : quand la sauvegarde native est meilleure ET testée, le filet
-n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
+Ce composant ne remplace pas les sauvegardes applicatives natives : les backups CNPG restent la
+voie de restauration *cohérente* d'une base ; velero est le filet de niveau cluster. Poussé à sa
+conclusion, ce raisonnement retire du périmètre ce qui a déjà une chaîne native meilleure **et
+testée** — le filet n'y ajouterait qu'une copie de moindre qualité. C'est ce qui exclut les PVC
+CNPG de la copie kopia, cf. Contraintes.
 
 ## Fichiers
 
@@ -51,17 +51,16 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
 ## Contraintes
 
 - **Le bucket et le compte de service ne sont PAS déclarés ici : ils vivent dans le repo
-  Terraform**, comme la configuration interne d'openbao. Le contrat attendu — et sans lequel le BSL
-  reste `Unavailable` : un bucket **dédié** (distinct de celui des snapshots openbao, velero faisant
-  son propre GC des sauvegardes expirées) et le compte de service
+  Terraform**. Le contrat attendu — et sans lequel le BSL reste `Unavailable` : un bucket **dédié**
+  (velero faisant son propre GC des sauvegardes expirées, il ne partage pas un bucket) et le compte de service
   `velero@homelab-499008.iam.gserviceaccount.com` lié à `roles/storage.objectAdmin` **sur ce
   bucket**. Rien côté `cluster/` ne vérifie ce contrat : la seule preuve que les deux repos
   s'accordent est l'état `Available` du `BackupStorageLocation`.
-- **Le credential est un `SealedSecret`, et c'en est la seconde raison valable du repo.** velero est
-  le moyen de restaurer openbao ; ranger son accès au bucket dans le coffre qu'il restaure fermerait
-  un cycle — un coffre perdu emporterait alors aussi l'accès aux sauvegardes qui permettent de le
-  reconstruire (règle anti-cycle, [`doc/regles-gitops.md`](../../../doc/regles-gitops.md)). Même
-  raisonnement que `openbao-snapshot-gcs`.
+- **Le credential est un `SealedSecret`, et la règle anti-cycle l'impose.** Un secret dont dépend
+  la *restauration* ne peut pas vivre dans un système que la restauration doit reconstruire : on
+  fermerait un cycle où la perte emporte aussi le moyen d'en sortir
+  ([`doc/regles-gitops.md`](../../../doc/regles-gitops.md)). C'est la même raison qui met
+  `forgejo-db-gcs` dans Git plutôt qu'ailleurs.
 - **Un backup manuel n'hérite RIEN de la schedule.** Le périmètre vit sur l'objet `Backup`, pas sur
   velero : `includedNamespaces` omis vaut **`["*"]`**, soit tout le cluster — y compris `monitoring`
   et ses 20 Gi de TSDB. Un `velero backup create` sans `--include-namespaces` remplit donc le bucket
@@ -92,25 +91,19 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
 - **La passphrase des dépôts kopia vit dans le cluster.** velero crée le Secret
   `velero-repo-credentials` dans son namespace ; sans elle, les dépôts kopia du bucket sont
   illisibles. Or le namespace `velero` est **exclu** des sauvegardes : ce Secret doit donc être
-  conservé **hors cluster**, au coffre, comme les clés de descellement d'openbao.
-- **velero ne sauvegarde PAS openbao, et c'est délibéré.** Le namespace a été dans la liste
-  blanche, puis en a été retiré : le coffre a sa propre chaîne — snapshot raft quotidien vers un
-  bucket GCS distinct — et elle est meilleure que ce que velero sait produire, `bao operator raft
-  snapshot save` donnant une copie *cohérente-transaction* là où kopia ne copie le PVC que de façon
-  *cohérente-crash*. Elle est aussi la seule des deux à être réellement testée
-  (`openbao-script.sh verify`). Ce que le retrait a coûté — un second domaine de panne, et la
-  détection passive d'une chaîne morte en silence — devait être remplacé par les alertes
-  `OpenBaoSnapshotTooOld` / `OpenBaoSnapshotMissing`.
+  conservé **hors cluster et hors Git**, au même titre que la clé du contrôleur sealed-secrets.
+- **Un namespace peut être RETIRÉ de la liste blanche, et ça s'est déjà produit.** Le critère :
+  quand une chaîne native produit une copie *cohérente-transaction* là où kopia ne copie le PVC que
+  de façon *cohérente-crash*, **et** qu'elle est réellement testée, velero n'ajoute qu'une copie de
+  moindre qualité qui coûte du volume et de la confiance mal placée.
 
-  > [!WARNING]
-  > **Ces alertes ne tournent plus.** `openbao` et
-  > [openbao-monitoring](../../../archive/openbao-monitoring/README.md) ont été archivés le
-  > 2026-09-08 ; le composant est en `.noapp.yaml`. Le raisonnement ci-dessus est donc **historique** :
-  > il n'y a plus ni coffre à sauvegarder, ni alerte pour surveiller sa sauvegarde. Conservé parce
-  > qu'il documente le seul cas où ce dépôt a retiré un namespace de la liste blanche, et pourquoi. Corollaire à ne pas perdre : restaurer le PVC
-  raft n'aurait de toute façon pas descellé le coffre — son contenu est chiffré, et les clés de
-  descellement comme le token root ne sont dans **aucune** sauvegarde
-  (cf. [openbao](../../../archive/openbao/README.md)).
+  ⚠️ **Ce retrait a un prix, et il doit être payé AVANT** : on perd un second domaine de panne, et
+  surtout la détection passive d'une chaîne morte en silence. Il faut donc que des alertes couvrent
+  la chaîne native au moment où on retire le filet — c'est exactement le rôle de
+  [cnpg-monitoring](../../../cluster/app/cnpg-monitoring/README.md) pour les PVC CNPG exclus
+  ci-dessous. **Les deux décisions se tiennent ensemble** : supprimer ces alertes rend l'exclusion
+  indéfendable.
+
 - **Restaurer un namespace géré par ArgoCD entre en concurrence avec `selfHeal`.** Les objets
   déclarés dans Git y sont reposés par ArgoCD ; ce que velero apporte d'utile, ce sont les
   **données** (PV/PVC) et les objets qui n'existent pas dans Git. Restaurer un namespace entier
@@ -128,12 +121,12 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   de son propre `ObjectStore` pour être réellement sauvegardée.
 - **Les PVC des bases CloudNativePG sont exclus de la copie de données** (`volume-policies.yaml`,
   règle `pvcLabels: {app.kubernetes.io/managed-by: cloudnative-pg}`, 2026-09-08). Même arbitrage
-  que pour openbao : la sauvegarde native barman-cloud
+  que ci-dessus : la sauvegarde native barman-cloud
   ([cnpg-barman-plugin](../../app/cnpg-barman-plugin/README.md)) est cohérente-**transaction** et
   donne le PITR, là où kopia ne peut copier le volume que de façon cohérente-crash. Garder les deux
   ne serait pas une ceinture et des bretelles mais un second chemin de restauration à moitié
   fiable, payé à chaque nuit par la lecture intégrale du volume.
-  - Ce qui tient la décision, exactement comme pour openbao : les alertes de
+  - Ce qui tient la décision, et sans quoi l'exclusion serait indéfendable : les alertes de
     [cnpg-monitoring](../../app/cnpg-monitoring/README.md) (`CNPGWalArchivingBacklog`,
     `CNPGBackupTooOld`, `CNPGNoBackupYet`…). Les supprimer rend l'exclusion indéfendable.
   - ⚠️ **Règle cluster-wide, sur un label que l'opérateur pose sur tous ses PVC** — pas une
@@ -152,10 +145,9 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   n'est plus rattrapable. Pour un historique plus long, ajouter une schedule hebdomadaire à TTL
   long (grand-père/père/fils) plutôt qu'allonger la quotidienne.
 - **Une copie kopia d'une base vivante est cohérente-crash, pas cohérente-transaction.** Elle vaut
-  ce que vaut un `kill -9` suivi d'un redémarrage : Postgres rejoue son WAL, un raft rejoue son
-  journal. Pour une restauration *propre*, la voie reste le backup natif (CNPG, snapshot raft).
-  Velero est le filet, pas le premier recours — et c'est l'argument qui a fini par sortir `openbao`
-  de la liste blanche.
+  ce que vaut un `kill -9` suivi d'un redémarrage : Postgres rejoue son WAL. Pour une restauration
+  *propre*, la voie reste le backup natif (CNPG). Velero est le filet, pas le premier recours — et
+  c'est l'argument qui sort un volume de la copie kopia dès qu'il a une chaîne native testée.
 - **Le namespace `velero` ne se sauvegarde pas lui-même.** Sa configuration (BSL, schedule, RBAC)
   est déclarée dans Git ; la restaurer se battrait avec la sync ArgoCD. Même raison pour
   `kube-system`, reconstruit par Talos et le CNI. Avec une liste blanche, ils sont exclus de fait —
@@ -164,8 +156,8 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   [velero-monitoring](../velero-monitoring/README.md), avec le PodMonitor du node-agent et les
   alertes. L'autodétection du chart repose sur les Capabilities Helm, donc sur la présence des
   CRDs prometheus-operator au moment du rendu — non garantie au bootstrap, `kube-prometheus-stack`
-  vivant dans le tier `app`, sans relation d'ordre avec `infra`. Même découpage que pour
-  [openbao](../../../archive/openbao/README.md). En revanche `metrics.enabled` reste **vrai** ici : c'est lui qui
+  vivant dans le tier `app`, sans relation d'ordre avec `infra`. Même découpage que pour les autres
+  composants `*-monitoring`. En revanche `metrics.enabled` reste **vrai** ici : c'est lui qui
   crée le Service scrapé, et le couper viderait le ServiceMonitor du composant frère en silence.
   Dashboard Grafana : dossier *Wittnerlab*, « Sauvegardes — velero » (le ConfigMap est dans
   [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)).
@@ -177,8 +169,8 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
 
 ## Opérations
 
-- **Vérifier le bucket et le compte de service** — ils sont posés par le repo **Terraform**, comme
-  la configuration d'openbao : rien à créer ici. Le compte de service est
+- **Vérifier le bucket et le compte de service** — ils sont posés par le repo **Terraform** : rien
+  à créer ici. Le compte de service est
   `velero@homelab-499008.iam.gserviceaccount.com` (sortie `velero_service_account_email`), et il
   lui faut `roles/storage.objectAdmin` **sur le bucket** :
   ```bash
@@ -208,8 +200,8 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   #    téléchargée. Ce sont les deux seules copies en clair de la clé privée du compte de service.
   rm cluster/infra/velero/manifests/velero-gcs.secret.yaml ./velero-sa.json
   ```
-  Contrairement aux secrets servis par [openbao](../../../archive/openbao/README.md), un scellé se refait passer
-  par Git : une rotation demande un commit. Révoquer l'ancienne clé côté GCP après coup
+  ⚠️ Un scellé se refait passer par Git : une rotation demande un commit, contrairement à un
+  secret servi par un backend externe. Révoquer l'ancienne clé côté GCP après coup
   (`gcloud iam service-accounts keys delete`).
 - **Vérifier que le bucket répond** — le BSL doit passer `Available` en moins d'une minute :
   ```bash

@@ -7,7 +7,7 @@ LocalPV-LVM et les alertes qui vont avec. Rien ici n'est nécessaire pour que le
 stockage — c'est précisément la raison de la séparation.
 
 Le composant `openebs` doit être debout au tout début du bootstrap (la StorageClass par défaut
-conditionne tous les PVC, à commencer par celui d'[openbao](../../../archive/openbao/README.md)), alors que ces
+conditionne tous les PVC, à commencer par ceux des bases et de la forge), alors que ces
 deux objets sont des CRs `monitoring.coreos.com` : ils n'existent qu'une fois
 [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) installé. Les garder dans
 `openebs` mettait cette Application en échec sur un cluster nu, et bloquait derrière elle toutes
@@ -43,7 +43,8 @@ kube-prometheus-stack.
   `cluster/infra`, le stack dans `cluster/app`, et les deux app-of-apps se synchronisent
   indépendamment. La wave 2 ne fait que garantir un point : ne bloquer personne dans `infra`.
 - **Ne pas remonter la wave.** En wave 0, une sync en échec (CRDs absentes) retiendrait `openebs`
-  et `openbao` ; en wave 2, ce composant est derrière tout le monde et n'a rien à retenir.
+  et tout ce qui le suit ; en wave 2, ce composant est derrière tout le monde et n'a rien à
+  retenir.
 
 ## Opérations
 

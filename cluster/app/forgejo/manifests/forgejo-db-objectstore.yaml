@@ -38,9 +38,8 @@ spec:
 
   configuration:
     # ⚠️ REMPLACER — le bucket n'est PAS créé par ce repo, il vient du repo Terraform (cf. README
-    # §Contraintes). Bucket DÉDIÉ, distinct de celui de velero et de celui des snapshots openbao :
-    # les trois chaînes ont chacune leur propre GC, et une lifecycle rule posée pour l'une casse
-    # les restaurations des autres.
+    # §Contraintes). Bucket DÉDIÉ, distinct de celui de velero : les deux chaînes ont chacune leur
+    # propre GC, et une lifecycle rule posée pour l'une casse les restaurations de l'autre.
     #
     # Le chemin s'arrête au bucket : barman range lui-même sous `<bucket>/<serverName>/`, et
     # `serverName` vaut le nom du `Cluster` (`forgejo-db`) quand il est omis. C'est ce qui permet

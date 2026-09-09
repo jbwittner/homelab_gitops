@@ -1,6 +1,6 @@
 # Alertes de sauvegarde.
 #
-# Principe directeur, hérité d'openbao-monitoring : un outil de backup échoue SILENCIEUSEMENT.
+# Principe directeur : un outil de backup échoue SILENCIEUSEMENT.
 # Les deux modes de panne les plus coûteux ne se voient sur aucun compteur d'échec —
 #   1. plus aucune sauvegarde ne se déclenche (série absente, pas série à zéro) ;
 #   2. la sauvegarde réussit mais ne contient aucune donnée de PV (node-agent absent).
