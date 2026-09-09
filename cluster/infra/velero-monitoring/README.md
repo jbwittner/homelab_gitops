@@ -64,6 +64,18 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
   sur la chaîne vide : le relabeling l'a rendu inopérant, et un backup manuel allumait une alerte
   critique 36 h plus tard, définitivement. Les règles `increase(...)` sur les échecs, elles,
   gardent `manuel` volontairement : un backup manuel qui échoue est un vrai échec.
+- **Troisième conséquence du relabeling, corrigée le 2026-09-09 : `velero_backup_.*` est plus
+  large que « les sauvegardes ».** Le regex attrape aussi `velero_backup_**location**_status_gauge`,
+  qui décrit une **destination** et n'a aucun rapport avec une schedule. Les séries de
+  `BackupStorageLocation` sortaient donc estampillées `schedule="manuel"` alors qu'aucune schedule
+  de ce nom n'existe — et le label ressortait tel quel **dans le mail** de
+  `VeleroBackupStorageLocationUnavailable`, où il ressemble à un indice et envoie chercher une
+  schedule fantôme en pleine panne. Aucune alerte n'était faussée : c'est un défaut de lisibilité,
+  et il n'apparaît qu'en lisant un vrai mail — jamais en relisant la configuration.
+  Un second `metricRelabelings` retire le label sur ces séries. ⚠️ Il n'est pas indépendant du
+  premier, c'est son **rattrapage** : les deux se déplacent ensemble. Et c'est un rattrapage plutôt
+  qu'un regex plus étroit parce que RE2 n'a pas de lookahead négatif — `velero_backup_(?!location)`
+  n'est pas exprimable.
 - **La liste des sauvegardes ne peut PAS venir des métriques de velero.** Elles sont agrégées par
   schedule et écrasées à chaque exécution : `velero_backup_tarball_size_bytes` ne décrit que la
   dernière, jamais l'historique. L'inventaire « une ligne par sauvegarde » vient de

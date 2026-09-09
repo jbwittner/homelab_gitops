@@ -22,6 +22,8 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   `instance` du node-exporter, scrapes control-plane désactivés
 - `manifests/namespace.yaml` — ns `monitoring`
 - `manifests/grafana-httproute.yaml` — HTTPRoute Grafana → `shared-gw`
+- `manifests/alertmanager-httproute.yaml` — HTTPRoute Alertmanager → `shared-gw`, listener
+  `https-internal`. ⚠️ **Aucune authentification derrière** — cf. § Accès
 - `manifests/grafana-admin.sealed.yaml` — `SealedSecret` `grafana-admin`, clés `admin-user` /
   `admin-password` : le **seul** identifiant d'accès à Grafana
 - `manifests/grafana-oidc.externalsecret.yaml` — `ExternalSecret` `grafana-oidc`, clé `client-secret`,
@@ -492,12 +494,49 @@ Ce que les logs disent quand ça rate, en revanche :
   partent tels quels vers Alertmanager. Si ce flag passait à `true`, Helm les interpréterait
   d'abord et le sujet arriverait vide — il faudrait les échapper.
 
-### Accès Prometheus / Alertmanager (non exposés)
+### Accès Prometheus / Alertmanager
+
+**Alertmanager est exposé sur le LAN** : `https://alertmanager.lan.wittner.tech`
+(`manifests/alertmanager-httproute.yaml`, listener `https-internal` du `shared-gw`, wildcard
+`*.lan.wittner.tech`). Aucun port ouvert sur Internet — le listener `https-public` n'est pas visé
+et le tunnel Cloudflare ne connaît pas ce hostname.
+
+> [!CAUTION]
+> **Cette URL n'est protégée par rien.** Alertmanager n'a pas d'authentification, l'opérateur n'en
+> propose pas, et l'implémentation Gateway API de Cilium non plus. Quiconque l'atteint depuis le
+> LAN peut **créer un silence**, c'est-à-dire éteindre la surveillance des sauvegardes — sans
+> identifiant et sans trace attribuable.
+>
+> C'est l'asymétrie avec Grafana, qui est sur le même listener mais derrière un compte
+> (`grafana-admin`). Le risque est assumé pour ce que la route apporte : poser un silence **avant**
+> une opération planifiée, et rendre cliquable le bouton « View In Alertmanager » des mails depuis
+> n'importe quel appareil du LAN. En faire une URL authentifiée demanderait un proxy d'auth, donc
+> un logiciel de plus.
+
+> [!WARNING]
+> **Le hostname doit aussi être déclaré sur le reverse proxy LAN (192.168.1.50), hors de ce
+> dépôt.** Sans cette déclaration, la réponse est **404 alors que l'`HTTPRoute` est sain** — le
+> symptôme ne pointe pas vers sa cause.
+
+**Prometheus reste non exposé**, et c'est délibéré : il n'a aucun usage à distance comparable à la
+pose d'un silence, et il divulguerait toute la topologie et la volumétrie du homelab à qui atteint
+l'URL. Son `externalUrl` vaut donc `http://localhost:9090` — le lien « Source » des mails devient
+cliquable exactement quand le port-forward est ouvert, c'est-à-dire quand on diagnostique.
 
 ```bash
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
-kubectl -n monitoring port-forward svc/kube-prometheus-stack-alertmanager 9093:9093
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-alertmanager 9093:9093   # secours
 ```
+
+⚠️ **Le port 9090 de la première commande est load-bearing** : c'est celui qu'attend le lien
+« Source » des mails. Le changer casse ces liens, sans autre signal.
+
+> [!NOTE]
+> **Ce défaut ne se voyait qu'en lisant un vrai mail.** Sans `externalUrl`, l'opérateur y met le
+> DNS interne du cluster (`http://kube-prometheus-stack-alertmanager.monitoring:9093`), qui ne
+> résout nulle part depuis un client mail. Aucun contrôle en cluster ne le montre : les objets sont
+> sains, les alertes partent, seuls les liens sont morts. Constaté le 2026-09-09 en lisant le mail
+> d'un exercice d'injection, pas en relisant la configuration.
 
 ### État
 

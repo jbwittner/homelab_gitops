@@ -78,6 +78,23 @@ grafana:
 prometheus:
   prometheusSpec:
     retention: 15d
+    # Adresse que Prometheus met dans le lien « Source » de chaque alerte qu'il pousse vers
+    # Alertmanager (le `generatorURL`), donc dans le corps des MAILS.
+    #
+    # Sans ce réglage, l'opérateur y met le DNS interne du cluster
+    # (`http://kube-prometheus-stack-prometheus.monitoring:9090`) : le lien ne résout nulle part
+    # depuis un client mail, et rien en cluster ne le signale — le défaut ne se voit qu'en lisant
+    # un vrai mail. Constaté le 2026-09-09 sur les mails de l'exercice d'injection.
+    #
+    # `localhost` est un choix assumé : Prometheus, LUI, n'est pas exposé (§ Accès) — le seul
+    # chemin reste un port-forward, et le lien devient cliquable exactement au moment où on
+    # diagnostique. Le partage avec Alertmanager s'arrête donc ici : celui-là est exposé sur le LAN
+    # parce qu'il a un usage à distance (poser un silence), Prometheus n'en a pas — et il
+    # divulguerait toute la topologie et la volumétrie du homelab à qui atteint l'URL.
+    #
+    # ⚠️ Ne PAS y mettre de chemin (`/prometheus` par exemple) : `--web.external-url` sert aussi de
+    # préfixe de route à l'UI, et l'interface deviendrait injoignable en port-forward direct.
+    externalUrl: http://localhost:9090
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -88,6 +105,16 @@ prometheus:
 # --- Alertmanager : PVC + notification mail des alertes critiques ---
 alertmanager:
   alertmanagerSpec:
+    # Adresse du bouton « View In Alertmanager » du corps des mails. Contrairement à Prometheus
+    # ci-dessus, Alertmanager EST exposé sur le LAN (`manifests/alertmanager-httproute.yaml`) :
+    # le lien est donc cliquable depuis n'importe quel appareil du LAN, téléphone compris, sans
+    # port-forward. Les deux se déplacent ensemble — retirer la route rend ce lien mort.
+    #
+    # ⚠️ Le hostname doit aussi être déclaré sur le reverse proxy LAN (192.168.1.50), hors dépôt.
+    #
+    # ⚠️ `https://`, pas `http://` : TLS est terminé au Gateway (wildcard `*.lan.wittner.tech`).
+    # Écrire `http` produirait un lien qui redirige ou échoue selon le client.
+    externalUrl: https://alertmanager.lan.wittner.tech
     storage:
       volumeClaimTemplate:
         spec:

@@ -46,3 +46,20 @@ spec:
           regex: "velero_backup_.*;"
           targetLabel: schedule
           replacement: manuel
+        # ⚠️ RATTRAPAGE de la règle ci-dessus, pas une règle indépendante — les deux se déplacent
+        # ensemble. `velero_backup_.*` est plus large qu'il n'y paraît : il attrape aussi
+        # `velero_backup_location_status_gauge`, qui décrit une DESTINATION et n'a aucun rapport
+        # avec une schedule. Résultat sans ce rattrapage : les séries de BackupStorageLocation
+        # portent `schedule="manuel"` alors qu'aucune schedule de ce nom n'existe, et le label
+        # ressort tel quel dans le MAIL de `VeleroBackupStorageLocationUnavailable` — où il
+        # ressemble à un indice et envoie chercher une schedule fantôme en pleine panne.
+        # Constaté le 2026-09-09 en lisant le mail d'un exercice d'injection.
+        #
+        # Le rattrapage plutôt qu'un regex plus étroit : RE2 (Prometheus) n'a PAS de lookahead
+        # négatif, donc `velero_backup_(?!location)` n'est pas exprimable. Un `replacement` vide
+        # supprime le label — c'est le seul moyen propre de le retirer après coup.
+        - sourceLabels: [__name__]
+          regex: "velero_backup_location_.*"
+          targetLabel: schedule
+          replacement: ""
+

@@ -4,6 +4,9 @@ namespace: monitoring
 resources:
   - namespace.yaml
   - grafana-httproute.yaml
+  # Exposition LAN d'Alertmanager. ⚠️ Indissociable de l'`externalUrl` d'alertmanagerSpec dans
+  # helm-values.yaml : retirer cette route en la laissant là-bas rend morts les liens des mails.
+  - alertmanager-httproute.yaml
   # Compte admin local Grafana : canal sealed-secrets (le SealedSecret porte la valeur, pas
   # un pointeur). Déchiffré par le contrôleur sealed-secrets (wave -8), donc bien avant cette
   # app. Rotation = kubeseal + commit (cf. README.md §Compte admin Grafana).
