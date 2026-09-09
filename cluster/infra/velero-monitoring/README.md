@@ -97,6 +97,19 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
 - **Aucune alerte ne surveille la taille du bucket.** velero n'expose que la taille du tarball
   d'objets, jamais le volume du dépôt kopia. La seule mesure fiable est côté GCP
   (`gcloud storage du`), hors cluster, donc hors Prometheus.
+- **Un `BackupStorageLocation` supprimé laisse sa métrique derrière lui, et l'alerte ne s'éteint
+  jamais seule.** velero pose `velero_backup_location_status_gauge` quand il découvre un BSL, mais
+  il ne la RETIRE PAS quand le BSL disparaît : la série continue d'être exportée à `0`, donc
+  `VeleroBackupStorageLocationUnavailable` reste en `firing` indéfiniment sur une destination qui
+  n'existe plus. Ce n'est pas un défaut de la règle — l'expression est correcte, c'est la métrique
+  qui ment. Constaté le 2026-09-09 : un BSL `drill-broken` créé à la main pour éprouver la règle,
+  puis supprimé, a laissé une alerte critique allumée alors que `kubectl get backupstoragelocation`
+  ne montrait plus que `default` en `Available` et que la sauvegarde de 03:00 était `Completed`.
+  ⚠️ **Tout exercice qui crée un BSL doit donc se terminer par un redémarrage du Deployment velero**
+  (voir *Opérations*), sinon le nettoyage est incomplet et l'alerte survit à l'exercice.
+  Ne PAS « corriger » en épinglant l'expression sur `backup_location_name="default"` : ça éteindrait
+  aussi la surveillance de tout BSL ajouté plus tard, en silence — on troquerait un faux positif
+  bruyant contre un faux négatif muet, sur la seule alerte qui nomme la cause d'un bucket injoignable.
 
 ## Opérations
 
@@ -119,6 +132,16 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
   kubectl -n monitoring exec -ti sts/prometheus-kube-prometheus-stack-prometheus -c prometheus -- \
     wget -qO- 'http://localhost:9090/api/v1/rules?type=alert' | grep -o 'Velero[A-Za-z]*'
   ```
+- **Éteindre une alerte de BSL restée allumée après un exercice** — le gauge d'un BSL supprimé n'est
+  purgé que par un redémarrage du serveur (voir *Contraintes*) :
+  ```bash
+  kubectl -n velero get backupstoragelocation            # confirmer d'abord que le BSL a bien disparu
+  kubectl -n velero rollout restart deployment/velero    # aucune sauvegarde en cours : vérifier avant
+  ```
+  Le `restartedAt` posé par `rollout restart` **ne crée pas de dérive ArgoCD** : avec
+  `ServerSideApply=true`, l'annotation appartient au field manager `kubectl-rollout` et non à
+  ArgoCD, qui ne la voit donc pas dans son diff — l'Application reste `Synced`. Ça reste un geste
+  impératif, à ne faire que pour cette panne-là.
 - **Ouvrir le dashboard** : Grafana → dossier *Wittnerlab* → « Sauvegardes — velero »
   (uid `velero-backups`). Il vit dans
   [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md), pas ici — et jamais édité
