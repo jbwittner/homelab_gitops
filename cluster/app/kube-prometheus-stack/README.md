@@ -58,9 +58,16 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   warnings / pending / chaîne d'alerting, tableau des alertes **firing et pending** avec leur
   ancienneté, historique par alerte, courbe par sévérité. Variables Composant (openbao / velero /
   openebs / chart) et Sévérité
-- `manifests/alertmanager-smtp.externalsecret.yaml` — `ExternalSecret` `alertmanager-smtp`, clés
-  `username` / `password` du relais SMTP. **Non référencé dans `kustomization.yaml`** tant que la
-  clé n'est pas dans le coffre (cf. § Notification mail)
+- `manifests/alertmanager-smtp.sealed.yaml` — `SealedSecret` `alertmanager-smtp`, clés
+  `username` / `password` du relais SMTP. Monté en volume par `alertmanagerSpec.secrets` :
+  Alertmanager lit le mot de passe dans un **fichier**, jamais depuis sa config
+  (cf. § Notification mail)
+- `manifests/alertmanager-smtp.secret.example.yaml` — template **versionné et vide** du credential
+  SMTP : la forme attendue, les noms de clés (⚠️ le nom de la clé est le nom du fichier monté) et
+  les pièges. Le clair réel est gitignoré (`*.secret.yaml`)
+- `manifests/alertmanager-smtp.externalsecret.yaml` — ancien canal openbao du credential SMTP,
+  **non référencé** : remplacé par le `SealedSecret` ci-dessus, les deux visent le même `Secret`.
+  Jamais activé — openbao est dans `archive/`
 - `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD
 - `manifests/kustomization.yaml` — assemblage
 
@@ -358,56 +365,108 @@ seul moment où on l'ouvre.
 - **Il n'y a toujours aucune notification** : sans receiver Alertmanager, une alerte n'existe que
   si quelqu'un ouvre cette page.
 
-### Notification mail des alertes critiques (livré, DÉSACTIVÉ)
+### Notification mail des alertes critiques (ACTIF depuis le 2026-09-09)
 
-Tout est écrit — `manifests/alertmanager-smtp.externalsecret.yaml`, le bloc `alertmanager.config`
-de `helm-values.yaml` — mais **volontairement inactif** : `alertmanagerSpec.secrets` monte le
-Secret `alertmanager-smtp` comme volume, et un volume dont le Secret n'existe pas laisse le pod
-Alertmanager en `ContainerCreating` **indéfiniment**. Activer avant d'avoir la clé SMTP casserait
-donc l'alerting pour l'installer. Les trois morceaux se décommentent ensemble, dans cet ordre :
+Les trois morceaux sont en place et indissociables — les déplacer ensemble, toujours :
 
-1. **Créer la clé SMTP chez le relais** (Brevo, Mailjet, SMTP2GO — offre gratuite suffisante).
-   Relever le **login SMTP** (un identifiant dédié, `9xxxxx@smtp-brevo.com` chez Brevo, pas
-   l'adresse du compte) et la **clé**. Valider l'adresse d'expéditeur choisie pour `smtp_from`,
-   sinon le relais accepte les mails et les jette sans rien renvoyer à Alertmanager.
-2. **Écrire la paire dans le coffre**, coffre descellé :
-   ```bash
-   bao kv put kv/homelab/alertmanager/smtp username='9xxxxx@smtp-brevo.com' password='<clé SMTP>'
-   ```
-3. **Décommenter**, en une seule fois : la ligne `alertmanager-smtp.externalsecret.yaml` de
-   `manifests/kustomization.yaml`, le `secrets:` d'`alertmanagerSpec` et le bloc
-   `alertmanager.config` de `helm-values.yaml`. Y renseigner `smtp_auth_username` et `smtp_from`.
-   Commit → ArgoCD applique.
-4. **Vérifier**, dans l'ordre — chaque étape a son mode d'échec propre :
-   ```bash
-   kubectl -n monitoring get externalsecret alertmanager-smtp   # SecretSynced ?
-   kubectl -n monitoring get secret alertmanager-smtp           # matérialisé ?
-   kubectl -n monitoring get pod -l app.kubernetes.io/name=alertmanager   # Running, pas ContainerCreating
-   kubectl -n monitoring logs sts/alertmanager-kube-prometheus-stack-alertmanager -c alertmanager | grep -i smtp
-   ```
-   Puis un vrai mail, sans attendre une panne — router temporairement `Watchdog` vers
+| Morceau | Où | Rôle |
+| --- | --- | --- |
+| `SealedSecret` `alertmanager-smtp` | `manifests/alertmanager-smtp.sealed.yaml` | porte le login et la clé SMTP |
+| `alertmanagerSpec.secrets` | `helm-values.yaml` | monte le Secret sous `/etc/alertmanager/secrets/alertmanager-smtp/<clé>` |
+| `alertmanager.config` | `helm-values.yaml` | route, inhibitions, receiver mail |
+
+> [!WARNING]
+> **L'ordre de pose n'est pas négociable, et son mode d'échec est muet.** Un volume dont le Secret
+> manque laisse le pod Alertmanager en `ContainerCreating` **indéfiniment** — pas d'erreur de
+> config, pas de `CrashLoopBackOff`, un pod qui ne démarre jamais. Le `SealedSecret` est donc
+> référencé dans le **même commit** que le `secrets:` qui le monte. Retirer l'un des trois en
+> laissant les autres reproduit exactement cette panne.
+
+**Le canal est sealed-secrets, pas openbao** — `alertmanager-smtp.externalsecret.yaml` est conservé
+mais non référencé. Deux raisons, et la seconde est la vraie :
+
+1. openbao est dans `archive/` ;
+2. surtout, faire dépendre l'alerting d'un coffre descellé le fait taire le jour où le coffre
+   tombe — et la panne d'openbao serait alors **l'alerte qui ne part pas**. Même argument que pour
+   le compte admin Grafana (§ Compte admin Grafana), en plus fort : Alertmanager est l'outil qui
+   doit parler quand le reste se tait.
+
+**Le credential est celui du mailer de Forgejo** (`gitea.config.mailer.USER`, relais Brevo) : un
+seul relais, une seule clé. ⚠️ La tourner chez Brevo casse les **deux**, et il faut resceller les
+deux fichiers (`alertmanager-smtp.secret.example.yaml` et le template Forgejo).
+
+#### Ce qui part réellement en mail
+
+Seul `severity = critical` est routé ; les `warning` restent dans Grafana. Ce n'est pas un filtre
+arbitraire mais un **étagement** : l'échec ponctuel est un warning, sa persistance devient
+critique, et c'est la persistance qui mérite un mail.
+
+| Part en mail (`critical`) | Après | Reste dans Grafana (`warning`) |
+| --- | --- | --- |
+| `CNPGWalArchivingBacklog` | 30 m | `CNPGWalArchivingFailing` — l'échec, dont le backlog est la conséquence |
+| `CNPGBackupTooOld` | 30 m | `CNPGLastBackupFailed` (15 m), `CNPGNoBackupYet` (24 h) |
+| `CNPGBackupChainAbsent` | 1 h | |
+| `CNPGMetricsAbsent` | 1 h | |
+| `VeleroDown` | 15 m | `VeleroBackupFailed`, `VeleroBackupPartiallyFailed` |
+| `VeleroBackupStorageLocationUnavailable` | 15 m | `VeleroNoBackupMetric` (6 h) |
+| `VeleroBackupTooOld` | 30 m | `VeleroRepoMaintenanceFailing` |
+| `VeleroNodeAgentNotReady` | 30 m | |
+
+Chaque warning a son critical en aval : un archivage WAL qui échoue finit en backlog, une
+sauvegarde qui rate finit en sauvegarde trop vieille. Rien d'important n'est muet — **sauf ce que
+personne ne mesure**, à savoir la copie kopia étalée d'un PVC, qui produit une sauvegarde verte
+(cf. [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md)). Le seul détecteur reste l'exercice
+trimestriel.
+
+#### Ce qu'il reste à faire, une seule fois
+
+Deux choses ne se vérifient pas depuis le dépôt, et la seconde est la seule qui prouve la chaîne.
+
+1. **L'expéditeur.** `smtp_from: alertmanager@wittner.tech` ne marche que si le domaine
+   `wittner.tech` est **authentifié** chez Brevo (DKIM de domaine), et pas seulement
+   `forgejo@wittner.tech` validée comme expéditeur unique. ⚠️ À défaut, Brevo **accepte** les mails
+   et les jette : l'échec n'apparaît que dans les logs du relais, pas dans ceux d'Alertmanager.
+   Repli sans risque : `forgejo@wittner.tech`, qui envoie déjà — le sujet porte l'alerte,
+   l'expéditeur n'est qu'une étiquette.
+
+2. **Un vrai mail, sans attendre une panne.** Router temporairement `Watchdog` vers
    `email-critique` au lieu de `"null"`, commit, attendre le mail, remettre. Le deadman switch
-   sonne en permanence : c'est le seul générateur d'alerte fiable dont on dispose pour un test.
+   sonne en permanence : c'est le seul générateur d'alerte fiable dont on dispose.
 
-Ce que ce câblage décide, et qui se relit dans les commentaires du bloc :
+```bash
+kubectl -n monitoring get sealedsecret alertmanager-smtp          # Synced ?
+kubectl -n monitoring get secret alertmanager-smtp                # matérialisé ?
+kubectl -n monitoring get pod -l app.kubernetes.io/name=alertmanager   # Running, pas ContainerCreating
+kubectl -n monitoring logs sts/alertmanager-kube-prometheus-stack-alertmanager \
+  -c alertmanager | command grep -i 'smtp\|notify'
+```
+
+#### Ce que ce câblage décide, et qui se relit dans les commentaires du bloc
 
 - **`config` REMPLACE la configuration par défaut du chart, elle ne s'y ajoute pas.** Les
   `inhibit_rules` recopiées sont celles du chart : sans elles, un composant en `critical` enverrait
   aussi ses `warning` — plusieurs mails pour une seule panne.
-- **Seul `severity = critical` part en mail.** Les warnings restent dans Grafana. Un mail qu'on
-  finit par filtrer ne vaut pas mieux que pas de mail.
 - **`Watchdog` est explicitement routé vers `"null"`** : il sonne toujours, il produirait une
   notification toutes les 4 h à vie. Sa valeur est de disparaître, ce qu'un mail ne peut pas dire —
   seul un service externe (healthchecks.io et consorts) peut surveiller ce silence, **et rien ne le
-  fait aujourd'hui** : si Prometheus lui-même tombe, aucun mail ne partira jamais.
+  fait aujourd'hui**.
+
+> [!CAUTION]
+> **Ce câblage ne couvre pas sa propre panne.** Si Prometheus ou Alertmanager tombe, aucun mail ne
+> partira — y compris pour signaler qu'ils sont tombés. C'est la limite structurelle du deadman
+> switch routé vers `"null"` : le seul détecteur possible est hors du cluster, et il n'existe pas.
+
 - **`repeat_interval: 4h`** au lieu des 12 h du chart : une panne du soir ne doit pas attendre le
   matin pour son premier rappel.
 - **`smtp_auth_password_file`, jamais `smtp_auth_password`** : le mot de passe vient du volume, ce
   qui garde `helm-values.yaml` publiable. Le login, lui, est en clair — Alertmanager n'a pas de
-  `smtp_auth_username_file`.
-- **`tplConfig: false`** dans ce chart (vérifié en 88.2.0) : les `{{ }}` du `Subject` partent tels
-  quels vers Alertmanager. Si ce flag passait à `true`, Helm les interpréterait d'abord et le sujet
-  arriverait vide — il faudrait les échapper.
+  `smtp_auth_username_file`. Il est malgré tout scellé à côté du mot de passe, pour que la paire ne
+  se dissocie jamais.
+- **Le nom de la clé du Secret EST le nom du fichier monté.** Renommer `password` casse le chemin
+  `smtp_auth_password_file` — sans autre signal qu'un échec d'envoi au premier mail.
+- **`tplConfig: false`** dans ce chart (revérifié en **88.6.5** au rendu) : les `{{ }}` du `Subject`
+  partent tels quels vers Alertmanager. Si ce flag passait à `true`, Helm les interpréterait
+  d'abord et le sujet arriverait vide — il faudrait les échapper.
 
 ### Accès Prometheus / Alertmanager (non exposés)
 

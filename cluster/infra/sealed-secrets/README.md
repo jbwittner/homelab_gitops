@@ -55,9 +55,13 @@ bootstrap à froid : un dépôt injoignable bloque désormais le contrôleur, do
 > existants**, elle ne change que la clé des nouveaux. Sa valeur suppose qu'on re-scelle tout le
 > parc à chaque tour, ce que personne ne fait ici.
 >
-> État au 2026-09-08 : une seule clé, `sealed-secrets-key7t2db`, créée le 2026-08-29 avec le
-> cluster ; les **dix** `SealedSecret` du dépôt sont scellés avec elle. La première rotation serait
-> tombée vers le **2026-09-28** — ce réglage la supprime avant qu'elle n'ait lieu.
+> État au 2026-09-09 : une seule clé, `sealed-secrets-key7t2db`, créée le 2026-08-29 avec le
+> cluster ; les `SealedSecret` du dépôt sont tous scellés avec elle — **11 fichiers, 13 documents**
+> (un fichier peut en porter plusieurs, cf. `forgejo-admin.sealed.yaml`). La première rotation
+> serait tombée vers le **2026-09-28** — ce réglage la supprime avant qu'elle n'ait lieu.
+>
+> Le compte se relit sans le tenir à jour à la main :
+> `grep -rh 'kind: SealedSecret' cluster/ | wc -l`.
 
 ## Opérations
 

@@ -784,9 +784,15 @@ scellement ne se voit pas au démarrage, seulement au premier envoi.
 | `i/o timeout` / `connection timed out` | Là, c'est le réseau. La `CiliumNetworkPolicy` n'ouvre la sortie que vers des adresses **publiques** : un relais sur le LAN demande une règle `toCIDR` explicite dans `manifests/forgejo-netpol.yaml`. |
 | Authentification refusée | Secret `forgejo-smtp` non scellé, ou `USER` renseigné avec l'adresse d'expédition au lieu de l'identifiant Brevo (`<id>@smtp-brevo.com`) — les deux diffèrent. |
 
-Alertmanager, lui, est encore sur un `REMPLACER`
-(cf. [`kube-prometheus-stack`](../kube-prometheus-stack/helm-values.yaml)) : il peut partager ce
-relais, avec des identifiants distincts.
+**Alertmanager partage ce relais et ce credential** depuis le 2026-09-09
+(cf. [`kube-prometheus-stack`](../kube-prometheus-stack/README.md) § Notification mail) : même
+login Brevo, même clé, scellée une seconde fois dans `monitoring` — sealed-secrets chiffrant pour
+le couple (nom, namespace), la valeur ne peut pas être mutualisée en un seul objet.
+
+⚠️ **Conséquence sur la rotation** : changer la clé SMTP chez Brevo casse les **deux** envois, et
+il faut resceller les deux fichiers (celui d'ici et
+`cluster/app/kube-prometheus-stack/manifests/alertmanager-smtp.secret.example.yaml`). Un seul des
+deux rescellé donne une forge qui envoie et un alerting muet — ou l'inverse, qui est pire.
 
 ### Reste
 

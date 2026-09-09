@@ -94,18 +94,28 @@ alertmanager:
           resources:
             requests:
               storage: 2Gi
-    ## NOTIFICATION MAIL — livrée mais DÉSACTIVÉE. Convention de ce bloc, à respecter en le
-    ## modifiant : `##` = documentation, elle reste commentée pour toujours ; `#` seul = la
-    ## configuration à décommenter le jour de l'activation. Un `sed` sur `^\s*# ` suffit alors,
-    ## et ne touche pas à la prose.
+    ## NOTIFICATION MAIL — ACTIVE depuis le 2026-09-09. Convention de ce bloc : `##` =
+    ## documentation, elle reste commentée pour toujours ; tout le reste est de la configuration
+    ## vivante. Pour désactiver, c'est l'inverse du chemin d'activation : recommenter `secrets` ET
+    ## `config` ensemble, jamais l'un sans l'autre.
     ##
-    ## `secrets` monte le Secret `alertmanager-smtp` (ExternalSecret, cf. manifests/) sous
-    ## /etc/alertmanager/secrets/alertmanager-smtp/. C'est le SEUL moyen de donner un mot de passe
-    ## SMTP à Alertmanager sans l'écrire dans ce fichier — donc dans Git.
-    ## ⚠️ Décommenter AVANT que le Secret existe met le pod en ContainerCreating indéfiniment :
-    ## le volume ne se monte pas. Procédure d'activation complète dans le README.
-    # secrets:
-    #   - alertmanager-smtp
+    ## `secrets` monte le Secret `alertmanager-smtp` sous
+    ## /etc/alertmanager/secrets/alertmanager-smtp/<clé>. C'est le SEUL moyen de donner un mot de
+    ## passe SMTP à Alertmanager sans l'écrire dans ce fichier — donc dans Git.
+    ##
+    ## ⚠️ Le Secret vient du **SealedSecret** `alertmanager-smtp.sealed.yaml`, PAS de
+    ## l'`ExternalSecret` du même nom (conservé dans manifests/, non référencé). Le canal a été
+    ## changé à l'activation : openbao est dans `archive/`, et surtout le faire dépendre d'un
+    ## coffre descellé ferait taire les alertes le jour où le coffre tombe — la panne d'openbao
+    ## serait alors l'alerte qui ne part pas. Même raison que pour le compte admin Grafana.
+    ##
+    ## ⚠️ `secrets` sans le Secret met le pod Alertmanager en ContainerCreating INDÉFINIMENT : un
+    ## volume dont le Secret manque ne se monte pas, et le symptôme n'est pas une erreur de config
+    ## mais un pod qui ne démarre jamais. Le SealedSecret est donc posé AVANT par le même commit,
+    ## et il est scellé pour le couple (`alertmanager-smtp`, `monitoring`) — le déplacer le rend
+    ## indéchiffrable, sans autre signal que ce même ContainerCreating.
+    secrets:
+      - alertmanager-smtp
 
   ## `config` REMPLACE intégralement la configuration par défaut du chart — elle n'est pas
   ## fusionnée. Les `inhibit_rules` et le receiver `"null"` ci-dessous ne sont donc pas décoratifs :
@@ -116,66 +126,78 @@ alertmanager:
   ## `tplConfig` vaut false dans ce chart (vérifié en 88.2.0) : les `{{ }}` ci-dessous partent tels
   ## quels vers Alertmanager au lieu d'être interprétés par Helm. À revérifier si le flag change,
   ## sinon il faudrait les échapper en `{{ "{{" }}`.
-  # config:
-  #   global:
-  #     resolve_timeout: 5m
-  #     # Relais transactionnel. Alternatives au même format : in-v3.mailjet.com:587 (Mailjet),
-  #     # mail.smtp2go.com:587 (SMTP2GO). Le port 587 est du STARTTLS, pas du TLS implicite —
-  #     # avec 465 il faudrait `smtp_require_tls: false` ET un smarthost en TLS direct, que
-  #     # certains relais refusent. Rester en 587.
-  #     smtp_smarthost: 'smtp-relay.brevo.com:587'
-  #     # DOIT être une adresse d'expéditeur validée chez le relais, sinon les mails sont acceptés
-  #     # puis silencieusement jetés — l'échec n'apparaît que dans les logs du relais, pas ici.
-  #     smtp_from: 'alertmanager@wittner.tech'
-  #     # Login SMTP du relais (PAS l'adresse mail du compte chez Brevo : un identifiant dédié du
-  #     # type 9xxxxx@smtp-brevo.com). En clair, faute de `smtp_auth_username_file` côté
-  #     # Alertmanager — la valeur de référence reste celle du coffre, cf. l'ExternalSecret.
-  #     smtp_auth_username: 'REMPLACER@smtp-brevo.com'
-  #     smtp_auth_password_file: /etc/alertmanager/secrets/alertmanager-smtp/password
-  #     smtp_require_tls: true
-  #   inhibit_rules:
-  #     - source_matchers: [severity = critical]
-  #       target_matchers: [severity =~ warning|info]
-  #       equal: [namespace, alertname]
-  #     - source_matchers: [severity = warning]
-  #       target_matchers: [severity = info]
-  #       equal: [namespace, alertname]
-  #     - source_matchers: [alertname = InfoInhibitor]
-  #       target_matchers: [severity = info]
-  #       equal: [namespace]
-  #     - target_matchers: [alertname = InfoInhibitor]
-  #   route:
-  #     # `alertname` en plus de `namespace` : sans lui, une panne d'openbao et une panne de velero
-  #     # simultanées mais sans rapport arriveraient dans le MÊME mail, et le `repeat_interval`
-  #     # du groupe s'appliquerait aux deux.
-  #     group_by: [namespace, alertname]
-  #     group_wait: 30s
-  #     group_interval: 5m
-  #     # Un rappel toutes les 4 h tant que ça sonne. Le défaut du chart (12 h) est trop long pour
-  #     # une alerte critique : une panne du soir ne re-notifierait qu'au matin.
-  #     repeat_interval: 4h
-  #     # Défaut = ne rien envoyer. Tout ce qui n'est pas explicitement routé plus bas reste
-  #     # visible dans Grafana et ne génère PAS de mail — c'est le choix « critical uniquement ».
-  #     receiver: "null"
-  #     routes:
-  #       # Watchdog sonne en permanence par construction (deadman switch) : la router vers un mail
-  #       # produirait une alerte toutes les 4 h à vie. Sa valeur est ailleurs — cf. README.
-  #       - matchers: ['alertname = "Watchdog"']
-  #         receiver: "null"
-  #       - matchers: ['severity = "critical"']
-  #         receiver: email-critique
-  #   receivers:
-  #     - name: "null"
-  #     - name: email-critique
-  #       email_configs:
-  #         # `send_resolved` : sans lui, rien ne dit jamais que c'est rentré dans l'ordre, et on
-  #         # se déplace pour une panne déjà résolue.
-  #         - to: jeanbaptiste.wittner@outlook.com
-  #           send_resolved: true
-  #           headers:
-  #             Subject: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} — {{ .CommonAnnotations.summary }}'
-  #   templates:
-  #     - '/etc/alertmanager/config/*.tmpl'
+  config:
+    global:
+      resolve_timeout: 5m
+      # Relais transactionnel. Alternatives au même format : in-v3.mailjet.com:587 (Mailjet),
+      # mail.smtp2go.com:587 (SMTP2GO). Le port 587 est du STARTTLS, pas du TLS implicite —
+      # avec 465 il faudrait `smtp_require_tls: false` ET un smarthost en TLS direct, que
+      # certains relais refusent. Rester en 587.
+      smtp_smarthost: 'smtp-relay.brevo.com:587'
+      # DOIT être une adresse d'expéditeur validée chez le relais, sinon les mails sont acceptés
+      # puis silencieusement jetés — l'échec n'apparaît que dans les logs du relais, pas ici.
+      #
+      # ⚠️ `alertmanager@wittner.tech` ne marche QUE si le domaine `wittner.tech` est authentifié
+      # chez Brevo (DKIM de domaine), et pas seulement `forgejo@wittner.tech` validée comme
+      # expéditeur unique. À défaut, retomber sur `forgejo@wittner.tech` — qui envoie déjà — est
+      # sans risque : le sujet du mail porte déjà l'alerte, l'expéditeur n'est qu'une étiquette.
+      # C'est le SEUL point de ce bloc qui ne se vérifie pas depuis le dépôt, d'où le test au
+      # Watchdog de la procédure (README § Notification mail).
+      smtp_from: 'alertmanager@wittner.tech'
+      # Login SMTP du relais (PAS l'adresse mail du compte chez Brevo : un identifiant dédié).
+      # En clair, faute de `smtp_auth_username_file` côté Alertmanager — la valeur de référence
+      # reste celle du `SealedSecret` `alertmanager-smtp`, dont la clé `username` porte le même
+      # login pour que la paire ne se dissocie jamais.
+      #
+      # ⚠️ MÊME credential Brevo que le mailer de Forgejo (`gitea.config.mailer.USER` de
+      # cluster/app/forgejo/helm-values.yaml). Un seul relais, une seule clé — mais la tourner
+      # chez Brevo casse les DEUX, et il faut resceller les deux fichiers.
+      smtp_auth_username: 'b66e7b001@smtp-brevo.com'
+      smtp_auth_password_file: /etc/alertmanager/secrets/alertmanager-smtp/password
+      smtp_require_tls: true
+    inhibit_rules:
+      - source_matchers: [severity = critical]
+        target_matchers: [severity =~ warning|info]
+        equal: [namespace, alertname]
+      - source_matchers: [severity = warning]
+        target_matchers: [severity = info]
+        equal: [namespace, alertname]
+      - source_matchers: [alertname = InfoInhibitor]
+        target_matchers: [severity = info]
+        equal: [namespace]
+      - target_matchers: [alertname = InfoInhibitor]
+    route:
+      # `alertname` en plus de `namespace` : sans lui, une panne d'openbao et une panne de velero
+      # simultanées mais sans rapport arriveraient dans le MÊME mail, et le `repeat_interval`
+      # du groupe s'appliquerait aux deux.
+      group_by: [namespace, alertname]
+      group_wait: 30s
+      group_interval: 5m
+      # Un rappel toutes les 4 h tant que ça sonne. Le défaut du chart (12 h) est trop long pour
+      # une alerte critique : une panne du soir ne re-notifierait qu'au matin.
+      repeat_interval: 4h
+      # Défaut = ne rien envoyer. Tout ce qui n'est pas explicitement routé plus bas reste
+      # visible dans Grafana et ne génère PAS de mail — c'est le choix « critical uniquement ».
+      receiver: "null"
+      routes:
+        # Watchdog sonne en permanence par construction (deadman switch) : la router vers un mail
+        # produirait une alerte toutes les 4 h à vie. Sa valeur est ailleurs — cf. README.
+        - matchers: ['alertname = "Watchdog"']
+          receiver: "null"
+        - matchers: ['severity = "critical"']
+          receiver: email-critique
+    receivers:
+      - name: "null"
+      - name: email-critique
+        email_configs:
+          # `send_resolved` : sans lui, rien ne dit jamais que c'est rentré dans l'ordre, et on
+          # se déplace pour une panne déjà résolue.
+          - to: jeanbaptiste.wittner@outlook.com
+            send_resolved: true
+            headers:
+              Subject: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} — {{ .CommonAnnotations.summary }}'
+    templates:
+      - '/etc/alertmanager/config/*.tmpl'
 
 # --- node-exporter : `instance` = nom du nœud au lieu de l'IP:port du pod.
 #     Par défaut la ServiceMonitor du chart n'applique aucun relabeling, donc toutes
