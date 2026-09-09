@@ -28,7 +28,7 @@
 # calendaire sans rappel. Il serait oublié, et l'oubli est invisible jusqu'à la reprise.
 #
 # État au 2026-09-08 : une seule clé, `sealed-secrets-key7t2db`, créée le 2026-08-29T20:34:17Z avec
-# le cluster. Les dix `SealedSecret` du dépôt ont tous été scellés avec elle. La première rotation
+# le cluster. Les onze fichiers `SealedSecret` du dépôt (treize documents) ont tous été scellés avec elle. La première rotation
 # serait tombée vers le 2026-09-28 ; ce réglage la supprime avant qu'elle n'ait lieu.
 #
 # ⚠️ SI CE RÉGLAGE EST UN JOUR RETIRÉ, la sauvegarde hors ligne cesse d'être suffisante le jour

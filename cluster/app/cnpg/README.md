@@ -36,9 +36,9 @@ déclarées par les applications consommatrices — aujourd'hui
   consomme, avec son cycle de vie.
 - **Une base n'est PAS sauvegardée par défaut**, et rien ne le signale. Il faut un `ObjectStore`,
   un `spec.plugins` sur le `Cluster`, une `ScheduledBackup` et une entrée dans la liste blanche de
-  `CNPGNoBackupYet` — quatre gestes, détaillés dans
-  [`cnpg-barman-plugin`](../cnpg-barman-plugin/README.md) §Opérations. Aujourd'hui seule
-  `forgejo-db` est couverte ; `authentik-db` et `pgsql-test` n'ont **aucune** chaîne de sauvegarde.
+  `CNPGBackupChainAbsent` — quatre gestes, détaillés dans
+  [`cnpg-barman-plugin`](../cnpg-barman-plugin/README.md) §Opérations. Aujourd'hui `forgejo-db` est
+  le **seul** `Cluster` du dépôt, et il est couvert.
 - **`kubectl get backups` ne montre PAS les sauvegardes velero mais celles de CNPG.** Le nom court
   est ambigu entre `backups.postgresql.cnpg.io` et `backups.velero.io`, et kubectl tranche
   silencieusement en faveur de CNPG. Écrire le nom long des deux côtés.

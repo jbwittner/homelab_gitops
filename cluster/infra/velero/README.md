@@ -33,8 +33,9 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   schedule quotidienne, snapshots de volume et Job de CRDs coupés (chaque choix est commenté sur
   place)
 - `manifests/namespace.yaml` — ns `velero` (wave `-1`), labellisé **`privileged`**
-- `manifests/volume-policies.yaml` — ConfigMap `velero-volume-policies`, garde-fou du mode opt-out :
-  ignore la copie des `emptyDir`. Référencée par la Schedule (`template.resourcePolicy`,
+- `manifests/volume-policies.yaml` — ConfigMap `velero-volume-policies`, garde-fou du mode opt-out.
+  **Deux** règles de skip : les `emptyDir`, et les PVC portant
+  `app.kubernetes.io/managed-by: cloudnative-pg` — cf. §Contraintes. Référencée par la Schedule (`template.resourcePolicy`,
   `helm-values.yaml`) ; le raisonnement est commenté sur place
 - [`script/velero-script.sh`](../../../script/velero-script.sh) — **hors du composant**, dans le
   dossier `script/` de la racine où vivent tous les utilitaires du repo : les gestes
@@ -98,11 +99,15 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
   snapshot save` donnant une copie *cohérente-transaction* là où kopia ne copie le PVC que de façon
   *cohérente-crash*. Elle est aussi la seule des deux à être réellement testée
   (`openbao-script.sh verify`). Ce que le retrait a coûté — un second domaine de panne, et la
-  détection passive d'une chaîne morte en silence — est remplacé par les alertes
-  `OpenBaoSnapshotTooOld` / `OpenBaoSnapshotMissing`
-  ([openbao-monitoring](../../../archive/openbao-monitoring/README.md)). **Les deux décisions se tiennent
-  ensemble** : supprimer ces alertes rend l'exclusion indéfendable, remettre `openbao` dans la
-  liste blanche revient sur une décision motivée. Corollaire à ne pas perdre : restaurer le PVC
+  détection passive d'une chaîne morte en silence — devait être remplacé par les alertes
+  `OpenBaoSnapshotTooOld` / `OpenBaoSnapshotMissing`.
+
+  > [!WARNING]
+  > **Ces alertes ne tournent plus.** `openbao` et
+  > [openbao-monitoring](../../../archive/openbao-monitoring/README.md) ont été archivés le
+  > 2026-09-08 ; le composant est en `.noapp.yaml`. Le raisonnement ci-dessus est donc **historique** :
+  > il n'y a plus ni coffre à sauvegarder, ni alerte pour surveiller sa sauvegarde. Conservé parce
+  > qu'il documente le seul cas où ce dépôt a retiré un namespace de la liste blanche, et pourquoi. Corollaire à ne pas perdre : restaurer le PVC
   raft n'aurait de toute façon pas descellé le coffre — son contenu est chiffré, et les clés de
   descellement comme le token root ne sont dans **aucune** sauvegarde
   (cf. [openbao](../../../archive/openbao/README.md)).
@@ -118,9 +123,9 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
 - **La schedule fonctionne en liste blanche : ce qui n'est pas listé n'est pas sauvegardé, sans le
   dire.** `includedNamespaces` ne contient aujourd'hui que **`forgejo`**. **Ajouter un composant au
   cluster ne l'ajoute pas aux sauvegardes** : c'est un geste explicite dans `helm-values.yaml`.
-  Candidats connus, à ouvrir un par un : `authentik` (Postgres CNPG 5Gi — ⚠️ lire la contrainte
-  suivante avant), `monitoring` (27Gi, dont 20Gi de TSDB Prometheus reconstructible). `openbao`
-  n'en est **pas** un — exclusion motivée, cf. la contrainte plus haut.
+  Candidat connu : `monitoring` (27Gi, dont 20Gi de TSDB Prometheus reconstructible). ⚠️ Toute
+  base CNPG d'un namespace ajouté ici sera exclue de kopia par la règle ci-dessous : elle a besoin
+  de son propre `ObjectStore` pour être réellement sauvegardée.
 - **Les PVC des bases CloudNativePG sont exclus de la copie de données** (`volume-policies.yaml`,
   règle `pvcLabels: {app.kubernetes.io/managed-by: cloudnative-pg}`, 2026-09-08). Même arbitrage
   que pour openbao : la sauvegarde native barman-cloud
@@ -132,9 +137,9 @@ n'ajoute qu'une copie de moindre qualité — cf. Contraintes.
     [cnpg-monitoring](../../app/cnpg-monitoring/README.md) (`CNPGWalArchivingBacklog`,
     `CNPGBackupTooOld`, `CNPGNoBackupYet`…). Les supprimer rend l'exclusion indéfendable.
   - ⚠️ **Règle cluster-wide, sur un label que l'opérateur pose sur tous ses PVC** — pas une
-    exception par base, qui se ferait oublier à la suivante. Corollaire : le jour où `authentik`
-    entre dans `includedNamespaces`, sa base ne sera couverte par **rien** tant qu'elle n'aura pas
-    son propre `ObjectStore`, cette règle l'ayant déjà sortie de kopia.
+    exception par base, qui se ferait oublier à la suivante. Corollaire : le jour où un namespace
+    portant une base CNPG entre dans `includedNamespaces`, cette base ne sera couverte par **rien**
+    tant qu'elle n'aura pas son propre `ObjectStore`, la règle l'ayant déjà sortie de kopia.
   - Portée : `skip` ne concerne que la **copie de données**. Le `Cluster`, ses Secrets
     auto-générés et le PVC lui-même restent sauvegardés en tant qu'objets, donc restaurables — ce
     sont eux qui permettent de **recréer** la base, les données natives la **remplissent**.

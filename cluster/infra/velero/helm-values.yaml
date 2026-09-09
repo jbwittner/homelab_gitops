@@ -161,9 +161,9 @@ schedules:
       #
       # Élargir ensuite, un namespace à la fois, en vérifiant à chaque ajout la présence des
       # `podvolumebackups` attendus :
-      #   - authentik  (⚠️ sa base CNPG serait exclue par la même règle et n'a pas encore
-      #                d'ObjectStore : l'ajouter ici ne la sauvegarderait PAS)
       #   - monitoring (27Gi dont 20Gi de TSDB Prometheus, reconstructible)
+      # ⚠️ Toute base CNPG d'un namespace ajouté ici est exclue de kopia par la règle de
+      #    volume-policies : sans ObjectStore à elle, l'ajouter ne la sauvegarderait PAS.
       #
       # ⚠️ `openbao` N'EST PAS UN CANDIDAT : il a été mis dans cette liste, puis retiré, et le
       # remettre serait revenir en arrière sur une décision motivée. Le coffre a sa propre chaîne —
@@ -176,9 +176,9 @@ schedules:
       #
       # Ce que velero apportait malgré tout, et qu'il fallait remplacer AVANT de retirer openbao
       # d'ici : un second domaine de panne, et surtout une détection passive d'une chaîne de
-      # sauvegarde morte en silence. C'est le rôle de `OpenBaoSnapshotTooOld` / `OpenBaoSnapshotMissing`
-      # (openbao-monitoring/manifests/prometheusrule.yaml). Sans ces règles, l'exclusion n'est plus
-      # défendable — les deux décisions se tiennent ensemble.
+      # sauvegarde morte en silence. C'était le rôle de `OpenBaoSnapshotTooOld` /
+      # `OpenBaoSnapshotMissing`. ⚠️ HISTORIQUE : openbao et openbao-monitoring ont été archivés le
+      # 2026-09-08 — ces alertes ne tournent plus, et il n'y a plus de coffre à sauvegarder.
       #
       # Reste hors de portée des deux : une lifecycle rule GCS qui purgerait le bucket de snapshots,
       # qu'aucune métrique du cluster ne voit. Seul un `verify` périodique y répond, et il est manuel.

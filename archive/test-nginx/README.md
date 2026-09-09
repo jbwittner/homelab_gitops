@@ -1,5 +1,16 @@
 # test-nginx
 
+> [!IMPORTANT]
+> **ARCHIVÉ le 2026-09-08** (commit `8c7d7e4`). Fichier `test-nginx.noapp.yaml` : non déployé.
+>
+> Composant jetable de smoke-test, sans donnée à conserver — son archivage ne casse rien. Le
+> `Cluster` CNPG `pgsql-test` qu'il portait n'existe plus : les README qui le citent encore comme
+> base sans chaîne de sauvegarde décrivent un objet disparu.
+>
+> Conservé parce qu'il reste le moyen le plus court de valider un socle fraîchement amorcé
+> (StorageClass, PVC, Gateway, CNPG) — cf. [`doc/runbook-bootstrap.md`](../../doc/runbook-bootstrap.md).
+
+
 ## Rôle
 
 Composant **jetable de smoke-test** : valide bout à bout le socle après un bootstrap ou un
@@ -13,7 +24,7 @@ dans le ns `test-nginx` :
 
 ## Fichiers
 
-- `test-nginx.app.yaml` — Application (archétype (c), path → `manifests/`)
+- `test-nginx.noapp.yaml` — Application (archétype (c), path → `manifests/`)
 - `manifests/kustomization.yaml` — force `namespace: test-nginx` sur toutes les ressources
 - `manifests/namespace.yaml`, `manifests/test-nginx.yaml`, `manifests/test-pvc.yaml`,
   `manifests/pgsql-test.yaml`

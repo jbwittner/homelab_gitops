@@ -4,7 +4,7 @@
 
 Stack d'observabilité du cluster : Prometheus + Alertmanager + Grafana + prometheus-operator
 (CRDs ServiceMonitor/PodMonitor) + node-exporter + kube-state-metrics. Grafana est exposé sur
-`https://grafana.lan.wittner.tech` via `shared-gw` (listener `https-internal-kalecgos`),
+`https://grafana.lan.wittner.tech` via `shared-gw` (listener `https-internal`),
 authentifié par un **compte admin local** dont le mot de passe est porté par un
 **SealedSecret**. Le **SSO authentik (OIDC)** reste écrit mais **commenté** (cf. § SSO).
 Prometheus et Alertmanager restent internes (non exposés).

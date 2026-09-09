@@ -1,5 +1,23 @@
 # openbao
 
+> [!IMPORTANT]
+> **ARCHIVÉ le 2026-09-08** (commit `8c7d7e4`). Le composant n'est plus déployé : son fichier est
+> `openbao.noapp.yaml`, hors du glob `{*.app.yaml,*.appset.yaml}` des tiers-2.
+>
+> Le commit d'archivage ne consigne pas de motif, mais la conséquence est vérifiable dans le
+> dépôt : **le canal de secrets qu'il portait n'existe plus.**
+> [external-secrets](../../cluster/infra/external-secrets/README.md), son unique consommateur, est
+> lui aussi en `.noapp.yaml` ; la CRD `ExternalSecret` n'est plus dans le cluster ; les quatre
+> `*.externalsecret.yaml` qui subsistent sont tous commentés dans leur `kustomization.yaml`. Tous
+> les secrets sont passés à
+> [sealed-secrets](../../cluster/infra/sealed-secrets/README.md) — onze fichiers, treize documents.
+>
+> Ce README décrit donc un état **passé**, au présent. Il est conservé pour la procédure (init,
+> descellement, snapshot raft) au cas où le coffre serait remonté, et parce que
+> [`doc/openbao-restore-local.md`](../../doc/openbao-restore-local.md) reste utilisable tel quel
+> pour vérifier un snapshot déjà pris.
+
+
 ## Rôle
 
 Gestionnaire de secrets (fork libre de Vault), stockage **raft intégré**, un replica. C'est
@@ -30,7 +48,7 @@ s'écrivent sans le suffixe `/data`, ajouté par ESO) :
 
 ## Fichiers
 
-- `openbao.app.yaml` — Application (archétype (b) : Helm + `$values` + `manifests/`), ns
+- `openbao.noapp.yaml` — Application (archétype (b) : Helm + `$values` + `manifests/`), ns
   `openbao`, wave `1`
 - `helm-values.yaml` — raft 1 replica + `retry_join`, injector, télémétrie serveur
   (`unauthenticated_metrics_access` + `prometheus_retention_time`), rétention du PVC. Le
@@ -328,7 +346,7 @@ Trois pièges, tous vérifiés à la connexion :
   ESO reprend la nouvelle valeur au prochain `refreshInterval` (1 h) ; pour l'appliquer tout de
   suite, voir « forcer un rafraîchissement » dans
   [external-secrets](../../cluster/infra/external-secrets/README.md).
-- **Upgrade** : bumper `targetRevision` dans `openbao.app.yaml`, commit, push. Le pod redémarre
+- **Upgrade** : bumper `targetRevision` dans `openbao.noapp.yaml`, commit, push. Le pod redémarre
   **scellé** — prévoir le descellement dans la foulée.
 - **Debug** :
   ```bash

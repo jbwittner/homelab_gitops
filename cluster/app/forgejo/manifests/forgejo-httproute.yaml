@@ -37,7 +37,8 @@ spec:
             value: /
       # En-têtes de sécurité posés PAR LE GATEWAY, et non par Forgejo. Deux raisons :
       #   - HSTS ne peut pas venir du backend. Forgejo parle en clair dans le cluster
-      #     (`PROTOCOL: http`) ; c'est ici, au point où TLS est terminé, que l'en-tête a un sens.
+      #     (`PROTOCOL` non posé, donc `http` par défaut) ; c'est ici, au point où TLS est
+      #     terminé, que l'en-tête a un sens.
       #   - `ResponseHeaderModifier` est un filtre de base de Gateway API, implémenté par Cilium
       #     depuis la 1.16 — rien à installer.
       #

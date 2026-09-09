@@ -12,7 +12,8 @@ metadata:
 spec:
   project: default
   # OpenEBS via le chart PARAPLUIE `openebs` (chemin recommandé upstream), dont on n'active QUE le
-  # moteur LVM (LocalPV-LVM). Le parapluie 4.5.1 embarque lvm-localpv 1.9.1 comme sous-chart.
+  # moteur LVM (LocalPV-LVM). Le parapluie 4.6.0 embarque lvm-localpv 1.10.0 comme sous-chart
+  # (même version que l'image `lvm-driver` épinglée dans manifests/vg-bootstrap-daemonset.yaml).
   # Pattern multi-source calqué sur cilium : chart Helm + `$values` (helm-values.yaml) + `manifests/`.
   #   - helm-values.yaml : coupe tous les autres moteurs (zfs/hostpath/mayastor/rawfile) + loki/alloy
   #     + preUpgradeHook ; ne garde que LVM. Values LVM re-nichées sous `lvm-localpv:`.

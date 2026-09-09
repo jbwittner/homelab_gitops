@@ -15,7 +15,7 @@ release, deux `targetRevision` suivis séparément par Renovate → deux Applica
 > **Ce composant n'active aucune sauvegarde.** Il installe la mécanique et la CRD `ObjectStore`.
 > Une base n'est prise en charge que si son `Cluster` porte explicitement `spec.plugins` — même
 > logique de **liste blanche** que la schedule [velero](../../infra/velero/README.md). Aujourd'hui :
-> `forgejo-db` seule. `authentik-db` et `pgsql-test` n'ont **aucune** chaîne de sauvegarde.
+> `forgejo-db` seule — et c'est aujourd'hui le **seul** `Cluster` CNPG du dépôt.
 
 ## Fichiers
 

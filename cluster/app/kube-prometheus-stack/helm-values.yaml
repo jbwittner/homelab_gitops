@@ -150,7 +150,7 @@ alertmanager:
   ## l'InfoInhibitor étouffe, et surtout ferait sonner les warnings d'un composant DÉJÀ en critical
   ## (première règle d'inhibition) — trois mails là où un seul décrit la panne.
   ##
-  ## `tplConfig` vaut false dans ce chart (vérifié en 88.2.0) : les `{{ }}` ci-dessous partent tels
+  ## `tplConfig` vaut false dans ce chart (vérifié en 88.6.5) : les `{{ }}` ci-dessous partent tels
   ## quels vers Alertmanager au lieu d'être interprétés par Helm. À revérifier si le flag change,
   ## sinon il faudrait les échapper en `{{ "{{" }}`.
   config:

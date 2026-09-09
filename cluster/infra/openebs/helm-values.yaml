@@ -1,4 +1,4 @@
-# helm-values — chart PARAPLUIE openebs 4.5.1 (on n'active QUE le moteur LVM)
+# helm-values — chart PARAPLUIE openebs 4.6.0 (on n'active QUE le moteur LVM)
 #
 # Le parapluie active PAR DÉFAUT : lvm, zfs, hostpath, mayastor, loki, alloy, preUpgradeHook.
 # On coupe tout sauf LVM → socle minimal, une seule raison d'être pour ce composant.

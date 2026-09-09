@@ -1,5 +1,15 @@
 # openbao-monitoring
 
+> [!IMPORTANT]
+> **ARCHIVÉ le 2026-09-08** (commit `8c7d7e4`), en même temps que
+> [openbao](../openbao/README.md) dont il est le volet post-bootstrap. Fichier
+> `openbao-monitoring.noapp.yaml` : non déployé.
+>
+> Conséquence à connaître : les alertes `OpenBaoSnapshotTooOld` / `OpenBaoSnapshotMissing` que
+> d'autres README citent encore comme garde-fous **ne tournent pas**. Le tableau de bord
+> « Alertes — cluster » ne les liste plus non plus.
+
+
 ## Rôle
 
 Volet **post-bootstrap** d'[openbao](../openbao/README.md) : scrape de `/v1/sys/metrics` et
@@ -26,7 +36,7 @@ schéma que [openebs-monitoring](../../cluster/infra/openebs-monitoring/README.m
 
 ## Fichiers
 
-- `openbao-monitoring.app.yaml` — Application (archétype (c), path → `manifests/`), **wave 2**,
+- `openbao-monitoring.noapp.yaml` — Application (archétype (c), path → `manifests/`), **wave 2**,
   ns `openbao`
 - `manifests/servicemonitor.yaml` — scrape du Service `openbao-active`, `/v1/sys/metrics`,
   `format=prometheus`, 30 s

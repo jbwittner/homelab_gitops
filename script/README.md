@@ -7,6 +7,12 @@ composant qu'il pilote se cherche : il faut déjà savoir quel composant porte l
 la commande. Ici, `ls script/` suffit — et c'est aussi ce qui rend la règle vérifiable, un `.sh`
 trouvé ailleurs que dans ce dossier est une exception à corriger.
 
+> [!NOTE]
+> **Une exception subsiste** : [`archive/openbao/openbao-script.sh`](../archive/openbao/openbao-script.sh),
+> parti dans `archive/` avec son composant. Il n'est plus maintenu et ne pilote plus rien de
+> déployé ; il reste utilisable pour vérifier un snapshot déjà pris
+> ([`doc/openbao-restore-local.md`](../doc/openbao-restore-local.md)).
+
 ## Contenu
 
 - [`velero-script.sh`](velero-script.sh) — sauvegardes velero : `list`, `show`, `backup`,
@@ -36,6 +42,11 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   en créant une copie velero du PVC **puis** une sauvegarde de base CNPG — dans cet ordre, le
   `pg_backup_stop` de la seconde forçant le basculement de WAL qui couvre l'instant de la
   première. Inversé, il ne prépare rien et ne le dit pas.
+
+  > [!WARNING]
+  > **`run` crée deux sauvegardes RÉELLES de la production**, qui comptent dans la rétention de
+  > 30 jours des deux buckets. Ce n'est pas une simulation. `check`, lui, ne crée rien.
+  > Variables : `TIMEOUT`, `YES`.
 - [`forgejo-pra-script.sh`](forgejo-pra-script.sh) — **épreuve du PRA de forgejo** : `up`,
   `verify`, `status`, `down`, `drill`. Restaure les deux chaînes (PVC par velero, base par
   `bootstrap.recovery`) dans une préprod jetable `forgejo-preprod`, l'expose sur
@@ -43,12 +54,19 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   [`doc/forgejo-pra-exercice.md`](../doc/forgejo-pra-exercice.md).
 
   > [!CAUTION]
-  > **C'est le SEUL script du dossier qui écrit dans le cluster.** Trois bornes le tiennent, et
-  > elles sont la condition de son existence :
-  > - il n'écrit que dans `forgejo-preprod`, un namespace qu'ArgoCD ne gère pas ;
+  > **C'est le seul script qui crée un PÉRIMÈTRE, et non de simples événements.** Les trois autres
+  > écrivent aussi dans le cluster — un `Backup`, un `Restore`, un `DeleteBackupRequest` — mais ce
+  > sont des objets éphémères ; celui-ci pose un namespace, des PVC et un `Cluster`. Trois bornes
+  > le tiennent, et elles sont la condition de son existence :
+  > - il n'écrit que dans `forgejo-preprod`, un namespace qu'ArgoCD ne gère pas. ⚠️ Le nom est
+  >   **surchargeable** par `PREPROD_NAMESPACE` : la borne tient tant qu'on ne la déplace pas
+  >   soi-même. `down` est en revanche gardé par le label `homelab.wittner.tech/drill` ;
   > - il ne touche à **rien** dans `forgejo` — la production est lue, jamais modifiée ;
   > - `down` fait partie de la procédure, pas des options : la préprod immobilise **110 Gi** de
   >   groupe de volumes, la StorageClass étant en `thinProvision: "no"`.
+  >
+  > **Variables d'environnement** : `PREPROD_NAMESPACE`, `PREPROD_HOST`, `GATEWAY_IP`, `PROXY_IP`,
+  > `TARGET_TIME`, `TIMEOUT`, `YES`.
 
 ## Contraintes
 

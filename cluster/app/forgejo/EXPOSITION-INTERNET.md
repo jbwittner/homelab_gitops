@@ -1,5 +1,16 @@
 # Exposition de Forgejo sur Internet — état de la checklist
 
+> [!IMPORTANT]
+> **Audit daté du 2026-09-06. La majeure partie de sa liste a été soldée depuis.** Sont faits : le
+> scellement des secrets, le mailer, la mise sous sauvegarde du namespace, la 2FA obligatoire, et
+> toute la chaîne de sauvegarde CNPG qui n'existait pas à l'écriture. Les passages ci-dessous qui
+> décrivent ces points comme « à faire » ou « non configuré » sont donc **périmés** ; ils sont
+> corrigés sur place, mais la §Conclusion est la seule vue à jour.
+>
+> **L'état courant du composant est [`README.md`](README.md)**, pas cette page. Elle est conservée
+> pour le raisonnement de sécurité — modèle d'accès, surface exposée, arbitrages — qui n'a pas
+> vieilli.
+
 Audit du seul périmètre autorisé : `cluster/app/forgejo/`. Aucun logiciel n'a été ajouté, aucune
 ressource n'a été créée hors de ce dossier.
 
@@ -39,8 +50,10 @@ ressource n'a été créée hors de ce dossier.
   (sync-wave `-1`), repris par `namespace:` du `kustomization.yaml`, par
   `destination.namespace` de l'Application et par le `SealedSecret` admin, qui est chiffré pour
   le couple (`forgejo-admin`, `forgejo`).
-- [ ] **Sceller `SECRET_KEY`, `INTERNAL_TOKEN`, `LFS_JWT_SECRET`, `OAUTH2_JWT_SECRET`, creds CNPG,
-  creds SMTP** — partiellement préparé, **rien n'est scellé** :
+- [x] **Sceller `SECRET_KEY`, `INTERNAL_TOKEN`, `LFS_JWT_SECRET`, `OAUTH2_JWT_SECRET`, creds CNPG,
+  creds SMTP** — ✅ **fait depuis** : `manifests/forgejo-admin.sealed.yaml` porte les trois Secrets
+  et sa ligne est active dans le `kustomization.yaml`. Le détail d'origine, encore exact sur le
+  fond :
   - les quatre secrets cryptographiques et le mot de passe SMTP : ajoutés **(posé ici)** comme
     documents 2 et 3 de `manifests/forgejo-admin.secret.yaml`, qui porte désormais les trois
     Secrets du composant — `kubeseal` lit un flux multi-documents, un seul scellement suffit.
@@ -88,8 +101,9 @@ ressource n'a été créée hors de ce dossier.
   **(posé ici)**, `NO_REPLY_ADDRESS: noreply.forgejo.wittner.tech`, sous-domaine dédié sans MX.
   ⚠️ Ne vaut que pour les comptes créés **après** : le compte admin existant garde son choix.
 - [x] **`SHOW_USER_EMAIL = false`** — `gitea.config.ui` **(posé ici)**.
-- [ ] **2FA activée, codes de récupération stockés hors ligne** — acte dans l'UI, aucune clé
-  d'`app.ini` ne l'impose côté serveur. Rien à poser dans ce dossier.
+- [x] **2FA activée, codes de récupération stockés hors ligne** — ✅ **imposée côté serveur
+  depuis** : `GLOBAL_TWO_FACTOR_REQUIREMENT: all` (`helm-values.yaml`, `gitea.config.security`).
+  L'enrôlement et la mise à l'abri des codes de récupération restent un acte manuel dans l'UI.
 
 ### Repos
 
@@ -116,11 +130,10 @@ ressource n'a été créée hors de ce dossier.
 
 - [x] **`SHOW_FOOTER_VERSION = false`** — `gitea.config.other` **(posé ici)**.
 - [x] **`ENABLE_SWAGGER = false`** — `gitea.config.api` **(posé ici)**.
-- [ ] **Mailer configuré (notifications de connexion, reset)** — **non configuré, et c'est le
-  manque le plus gênant de la liste.** Le câblage est prêt (`FORGEJO__MAILER__PASSWD` en
-  `optional: true`, template SMTP, bloc `mailer:` commenté avec sa procédure), mais **aucun relais
-  n'est choisi** : celui d'Alertmanager est lui-même resté à `REMPLACER`. Conséquence à assumer
-  telle quelle : la perte du mot de passe admin ne se répare que par `kubectl exec`.
+- [x] **Mailer configuré (notifications de connexion, reset)** — ✅ **fait depuis** : relais
+  `smtp-relay.brevo.com:587`, `mailer.ENABLED: true` (`helm-values.yaml`), mot de passe dans le
+  Secret `forgejo-smtp`. Alertmanager utilise le même relais. La perte du mot de passe admin se
+  répare donc par mail, sans `kubectl exec`.
 
 ## Kubernetes
 
@@ -258,11 +271,15 @@ ressource n'a été créée hors de ce dossier.
     `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin` ;
   - **TLS 1.2 minimum : NON**, et impossible ici. La version minimale se règle sur le Gateway
     partagé (`infra/gateway-api/manifests/gateway.yaml`), hors du dossier autorisé.
-- [ ] **Backup CNPG + Velero sur le namespace, incluant le PVC des données Git** — **non**, et le
-  `README.md` du composant le signalait déjà : `schedules.daily.template.includedNamespaces` de
-  Velero est une **liste blanche** qui ne contient pas `forgejo`. Le fichier à modifier est
-  `infra/velero/helm-values.yaml`, hors périmètre. Un `spec.backup` sur le `Cluster` CNPG
-  supposerait un bucket et des identifiants qui n'existent pas.
+- [x] **Backup CNPG + Velero sur le namespace, incluant le PVC des données Git** — ✅ **les deux
+  chaînes existent depuis** : `includedNamespaces` contient `forgejo` (velero, 03:00 UTC), et la
+  base a sa propre chaîne barman-cloud (`ObjectStore` + `spec.plugins` + `ScheduledBackup`, 02:00
+  UTC) — cf. [`README.md`](README.md) §Sauvegarde et
+  [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md).
+
+  ⚠️ **Un seul `podvolumebackup` est attendu, pas deux** : le PVC de la base est explicitement
+  exclu de la copie kopia depuis le 2026-09-08 (`volume-policies.yaml`), sa sauvegarde relevant de
+  barman. Deux `podvolumebackups` signaleraient au contraire une régression.
 
 ## Si tu actives les Actions
 
@@ -316,81 +333,52 @@ Aucune n'a été effectuée : elles demandent toutes une instance en service, et
 
 ## Conclusion — ce qui reste à faire
 
-### 1. Bloquant avant d'ouvrir sur Internet
+> **Révisée le 2026-09-09.** La liste d'origine comptait neuf points ; six sont soldés.
 
-1. **Synchroniser et vérifier ce qui vient d'être posé.** Rien de ce commit n'a tourné. Trois
-   changements peuvent empêcher le pod de démarrer ou le rendre injoignable, et leur mode d'échec
-   est muet :
-   - la `CiliumNetworkPolicy` (timeout, pas d'erreur) —
-     `kubectl -n forgejo delete ciliumnetworkpolicy forgejo` pour un rollback immédiat ;
-   - le montage du `robots.txt` (`extraContainerVolumeMounts`) ;
-   - le `containerSecurityContext` (CrashLoopBackOff au démarrage si une hypothèse est fausse).
+### Soldé depuis l'audit
 
-   ```bash
-   kubectl -n forgejo rollout status deploy/forgejo
-   kubectl -n forgejo logs deploy/forgejo -c configure-gitea
-   curl -sI https://forgejo.wittner.tech/ | grep -i strict-transport
-   curl -s  https://forgejo.wittner.tech/robots.txt
-   ```
+1. ✅ **Sync et vérification** du commit d'origine (netpol, `robots.txt`, `containerSecurityContext`) —
+   la forge tourne, est publique, et [forgejo-monitoring](../forgejo-monitoring/README.md) alerte
+   désormais si elle cesse de répondre.
+2. ✅ **`forgejo` sous sauvegarde** — deux chaînes, velero (PVC, 03:00 UTC) et barman-cloud (base,
+   02:00 UTC). Le plan de reprise est écrit **et éprouvé** : dix passages consignés dans
+   [`doc/forgejo-pra-exercice.md`](../../../doc/forgejo-pra-exercice.md).
+3. ✅ **Mailer** — relais Brevo, `mailer.ENABLED: true`, mot de passe scellé.
+4. ✅ **Quatre secrets cryptographiques scellés** — `forgejo-admin.sealed.yaml`, trois Secrets en un
+   scellement.
+5. ✅ **2FA imposée côté serveur** — `GLOBAL_TWO_FACTOR_REQUIREMENT: all`.
+6. ✅ **Limitation de débit à l'edge** — règles Cloudflare `Forgejo rate limiting` et `Block not EU`.
 
-2. **Mettre `forgejo` sous sauvegarde.** C'est le seul point de la liste dont l'absence ne se
-   rattrape pas après coup, et le `README` le signalait déjà avant cet audit. Ajouter `forgejo` à
-   `schedules.daily.template.includedNamespaces` dans `infra/velero/helm-values.yaml`
-   (**hors du périmètre autorisé**), puis vérifier deux `podvolumebackups` au backup suivant : le
-   PVC `forgejo-data` **et** celui du pod CNPG.
+### Ouvert
 
-3. **Supprimer `manifests/forgejo-admin.secret.yaml`.** Le fichier est encore présent dans l'arbre
-   de travail, **en clair, avec un mot de passe admin réel**. Il est gitignoré, donc jamais
-   poussé — mais la procédure du `README` prévoyait de le détruire après scellement, et le
-   `SealedSecret` correspondant existe déjà. Je ne l'ai pas supprimé de moi-même : c'est peut-être
-   la seule copie du mot de passe.
+7. ⚠️ **Les templates en clair traînent encore dans l'arbre de travail** :
+   `manifests/forgejo-admin.secret.yaml` (mot de passe admin réel) et
+   `manifests/forgejo-db-gcs.secret.yaml` (clé de compte de service GCP). Ils sont gitignorés, donc
+   jamais poussés, mais les deux `SealedSecret` correspondants existent : la procédure prévoit de
+   les détruire après scellement. **Vérifier d'abord que le mot de passe admin est bien enregistré
+   ailleurs** — c'est peut-être sa seule copie en clair.
 
-### 2. Important, dans la foulée
+8. **TLS 1.2 minimum sur le Gateway** — toujours pas réglé : les deux listeners de
+   `infra/gateway-api/manifests/gateway.yaml` n'ont pas de bloc `options`. Hors du périmètre de
+   l'audit d'origine, toujours à traiter.
 
-4. **Choisir un relais SMTP et activer le mailer** (§Mailer du `README`). Sans lui, pas de reset de
-   mot de passe : la récupération passe obligatoirement par un accès au cluster. Le même relais que
-   celui d'Alertmanager fera l'affaire — il reste à choisir, lui aussi.
+9. **`REVERSE_PROXY_TRUSTED_PROXIES` n'est pas réglé.** Derrière le Gateway, Forgejo journalise
+   l'IP du proxy et non celle du client, ce qui rend inexploitable toute corrélation d'échecs de
+   connexion côté application. ⚠️ Le rate limiting Cloudflare n'en souffre pas — il s'applique à
+   l'edge, sur l'IP réelle. C'est en revanche ce qui empêcherait un ban d'IP **côté Forgejo** de
+   viser la bonne adresse.
 
-5. **Sceller les quatre secrets cryptographiques** (§Sceller les secrets cryptographiques). Tant
-   que ce n'est pas fait, le PVC reste irremplaçable : sessions, jetons d'API, jetons LFS et OAuth2
-   ne sont déchiffrables que par lui. ⚠️ Sceller les valeurs **déjà en place**, jamais des valeurs
-   neuves — et comme le scellement porte sur le fichier entier, remplir le mot de passe admin et le
-   SMTP dans le même passage.
+10. **Actions est actif côté serveur alors qu'aucun runner n'existe.** `gitea.config.actions.ENABLED:
+    false` réduirait la surface et la rétention par défaut (artefacts 90 j, logs 365 j) sans rien
+    casser. Décision produit, à prendre avant que des workflows n'existent.
 
-6. **Activer la 2FA sur le compte admin** et stocker les codes de récupération hors ligne. Aucune
-   configuration ne peut le faire à votre place.
+11. **Le registre de paquets est actif par défaut**, sans quota (`[quota] ENABLED: false`), sur un
+    volume qui ne borne rien — cf. [`README.md`](README.md) §Dimensionnement du volume.
 
-7. **Vérifier le profil du compte admin** : il a été créé avant `DEFAULT_KEEP_EMAIL_PRIVATE`, donc
-   `jeanbaptiste.wittner@outlook.com` peut encore être visible. Paramètres → Compte.
+12. **Endpoints coûteux non limités** (`/archive/`, `/raw/`, `/blame/`, `/commits/`) : le plan
+    Cloudflare gratuit ne donne qu'**une** règle de rate limiting, déjà consommée. Le chemin LAN
+    n'est limité par rien. Ni Forgejo ni le Gateway API de Cilium n'offrent d'alternative sans
+    ajouter un logiciel. Le `robots.txt` ne couvre que les robots polis.
 
-### 3. Hors du périmètre autorisé — à traiter ailleurs
-
-8. **TLS 1.2 minimum sur le Gateway** (`infra/gateway-api/manifests/gateway.yaml`).
-
-9. **Limitation de débit** — **partiellement réglée à l'edge**, hors dépôt : la règle Cloudflare
-   `Forgejo rate limiting` bloque les rafales sur `/user/login*`, `/user/two_factor*` et les autres
-   chemins d'authentification ; la règle `Block not EU` coupe le bruit hors UE en amont. Reste
-   ouvert : les endpoints coûteux (`/archive/`, `/raw/`, `/blame/`, `/commits/`) ne sont pas
-   limités — le plan gratuit ne donne qu'**une** règle de rate limiting, déjà consommée — et le
-   chemin LAN n'est limité par rien. Côté cluster, la contrainte « pas de logiciel supplémentaire »
-   n'a pas bougé : ni Forgejo ni le Gateway API de Cilium n'en proposent. Le `robots.txt` ne couvre
-   toujours que les robots polis.
-
-### 4. Recommandations, non appliquées volontairement
-
-Ces trois points ne figurent pas dans la checklist ; ils n'ont **pas** été modifiés pour ne pas
-élargir la commande, mais ils comptent pour une instance publique.
-
-- **Actions est actif côté serveur alors qu'aucun runner n'existe.** `gitea.config.actions.ENABLED:
-  false` réduirait la surface et la rétention par défaut (artefacts 90 j, logs 365 j) sans rien
-  casser aujourd'hui. Décision produit : c'est le moment de la prendre, avant que des workflows
-  n'existent.
-- **Le registre de paquets est actif par défaut**, sans quota (`[quota] ENABLED: false`), sur un
-  volume qui ne borne rien. Le `README` le documente déjà (§Dimensionnement du volume) ; le risque
-  change de nature une fois la forge publique.
-- **`REVERSE_PROXY_TRUSTED_PROXIES` n'est pas réglé.** Derrière le Gateway, Forgejo journalise
-  probablement l'IP du proxy au lieu de celle du client — ce qui rend toute analyse de tentatives de
-  connexion peu exploitable. ⚠️ Le rate limiting Cloudflare, lui, n'en souffre pas : il s'applique à
-  l'edge, sur l'IP réelle du client, bien avant l'origine. C'est en revanche exactement ce qui
-  empêcherait un blocage **côté Forgejo** (ban d'IP, corrélation d'échecs) de viser la bonne
-  adresse.
+13. **Vérifier le profil du compte admin** : créé avant `DEFAULT_KEEP_EMAIL_PRIVATE`, son adresse
+    peut encore être visible. Paramètres → Compte.

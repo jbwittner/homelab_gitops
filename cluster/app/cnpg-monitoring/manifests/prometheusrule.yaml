@@ -18,8 +18,10 @@
 #
 #   2. `cnpg_collector_last_available_backup_timestamp` VAUT 0, PAS « absent », quand aucune
 #      sauvegarde n'existe. Une règle en `time() - métrique > seuil` sans garde `> 0` se
-#      déclenche donc pour l'éternité sur toute base non sauvegardée — ici `authentik-db` et
-#      `pgsql-test`. C'est aussi pourquoi la forme `absent(...)` de VeleroNoBackupMetric ne se
+#      déclenche donc pour l'éternité sur toute base non sauvegardée. Aucune n'est dans ce cas
+#      aujourd'hui (`forgejo-db` est le seul Cluster, et il est couvert), mais la garde reste : une
+#      base ajoutée sans chaîne allumerait l'alerte immédiatement, ce qui est le comportement
+#      voulu. C'est aussi pourquoi la forme `absent(...)` de VeleroNoBackupMetric ne se
 #      transpose pas telle quelle : la série existe, elle est simplement à zéro.
 #
 #   3. Les métriques `cnpg_collector_*_backup_timestamp` sont marquées **(Deprecated)** par
@@ -119,10 +121,10 @@ spec:
         # parfaitement silencieuse — `CNPGBackupTooOld` étant justement gardée par `> 0`.
         #
         # PAS de liste blanche, et c'est le métrique du plugin qui le permet : elle n'existe que
-        # pour les bases dont le `spec.plugins` est câblé. `authentik-db` et `pgsql-test`, qui
-        # n'ont aucune chaîne native, n'ont pas non plus la série — elles ne peuvent pas déclencher
-        # cette règle. L'intention « cette base doit être sauvegardée » est portée par le `Cluster`
-        # lui-même, pas par une liste à tenir ici.
+        # pour les bases dont le `spec.plugins` est câblé. Une base sans plugin, donc sans chaîne
+        # native, n'a pas non plus la série — elle ne peut pas déclencher cette règle. L'intention
+        # « cette base doit être sauvegardée » est portée par le `Cluster` lui-même, pas par une
+        # liste à tenir ici.
         - alert: CNPGNoBackupYet
           expr: barman_cloud_cloudnative_pg_io_last_available_backup_timestamp == 0
           for: 24h

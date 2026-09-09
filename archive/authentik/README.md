@@ -1,5 +1,18 @@
 # authentik
 
+> [!IMPORTANT]
+> **ARCHIVÉ le 2026-09-08** (commit `8c7d7e4`). Fichier `authentik.noapp.yaml` : non déployé.
+>
+> Le motif n'est pas consigné ; la conséquence l'est. **Il n'y a plus de SSO nulle part** : le bloc
+> `oidc.config` d'ArgoCD est commenté et son patch RBAC n'est pas appliqué
+> ([argocd](../../cluster/infra/argocd/README.md) §SSO), l'`ExternalSecret` `grafana-oidc` est
+> commenté lui aussi. Les comptes locaux (`admin` ArgoCD, `grafana-admin`) sont aujourd'hui le seul
+> moyen d'entrer.
+>
+> Sa base PostgreSQL (`authentik-db`) n'existe plus : les README qui la citent encore comme
+> candidate à une sauvegarde décrivent un cluster disparu.
+
+
 ## Rôle
 
 Identity Provider du homelab (SSO : OIDC, SAML, LDAP, proxy). Base de données PostgreSQL dédiée,
@@ -13,7 +26,7 @@ groupes côté authentik sont gérés en **Terraform** (autre repo), pas ici.
 
 ## Fichiers
 
-- `authentik.app.yaml` — Application (archétype (b) : chart + `$values` + `manifests/`)
+- `authentik.noapp.yaml` — Application (archétype (b) : chart + `$values` + `manifests/`)
 - `helm-values.yaml` — postgres bundlé désactivé, connexion au Cluster CNPG `authentik-db`,
   `AUTHENTIK_SECRET_KEY` et mot de passe DB injectés par `secretKeyRef`
 - `manifests/namespace.yaml` — ns `authentik`

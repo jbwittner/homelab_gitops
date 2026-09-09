@@ -44,7 +44,7 @@ spec:
                 # lui-même le chemin d'API.
                 #
                 # ⚠️ `http://` en clair, assumé : le pod Forgejo parle http dans le cluster
-                # (`gitea.config.server.PROTOCOL: http`, TLS terminé au Gateway). Le jeton
+                # (`PROTOCOL` laissé à son défaut `http`, TLS terminé au Gateway). Le jeton
                 # transite donc en clair sur le réseau de pods.
                 - name: RENOVATE_ENDPOINT
                   value: "http://forgejo-http.forgejo.svc.cluster.local:3000/"

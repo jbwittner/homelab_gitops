@@ -39,11 +39,11 @@ l'**humain** (§5). Les deux jeux sont indépendants : casser l'OIDC ne coupe pa
 > **Les valeurs des secrets ne passent JAMAIS par Terraform.** Elles finiraient en clair dans le
 > state, ce qui reproduit exactement le problème qu'on cherche à éviter. Terraform pose la
 > **structure** (engine, auth, policy, roles) ; les valeurs se posent au coffre à la main, par
-> `bao kv put` — cf. [runbook-bootstrap.md](runbook-bootstrap.md), étape 8b.
+> `bao kv put` — cf. [runbook-bootstrap.md](../../doc/runbook-bootstrap.md), étape 8b.
 
 ## Prérequis
 
-- OpenBao déployé et **descellé** ([cluster/infra/openbao](../../cluster/infra/openbao/README.md)) ;
+- OpenBao déployé et **descellé** ([cluster/infra/openbao](README.md)) ;
 - Terraform authentifié auprès de lui — via `BAO_ADDR`/`VAULT_ADDR` sur
   `https://openbao.lan.wittner.tech` et un token. Le token root convient pour l'amorçage, mais
   n'a rien à faire dans un CI : prévoir un AppRole dédié ensuite ;
@@ -138,7 +138,7 @@ resource "vault_kubernetes_auth_backend_config" "k8s" {
 C'est un credential **du cluster distant**, pas du coffre. Il exige, **dans ce dépôt-ci**, un
 `ServiceAccount` du spoke lié à `system:auth-delegator` et un `Secret` de type
 `kubernetes.io/service-account-token` pour obtenir un JWT non expirant — exactement le motif
-déjà employé par [argocd-manager](../../cluster/infra/argocd-manager/README.md) pour l'identité du
+déjà employé par `argocd-manager` pour l'identité du
 hub.
 
 > [!WARNING]
@@ -347,7 +347,7 @@ resource "vault_identity_group_alias" "openbao_admin" {
 > ici le consommateur **est le coffre lui-même**, et la valeur vit déjà dans sa config d'auth.
 > L'y recopier ajouterait une copie à faire tourner sans ajouter un seul lecteur — et un secret
 > nécessaire au login, rangé derrière ce même login, est précisément la boucle que la règle
-> anti-cycle de [regles-gitops.md](regles-gitops.md) interdit.
+> anti-cycle de [regles-gitops.md](../../doc/regles-gitops.md) interdit.
 
 Passage de la valeur, sans jamais toucher un fichier :
 
@@ -436,7 +436,7 @@ Aucune valeur de secret n'est à recopier : le coffre est unique, les six secret
 ## Ce qui ne va PAS dans Terraform
 
 - **Les valeurs des secrets** — elles finiraient dans le state. `bao kv put`, cf.
-  [runbook-bootstrap.md](runbook-bootstrap.md) étape 8b. Seule exception, et par nécessité : le
+  [runbook-bootstrap.md](../../doc/runbook-bootstrap.md) étape 8b. Seule exception, et par nécessité : le
   `client_secret` du Provider OIDC d'openbao (§5.4), que Terraform génère lui-même côté authentik.
 - **Les comptes et les groupes** — `app-openbao-admin` est un groupe **authentik**, peuplé là-bas.
   Le coffre n'en connaît que le nom, via le claim `groups`.
@@ -445,4 +445,4 @@ Aucune valeur de secret n'est à recopier : le coffre est unique, les six secret
   Kubernetes, donc du GitOps, donc ce dépôt-ci.
 - **Les credentials d'un futur snapshot vers S3/MinIO** — règle anti-cycle : un secret dont
   openbao a besoin ne peut pas venir d'openbao, il doit être un `SealedSecret`
-  ([regles-gitops.md](regles-gitops.md)).
+  ([regles-gitops.md](../../doc/regles-gitops.md)).

@@ -3,7 +3,7 @@
 ## Rôle
 
 Volet **observabilité de la sauvegarde** des bases [cnpg](../cnpg/README.md) : un PodMonitor sur le
-collecteur des instances PostgreSQL, et six alertes sur l'état de la chaîne barman-cloud
+collecteur des instances PostgreSQL, et sept alertes sur l'état de la chaîne barman-cloud
 ([cnpg-barman-plugin](../cnpg-barman-plugin/README.md)).
 
 > [!CAUTION]
@@ -21,7 +21,7 @@ collecteur des instances PostgreSQL, et six alertes sur l'état de la chaîne ba
 - `cnpg-monitoring.app.yaml` — Application (archétype (c)), ns `cnpg-system`, wave `2`
 - `manifests/podmonitor.yaml` — scrape du port `metrics` (9187) des pods d'instance, **tous
   namespaces**
-- `manifests/prometheusrule.yaml` — six alertes, groupe `cnpg.backup.rules`
+- `manifests/prometheusrule.yaml` — sept alertes, groupe `cnpg.backup.rules`
 
 ## Contraintes
 
@@ -37,8 +37,8 @@ collecteur des instances PostgreSQL, et six alertes sur l'état de la chaîne ba
   produirait une base non surveillée, silencieusement.
 - **`podTargetLabels: [cnpg.io/cluster]` est load-bearing.** C'est ce qui donne le label de série
   `cnpg_io_cluster`, sur lequel s'appuient l'annotation de chaque alerte **et** la liste blanche de
-  `CNPGNoBackupYet`. Le retirer ne casse pas les règles : il les rend illisibles et vide la liste
-  blanche de son sens.
+  `CNPGBackupChainAbsent`. Le retirer ne casse pas les règles : il les rend illisibles et vide la
+  liste blanche de son sens.
 
 ### Trois pièges de métriques
 
@@ -111,8 +111,10 @@ en paraissant correcte.
   `cnpg_collector_*_backup_timestamp` homonymes sont les versions **dépréciées** et ne sont pas
   celles que les règles interrogent.
 
-- **Ajouter une base à la liste blanche** : éditer le `cnpg_io_cluster=~"…"` de `CNPGNoBackupYet`
-  dans `manifests/prometheusrule.yaml`. C'est le **quatrième** geste de la mise sous sauvegarde
+- **Ajouter une base à la liste blanche** : éditer le sélecteur `cnpg_io_cluster` de
+  **`CNPGBackupChainAbsent`** dans `manifests/prometheusrule.yaml` (aujourd'hui
+  `cnpg_io_cluster="forgejo-db"`). ⚠️ Ce n'est **pas** `CNPGNoBackupYet`, qui n'a aucun sélecteur :
+  sa règle est un `== 0` sur toutes les séries, ce que §Le détail des règles explique. C'est le **quatrième** geste de la mise sous sauvegarde
   d'une base (cf. [cnpg-barman-plugin](../cnpg-barman-plugin/README.md) §Opérations).
 
 ## Non retenu
