@@ -77,6 +77,14 @@ SRC_NS="forgejo"
 SRC_CLUSTER="forgejo-db"
 SRC_STORE="forgejo-db-store"
 SRC_GCS_SECRET="forgejo-db-gcs"
+# Secrets produits par sealed-secrets, donc reproductibles depuis Git — et EXCLUS des sauvegardes
+# velero par le label `velero.io/exclude-from-backup` porté par leurs SealedSecret. Ils ne peuvent
+# donc plus arriver dans la préprod par la restauration : il faut les y recopier.
+#
+# ⚠️ Et le déchiffrement ne peut PAS les produire ici : les SealedSecret sont en scope STRICT, liés
+# au couple nom+namespace. Restaurée dans « $NS », une SealedSecret de « forgejo » ne déchiffre pas.
+# C'est aussi pour ça que forgejo-db-gcs se recopiait déjà avant ce changement.
+SRC_SEALED_SECRETS=(forgejo-db-gcs forgejo-secrets forgejo-smtp forgejo-admin)
 VELERO_NS="velero"
 
 NS="${PREPROD_NAMESPACE:-forgejo-preprod}"
@@ -186,9 +194,19 @@ copy_object() {
 # ne sait pas atteindre. Voir doc/forgejo-pra.md §1.
 pick_backup() {
   local win first last bk
+  # ⚠️ `serverName` SE LIT SUR LE CLUSTER, IL NE SE DÉDUIT PAS DE SON NOM — même correctif que
+  # `forgejo-pra-prepare-script.sh`, et les deux DOIVENT rester d'accord : ils choisissent la même
+  # sauvegarde, et une divergence ferait dire « prêt » à l'un pendant que l'autre refuse de partir.
+  # Depuis que la reprise se fait sous le nom d'origine, ce sont les générations qui portent le
+  # serverName (`forgejo-db`, `-v3`, `-v4`…) : le déduire fait lire la fenêtre d'une génération
+  # MORTE et retenir un couple obsolète.
+  local srv cl_json
+  cl_json="$(kubectl -n "$SRC_NS" get clusters.postgresql.cnpg.io "$SRC_CLUSTER" -o json 2>/dev/null || echo '{}')"
+  srv="$(jq -r --arg p "barman-cloud.cloudnative-pg.io" --arg c "$SRC_CLUSTER" '
+      ([ .spec.plugins[]? | select(.name == $p) ] | first | .parameters.serverName) // $c' <<<"$cl_json")"
   win="$(kubectl -n "$SRC_NS" get objectstores.barmancloud.cnpg.io "$SRC_STORE" \
-        -o jsonpath="{.status.serverRecoveryWindow.$SRC_CLUSTER}" 2>/dev/null || true)"
-  [[ -n "$win" ]] || die "Aucune fenêtre de récupération pour « $SRC_CLUSTER » sur l'ObjectStore
+        -o jsonpath="{.status.serverRecoveryWindow.$srv}" 2>/dev/null || true)"
+  [[ -n "$win" ]] || die "Aucune fenêtre de récupération pour le serverName « $srv » sur l'ObjectStore
        « $SRC_STORE » : le bucket barman ne contient aucune sauvegarde de base exploitable.
        Diagnostic : script/cnpg-barman-plugin-script.sh list"
   first="$(jq -r '.firstRecoverabilityPoint // ""' <<<"$win")"
@@ -276,9 +294,16 @@ cmd_up() {
   # --- 2. Credential GCS et destination barman. L'ObjectStore est NAMESPACÉ et le plugin n'en lit
   # que dans le namespace du Cluster : il ne se mutualise pas, il se recopie.
   log "2/7 Credential GCS et ObjectStore"
-  copy_object secret "$SRC_GCS_SECRET"
+  local sec
+  for sec in "${SRC_SEALED_SECRETS[@]}"; do
+    kubectl -n "$SRC_NS" get secret "$sec" >/dev/null 2>&1 \
+      || die "Secret « $sec » absent de « $SRC_NS » : il est exclu des sauvegardes velero et ne
+       peut venir que d'ici. Vérifier que sa SealedSecret est Synced :
+       kubectl -n $SRC_NS get sealedsecret"
+    copy_object secret "$sec"
+  done
   copy_object objectstores.barmancloud.cnpg.io "$SRC_STORE"
-  ok "$SRC_GCS_SECRET et $SRC_STORE recopiés dans $NS"
+  ok "${#SRC_SEALED_SECRETS[@]} secrets et $SRC_STORE recopiés dans $NS"
 
   # --- 3. Restore velero. Le PVC, le Pod qui porte sa donnée, les Secrets matérialisés.
   log "3/7 Restauration velero → $NS"

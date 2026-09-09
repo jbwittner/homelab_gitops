@@ -10,6 +10,9 @@ spec:
   template:
     metadata:
       labels:
+        # Voir forgejo-admin.sealed.yaml : reproductible depuis Git, et le restaurer orphelinerait
+        # la SealedSecret. Le drill en fait une copie explicite vers la préprod (copy_object).
+        velero.io/exclude-from-backup: "true"
         app.kubernetes.io/component: database
         app.kubernetes.io/name: forgejo
         app.kubernetes.io/part-of: homelab-gitops
