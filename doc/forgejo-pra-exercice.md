@@ -709,12 +709,16 @@ Une écriture qui ne la croise pas ne peut rien casser.
 
 > [!NOTE]
 > **Activer `renovate-forgejo` n'est PAS un déclencheur, et l'améliore même.** Sa `schedule` est
-> `0 2 * * *` — une heure avant velero, pour ~40 s de run (mesuré sur le bot GitHub). Il écrirait
-> dans la forge chaque nuit, donc du WAL serait produit et archivé : la fenêtre PITR cesserait
-> d'être figée entre deux sauvegardes de base, et `--target-time` redeviendrait utilisable
-> (cf. [plan §1](forgejo-pra.md), régime « forge écrite »).
+> `0 1 * * *` en **`Europe/Paris`** — soit 23:00 UTC l'été et 00:00 UTC l'hiver, donc 2 h à 3 h
+> avant la copie velero de 03:00 UTC, pour ~40 s de run. Il écrirait dans la forge chaque nuit,
+> donc du WAL serait produit et archivé : la fenêtre PITR cesserait d'être figée entre deux
+> sauvegardes de base, et `--target-time` redeviendrait utilisable (cf.
+> [plan §1](forgejo-pra.md), régime « forge écrite »).
 >
-> Le déclencheur serait de **déplacer son horaire** sur 03:00.
+> ⚠️ **Les deux chaînes de sauvegarde sont en UTC, les CronJobs renovate en heure locale.** Elles
+> se décalent donc l'une par rapport à l'autre d'une heure au changement d'heure. La marge la plus
+> étroite est 1 h, en hiver. Le déclencheur serait de replanifier renovate de façon à tomber sur
+> 03:00 UTC — cf. [plan §2](forgejo-pra.md).
 
 ### Ce qu'on a décidé de ne pas faire
 

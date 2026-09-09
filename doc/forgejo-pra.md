@@ -24,8 +24,8 @@ couvre l'autre.**
 
 | Donnée | Chaîne | Cohérence | Heure | Rétention |
 | --- | --- | --- | --- | --- |
-| PVC `forgejo-data` — dépôts Git, LFS, paquets, artefacts Actions, **`app.ini`** | velero / kopia | **étalée** — pire que crash, cf. ci-dessous | 03:00 | 30 j (`ttl: 720h`) |
-| Base `forgejo-db` — issues, PR, comptes, sessions, droits | barman-cloud (CNPG natif) | **transaction** + PITR | 02:00 + WAL continu | 30 j (`retentionPolicy`) |
+| PVC `forgejo-data` — dépôts Git, LFS, paquets, artefacts Actions, **`app.ini`** | velero / kopia | **étalée** — pire que crash, cf. ci-dessous | **03:00 UTC** | 30 j (`ttl: 720h`) |
+| Base `forgejo-db` — issues, PR, comptes, sessions, droits | barman-cloud (CNPG natif) | **transaction** + PITR | **02:00 UTC** + WAL continu | 30 j (`retentionPolicy`) |
 
 ### Les deux sont « à chaud », et ce n'est pas le même « à chaud »
 
@@ -96,14 +96,17 @@ La question revient naturellement, et la réponse est non — mais pas pour la r
 « Il n'y a qu'un utilisateur » ne suffit pas : ce qui compte est **qui écrit à 03:00**, humain ou
 non. État vérifié le 2026-09-08 :
 
-| Écrivain potentiel | État réel |
-| --- | --- |
-| `renovate-forgejo` — pousse des branches dans la forge | **pas déployé** (ligne commentée dans `cluster/app/renovate/manifests/kustomization.yaml`). Une fois activé : `schedule: "0 2 * * *"`, soit **une heure avant**, pour ~40 s de run — mesuré sur le bot GitHub |
-| `renovate-github` | 01:00, et il pousse sur **GitHub**, pas ici |
-| Crons internes de Forgejo | tous aux défauts amont — la section `[cron*]` d'`app.ini` est **vide** |
-| L'humain | le seul écrivain réaliste à 03:00 |
+| Écrivain potentiel | Horaire | État réel |
+| --- | --- | --- |
+| `renovate-forgejo` — pousse des branches dans la forge | `0 1 * * *` **Europe/Paris** → 23:00 UTC l'été, 00:00 UTC l'hiver | **pas déployé** (ligne commentée dans `cluster/app/renovate/manifests/kustomization.yaml`). Une fois activé : 2 h de marge l'été, 1 h l'hiver, pour ~40 s de run |
+| `renovate-github` | `0 2 * * *` **Europe/Paris** → 00:00 UTC l'été, 01:00 UTC l'hiver | actif, mais il pousse sur **GitHub**, pas ici |
+| Crons internes de Forgejo | défauts amont | la section `[cron*]` d'`app.ini` est **vide** |
+| L'humain | — | le seul écrivain réaliste à 03:00 UTC |
 
-Et le parcours kopia dure **17 s** sur la volumétrie actuelle.
+Et le parcours kopia dure **12 à 22 s** sur la volumétrie actuelle.
+
+⚠️ La marge la plus étroite est **1 h, en hiver**, entre `renovate-github` (01:00 UTC) et la
+sauvegarde de base (02:00 UTC). C'est elle qu'il faut regarder avant de toucher à un horaire.
 
 Parmi les crons internes, ceux qui tournent la nuit **suppriment** des fichiers
 (`cleanup_packages`, `archive_cleanup`) : une suppression qui croise le parcours donne un fichier
@@ -128,7 +131,7 @@ seul réellement dangereux — est `git_gc_repos`, désactivé par défaut en am
 **Les trois déclencheurs qui changeraient la réponse** — et dans les trois cas le correctif reste
 le snapshot CSI, pas la coupure :
 
-1. `renovate-forgejo` activé **et** replanifié sur 03:00 ;
+1. `renovate-forgejo` activé **et** replanifié de façon à tomber sur 03:00 UTC ;
 2. `[cron.git_gc_repos] ENABLED = true` ;
 3. la forge grossit assez pour que le parcours dure des minutes, auquel cas le risque devient la
    fenêtre 02:00–03:00 où renovate écrit.
@@ -206,7 +209,22 @@ PVC     ────────────────────────
 
 ---
 
-## 2. Pourquoi la base à 02:00 et le PVC à 03:00
+## 2. Pourquoi la base à 02:00 UTC et le PVC à 03:00 UTC
+
+> [!IMPORTANT]
+> **Tous les horaires de ce document sont en UTC**, et ils ne peuvent pas être autre chose : ni
+> `Schedule` (velero) ni `ScheduledBackup` (CNPG) n'exposent de champ `timezone`. Seul un `CronJob`
+> Kubernetes en a un — d'où le `Europe/Paris` des CronJobs renovate, qui sont les **seuls** objets
+> du dépôt en heure locale.
+>
+> | | Été (CEST) | Hiver (CET) |
+> | --- | --- | --- |
+> | base CNPG · 02:00 UTC | 04:00 Paris | 03:00 Paris |
+> | PVC velero · 03:00 UTC | 05:00 Paris | 04:00 Paris |
+>
+> ⚠️ **Ne pas « corriger » en décalant d'une heure.** Un cron UTC fixe ne peut viser une heure
+> locale qu'à une saison, et le décalage créerait une **collision** : `renovate-github` tourne à
+> 02:00 Europe/Paris, soit 01:00 UTC en hiver. Détail dans les deux fichiers de schedule.
 
 L'ordre n'est pas un hasard d'ordonnancement. **La sauvegarde de base doit précéder la copie du
 PVC, et le plus près possible.** Trois raisons indépendantes, toutes dans ce sens :

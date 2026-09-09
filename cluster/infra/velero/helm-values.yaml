@@ -110,6 +110,21 @@ metrics:
 schedules:
   daily:
     disabled: false
+    # ⚠️ CET HORAIRE EST EN **UTC**, et il ne peut pas être autre chose. Ni `Schedule` (velero) ni
+    # `ScheduledBackup` (CNPG) n'exposent de champ `timezone` — seul un `CronJob` Kubernetes en a un
+    # (`timeZone`), d'où le `Europe/Paris` des CronJobs renovate. Les deux chaînes de sauvegarde, elles,
+    # sont en UTC en dur.
+    #
+    #   02:00 UTC = 04:00 Paris l'été (CEST) · 03:00 Paris l'hiver (CET)
+    #   03:00 UTC = 05:00 Paris l'été        · 04:00 Paris l'hiver
+    #
+    # ⚠️ NE PAS « corriger » en décalant d'une heure pour viser un horaire de Paris. Deux raisons :
+    #   1. un cron UTC fixe ne peut viser une heure locale qu'à UNE saison — il faudrait 00:00 UTC
+    #      l'été et 01:00 UTC l'hiver, donc on se tromperait six mois par an ;
+    #   2. le décalage créerait une COLLISION : `renovate-github` tourne à 02:00 Europe/Paris, soit
+    #      01:00 UTC en hiver. Y placer la sauvegarde de base ferait écrire le bot dans la forge
+    #      pendant la copie.
+    # En l'état l'ordre base → PVC tient aux DEUX saisons : 2 h de marge l'été, 1 h l'hiver.
     schedule: "0 3 * * *"
     # ⚠️ NE PAS déclarer `skipImmediately` ici. C'est un ordre à usage unique, pas un état désiré :
     # le contrôleur le remet lui-même à `false` après l'avoir consommé (schedule_controller.go, il

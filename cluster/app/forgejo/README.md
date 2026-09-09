@@ -28,7 +28,7 @@ box, plus d'IP d'origine publiée — cf. [§Réseau](#le-ssh-a-été-coupé).
   sous **archivage WAL continu** — cf. §Sauvegarde
 - `manifests/forgejo-db-objectstore.yaml` — `ObjectStore` barman-cloud : bucket GCS, credentials,
   rétention 30 j — cf. §Sauvegarde
-- `manifests/forgejo-db-scheduledbackup.yaml` — sauvegarde de base quotidienne à 02:00
+- `manifests/forgejo-db-scheduledbackup.yaml` — sauvegarde de base quotidienne à 02:00 **UTC**
   (⚠️ cron à **six** champs) — cf. §Sauvegarde
 - `manifests/forgejo-db-gcs.secret.example.yaml` — template **versionné et vide** du credential
   GCS. Scellé **à part** du template multi-documents des trois autres Secrets, pour que tourner la
@@ -183,8 +183,8 @@ bloc YAML minuscule à clés majuscules, qu'elle figure ou non dans la liste des
 
 | Donnée | Chaîne | Cohérence | Rétention | Bucket |
 | --- | --- | --- | --- | --- |
-| PVC `forgejo-data` (100Gi) — dépôts, LFS, paquets, `app.ini` | velero / kopia, 03:00 | **étalée** ⚠️ | 30 j (`ttl: 720h`) | `homelab-velero-backups-*` |
-| Base `forgejo-db` (10Gi) — issues, PR, comptes, sessions | barman-cloud (CNPG natif), 02:00 + WAL continu | **transaction** + PITR | 30 j (`retentionPolicy`) | bucket CNPG dédié |
+| PVC `forgejo-data` (100Gi) — dépôts, LFS, paquets, `app.ini` | velero / kopia, 03:00 **UTC** | **étalée** ⚠️ | 30 j (`ttl: 720h`) | `homelab-velero-backups-*` |
+| Base `forgejo-db` (10Gi) — issues, PR, comptes, sessions | barman-cloud (CNPG natif), 02:00 **UTC** + WAL continu | **transaction** + PITR | 30 j (`retentionPolicy`) | bucket CNPG dédié |
 
 > [!WARNING]
 > **« Étalée » et non « cohérente-crash », et l'écart n'est pas cosmétique.** La copie kopia est un
@@ -244,9 +244,10 @@ purgé sous eux.
 > ([`doc/forgejo-pra-exercice.md`](../../../doc/forgejo-pra-exercice.md)).
 >
 > Trois points de ce plan ne se déduisent d'aucun fichier de ce dossier :
-> - **les deux moitiés ne sont jamais cohérentes entre elles** — le PVC est figé à 03:00, la base
+> - **les deux moitiés ne sont jamais cohérentes entre elles** — le PVC est figé à 03:00 UTC, la base
 >   se rejoue ; l'alignement se fait toujours en amenant la base à l'instant du PVC ;
-> - **la base à 02:00 et le PVC à 03:00, dans cet ordre**, parce que la sauvegarde de base doit
+> - **la base à 02:00 UTC et le PVC à 03:00 UTC, dans cet ordre** (les deux chaînes n'ont pas de
+>   champ `timezone`), parce que la sauvegarde de base doit
 >   précéder la copie du PVC — sinon le rejeu part de la veille ;
 > - **le point de reprise unique est une clé GCP**, pas une sauvegarde : sur un cluster reconstruit
 >   à neuf, le `SealedSecret` `velero-gcs` est indéchiffrable et plus rien ne se restaure.

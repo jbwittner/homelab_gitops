@@ -24,6 +24,27 @@ spec:
   # 02:00 et non 03:00 : la schedule velero part à 03:00 sur le même nœud, et le PVC de 100Gi de
   # Forgejo y passe en lecture intégrale. Décaler évite de superposer les deux sur un stockage
   # node-local unique. Une heure de marge suffit largement pour 10Gi de métadonnées.
+  #
+  # ⚠️ L'ordre compte AUSSI pour la restauration, pas seulement pour les E/S : la sauvegarde de base
+  # doit PRÉCÉDER la copie du PVC. Le PVC ne se déplace pas dans le temps, la base si — on l'amène à
+  # l'instant du PVC par rejeu de WAL, jamais l'inverse. Inversés, il faudrait repartir de la base
+  # de la VEILLE, soit 23 h de rejeu. Cf. doc/forgejo-pra.md §2.
+  #
+  # ⚠️ CET HORAIRE EST EN **UTC**, et il ne peut pas être autre chose. Ni `Schedule` (velero) ni
+  # `ScheduledBackup` (CNPG) n'exposent de champ `timezone` — seul un `CronJob` Kubernetes en a un
+  # (`timeZone`), d'où le `Europe/Paris` des CronJobs renovate. Les deux chaînes de sauvegarde, elles,
+  # sont en UTC en dur.
+  #
+  #   02:00 UTC = 04:00 Paris l'été (CEST) · 03:00 Paris l'hiver (CET)
+  #   03:00 UTC = 05:00 Paris l'été        · 04:00 Paris l'hiver
+  #
+  # ⚠️ NE PAS « corriger » en décalant d'une heure pour viser un horaire de Paris. Deux raisons :
+  #   1. un cron UTC fixe ne peut viser une heure locale qu'à UNE saison — il faudrait 00:00 UTC
+  #      l'été et 01:00 UTC l'hiver, donc on se tromperait six mois par an ;
+  #   2. le décalage créerait une COLLISION : `renovate-github` tourne à 02:00 Europe/Paris, soit
+  #      01:00 UTC en hiver. Y placer la sauvegarde de base ferait écrire le bot dans la forge
+  #      pendant la copie.
+  # En l'état l'ordre base → PVC tient aux DEUX saisons : 2 h de marge l'été, 1 h l'hiver.
   schedule: "0 0 2 * * *"
 
   cluster:
