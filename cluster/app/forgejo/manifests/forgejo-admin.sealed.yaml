@@ -1,3 +1,20 @@
+# Secrets scellés de Forgejo. Les trois documents portent le label
+# `velero.io/exclude-from-backup` : ils sont reproductibles depuis Git par sealed-secrets, donc les
+# sauvegarder n'apporte rien — et les RESTAURER nuit (détail à côté de chaque label).
+#
+# ⚠️ LE CRITÈRE D'EXCLUSION N'EST PAS « REPRODUCTIBLE DEPUIS GIT », c'est le MODE D'APPARTENANCE.
+# Ne pas étendre cette exclusion aux autres Secrets du namespace sans l'avoir vérifié :
+#
+#   sealed-secrets  reconnaît les siens par `ownerReference`     -> une restauration les ORPHELINE
+#   ArgoCD          par son annotation `tracking-id`             -> restauration sans conséquence
+#   CloudNativePG   ne marque rien, se sert de ce qui existe     -> restauration sans conséquence
+#
+# Les Secrets du chart (`forgejo`, `forgejo-init`, `forgejo-inline-config`) sont eux aussi rendus
+# depuis Git et parfaitement déterministes — ils restent `Synced`, ce qu'un chart générant de
+# l'aléatoire ne pourrait pas — et pourtant leur sauvegarde ne pose aucun problème. Les exclure
+# casserait le drill sans rien gagner : la préprod n'est pas gérée par ArgoCD, personne n'y
+# recréerait ces Secrets, et le `forgejo-db-app` restauré y porte le mot de passe du rôle tel qu'il
+# est dans la base restaurée.
 ---
 apiVersion: bitnami.com/v1alpha1
 kind: SealedSecret
