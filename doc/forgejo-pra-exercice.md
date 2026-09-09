@@ -587,6 +587,7 @@ ne sait plus s'il a été joué, ni sur quelle volumétrie, ni jusqu'où.
 | 3 | 2026-09-08 | `drill --fresh` | `manual-fnmdv` (17:01:47Z), créée par le drill | 6 / 6 | **OK** |
 | 4 | 2026-09-08 | `prepare run` + `drill` | `manual-qs7c7` (17:05:52Z) | 6 / 6 | **OK** |
 | 5 | 2026-09-08 | manuelle, commande par commande | `manual-qs7c7` | 6 / 6 **+ connexion à l'interface** | **OK** |
+| 6 | 2026-09-09 | **EN PLACE, sur la production** — `prepare run` + §8 étape A, PVC détruit | `manual-v4tgs` (09:46:29Z) + base `forgejo-db-manual-jhch7` | empreintes avant/après, `git fsck`, alignement base↔disque | **OK au troisième essai** — les deux premiers ont rendu un PVC vide |
 
 Le passage **1** est celui qui a produit toutes les trouvailles du plan : le `FATAL` de
 `recovery_target_time`, les `ownerReferences` effacées par velero, l'adoption du PVC orphelin. Les
@@ -595,6 +596,15 @@ suivants les vérifient.
 Le passage **5** est le seul à avoir validé la chaîne **de bout en bout** : se connecter à
 l'interface met d'accord le hash venu de la base (barman), le `SECRET_KEY` venu de l'`app.ini`
 (PVC) et la route. Aucun contrôle automatisé ne fait ça.
+
+Le passage **6** est le premier joué **sur la production**, PVC détruit pour de bon. Il a coûté
+deux tentatives ratées avant de réussir, et c'est là tout son intérêt : les deux échecs venaient de
+gestes **écrits dans le plan** (`--overwrite`, puis `scale --replicas=0`), qui rendaient chacun un
+`Restore` d'apparence saine sur un volume vide. Cinq passages en namespace jetable ne les avaient
+jamais montrés — le namespace vide ne contient ni Deployment ni ReplicaSet, donc aucun des deux
+mécanismes ne s'y déclenche. Le §8 étape A du [plan](forgejo-pra.md) porte désormais la procédure
+qui a réellement fonctionné, et les quatre pièges nommés. À rejouer à volumétrie non triviale : à
+1,6 Mio, la copie est du bruit devant les temps fixes.
 
 > [!NOTE]
 > `--fresh` (passage 3) a depuis été **retiré** : fabriquer sa propre condition d'exécution fait de

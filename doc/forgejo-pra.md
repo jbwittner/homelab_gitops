@@ -552,51 +552,99 @@ Vérifier que cet instant tombe dans la fenêtre affichée par `cnpg-barman-plug
 ### Étape A — le PVC et l'applicatif (scénarios B, C, D)
 
 > [!CAUTION]
-> **Cette étape n'a jamais été jouée en place, et elle est plus dure que dans l'exercice.**
-> L'[exercice](forgejo-pra-exercice.md) restaure dans un namespace **vide** : c'est le cas facile.
-> Restaurer dans `forgejo`, où l'application tourne déjà, ajoute deux pièges qu'il ne rencontre
-> jamais.
+> **Jouée en place pour la première fois le 2026-09-09, sur la production.** Elle a fini par
+> réussir, mais **pas telle qu'elle était écrite** : la version d'origine de cette procédure
+> échouait, et de deux façons qui rendaient toutes deux un `Restore` d'apparence saine avec un PVC
+> vide. Ce qui suit est la version corrigée, éprouvée. L'[exercice](forgejo-pra-exercice.md)
+> restaure dans un namespace **vide**, où aucun de ces quatre pièges n'existe : le cas facile
+> masque le mécanisme.
 >
-> **Piège α — `existingResourcePolicy` non renseigné = « ignorer ce qui existe ».** Un `Restore`
-> lancé tel quel sur `forgejo` **saute en silence** tous les objets déjà présents. Il rendrait
-> `Completed` sans que rien n'ait bougé.
+> **Piège α — `existingResourcePolicy` non renseigné saute les objets déjà présents.** C'est ici
+> **voulu, et il ne faut PAS le corriger avec `--overwrite`.** Services, Secrets et ConfigMaps du
+> namespace sont gérés par ArgoCD : leur source de vérité est Git, pas la sauvegarde. Le restore du
+> 2026-09-09 a produit **55 avertissements `already exists`**, tous corrects. Ce qu'on vient
+> chercher dans la sauvegarde, c'est le PVC et le Pod porteur de la donnée — et ceux-là sont
+> absents, donc créés.
 >
-> **Piège β — le Deployment vivant bloque la restauration de la donnée.** La donnée kopia est
-> portée par le **Pod**. Si le Deployment tourne, le Pod restauré entre en collision avec
-> l'existant, il est ignoré — donc **pas de `PodVolumeRestore`, donc PVC vide**. C'est la raison
-> d'être du `scale --replicas=0` ci-dessous : il n'est pas là pour « éviter les écritures », il est
-> là pour **laisser la place au Pod restauré**.
+> **Piège β — `--overwrite` défait l'étape « libérer la place ».** `existingResourcePolicy=update`
+> réécrit le Deployment avec celui de la sauvegarde, **`replicas: 1` compris**. Le ReplicaSet
+> recrée aussitôt un pod, qui prend le PVC neuf (RWO) et démarre Forgejo **sur un volume vide** —
+> observé le 2026-09-09 : 16 fichiers et 392 Kio au lieu de 97 fichiers et 1,6 Mio, et
+> `gitea-repositories` absent. L'étape 4 annulait l'étape 2.
+>
+> **Piège γ — `scale --replicas=0` ne suffit pas : il DÉTRUIT la restauration.** Le Pod restauré
+> par velero porte une `ownerReference` vers son ReplicaSet d'origine. Ce RS est à `desired=0`
+> puisque le Deployment l'est : le contrôleur de ReplicaSet voit un pod qu'il possède et n'en veut
+> aucun, donc **il le supprime dans la seconde**. Le `PodVolumeRestore` attend alors un pod que
+> Kubernetes vient de détruire, et le `Restore` reste `InProgress` indéfiniment — 18 min observées
+> avant abandon. La parade est de **supprimer le Deployment ET ses ReplicaSets**, ce qui reproduit
+> en place les conditions du namespace vide. L'ordre de velero le permet : il restaure le Pod
+> (item 26/70) **avant** le ReplicaSet (item 31/70), donc le pod naît sans propriétaire, puis le RS
+> restauré à `desired=1` l'adopte.
+>
+> **Piège δ — couper `selfHeal` sur l'Application `forgejo` seule ne coupe rien.** La chaîne
+> app-of-apps est `root` → `app` → `forgejo` : le parent réapplique le manifeste de l'enfant depuis
+> Git en quelques secondes, `automated` revient, et avec lui le `replicas: 1`. Vérifié le
+> 2026-09-09 — un pod était déjà reparti 20 s après le `scale --replicas=0`. Il faut couper les
+> **trois**, de haut en bas.
 
 ```bash
-# 1. Couper la concurrence d ArgoCD. selfHeal reposerait ce que Git déclare PENDANT la restauration.
-kubectl -n argocd patch application forgejo --type=merge \
-  -p '{"spec":{"syncPolicy":{"automated":null}}}'
+# 0. Prendre l empreinte de ce qu on va detruire. Sans elle, une restauration verte ne prouve rien.
+P=$(kubectl -n forgejo get pod -l app.kubernetes.io/name=forgejo -o jsonpath='{.items[0].metadata.name}')
+kubectl -n forgejo exec $P -c forgejo -- sh -c 'find /data -type f | wc -l; du -sh /data'
+kubectl -n forgejo exec $P -c forgejo -- find /data/git/gitea-repositories -maxdepth 2 -name '*.git'
+kubectl -n forgejo exec $P -c forgejo -- sha256sum /data/jwt/private.pem /data/gitea/conf/app.ini
 
-# 2. Libérer la place — cf. piège β.
-kubectl -n forgejo scale deploy/forgejo --replicas=0
+# 1. Couper ArgoCD sur les TROIS niveaux, de haut en bas — cf. piege d.
+#    Couper le seul « forgejo » ne tient pas : le parent le repose en quelques secondes.
+for a in root app forgejo; do
+  kubectl -n argocd patch application $a --type=merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+done
 
-# 3. ⚠️ IRRÉVERSIBLE. reclaimPolicy: Delete → la suppression du PVC DÉTRUIT le LV.
-#    À ne faire que si le volume est déjà perdu ou corrompu.
+# 2. Reproduire les conditions du namespace vide — cf. piege g.
+#    SUPPRIMER le Deployment et ses ReplicaSets, et non les mettre a zero : un RS a desired=0
+#    supprime le Pod restaure avant que node-agent ait ecrit le moindre octet.
+kubectl -n forgejo delete deploy/forgejo
+kubectl -n forgejo delete rs --all
+
+# 3. IRREVERSIBLE. reclaimPolicy: Delete -> la suppression du PVC DETRUIT le LV.
+#    A ne faire que si le volume est deja perdu ou corrompu.
 kubectl -n forgejo delete pvc forgejo-data
 
 # 4. Restaurer. Pas de namespaceMapping : on revient chez soi.
+#    SANS --overwrite — cf. pieges a et b. Les « already exists » attendus sont le comportement voulu.
 script/velero-script.sh restore <backup> -n forgejo
 
-# 5. Attendre que les octets soient écrits — c est la preuve, pas la phase du Restore.
-kubectl -n velero get podvolumerestores -l velero.io/restore-name=<restore> -o json \
-  | jq -r '[.items[] | {pod:.spec.pod.name, phase:.status.phase, octets:.status.progress}]'
+# 5. Attendre que les octets soient ecrits — c est la preuve, pas la phase du Restore.
+kubectl -n velero get podvolumerestores -l velero.io/restore-name=<restore> \
+  -o custom-columns=POD:.spec.pod.name,PHASE:.status.phase,BYTES:.status.progress.bytesDone
 
-# 6. Le Pod restauré a fait son office : il n a plus de raison d exister.
-kubectl -n forgejo delete pod -l app.kubernetes.io/name=forgejo --field-selector=status.phase!=Running
+# 6. Rendre la main a ArgoCD. Il adopte le Deployment restaure sans rolling update tant que le
+#    hash de template correspond a Git ; le Pod restaure est alors conserve tel quel.
+for a in root app forgejo; do
+  kubectl -n argocd patch application $a --type=merge \
+    -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+done
 
-# 7. Remonter, puis rendre la main à ArgoCD.
-kubectl -n forgejo scale deploy/forgejo --replicas=1
-kubectl -n argocd patch application forgejo --type=merge \
-  -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+# 7. Confronter a l empreinte du point 0. Les sommes doivent etre IDENTIQUES ; le nombre de
+#    fichiers gagne exactement 1, le marqueur /data/.velero/<uid> ecrit par la restauration.
 ```
 
 Point de contrôle : le **nombre de volumes réellement repris**. Une restauration `Completed` avec
 **zéro** volume signifie objets restaurés, **données absentes**.
+
+**Mesuré le 2026-09-09**, sur 1,6 Mio : `PodVolumeRestore` en **9 s** (1 072 125 / 1 072 125 octets),
+`Restore` complet en **3 min 40 s** dont l'essentiel en `Finalizing`, 55 avertissements, 0 erreur.
+Les trois sommes de contrôle et les deux dépôts sont revenus identiques, `git fsck` propre, et la
+base connaissait les **mêmes** deux dépôts que le disque. Ce chiffre ne dit **rien** du RTO à
+volumétrie réelle : à 1,6 Mio, la copie kopia est du bruit devant les temps fixes.
+
+> [!WARNING]
+> **Si un `Restore` reste bloqué, ne pas forcer la suppression de ses finalizers.** Retirer
+> `restores.velero.io/external-resources-finalizer` et `velero.io/pod-volume-finalizer` à la main a
+> laissé le contrôleur de restore **muet** : le `Restore` suivant est resté sans phase, sans une
+> ligne de log, pendant plus de deux minutes. Il a fallu un `kubectl -n velero rollout restart
+> deployment/velero` pour qu'il reprenne. Redémarrer le serveur AVANT d'en arriver aux finalizers.
 
 ### Étape B — la base (scénario A)
 
@@ -670,10 +718,14 @@ Traefik.
 - **Le RTO à volumétrie réelle.** Les durées du §3 ont été relevées sur 1,6 Mio de données.
 - **La perte simultanée des deux buckets GCS.** Distincts, GC séparés — mais même projet, même
   compte.
-- **La restauration EN PLACE, dans `forgejo`** (§8 étape A). L'exercice restaure toujours à côté,
-  c'est-à-dire dans le cas facile. Les deux pièges de l'étape A — `existingResourcePolicy` qui
-  ignore l'existant, et le Deployment vivant qui empêche le `PodVolumeRestore` — sont **déduits du
-  mécanisme, pas mesurés**. L'étape B, elle, est répétable sans risque et devrait l'être.
+- ~~**La restauration EN PLACE, dans `forgejo`**~~ — **jouée le 2026-09-09 sur la production**,
+  PVC détruit puis repris depuis le bucket, empreintes identiques et base alignée sur le disque
+  (§8 étape A). L'exercice, lui, restaure toujours à côté : c'est le cas facile, et il a masqué
+  quatre pièges que seule la reprise en place révèle. Deux d'entre eux tenaient à des gestes
+  **écrits dans ce plan** — `--overwrite`, et `scale --replicas=0` — qui produisaient un `Restore`
+  vert sur un volume vide. Les pièges déduits du mécanisme n'étaient pas les bons ; la procédure du
+  §8 est désormais celle qui a réellement fonctionné. Reste non éprouvée : la reprise en place
+  **à volumétrie réelle**, et l'étape B en place (répétable sans risque, et qui devrait l'être).
 - **Le comportement sous charge d'écriture.** `git fsck` et `forgejo doctor` sont joués à chaque
   exercice et passent — mais sur une forge au repos. L'étalement de la copie kopia (§1) ne se
   manifeste que si une écriture croise le parcours, et rien ici ne le provoque.
