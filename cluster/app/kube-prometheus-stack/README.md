@@ -418,28 +418,52 @@ personne ne mesure**, à savoir la copie kopia étalée d'un PVC, qui produit un
 (cf. [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md)). Le seul détecteur reste l'exercice
 trimestriel.
 
-#### Ce qu'il reste à faire, une seule fois
+#### Éprouvé le 2026-09-09 — bout en bout, mails reçus
 
-Deux choses ne se vérifient pas depuis le dépôt, et la seconde est la seule qui prouve la chaîne.
+La chaîne a été prouvée **entière**, injection → relais → boîte, et pas seulement « la config est
+chargée ». Les deux points qui ne se vérifiaient pas depuis le dépôt sont donc fermés :
 
-1. **L'expéditeur.** `smtp_from: alertmanager@wittner.tech` ne marche que si le domaine
-   `wittner.tech` est **authentifié** chez Brevo (DKIM de domaine), et pas seulement
-   `forgejo@wittner.tech` validée comme expéditeur unique. ⚠️ À défaut, Brevo **accepte** les mails
-   et les jette : l'échec n'apparaît que dans les logs du relais, pas dans ceux d'Alertmanager.
-   Repli sans risque : `forgejo@wittner.tech`, qui envoie déjà — le sujet porte l'alerte,
-   l'expéditeur n'est qu'une étiquette.
+| Point | Résultat |
+| --- | --- |
+| `smtp_from: alertmanager@wittner.tech` | **validé** — le domaine `wittner.tech` est bien authentifié chez Brevo, pas seulement `forgejo@`. Aucun repli nécessaire |
+| Envoi réel | mail `[FIRING]` reçu, puis `[RESOLVED]` à l'expiration — `send_resolved` prouvé aussi |
 
-2. **Un vrai mail, sans attendre une panne.** Router temporairement `Watchdog` vers
-   `email-critique` au lieu de `"null"`, commit, attendre le mail, remettre. Le deadman switch
-   sonne en permanence : c'est le seul générateur d'alerte fiable dont on dispose.
+**La méthode retenue n'est pas celle qui était prévue.** Le reroutage temporaire du `Watchdog`
+demandait deux commits et un aller-retour ArgoCD. Injecter une alerte à la main ne touche ni Git ni
+l'état durable — c'est un **événement**, au sens de la règle de [`doc/`](../../../doc/README.md) —
+et elle s'éteint seule. À rejouer tel quel après toute modification du bloc `config` :
 
 ```bash
-kubectl -n monitoring get sealedsecret alertmanager-smtp          # Synced ?
-kubectl -n monitoring get secret alertmanager-smtp                # matérialisé ?
-kubectl -n monitoring get pod -l app.kubernetes.io/name=alertmanager   # Running, pas ContainerCreating
-kubectl -n monitoring logs sts/alertmanager-kube-prometheus-stack-alertmanager \
-  -c alertmanager | command grep -i 'smtp\|notify'
+kubectl -n monitoring exec alertmanager-kube-prometheus-stack-alertmanager-0 -c alertmanager -- \
+  amtool alert add \
+    --alertmanager.url=http://127.0.0.1:9093 \
+    alertname=TestNotificationMail \
+    severity=critical \
+    namespace=monitoring \
+    --annotation=summary='Test manuel de la chaîne de notification' \
+    --annotation=description='Alerte injectée à la main. Aucune panne réelle.'
 ```
+
+Elle matche `severity = "critical"` → `email-critique`, et ni la route `Watchdog` ni aucune règle
+d'inhibition. Déroulé mesuré : mail `[FIRING]` **~30 s** après (le `group_wait`), mail `[RESOLVED]`
+**~5 min** après (l'alerte expire d'elle-même sur `resolve_timeout`). Rien à nettoyer.
+
+> [!WARNING]
+> **Un envoi réussi ne laisse AUCUNE trace dans les logs.** Relevé le 2026-09-09 : `logLevel: info`,
+> **zéro ligne** sur les 45 minutes couvrant les deux envois. `Notify success` est journalisé en
+> `debug`, pas en `info` — attendre cette ligne fait conclure à tort que la chaîne est morte.
+>
+> Corollaire, et c'est le vrai piège : **les logs ne servent qu'au diagnostic d'échec.** La seule
+> preuve qu'un mail est parti est le mail lui-même.
+
+Ce que les logs disent quand ça rate, en revanche :
+
+| Log | Cause |
+| --- | --- |
+| `Invalid username or password` / `535` | credential Brevo faux, ou `smtp_auth_username` renseigné avec l'adresse du compte au lieu de l'identifiant `<id>@smtp-brevo.com` |
+| `i/o timeout` / `connection refused` | sortie vers `smtp-relay.brevo.com:587` bloquée |
+| **rien**, et pas de mail non plus | l'alerte n'a pas atteint le receiver : routage, pas SMTP. Vérifier `/#/status` |
+| **rien**, mais mail attendu jamais reçu | ⚠️ le cas vicieux : le relais a **accepté puis jeté**. Ne se diagnostique que dans les logs d'envoi **côté Brevo**. C'est le symptôme d'un `smtp_from` non validé — écarté ici, mais il reviendrait au premier changement d'expéditeur |
 
 #### Ce que ce câblage décide, et qui se relit dans les commentaires du bloc
 

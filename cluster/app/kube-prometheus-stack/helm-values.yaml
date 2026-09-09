@@ -137,12 +137,14 @@ alertmanager:
       # DOIT être une adresse d'expéditeur validée chez le relais, sinon les mails sont acceptés
       # puis silencieusement jetés — l'échec n'apparaît que dans les logs du relais, pas ici.
       #
-      # ⚠️ `alertmanager@wittner.tech` ne marche QUE si le domaine `wittner.tech` est authentifié
-      # chez Brevo (DKIM de domaine), et pas seulement `forgejo@wittner.tech` validée comme
-      # expéditeur unique. À défaut, retomber sur `forgejo@wittner.tech` — qui envoie déjà — est
-      # sans risque : le sujet du mail porte déjà l'alerte, l'expéditeur n'est qu'une étiquette.
-      # C'est le SEUL point de ce bloc qui ne se vérifie pas depuis le dépôt, d'où le test au
-      # Watchdog de la procédure (README § Notification mail).
+      # VALIDÉ le 2026-09-09 par un envoi réel (README § Éprouvé) : le domaine `wittner.tech` est
+      # authentifié chez Brevo (DKIM de domaine), pas seulement `forgejo@wittner.tech` comme
+      # expéditeur unique — cette adresse-ci n'existe donc nulle part ailleurs et part quand même.
+      #
+      # ⚠️ À REVÉRIFIER par un envoi réel à chaque changement de cette valeur OU de relais : une
+      # adresse non validée ne produit PAS d'erreur. Le relais accepte le mail et le jette, et le
+      # seul endroit où ça se voit est le journal d'envoi de Brevo — ni les logs d'Alertmanager,
+      # ni son UI. Repli connu et sans risque : `forgejo@wittner.tech`, qui envoie déjà.
       smtp_from: 'alertmanager@wittner.tech'
       # Login SMTP du relais (PAS l'adresse mail du compte chez Brevo : un identifiant dédié).
       # En clair, faute de `smtp_auth_username_file` côté Alertmanager — la valeur de référence
