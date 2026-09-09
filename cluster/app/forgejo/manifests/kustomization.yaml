@@ -28,6 +28,21 @@ resources:
   - forgejo-db-objectstore.yaml
   - forgejo-db-scheduledbackup.yaml
   - forgejo-httproute.yaml
+  # --- Métriques (cf. README §Métriques) ---
+  # Token du `/metrics`, scellé le 2026-09-09.
+  #
+  # ⚠️⚠️ La commenter ARRÊTE la forge, elle ne « désactive » pas les métriques :
+  # `gitea.metrics.enabled` est à `true` dans helm-values.yaml et `FORGEJO__METRICS__TOKEN` y est
+  # câblée SANS `optional: true` — sans ce Secret, le pod part en `CreateContainerConfigError`.
+  # C'est le mode d'échec voulu : l'alternative (`optional: true`) ferait démarrer le pod avec un
+  # `/metrics` SANS authentification sur un hostname public. Un pod arrêté se voit ; une
+  # exposition, non. Pour revenir en arrière, couper `gitea.metrics.enabled` ET retirer la
+  # variable — les deux ensemble.
+  - forgejo-metrics.sealed.yaml
+  #
+  # Scrape authentifié du `/metrics`. Inerte sans le Secret ci-dessus (cible en 401) et sans
+  # `gitea.metrics.enabled` (cible en 404) — les trois se déplacent ensemble.
+  - forgejo-metrics-servicemonitor.yaml
   # Filtrage réseau du pod (ingress + egress). ⚠️ Le retirer ne « désactive » pas une protection
   # au sens habituel : il rouvre au pod TOUT le LAN et TOUS les services du cluster.
   - forgejo-netpol.yaml

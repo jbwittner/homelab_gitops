@@ -66,6 +66,29 @@ spec:
             - port: "3000"
               protocol: TCP
 
+    # --- Métriques : le pod Prometheus, et lui seul ---
+    # `/metrics` est servi sur le MÊME port que l'UI (3000) — Forgejo ne sait pas le mettre
+    # ailleurs. Cette règle est donc la troisième couche qui le tient hors d'Internet, avec le
+    # `[metrics] TOKEN` (helm-values.yaml) et la redirection du HTTPRoute
+    # (forgejo-httproute.yaml). Elle n'ouvre rien de plus que ce que la règle `ingress`/`host`
+    # ci-dessus laisse déjà passer par le Gateway ; elle ouvre un chemin DIRECT, pod à pod, qui
+    # ne traverse pas le Gateway et échappe donc à la redirection.
+    #
+    # ⚠️ Sélection par le label du pod et pas seulement par le namespace : `monitoring` héberge
+    # aussi Grafana et Alertmanager, qui n'ont rien à faire sur ce port.
+    #
+    # ⚠️ `app.kubernetes.io/name: prometheus` est posé par le prometheus-operator sur les pods du
+    # StatefulSet. Un changement de ce label côté amont ne casse pas le pod : il coupe le scrape,
+    # et le seul signe est la cible qui passe en `down` avec un timeout — pas un refus.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+
     # ⚠️ Il n'y a AUCUNE règle sur le port 2222, et c'est le signe que le SSH est coupé. Une
     # règle ouvrait auparavant ce port à une liste d'entités large (`world`, `cluster`, `host`,
     # `remote-node`), le filtrage par source étant délégué à `service.ssh.loadBalancerSourceRanges`.

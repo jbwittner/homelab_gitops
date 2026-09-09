@@ -48,6 +48,13 @@ box, plus d'IP d'origine publiée — cf. [§Réseau](#le-ssh-a-été-coupé).
   publique
 - `manifests/forgejo-robots.yaml` — ConfigMap du `robots.txt`, monté sur `/data/gitea/robots.txt`
   par `extraVolumes` / `extraContainerVolumeMounts` — cf. §Exposition publique
+- `manifests/forgejo-metrics-servicemonitor.yaml` — `ServiceMonitor` du `/metrics`, **écrit à la
+  main** : celui du chart ne sait pas porter d'`authorization` et ne porte pas le label
+  `release: kube-prometheus-stack`. Il vit dans le ns `forgejo` pour partager le Secret du token
+  avec le pod — cf. §Métriques
+- `manifests/forgejo-metrics.secret.example.yaml` — template **versionné et vide** du token de
+  métriques. Scellé **à part** du template multi-documents, pour qu'une rotation du token
+  n'oblige pas à re-fournir les quatre secrets cryptographiques — cf. §Métriques
 - `manifests/forgejo-admin.secret.example.yaml` — template de scellement **versionné et vide de
   toute valeur** : la copie de référence du clair `*.secret.yaml`, qui est gitignoré et supprimé
   après `kubeseal`. Il ne porte aucun secret et n'est **pas** dans le `kustomization.yaml` — il se
@@ -55,8 +62,11 @@ box, plus d'IP d'origine publiée — cf. [§Réseau](#le-ssh-a-été-coupé).
 - `manifests/forgejo-admin.sealed.yaml` — les **trois** Secrets scellés d'un coup. Les trois
   portent `velero.io/exclude-from-backup` — cf. §Sauvegarde
 - `manifests/forgejo-db-gcs.sealed.yaml` — credential GCS scellé, également exclu des sauvegardes
-- `manifests/kustomization.yaml` — assemblage. Les lignes `forgejo-admin.sealed.yaml` et
-  `forgejo-db-gcs.sealed.yaml` y sont **actives** : le scellement a eu lieu. Une ligne pointant un
+- `manifests/forgejo-metrics.sealed.yaml` — token du `/metrics`, scellé **seul** (2026-09-09).
+  Consommé des deux côtés depuis la même clé : `app.ini` du pod **et** `authorization` du
+  ServiceMonitor — cf. §Métriques
+- `manifests/kustomization.yaml` — assemblage. Les lignes `forgejo-admin.sealed.yaml`,
+  `forgejo-db-gcs.sealed.yaml` et `forgejo-metrics.sealed.yaml` y sont **actives** : le scellement a eu lieu. Une ligne pointant un
   fichier absent ferait échouer le `kustomize build` entier, donc l'Application — c'est pourquoi
   on ne décommente que dans le commit qui produit le fichier
 
@@ -491,12 +501,16 @@ Donc : enrôler juste après le sync, pas le lendemain.
 Une seule `CiliumNetworkPolicy` sélectionne le pod applicatif, dans les deux directions — donc
 tout ce qui n'y figure pas est refusé.
 
-- **Ingress** : deux règles, toutes deux sur le port 3000. La première ouvre aux entités
-  `ingress` / `host` / `remote-node` (le proxy du Gateway et les sondes du kubelet) ; la seconde
+- **Ingress** : trois règles, toutes sur le port 3000. La première ouvre aux entités
+  `ingress` / `host` / `remote-node` (le proxy du Gateway et les sondes du kubelet) ; la deuxième
   aux pods du namespace `renovate` — le bot [renovate](../renovate/README.md) joint l'API **et**
-  clone en interne par le Service `forgejo-http`, sans repasser par l'edge. C'est le seul pod du
-  cluster à atteindre l'UI. ⚠️ Retirer cette seconde règle ne dégrade pas le bot, elle le coupe,
-  en timeout muet. La règle du port 2222, elle, est partie avec le clone SSH.
+  clone en interne par le Service `forgejo-http`, sans repasser par l'edge. ⚠️ Retirer cette
+  deuxième règle ne dégrade pas le bot, elle le coupe, en timeout muet. La troisième, ajoutée le
+  2026-09-09, n'ouvre le port qu'au **pod Prometheus** (`monitoring`,
+  `app.kubernetes.io/name: prometheus`) pour le scrape du `/metrics` — c'est la troisième couche
+  du §Métriques, et elle est volontairement sélective : `monitoring` héberge aussi Grafana et
+  Alertmanager, qui n'ont rien à faire sur ce port. Ces deux pods-là et le bot Renovate sont les
+  seuls du cluster à atteindre l'UI. La règle du port 2222, elle, est partie avec le clone SSH.
 - **Egress** : DNS, la base CNPG, et `0.0.0.0/0` **moins** les plages privées. Le pod ne peut
   donc joindre ni l'API Kubernetes, ni un autre service du cluster, ni une machine du LAN — mais
   garde ce dont Forgejo a besoin : cloner un dépôt distant, livrer un webhook, joindre un relais
@@ -572,18 +586,105 @@ d'accueil de dépôts indexables.
 
 ## Métriques
 
-`gitea.metrics.enabled` reste à `false`, et c'est un choix : l'endpoint `/metrics` est servi sur
-le **port HTTP applicatif**, donc derrière le HTTPRoute public. Sans `[metrics] TOKEN`, il serait
-lisible depuis Internet (noms de dépôts, volumétrie, nombre de comptes).
+`gitea.metrics.enabled` est passé à **`true` le 2026-09-09**, pour alimenter le dashboard
+**« Forge — forgejo »** de [kube-prometheus-stack](../kube-prometheus-stack/README.md).
 
-L'activer demande deux choses, pas une :
+> [!CAUTION]
+> **L'endpoint `/metrics` est servi sur le port HTTP applicatif (3000), donc sur la même route
+> publique que l'interface.** Forgejo ne sait pas le déplacer ailleurs : il n'y a ni port ni
+> listener séparé, `routes.Get("/metrics", …)` est monté sur le routeur web (routers/web/web.go).
+> C'est la contrainte qui gouverne tout ce qui suit — et la raison pour laquelle ce réglage est
+> resté coupé jusqu'ici.
 
-1. un token scellé (même canal que le compte admin), injecté dans l'`app.ini` par un
-   `gitea.additionalConfigSources` pointant un Secret dont la clé `metrics` contient `TOKEN=…` ;
-2. un `ServiceMonitor` écrit à la main dans `manifests/` — celui du chart ne sait pas porter
-   d'`authorization`, et il lui faudrait de toute façon le label `release: kube-prometheus-stack`
-   attendu par le sélecteur de [`kube-prometheus-stack`](../kube-prometheus-stack/README.md)
-   (voir [`velero-monitoring`](../../infra/velero-monitoring/README.md) pour le gabarit).
+### Les trois couches
+
+Aucune des trois n'est décorative, et **il faut les trois** : chacune tombe pour des raisons que
+les autres ne couvrent pas.
+
+| # | Couche | Où | Ce qu'elle arrête | Ce qu'elle n'arrête pas |
+| --- | --- | --- | --- | --- |
+| 1 | `[metrics] TOKEN` | `helm-values.yaml` → Secret `forgejo-metrics` | Toute requête sans `Authorization: Bearer <token>` — **401**, comparaison à temps constant (`routers/web/metrics.go`) | Rien si le token n'est pas posé : token vide = handler **ouvert** |
+| 2 | Redirection au Gateway | `manifests/forgejo-httproute.yaml` | Le chemin public `/metrics` : règle `PathType: Exact` qui **redirige vers `/`** — la requête n'atteint jamais le pod | Un accès direct au pod depuis le cluster (couche 3) |
+| 3 | `CiliumNetworkPolicy` | `manifests/forgejo-netpol.yaml` | Tout pod du cluster sauf Prometheus (`monitoring`, `app.kubernetes.io/name: prometheus`) | Le trafic venant du Gateway (couche 2) |
+
+Prometheus scrape le **pod** par le Service `forgejo-http` (ClusterIP → IP de pod) : il ne passe
+pas par `shared-gw`, la couche 2 ne le gêne donc pas.
+
+> [!WARNING]
+> **Le mode d'échec a été choisi, et il est bruyant.** `FORGEJO__METRICS__TOKEN` est câblé **sans**
+> `optional: true` — à l'inverse de toutes les autres variables de `additionalConfigFromEnvs`. Sans
+> le Secret `forgejo-metrics`, le pod part en `CreateContainerConfigError` et **ne démarre pas**.
+> Avec `optional: true`, il démarrerait — en servant un `/metrics` **sans authentification**.
+> Un pod arrêté se voit ; une exposition, non.
+
+### Activer (ou tourner le token)
+
+**Le token a été scellé le 2026-09-09** — `manifests/forgejo-metrics.sealed.yaml`, ligne active
+dans le `kustomization.yaml`. La procédure ci-dessous est donc celle d'une **rotation**, ou d'un
+rescellement après reprise à froid.
+
+L'ordre compte : le Secret d'abord, la ligne du `kustomization.yaml` ensuite, et **un seul
+commit** — ArgoCD est en `selfHeal`, un commit intermédiaire arrête la forge.
+
+```bash
+cp cluster/app/forgejo/manifests/forgejo-metrics.secret.example.yaml \
+   cluster/app/forgejo/manifests/forgejo-metrics.secret.yaml
+
+# token : openssl rand -hex 32 — aucune contrainte de format, la comparaison est octet à octet
+$EDITOR cluster/app/forgejo/manifests/forgejo-metrics.secret.yaml
+
+kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
+  < cluster/app/forgejo/manifests/forgejo-metrics.secret.yaml \
+  > cluster/app/forgejo/manifests/forgejo-metrics.sealed.yaml
+rm cluster/app/forgejo/manifests/forgejo-metrics.secret.yaml
+
+# puis décommenter `- forgejo-metrics.sealed.yaml` dans manifests/kustomization.yaml
+```
+
+⚠️ **Rotation** : les deux consommateurs du token ne le rechargent pas au même moment. Prometheus
+relit le Secret en quelques dizaines de secondes ; Forgejo ne relit son `app.ini` **qu'au
+démarrage**. Entre les deux, la cible est en 401 — `kubectl -n forgejo rollout restart
+deploy/forgejo` referme la fenêtre.
+
+### Ce que la forge expose, et ce qu'elle n'expose pas
+
+⚠️ **Le préfixe est `gitea_`, pas `forgejo_`** (`const namespace = "gitea_"`,
+`modules/metrics/collector.go`) : une requête `forgejo_repositories` renvoie une série vide sans
+le dire.
+
+⚠️ **Ce sont 28 jauges recomptées par un `SELECT count(*)` à chaque scrape**, jamais des compteurs
+cumulés : `rate()` et `increase()` n'ont aucun sens dessus, et **la fréquence de scrape est une
+charge SQL directe**. D'où l'`interval: 60s` du ServiceMonitor — le premier levier si la base
+souffre est de le porter à `5m`.
+
+Il n'y a **ni métrique de pull request** (`gitea_issues` ne compte que les issues), **ni compteur
+de requêtes HTTP, de clones ou de latence**. Le collecteur ne sait que compter des objets. Tout ce
+qui relève du trafic reste hors de portée de cette source.
+
+Deux réglages de cardinalité, posés dans `gitea.config.metrics` :
+
+- `ENABLED_ISSUE_BY_REPOSITORY: true` — une série par dépôt (tableau « Issues par dépôt » du
+  dashboard). ⚠️ Fait entrer les **noms de dépôts, privés compris**, dans Prometheus et Grafana.
+- `ENABLED_ISSUE_BY_LABEL: false` — coupé : la cardinalité suivrait le nombre d'étiquettes créées
+  dans l'interface, sans plafond.
+
+### Vérifier
+
+```bash
+# 1. Depuis Internet : doit répondre 302 vers / — et surtout PAS du texte Prometheus
+curl -sI https://forgejo.wittner.tech/metrics | head -3
+
+# 2. Sans token, en direct sur le pod : doit répondre 401
+kubectl -n forgejo exec deploy/forgejo -- wget -qS -O- http://localhost:3000/metrics 2>&1 | head -3
+
+# 3. La cible côté Prometheus (doit être `up`, job `forgejo-http`)
+kubectl -n monitoring exec -ti sts/prometheus-kube-prometheus-stack-prometheus -c prometheus -- \
+  wget -qO- 'http://localhost:9090/api/v1/targets?state=active' | grep -o 'forgejo[^"]*'
+```
+
+⚠️ **Une cible en 401 ne vide pas le dashboard, elle le fige** : les jauges gardent leur dernière
+valeur et les courbes restent plates, sans trou. Le seul témoin est le panneau « Scrape ». C'est
+la panne à connaître avant de croire un chiffre affiché.
 
 ## Opérations
 

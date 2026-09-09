@@ -64,6 +64,11 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   barman-cloud » : fraîcheur et fenêtre PITR, tableau une ligne par base et une ligne par CR
   `Backup`, archivage WAL, coût du sidecar. Pendant du dashboard velero pour la chaîne de
   sauvegarde des bases — les deux ne se recouvrent pas
+- `manifests/dashboard-forgejo.yaml` — dashboard « Forge — forgejo » : version servie, dépôts /
+  organisations / équipes, issues (tableau par dépôt), comptes et clés, files de webhooks et de
+  miroirs, processus et remplissage du PVC `forgejo-data`. ⚠️ Sa source est le `/metrics` de
+  Forgejo, **scrapé avec authentification** par un ServiceMonitor qui vit dans
+  `cluster/app/forgejo/manifests` — pas ici. Préfixe des métriques : `gitea_`, pas `forgejo_`
 - `manifests/dashboard-alertes.yaml` — dashboard « Alertes — cluster » : tuiles critiques /
   warnings / pending / chaîne d'alerting, tableau des alertes **firing et pending** avec leur
   ancienneté, historique par alerte, courbe par sévérité. Variables Composant (CNPG / Forgejo /

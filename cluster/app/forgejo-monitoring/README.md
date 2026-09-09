@@ -8,8 +8,11 @@ Séparé du composant principal pour la même raison que
 [cnpg-monitoring](../cnpg-monitoring/README.md) — ce sont des CRs `monitoring.coreos.com`, dont les
 CRDs n'existent pas au bootstrap à froid.
 
-**Il n'y a pas de dashboard ici**, et pas non plus de métriques applicatives : la forge n'est
-scrapée par personne (voir *Contraintes*).
+**Il n'y a pas de dashboard ici** : celui de la forge (« Forge — forgejo ») vit avec les autres
+dans [kube-prometheus-stack](../kube-prometheus-stack/README.md), et le ServiceMonitor qui
+l'alimente dans [forgejo](../forgejo/README.md) — ce composant-ci ne porte que des alertes. ⚠️ Et
+**aucune des deux ne lit encore les métriques applicatives** : elles interrogent kube-state-metrics
+(voir *Contraintes*).
 
 ## Pourquoi il existe
 
@@ -38,12 +41,21 @@ se déclenche jamais. **Série absente ≠ série à zéro.**
 - **Les deux règles sont indissociables. En garder une seule rouvre le trou.** C'est la même
   construction que `VeleroBackupTooOld` / `VeleroNoBackupMetric` : une règle sur la valeur, sa
   complémentaire en `absent(...)`. Seule la seconde aurait sonné le 2026-09-09.
-- **La source est kube-state-metrics, pas la forge.** Aucun ServiceMonitor ne collecte Forgejo
-  aujourd'hui, alors que le chart sait exposer des métriques (`[metrics] TOKEN` dans
-  `helm-values.yaml`). Conséquence assumée : on voit qu'aucun pod ne sert, on ne verrait **pas** un
-  processus vivant mais muet. Le jour où un ServiceMonitor existe, `absent(up{job="forgejo"} == 1)`
-  sera une meilleure sonde et devra s'ajouter — pas remplacer celles-ci, qui couvrent la
-  disparition de l'objet.
+- **La source des deux règles reste kube-state-metrics, pas la forge.** Depuis le 2026-09-09 la
+  forge **est** scrapée (`/metrics` authentifié, ServiceMonitor `forgejo-metrics`, job
+  `forgejo-http` — cf. [forgejo §Métriques](../forgejo/README.md#métriques)), mais **aucune règle
+  ne s'appuie encore dessus** : le trou « processus vivant mais muet » est donc toujours ouvert,
+  et il l'est maintenant *sciemment*. La sonde qui le fermerait est écrite mais pas posée :
+
+  ```promql
+  absent(up{job="forgejo-http"} == 1)
+  ```
+
+  ⚠️ Elle **s'ajouterait** aux deux règles ci-dessus, sans en remplacer aucune : elles couvrent la
+  disparition de l'objet, ce que `up` ne voit pas. ⚠️ Et elle sonnerait aussi sur une **dérive du
+  token** de métriques (cible en 401) — ce qui est le comportement voulu, mais fait d'un secret
+  mal tourné une alerte de disponibilité de la forge. C'est ce couplage qui explique qu'elle
+  attende une décision plutôt qu'un commit.
 - **`for: 10m` sur `ForgejoDown` est un plancher, pas un réglage timide.** La forge n'a qu'un
   replica : toute montée de version Renovate la rend indisponible le temps du remplacement. Plus
   court, chaque mise à jour allumerait une alerte critique — et une alerte qu'on apprend à ignorer

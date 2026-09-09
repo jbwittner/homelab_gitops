@@ -45,4 +45,7 @@ resources:
   - dashboard-cnpg.yaml
   - dashboard-cnpg-barman-plugin.yaml
   - dashboard-alertes.yaml
+  # ⚠️ Vide tant que le `/metrics` de Forgejo n'est pas scrapé : il dépend du ServiceMonitor et du
+  # token scellé qui vivent dans cluster/app/forgejo/manifests (cf. son README §Métriques).
+  - dashboard-forgejo.yaml
   - servicemonitors-argocd.yaml

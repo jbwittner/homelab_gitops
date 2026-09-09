@@ -11,8 +11,10 @@
 # prend un `413` que git ne sait pas expliquer. L'échappatoire est documentée dans README §Réseau —
 # depuis le LAN, le DNS interne court-circuite l'edge et le plafond disparaît.
 #
-# ⚠️ Cette route expose TOUS les chemins, `/metrics` compris le jour où les métriques seront
-# activées. C'est la raison pour laquelle `gitea.metrics.enabled` reste à `false`.
+# ⚠️ Cette route exposerait TOUS les chemins, `/metrics` compris — et les métriques sont ACTIVÉES
+# depuis le 2026-09-09. D'où la première règle ci-dessous, qui intercepte ce seul chemin. Elle est
+# l'une des trois couches qui tiennent `/metrics` hors d'Internet ; les deux autres sont le
+# `[metrics] TOKEN` (helm-values.yaml) et la CiliumNetworkPolicy. Cf. README §Métriques.
 #
 # group/kind/weight/sectionName et matches explicites : le CRD les injecte comme défauts côté
 # live — sans eux, OutOfSync permanent dans ArgoCD.
@@ -31,6 +33,41 @@ spec:
   hostnames:
     - forgejo.wittner.tech
   rules:
+    # --- `/metrics` : intercepté ici, jamais transmis au backend ---
+    # Forgejo sert son endpoint Prometheus sur le port applicatif (3000), donc sur cette route
+    # publique. Cette règle le renvoie vers la page d'accueil au niveau du Gateway : le chemin
+    # n'atteint pas le pod depuis Internet, et il n'y a donc rien à deviner ni à forcer côté edge.
+    #
+    # ⚠️ Elle ne gêne PAS le scrape. Prometheus vise le Service `forgejo-http` (ClusterIP →
+    # IP de pod) et ne passe pas par `shared-gw` — la CiliumNetworkPolicy lui ouvre ce chemin-là
+    # explicitement.
+    #
+    # ⚠️ `type: Exact` est LOAD-BEARING, deux fois :
+    #   - la précédence de Gateway API donne la priorité à une correspondance exacte sur le
+    #     `PathPrefix: /` de la règle suivante. En `PathPrefix`, les deux règles seraient
+    #     départagées par la longueur — ce qui marcherait ici, mais capturerait aussi
+    #     `/metrics-quelque-chose`, y compris un futur dépôt nommé ainsi ;
+    #   - un dépôt PEUT s'appeler `metrics`. Son URL est `/<propriétaire>/metrics`, jamais
+    #     `/metrics` : la règle exacte ne l'attrape pas.
+    #
+    # ⚠️ Le bloc `ResponseHeaderModifier` de la règle suivante n'est délibérément PAS recopié ici :
+    # une redirection 302 n'a pas de corps, il n'y a ni type MIME à ne pas renifler ni cadre à
+    # refuser. Le seul en-tête qui aurait du sens est HSTS, et il est déjà posé par toutes les
+    # autres réponses du même hostname.
+    - matches:
+        - path:
+            type: Exact
+            value: /metrics
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /
+            # 302 et non 301 : une redirection permanente serait mise en cache par les
+            # navigateurs et par l'edge Cloudflare, et survivrait donc au retrait de cette règle.
+            statusCode: 302
+
     - matches:
         - path:
             type: PathPrefix

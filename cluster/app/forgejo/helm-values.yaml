@@ -102,6 +102,14 @@ service:
   http:
     type: ClusterIP
     port: 3000
+    # Étiquette de sélection du ServiceMonitor `forgejo-metrics`
+    # (manifests/forgejo-metrics-servicemonitor.yaml). ⚠️ Elle est LOAD-BEARING et ne peut pas
+    # être remplacée par les labels du chart : `forgejo-http` et `forgejo-ssh` portent EXACTEMENT
+    # les mêmes `app.kubernetes.io/*`, un sélecteur écrit dessus prendrait les deux Services.
+    # Le second n'a pas de port nommé `http` — il ne produirait aucune cible, mais laisserait une
+    # entrée morte dans la configuration de scrape.
+    labels:
+      monitoring: forgejo-metrics
   ssh:
     # ⚠️ Ce Service EXISTE encore alors que le SSH est coupé, et ce n'est pas un oubli : le chart
     # 17.1.5 rend `templates/gitea/ssh-svc.yaml` SANS AUCUNE CONDITION — il n'y a pas de
@@ -223,14 +231,31 @@ gitea:
     # `initialOnlyRequireReset`) ne posent le mot de passe qu'à la création du compte.
     passwordMode: keepUpdated
 
-  # Endpoint Prometheus `/metrics` : laissé COUPÉ (défaut du chart), et c'est une décision.
-  # Il est servi sur le port HTTP applicatif, donc derrière le même HTTPRoute que l'UI — sur un
-  # hostname PUBLIC. Sans `[metrics] TOKEN`, il serait lisible par n'importe qui sur Internet
-  # (noms de dépôts, volumétrie, comptes). L'activer proprement demande un token scellé ET un
-  # ServiceMonitor écrit à la main (celui du chart ne sait pas porter d'`authorization`) :
-  # cf. README §Métriques.
+  # --- Endpoint Prometheus `/metrics` ---
+  # ACTIVÉ. Il est servi sur le PORT HTTP APPLICATIF (3000) — Forgejo ne sait pas le mettre
+  # ailleurs — donc sur le même chemin d'entrée que l'UI, qui est PUBLIC. Trois couches
+  # indépendantes le tiennent hors d'Internet, et il faut les trois (cf. README §Métriques) :
+  #
+  #   1. `[metrics] TOKEN`  — Forgejo répond 401 sans `Authorization: Bearer <token>`
+  #      (routers/web/metrics.go, comparaison à temps constant). Le token arrive par
+  #      `FORGEJO__METRICS__TOKEN`, plus bas dans `additionalConfigFromEnvs`.
+  #   2. HTTPRoute          — une règle en `PathType: Exact` sur `/metrics` REDIRIGE vers `/` au
+  #      Gateway : le chemin public n'atteint jamais le backend
+  #      (manifests/forgejo-httproute.yaml).
+  #   3. CiliumNetworkPolicy — seul le pod Prometheus du ns `monitoring` peut ouvrir le 3000
+  #      depuis le cluster (manifests/forgejo-netpol.yaml).
+  #
+  # Prometheus scrape le POD directement (ClusterIP → IP de pod), il ne passe pas par le Gateway :
+  # la couche 2 ne le gêne pas.
+  #
+  # ⚠️ `serviceMonitor.enabled` du chart reste à `false` et doit y rester : l'objet qu'il rend ne
+  # sait pas porter d'`authorization` (il partirait donc en 401), et il ne porte pas le label
+  # `release: kube-prometheus-stack` qu'attend le sélecteur de Prometheus. Le ServiceMonitor est
+  # écrit à la main dans manifests/forgejo-metrics-servicemonitor.yaml.
   metrics:
-    enabled: false
+    enabled: true
+    serviceMonitor:
+      enabled: false
 
   # --- app.ini ---
   # Chaque clé de ce bloc devient une entrée d'`app.ini`. Le nom de section est en minuscules,
@@ -301,6 +326,24 @@ gitea:
       # cluster (ligne `host all all all scram-sha-256`) ; seuls la réplication et le pooler
       # exigent TLS. Explicité pour que la valeur ne soit pas prise pour un oubli.
       SSL_MODE: disable
+
+    metrics:
+      # Une ligne `gitea_issues_by_repository{repository="proprietaire/depot"}` par dépôt ayant au
+      # moins une issue — c'est ce qui alimente le tableau « Issues par dépôt » du dashboard.
+      #
+      # ⚠️ Contrepartie assumée : les NOMS DE DÉPÔTS, privés compris, entrent dans Prometheus et
+      # ressortent dans Grafana. C'est acceptable ici (Grafana est sur le LAN, derrière un compte
+      # admin) et ça ne le serait pas sur une instance multi-utilisateurs.
+      ENABLED_ISSUE_BY_REPOSITORY: true
+      # ⚠️ Laissé COUPÉ, et pas par symétrie : `gitea_issues_by_label` produit une série par
+      # LABEL et par instance de label — la cardinalité suit le nombre d'étiquettes créées dans
+      # l'interface, sans plafond, alors que le nombre de dépôts, lui, se compte.
+      ENABLED_ISSUE_BY_LABEL: false
+      # ⚠️ `ENABLED` n'est pas ici : le chart le dérive de `gitea.metrics.enabled` ci-dessus
+      # (`gitea.inline_configuration.defaults`, templates/_helpers.tpl). L'écrire des deux côtés
+      # ferait deux sources de vérité pour un seul réglage.
+      # ⚠️ `TOKEN` n'est PAS ici et ne doit jamais y être : ce fichier est dans Git. Il arrive par
+      # `additionalConfigFromEnvs` (FORGEJO__METRICS__TOKEN), câblé plus bas.
 
     security:
       # Le chart le pose DÉJÀ à `true` tout seul (`gitea.inline_configuration.defaults` :
@@ -519,3 +562,17 @@ gitea:
           name: forgejo-smtp
           key: PASSWD
           optional: true
+    # Jeton du `/metrics`. ⚠️⚠️ PAS D'`optional: true` ICI, ET C'EST L'INVERSE DÉLIBÉRÉ DE TOUTES
+    # LES ENTRÉES CI-DESSUS. `optional: true` ferait démarrer le pod SANS token alors que
+    # `gitea.metrics.enabled` vaut `true` — et Forgejo sert alors `/metrics` SANS AUTHENTIFICATION
+    # (routers/web/metrics.go : token vide = handler ouvert). Le mode d'échec serait une exposition
+    # silencieuse. Sans `optional`, il est un `CreateContainerConfigError` bruyant : le pod ne
+    # démarre pas tant que le Secret `forgejo-metrics` n'est pas scellé.
+    #
+    # ⚠️ Ce couplage est donc à sens unique : on peut sceller le Secret sans activer les métriques,
+    # jamais l'inverse. Cf. README §Métriques pour l'ordre des opérations.
+    - name: FORGEJO__METRICS__TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: forgejo-metrics
+          key: token

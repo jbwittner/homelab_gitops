@@ -198,9 +198,13 @@ ressource n'a été créée hors de ce dossier.
   (le DNS interne sert `192.168.1.50` pour tout `*.wittner.tech`). Auparavant le SSH survivait à
   cette panne ; c'est le prix direct de la simplification, et il est payé sciemment.
 
-- [x] **`/metrics` non routé publiquement** — déjà en place : `gitea.metrics.enabled: false`,
-  décision documentée (l'endpoint est servi sur le port HTTP applicatif, donc derrière la
-  HTTPRoute publique ; sans `[metrics] TOKEN` il serait lisible depuis Internet).
+- [x] **`/metrics` non routé publiquement** — **révisé le 2026-09-09** : les métriques sont
+  désormais **activées** (`gitea.metrics.enabled: true`) pour le dashboard « Forge — forgejo », et
+  la case reste cochée grâce à **trois** couches, pas une (cf. [README §Métriques](README.md#métriques)) :
+  `[metrics] TOKEN` scellé (401 sans en-tête `Bearer`), règle `PathType: Exact` du HTTPRoute qui
+  **redirige `/metrics` vers `/`** avant tout backend, et `CiliumNetworkPolicy` n'ouvrant le 3000
+  qu'au pod Prometheus. ⚠️ La variable du token est câblée **sans** `optional: true` : sans le
+  Secret, le pod refuse de démarrer plutôt que de servir un `/metrics` ouvert.
 - [ ] **Rate limiting ingress sur `/user/login`** — **plus « impossible », mais toujours hors
   dépôt : la limitation est posée à l'edge Cloudflare.** Règle *Rate limiting* `Forgejo rate
   limiting`, active, action **Block**, sur les chemins d'authentification :
