@@ -38,6 +38,11 @@ ces pages iraient dans le README du composant concerné.
 - [`forgejo-pra.md`](forgejo-pra.md) — le **plan de reprise** de la forge : ce qui est perdu selon
   le sinistre, dans quel ordre remonter, et les **sept** pièges qui rendent une restauration
   silencieusement fausse.
+- [`forgejo-docker-bascule-et-sauvegarde.md`](forgejo-docker-bascule-et-sauvegarde.md) — sortir la
+  forge du cluster vers un hôte **Docker**, et le régime de sauvegarde qui remplace velero +
+  barman-cloud une fois qu'ils ne sont plus là. Motif : Forgejo ne peut devenir la **source du
+  GitOps** qu'en cessant d'être déployé par lui. ⚠️ **Jamais exécutée** — signalée comme telle en
+  tête de page, contrairement aux deux suivantes.
 - [`forgejo-pra-exercice.md`](forgejo-pra-exercice.md) — **l'exercice** qui éprouve ce plan :
   restaurer les deux chaînes dans un namespace `forgejo-preprod`, l'exposer sur
   `forgejo-preprod.lan.wittner.tech`, vérifier, détruire. Contient le **journal des dix passages**.
