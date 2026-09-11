@@ -1,0 +1,49 @@
+# Exposition LAN d'Alertmanager, sur le même chemin que Grafana : listener `https-internal` du
+# `shared-gw` (`*.lan.wittner.tech`, cf. infra/gateway-api). Aucun port ouvert sur Internet — le
+# listener `https-public` n'est PAS visé, et le tunnel Cloudflare ne connaît pas ce hostname.
+#
+# ⚠️ ALERTMANAGER N'A AUCUNE AUTHENTIFICATION, et c'est la vraie contrepartie de cette route —
+# pas le réseau. Quiconque atteint cette URL depuis le LAN peut CRÉER UN SILENCE, c'est-à-dire
+# éteindre la surveillance des sauvegardes, sans identifiant et sans trace attribuable. Ni
+# l'opérateur ni l'implémentation Gateway API de Cilium ne proposent d'authentification ; en
+# ajouter demanderait un proxy d'auth, donc un logiciel de plus.
+#
+# Le choix est assumé pour ce que la route apporte : poser un silence AVANT une opération
+# planifiée (l'exercice PRA trimestriel fait sonner `CNPGNoBackupYet` et `CNPGWalArchivingFailing`
+# — mesuré le 2026-09-09), et rendre cliquable le bouton « View In Alertmanager » du corps des
+# mails depuis n'importe quel appareil du LAN, téléphone compris. C'est `externalUrl` de
+# `helm-values.yaml` qui porte cette seconde moitié : les deux se déplacent ensemble.
+#
+# ⚠️ Le hostname doit AUSSI être déclaré sur le reverse proxy LAN (192.168.1.50), HORS de ce
+# dépôt. Sans cette déclaration, la réponse est 404 alors que l'HTTPRoute est parfaitement sain —
+# le symptôme ne pointe pas vers sa cause.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kube-prometheus-stack-alertmanager
+spec:
+  # group/kind/weight/sectionName et matches explicites : le CRD les injecte comme
+  # défauts côté live — sans eux, OutOfSync permanent dans ArgoCD (cf. argocd-httproute).
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: shared-gw
+      namespace: gateway
+      # Listener `*.lan.wittner.tech` : il doit couvrir le hostname ci-dessous, sinon
+      # la route n'est attachée à aucun listener et le Gateway répond 404.
+      sectionName: https-internal
+  hostnames:
+    - alertmanager.lan.wittner.tech
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          # Port 9093 = `http-web`. ⚠️ NE PAS viser 8080 (`reloader-web`) : c'est le sidecar
+          # config-reloader, pas l'interface.
+          name: kube-prometheus-stack-alertmanager
+          port: 9093
+          weight: 1

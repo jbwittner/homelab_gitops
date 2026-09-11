@@ -1,0 +1,12 @@
+# Namespace créé AVANT les objets du chart (sync-wave -1). Pas de `CreateNamespace=true` :
+# le namespace est un manifeste versionné comme le reste.
+#
+# Pas de label PodSecurity `privileged` : les trois Deployments du chart (contrôleur, webhook,
+# cert-controller) tournent en non-root, sans hostPath ni capability ajoutée — ils passent
+# l'admission `baseline` que Talos applique cluster-wide.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

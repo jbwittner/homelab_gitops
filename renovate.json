@@ -1,0 +1,49 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "description": [
+    "Cooldown supply-chain : une release doit exister depuis 7 jours avant d'être proposée.",
+    "internalChecksFilter=strict est le défaut, mais explicité ici car load-bearing : les versions encore 'pending' sont filtrées AVANT création de branche/PR, donc rien n'est ni ouvert ni automergé avant J+7. Sans strict, ignoreTests=true ci-dessous rendrait le check renovate/stability-days vert d'office et l'automerge passerait immédiatement."
+  ],
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "ignorePaths": [
+    "archive/**",
+    "doc/**"
+  ],
+  "argocd": {
+    "managerFilePatterns": ["/\\.app\\.yaml$/", "/\\.appset\\.yaml$/"]
+  },
+  "kubernetes": {
+    "managerFilePatterns": ["/manifests/.+\\.yaml$/"]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Manifestes upstream épinglés par URL dans les kustomization.yaml (le manager kustomize ne voit que les URLs git avec ?ref=)",
+      "managerFilePatterns": ["/(^|/)kustomization\\.ya?ml$/"],
+      "matchStrings": [
+        "https://raw\\.githubusercontent\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/refs/tags/(?<currentValue>[^/\\s]+)/",
+        "https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/releases/download/(?<currentValue>[^/\\s]+)/"
+      ],
+      "datasourceTemplate": "github-releases"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["pin", "patch", "minor"],
+      "automerge": true,
+      "ignoreTests": true
+    },
+    {
+      "matchPackageNames": ["renovate/renovate"],
+      "automerge": true,
+      "ignoreTests": true
+    },
+    {
+      "description": "Argo CD est self-managed : merge manuel obligatoire, quel que soit le type d'update",
+      "matchPackageNames": ["argoproj/argo-cd"],
+      "automerge": false
+    }
+  ]
+}

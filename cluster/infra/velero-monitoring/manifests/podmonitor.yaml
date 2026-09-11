@@ -1,0 +1,28 @@
+# Scrape des métriques du DaemonSet node-agent — la copie kopia des données de PV.
+# PodMonitor et non ServiceMonitor : le chart ne crée aucun Service devant le DaemonSet, chaque
+# pod expose ses propres compteurs sur 8085 et le label `node` sert à les distinguer.
+#
+# ⚠️ Ces métriques ne s'appellent PAS `velero_*`. Le code les enregistre sous le préfixe
+# `podVolume` (`pkg/metrics/metrics.go`, `podVolumeMetricsNamespace = "podVolume"`), casse
+# comprise : `podVolume_pod_volume_operation_latency_seconds`,
+# `podVolume_pod_volume_backup_enqueue_count`. Une requête écrite en `velero_pod_volume_…` ne
+# renvoie rien — et ne le dit pas.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: velero-node-agent
+  namespace: velero
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - velero
+  selector:
+    matchLabels:
+      name: node-agent
+  podMetricsEndpoints:
+    - port: http-monitoring
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

@@ -1,0 +1,54 @@
+# Supervision des MACHINES hors cluster — celles que ce cluster surveille sans les porter.
+#
+# ⚠️ POURQUOI CE COMPOSANT EXISTE À PART DE `forgejo-monitoring`. Le critère est le même que celui
+# qui sépare les piles `node-exporter/` et `forgejo/` dans homelab_emeriss : le CYCLE DE VIE. Une
+# machine précède le service qu'elle porte et lui survit. `vert-emeriss` porte la forge
+# aujourd'hui ; le jour où la forge déménage, disparaît ou se dédouble, ce qui mesure son disque et
+# sa mémoire n'a aucune raison de bouger. Mis dans `forgejo-monitoring`, ce scrape serait supprimé
+# par un `prune` ArgoCD le jour où on retire la forge — c'est-à-dire précisément quand on
+# surveillerait la machine pour savoir ce qu'elle devient.
+#
+# Une SEULE machine aujourd'hui. Le composant est nommé au pluriel parce qu'en ajouter une seconde
+# doit être un fichier de plus, pas une refonte : les règles sont écrites sur `job="external-node"`
+# et se ventilent par `instance`.
+#
+# ⚠️ CE COMPOSANT PORTE, SANS QUE SON NOM LE DISE, LE TRANSPORT DES MÉTRIQUES DE SAUVEGARDE DE LA
+# FORGE. `forgejo_backup_*` est publié par `forgejo-ctl` dans le collecteur `textfile` de
+# node-exporter, donc arrive par CE scrape. Les trois alertes qui s'en servent vivent, elles, dans
+# `forgejo-monitoring` — elles parlent de la forge, pas de la machine. Conséquence à connaître :
+# une panne ici rend ces trois-là aveugles. C'est écrit des deux côtés.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hosts-monitoring
+  namespace: argocd
+  annotations:
+    # Wave 2, comme les composants frères : après les CRDs de kube-prometheus-stack. Aucun ordre
+    # vis-à-vis de `forgejo-monitoring` — les deux sont indépendants, et c'est le but.
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: hosts-monitoring
+    app.kubernetes.io/part-of: homelab-gitops
+    # ⚠️ `infrastructure` et non `forge` : ce composant ne parle pas de la forge, il parle des
+    # machines. C'est le label qui rend la distinction lisible dans `kubectl -n argocd get app -L`.
+    app.kubernetes.io/component: infrastructure
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/hosts-monitoring/manifests
+  destination:
+    name: bleu-kalecgos
+    # `monitoring` : c'est le namespace du prometheus-operator, et surtout celui où doit vivre le
+    # Secret référencé par la ScrapeConfig — l'opérateur ne lit les références d'authentification
+    # que dans le namespace de l'objet qui les porte.
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

@@ -1,0 +1,87 @@
+# Secrets scellés de Forgejo. Les trois documents portent le label
+# `velero.io/exclude-from-backup` : ils sont reproductibles depuis Git par sealed-secrets, donc les
+# sauvegarder n'apporte rien — et les RESTAURER nuit (détail à côté de chaque label).
+#
+# ⚠️ LE CRITÈRE D'EXCLUSION N'EST PAS « REPRODUCTIBLE DEPUIS GIT », c'est le MODE D'APPARTENANCE.
+# Ne pas étendre cette exclusion aux autres Secrets du namespace sans l'avoir vérifié :
+#
+#   sealed-secrets  reconnaît les siens par `ownerReference`     -> une restauration les ORPHELINE
+#   ArgoCD          par son annotation `tracking-id`             -> restauration sans conséquence
+#   CloudNativePG   ne marque rien, se sert de ce qui existe     -> restauration sans conséquence
+#
+# Les Secrets du chart (`forgejo`, `forgejo-init`, `forgejo-inline-config`) sont eux aussi rendus
+# depuis Git et parfaitement déterministes — ils restent `Synced`, ce qu'un chart générant de
+# l'aléatoire ne pourrait pas — et pourtant leur sauvegarde ne pose aucun problème. Les exclure
+# casserait le drill sans rien gagner : la préprod n'est pas gérée par ArgoCD, personne n'y
+# recréerait ces Secrets, et le `forgejo-db-app` restauré y porte le mot de passe du rôle tel qu'il
+# est dans la base restaurée.
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: forgejo-admin
+  namespace: forgejo
+spec:
+  encryptedData:
+    password: AgAjG6H9ZhSmizfolS0ZhsmHeaEbe1P+d4S7rCtnpCnToxdZiJ3ru192HjPinr7RAieIujzQRGRk9MLNvBfCMuWIYUBRE6BoOXzoFIx+deEtUmT73Y+d2fF7uXqxr2yqt69W7qQsuLALCB5K4tl1N6uzv3dJdta5D5NISoBq0WpVHOkCfODGZgM/oOulYxlugMK2LUcvnaf6VhBkNXQq8zqVDi6YI7Z0fjcKnqXd/1L3HE9goTqfjHrtjSMVimIoaM3GKCeTM1ZtD2h1dG5ipbcVjTjQ3NJmB61eku69Kf/R/TtixUSlNrG9sfJFM4VmNqJknpkLMJKhfVM/ciSwC7AZN4ao5ajOunSWg94wZG1x2Oy5d7B2O6R0OFLUdWTQVUTA0fWBh19pvyfD2LxGHsoyHRuUfJVCVu+WEC7MzhIQ+vC8DJImKtBC/2gDHOsTr9M3BtyGtF+r69cZKoZLGfmU/JWhV5zkz1fjG1iwuGSyL/sNhvCxajF2GHEeqMQm1UOXEMBF8MfUeydyJaNdIWqrL8WWXfAzkPbffJQ9GyIpRmXROcMTq7Ys1YU31qEPmZrtLZmHpeHEodaYO3DUg8mIk280cj99AXqUS383VL5C1xEU3TfUABJ/9DtFJqf5ARnMd3YfuY+taw7SMywMwMaY1f8/xAWbVbmbn8ht2JaJjNHw3RD/B+r3pVd6A2Q2iIh9d4H+NRMziTmdGfivOVFnuoOZ+0Pm+wPdPKDenapBHA==
+    username: AgBXEOAaCq7CnOJ4adro86HFcOeAzsuXGPSBd1iUC/HDgUH+m8me+NEfjR6hkDJbRpo/3iWQwfa0E2+bjaRyDBGFfB8enHTJeUW3UTBa0x7iH3ZtOFa6QEzBEj9uefTswImBaeRaHQQpd1EaX3ijS3Jh1WLRV7vXSu/fJBakrsl4wGr/BGBBgW3yXeR2f1Wkph5lAY1h5/igk1wbO98sNo81luNSAkJ/YhEeS22HMKxfxi5bdQPeYRg/7A6VKOUm/b+4rkJGW3egJ5MKUsWp7Ac0pk7T/IppWEwBrWmuK+sS3wjvnCLjjq1QnKHDHC77pVCpm7fEV9etonfAZoe5Tv1EW0SROZ57AO/I2WebAtkfdwKV+7qxFqo1qqalFH35Wzqqtmeyw4KfpWNyKnCTGpqyXWwK3GXz90Jsl9XFcJzVZCfJJgKolOmJ2CbmF7KVLlHKT1VGjcTbYdxSf30twEc0IbpdzUMJT49utuzWtzdgKBtdhunKzpnayH3WScDWqtef4gN0e5c4UpO9XHMT5sihklPPBZssNu+ReGVAGxxmYn7kGLyZm0juHsodTpNSrCphj6SDL5MlNa6cVRDiBC3XR0k18xr5bWxKoDnKc/3jEkB/JE3ev0bnNn67ndvZsDSACsRtZhh0CD294R4tQPQwTDMYP65kdDj1DrDYBSiIMD5AkfpNVZxjhlmrKlyRdkzZpHPhQ0C4q0gVcO7E
+  template:
+    metadata:
+      labels:
+        # Exclut ce Secret des sauvegardes velero : il est reproductible depuis Git par
+        # sealed-secrets, donc le copier n'apporte rien — et le RESTAURER NUIT. Un Secret restauré
+        # par velero arrive sans ownerReference, et le contrôleur refuse alors de s'approprier un
+        # objet préexistant : « already exists and is not managed by SealedSecret ». La SealedSecret
+        # reste en Synced=False et le Secret devient ORPHELIN — une rotation faite dans Git ne se
+        # propage plus, en silence. Constaté le 2026-09-09 après la reprise d'un namespace détruit.
+        velero.io/exclude-from-backup: "true"
+      name: forgejo-admin
+      namespace: forgejo
+    type: Opaque
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: forgejo-secrets
+  namespace: forgejo
+spec:
+  encryptedData:
+    INTERNAL_TOKEN: AgBV0pqxH4BOTWnjAExV8bf1s4AAnexJxJiqoROFeLAf7IBVm7+XbJ/xZ7EAm0Nk+3Vc/ZTnmc62nEjxqCCi9b3OiEr6ZZhBcBJwx7xpFrvmVoahTY0YAlrYz8hJ0Hl7XjxtXmzxcmRQlST2B+oAQE0FL36IVwPnarCkhGG4Yzjdml1Yl+ZEMflJ/uBcBM6I1LlqFMFGZqThbd665AGoKjHKq2V3tAU/j3Tkzuyr8cDa7sn/yI7Uto6jB73dapykEQRT2vTNU5c+UQxKwcoGuBWWeA8v/bXNmOIej+xRCREIxCGzjaLeSpUb/nECHv6sWNORbB819227/eil7mf29Lbr9DyIUpWGeyktIwk8HYVN6XkTjeR61o3emm7cPhGC6K8fOIX7LxcGq/5jqfjHIEJV2zjI5nKyqK3IiQgMP6WK85+y6FnqGgNthk2Fpq2PaJ+Ki1GBB99Xk1J+1s1FXzDmLM/hobZFDhexECxHvo8nSdVUYl9G15aa+OoMzClq7ha8Sc1N4+ObXLYcsjLl+gDZXrkgDpt4rzSpSjrcrl1SNB0mE9LwPB84TTfbf76WcnhgXenMJLrXbBxiH0v2ilc+drIJ6wqjZgggrNbpHePOTx6JrZZlae7mQxFeHqRuyYNp5oL6JLwSpdSEzRlLSvyxVXg+M+GSTrN8mPafFx0ElU+dI0t9vmn8igVs1uDmwyuZLUqgASKxVVPYeANQEgQ5C2woyYSeD3Ayagyb/OOeVQ==
+    LFS_JWT_SECRET: AgBP3tIBJ5Ufq+iQ51W/wUKanRWi9Nl8X9rdu35uOecXLL6VISzeB0pINNszDUJQEuAIAtSovqcPDjDbCp2RmzIljkY5/pqrLaSVBXsXEOghqNR7PmlqQJfQXXq8zNB2PWKBOCdWurWge29libSc04jFakCsjAWDkLSGHzDeveGoTsWBHSCyKXxkhwKe9kRMq73qTJEZLIgL0qBzanP2bwe73yM0yZeyCGVvlyfqSd8uSGnaD/wm+Dj2spZZyigqngCUgHgCcHdHd4S0GBq5GG3WicCOC5PXI5Q0XFyjosv8J0Dj148qqBq7GBQ1V+oBiAs01ZypYI2t/bAepd32b/eNfrfwgRtZb0DWfgxf4MUn3nNf7K4innN1s4yREozjwS6+AIfpAAIhH9dzDyfXvgHJEHZQ92Vl9O8Duffg8hyBcr3wF/NkWrz764uwxqAD7GCw9Rd2eDdAhoQ1yemmDDjtvAace82cWoNKvycbFTcNCDwdUZveYvuU1lCMsp1Htxud6c4NHEjrRZn3gmIrSUXOUbmCluydfPYxv8bw73jkrKEnL21a2GeRIcH5sF5HyFzfGAmz40/7gA4fjmbKJt7fN20DML7QPMt3fbBpvfOL5GQJ6VeROXi8Ik/4e8WE5ebjOYqzASCIFJcPF/k+f3dhk7/pH2W2sY67z8IabAhULewp1O9rcNCaw0kP3HsX9qzg+L7eSgxiKdLT+6RBCnxQxt4w8O1Kg8Z+WjO1eaFyGQ==
+    OAUTH2_JWT_SECRET: AgBAFSwRE80k7hheQqi/kD7ZXhr1BgPIZm9gAnbWkptNDf6ZmgAKHqTbFvf4OsRlMsYaNrwalrG8+q+Ek2KOztjCYE6cnlLcg+d2u0llsc59c8u5ClJ+i8x/FrzjHQNaqBin75uJlJGaJkYBWOjufiiVD0/Dfb1Cob9G4h+YV6/m56wgy03N2qRNTeSInURvCXqZcb8kqG1/AUpV6xcbXXFt24E+PIn8WAPD8Qy+nbsfwHzgFJwEQgGGg/AsRIY1gA9hjLiDGGO9P0Wp5bg79dyVdYzobi+uTAU+p6JurktiDc1MlOAK1FsXp74+Zo7JejJrD1opb9Du+ka4TBNcMNKqABnN2u1WnpIOu/N6ddtT5kPJa9VQO0iFqzb5E2X18D/M0mtfEY9lp1HoSZm31xlnCaKbInDgS9q1J5nCsGlDY6MMNpXEpwbtAXKqJSZr+UEVircpngHKXBoIGoBX6gg891uSRZvKlwXyVnW73TveocGMWbA33YEsimWozhxB6KZ4YC+2ySdWbjpYFDWqNIu18FZ0GlI2SALKzEqgekoNBcNgb2O+pK4fNzk9B1ctty2LAUuT+EgJxkGelK+fr2gcyvdnI0RQdvuVtTAO/fbSawQOC+pLsLVNBf2xuqK4BU4zDREP8G7Cz0KCb9bvp8vfeWrOSQxjGq/ndDTq9kpxuw5MDsIY2AAsYiA/1zTg7YhYzfA2gfR2NnfIwtsvCmoI8adVAXWyx5lZQpx+LNiGWw==
+    SECRET_KEY: AgDNQTwgBD3DW3hGhFMpIEAJLx9pASmj8Wo9CC3B8xT1/IBjLa9PMT4Evdd7s800eJERU0PXEAmn2aLFc5+ecriFzZcAxl+YTiodke9PeB82u2pL3zBTlQ+DvYGT21U63rNnDJ4Cq9IH1fNrDxoNoFs6eGgfCU3o2/scEe0YB5mvDLdmhM/XaOMJnyB1cLz8fz+7ahzLwOqPhVwXLsmLmbzVrpY/WDjngBrjdSQ1RC4JmS0B3sdfUlhoMg177LRZ8WJvp54J3HM2tw/xJbINfnX5dmeveaXdv5A88v8s7X84WQ/DDTwdPyZfT3a22JUwx9a1/Kuq/DX+YgnHW1pthh0ZoHqsuUJb8/uTKzm3Pcm6Ww4FXgBn/qa6FspgN1s0cwCvnKNkMRpt3KvRp2eMFo07n2gjTgxRTaM538sAd1LOerOE7imjiWHJwjgRcWDIjEsDEbjb87CLJ62Dc5hMA+Lkw3rBVjy3fTFbVR3SBGaO8KmPvRsoq5Aib5gYjN8XD2T26Ns7rmjFbqqZ+Y2kKk38VgAHDPtTdl937aUin442QH60QBKCvFKDTEqx6yt8pkDpLtj57TaHdWHuBhWQL6p++5htYjZKcBmBYcrOblUL9MVvE1vsC/iPmJaziTurR2+1ijZkz0/PnPwRfXyvk+xh/8TTJ71KWRoao0SlEzqpzjQ8YlVIJk9tngMmUYl8PYGhUbBZxNqJIZKMx/QZpPzSfHrLwourVYn3hUMvWC7vxQ==
+  template:
+    metadata:
+      labels:
+        # Exclut ce Secret des sauvegardes velero : il est reproductible depuis Git par
+        # sealed-secrets, donc le copier n'apporte rien — et le RESTAURER NUIT. Un Secret restauré
+        # par velero arrive sans ownerReference, et le contrôleur refuse alors de s'approprier un
+        # objet préexistant : « already exists and is not managed by SealedSecret ». La SealedSecret
+        # reste en Synced=False et le Secret devient ORPHELIN — une rotation faite dans Git ne se
+        # propage plus, en silence. Constaté le 2026-09-09 après la reprise d'un namespace détruit.
+        velero.io/exclude-from-backup: "true"
+      name: forgejo-secrets
+      namespace: forgejo
+    type: Opaque
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: forgejo-smtp
+  namespace: forgejo
+spec:
+  encryptedData:
+    PASSWD: AgC8Ce6ezIUncFHv4R/O+OQLWKZQeJc2Fd60wm5WlvV1kL2Zdx9Fp9Xp3Ng8j0/uLS1bV1eBUD6F7qBZK4GlcqRZG9169wXghkOV6esVauxw2I4gRcOOBQtITSJB3moIaGCANJ6mk/+4zE1+8vkKNsekzsfeKwWp73eP454FZ1QYnpPyPc0m37PersPERcfysPMhvzDM5KF9XE7DJr1JQKqDTZC2JmmgQP7XPlx2hgsuvQZAEuAxRLek0IuA8M8bqeqfoa1XngyXS0NGNkTYkR4SnYFHCcU/FNMsrvSwRQ7MxQjbpObYxnYxFVEInMSpoPBAdxBytFSGlHRFuN5ShDM4lFlJjnT97Dv5KC91kQSh/xUi7/omGR8KxD0qP1ho+jnM5XjAWL9npWxM0ZemFGHhbM3bIi+1aDYPE012YRnXGGc1OxZur9yacgpWw5mIJjRIpxSkW0x3aUWIJjxxrzBdOa8RV6TLz79mvT4rGj53QMhUGwpmOqCy60Fd/iGLzlZiY/A/43jOABQiEZvBXLnHQJ7dkcBlVODTQtDeI7BJDvbOXkhSeb+5wukXJfJQIBVNCC9483LcJSzrhMCynI+Sw7nKfXwWgIRRgkULjOAddO1YxvjEECjeMYxia70qsVSde27HxB8WjuBKehZh2pv3V8je1KVemHxLqXKQldMckCYcTVyC9itL0+8nZxEObxmEIb6e6+e7erbakcmxAsGs1n3+LWvOJiQa9iuuNZILUKS2OXfpvXqH3l6eBCmikT1JpAaqzjWos+SQ4RgwzYTHIh1ogBZYgmFaYBDCgMILLxYspfAY8UAxTEw=
+  template:
+    metadata:
+      labels:
+        # Exclut ce Secret des sauvegardes velero : il est reproductible depuis Git par
+        # sealed-secrets, donc le copier n'apporte rien — et le RESTAURER NUIT. Un Secret restauré
+        # par velero arrive sans ownerReference, et le contrôleur refuse alors de s'approprier un
+        # objet préexistant : « already exists and is not managed by SealedSecret ». La SealedSecret
+        # reste en Synced=False et le Secret devient ORPHELIN — une rotation faite dans Git ne se
+        # propage plus, en silence. Constaté le 2026-09-09 après la reprise d'un namespace détruit.
+        velero.io/exclude-from-backup: "true"
+      name: forgejo-smtp
+      namespace: forgejo
+    type: Opaque

@@ -1,0 +1,73 @@
+# Scrape de la BASE de la forge — `forgejo-db-metrics.lan.wittner.tech`, servi par le
+# `postgres-exporter` de la pile `forgejo/` (dépôt homelab_emeriss).
+#
+# ⚠️ CE QU'IL RÉPARE. `/metrics` de Forgejo n'expose que des jauges APPLICATIVES (`gitea_*` :
+# dépôts, comptes, issues) : la base y est INTERROGÉE — une trentaine de `SELECT count(*)` par
+# scrape — jamais MESURÉE. Et la bascule hors du cluster a emporté la seule source qui en parlait,
+# les métriques CNPG de `forgejo-db`. Entre le 2026-09-11 et cet objet, aucune règle ne voyait la
+# base.
+#
+# ⚠️ CE QUE CE SCRAPE N'APPORTE PAS, CONTRAIREMENT À CE QU'ON CROIT. « La base est morte » était
+# DÉJÀ alerté avant lui, par une chaîne indirecte : base injoignable → `pg_isready` en échec →
+# healthcheck de la forge en échec (`/api/healthz` teste la base) → les `SELECT count(*)` de
+# `/metrics` échouent → `up{job="forgejo"} == 0` → `ForgejoDown`. Ce qu'il ajoute est ce que cette
+# chaîne ne pouvait pas voir : deadlocks, volumétrie, et surtout la DISTINCTION entre « la base ne
+# répond plus » et « l'exportateur ne répond plus » (cf. `pg_up` dans `prometheusrule.yaml`).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: forgejo-db-metrics
+  namespace: monitoring
+  labels:
+    # ⚠️ OBLIGATOIRE : sélecteur du prometheus-operator. Sans ce label, l'objet est ignoré SANS
+    # ERREUR — la cible n'apparaît simplement jamais dans /targets.
+    release: kube-prometheus-stack
+spec:
+  staticConfigs:
+    - targets:
+        - forgejo-db-metrics.lan.wittner.tech
+  scheme: HTTPS
+  metricsPath: /metrics
+  # 60s, comme le scrape de la forge et pour la MÊME raison : chaque scrape de postgres-exporter
+  # exécute une série de requêtes sur `pg_stat_*` et `pg_database`. C'est une charge SQL directe,
+  # sur la machine d'à côté. Ce sont des compteurs cumulatifs et des volumétries : ils ne bougent
+  # pas à la seconde.
+  scrapeInterval: 60s
+  scrapeTimeout: 20s
+  # ⚠️ SECRET PROPRE À CE COMPOSANT. Le `node-exporter` de la MÊME machine a le sien
+  # (`node-exporters`, composant `hosts-monitoring`). Les séparer n'isole rien sur le plan
+  # cryptographique — même hôte, même `docker inspect` — mais rend les deux composants
+  # INDÉPENDANTS : retirer la forge du parc supprime ce Secret sans toucher à la supervision de la
+  # machine, qui lui survit. C'est le même critère de cycle de vie qui met le scrape de la machine
+  # dans un autre composant, et son exportateur dans une autre pile côté homelab_emeriss.
+  basicAuth:
+    username:
+      name: forgejo-db-metrics
+      key: username
+    password:
+      name: forgejo-db-metrics
+      key: password
+  relabelings:
+    # ⚠️ SEUL point de couplage avec `forgejo-db.rules`. Le changer casse toutes ses règles,
+    # silencieusement.
+    - targetLabel: job
+      replacement: forgejo-db
+    # ⚠️ MÊME `instance` que le scrape du node-exporter de cette machine
+    # (`cluster/app/hosts-monitoring/manifests/scrapeconfig-vert-emeriss.yaml`), alors que les deux
+    # objets vivent dans des composants différents. C'est VOLONTAIRE : c'est la seule chose qui
+    # permette de rapprocher un incident de base d'un incident de disque, sur la même ligne de
+    # graphe et dans la même alerte. Les deux valeurs se changent ensemble, et rien ne le vérifie —
+    # une divergence ne casse rien, elle rend juste le rapprochement impossible.
+    - targetLabel: instance
+      replacement: vert-emeriss
+  metricRelabelings:
+    # ⚠️ ÉCARTE UNE BOMBE DE CARDINALITÉ. `pg_stat_activity_count` porte SEPT étiquettes
+    # (`datname`, `state`, `usename`, `application_name`, `backend_type`, `wait_event_type`,
+    # `wait_event`), dont `wait_event` qui prend des dizaines de valeurs et change à chaque
+    # scrape : c'est un produit cartésien qui crée des séries neuves indéfiniment, sur une base
+    # qui n'a qu'un écrivain. Aucune règle de ce dépôt ne s'en sert — la saturation des connexions
+    # n'est volontairement pas alertée, cf. le README du composant.
+    # `max_tx_duration` est écarté pour la même raison : mêmes sept étiquettes.
+    - sourceLabels: [__name__]
+      regex: pg_stat_activity_(count|max_tx_duration)
+      action: drop

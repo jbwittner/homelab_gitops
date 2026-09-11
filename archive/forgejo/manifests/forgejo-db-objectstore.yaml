@@ -1,0 +1,98 @@
+# Destination de sauvegarde barman-cloud de la base `forgejo-db` : bucket GCS, credentials,
+# rétention. Consommée par le plugin [cnpg-barman-plugin](../../cnpg-barman-plugin/README.md),
+# qui doit tourner AVANT — sans sa CRD, cet objet échoue en `no matches for kind "ObjectStore"`
+# (d'où la wave -1 sur son Application).
+#
+# ⚠️ Cet objet ne sauvegarde RIEN à lui seul. Il décrit une destination ; c'est le
+# `spec.plugins` de `forgejo-db.yaml` qui met la base sous archivage WAL, et
+# `forgejo-db-scheduledbackup.yaml` qui déclenche les sauvegardes de base. Les trois se
+# déplacent ensemble : un `ObjectStore` orphelin est inerte et ne le dit pas.
+#
+# ⚠️ Ressource NAMESPACÉE, et le plugin n'en lit que dans le namespace du `Cluster`. Elle ne peut
+# donc pas être mutualisée entre `forgejo`, `authentik` et les autres : chaque base ajoutée au
+# périmètre veut son propre `ObjectStore` — et son propre SealedSecret, sealed-secrets chiffrant
+# pour le couple (nom, namespace).
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: forgejo-db-store
+  namespace: forgejo
+  labels:
+    app.kubernetes.io/name: forgejo
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: database
+spec:
+  # 30 jours, aligné sur le `ttl` de la schedule velero — une fenêtre de récupération unique pour
+  # tout le composant, plutôt que deux horizons à retenir. Format imposé par la CRD :
+  # `^[1-9][0-9]*[dwm]$`.
+  #
+  # ⚠️ Cette rétention gouverne AUSSI les WAL : barman ne garde que ceux nécessaires à la plus
+  # ancienne sauvegarde de base encore vivante. La borner à 30 j borne donc la fenêtre de PITR à
+  # 30 j, pas seulement le nombre de sauvegardes complètes.
+  #
+  # ⚠️ Le ménage est fait par le SIDECAR, toutes les 1800 s par défaut
+  # (`instanceSidecarConfiguration.retentionPolicyIntervalSeconds`). Ne PAS poser en plus une
+  # lifecycle rule GCS sur le bucket : elle supprimerait des WAL dont barman a encore besoin, et
+  # le symptôme ne serait visible qu'à la restauration.
+  retentionPolicy: 30d
+
+  configuration:
+    # ⚠️ REMPLACER — le bucket n'est PAS créé par ce repo, il vient du repo Terraform (cf. README
+    # §Contraintes). Bucket DÉDIÉ, distinct de celui de velero : les deux chaînes ont chacune leur
+    # propre GC, et une lifecycle rule posée pour l'une casse les restaurations de l'autre.
+    #
+    # Le chemin s'arrête au bucket : barman range lui-même sous `<bucket>/<serverName>/`, et
+    # `serverName` vaut le nom du `Cluster` (`forgejo-db`) quand il est omis. C'est ce qui permet
+    # à plusieurs bases de partager un bucket sans se marcher dessus — ne pas ajouter de préfixe
+    # à la main ici.
+    destinationPath: gs://homelab-cnpg-backups-8b8ff253/forgejo/
+
+    # Clé JSON du compte de service GCP, montée depuis le Secret produit par sealed-secrets
+    # (`forgejo-db-gcs.sealed.yaml`). ⚠️ `gkeEnvironment` n'est PAS activé : il suppose un cluster
+    # GKE avec Workload Identity, où l'authentification passe par le nœud. Ici c'est une clé.
+    googleCredentials:
+      applicationCredentials:
+        name: forgejo-db-gcs
+        key: cloud
+
+    # --- Sauvegardes de base ---
+    data:
+      # gzip pour les deux flux. Le sidecar embarque aussi `bzip2`, `lz4` et `snappy` ; `snappy`
+      # réduirait la latence d'archivage au prix du volume. Sur 10Gi de métadonnées, l'arbitrage
+      # ne pèse rien — gzip est gardé pour n'avoir qu'un seul comportement à connaître.
+      compression: gzip
+      # ⚠️ PAS d'`encryption` : ce champ pilote le SSE côté S3. GCS chiffre au repos par défaut
+      # avec des clés gérées par Google ; le renseigner ici n'ajouterait rien et ferait échouer
+      # l'upload sur une API qui ne connaît pas l'en-tête.
+      #
+      # ⚠️ PAS d'`immediateCheckpoint` : il force un checkpoint au démarrage de la sauvegarde, ce
+      # qui écrase les I/O du volume au lieu de les étaler. Sur un nœud unique qui porte aussi le
+      # PVC de 100Gi de Forgejo, l'étalement est préférable — la sauvegarde est plus longue, la
+      # forge reste réactive.
+      #
+      # ⚠️ PAS de `jobs` > 1 : le parallélisme d'upload n'a d'intérêt qu'à partir de plusieurs
+      # centaines de Go, et multiplie la mémoire du sidecar.
+
+    wal:
+      compression: gzip
+      # `maxParallel` laissé au défaut (1). CNPG règle `archive_timeout = 300`, mais ⚠️ cela ne
+      # veut PAS dire qu'un segment part toutes les 5 minutes : PostgreSQL ne force un changement
+      # de segment sur ce délai que s'il y a EU de l'activité WAL depuis le précédent. Une base au
+      # repos n'archive rien, indéfiniment — mesuré à 40 h sur cette instance. C'est pour cette
+      # raison que la surveillance porte sur le BACKLOG (`CNPGWalArchivingBacklog`,
+      # cf. cnpg-monitoring) et non sur l'âge du dernier archivage.
+
+  # --- Sidecar injecté dans les pods d'instance ---
+  # C'est LUI qui fait le travail : `barman-cloud-wal-archive` à chaque segment, la sauvegarde de
+  # base à chaque `Backup`, et l'application de la rétention. Le Deployment `barman-cloud` de
+  # cnpg-system n'est qu'un serveur gRPC de contrôle et ne transporte aucune donnée — d'où des
+  # ressources réglées ici et non dans le helm-values du plugin.
+  instanceSidecarConfiguration:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        # Pas de limite CPU : un upload throttlé retarde l'archivage WAL, ce qui remplit
+        # `pg_wal` sur le PVC de la base. La limite mémoire, elle, borne le tampon de gzip.
+        memory: 512Mi

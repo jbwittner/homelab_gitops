@@ -1,0 +1,14 @@
+# Namespace créé AVANT les objets du chart (sync-wave -1). Pas de `CreateNamespace=true` :
+# le namespace est un manifeste versionné comme le reste.
+#
+# Pas de label PodSecurity `privileged`, contrairement à `alloy`, `openebs` et `monitoring` :
+# le chart fait tourner OpenBao en non-root (uid 100, `runAsNonRoot: true`,
+# `allowPrivilegeEscalation: false`, seccomp `RuntimeDefault`), sans hostPath ni capability
+# ajoutée — il pose même `SKIP_SETCAP=true`, donc pas de `IPC_LOCK`, qui serait justement
+# refusée au niveau `baseline` appliqué cluster-wide par Talos.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openbao
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

@@ -1,0 +1,36 @@
+# Le chart sait générer un HTTPRoute (`server.gateway.httpRoute.enabled`), mais son template
+# n'émet ni `group` ni `weight` sur le `backendRef` : les défauts injectés par le CRD côté live
+# créeraient un OutOfSync permanent dans ArgoCD (cf. doc/reseau.md). D'où un manifeste maison,
+# aligné sur argocd-httproute.yaml.
+#
+# Backend = le Service `openbao` (et NON `openbao-active`) : ce dernier ne sélectionne que les
+# pods portant le label `openbao-active: "true"`, posé par `service_registration "kubernetes"`
+# une fois le nœud descellé et leader. Un OpenBao scellé n'a donc AUCUN endpoint côté
+# `-active` — l'UI serait injoignable exactement au moment où on en a besoin pour desceller.
+# Le Service `openbao` est en `publishNotReadyAddresses: true` (défaut du chart) et route donc
+# vers le pod même scellé, celui-ci n'étant pas Ready tant qu'il l'est.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: openbao
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: shared-gw
+      namespace: gateway
+      # Listener non spécifique à un cluster (`*.lan.wittner.tech`, secret wildcard-lan-tls).
+      sectionName: https-internal
+  hostnames:
+    - openbao.lan.wittner.tech
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: openbao
+          port: 8200
+          weight: 1

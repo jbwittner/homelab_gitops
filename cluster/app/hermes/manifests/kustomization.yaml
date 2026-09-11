@@ -1,0 +1,67 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: hermes
+resources:
+  - namespace.yaml
+  # Produit par kubeseal (cf. README §Câblage des secrets). Le StatefulSet ne démarre pas sans :
+  # `envFrom` sur un Secret absent bloque le pod en CreateContainerConfigError.
+  - hermes-env.sealed.yaml
+  - statefulset.yaml
+  - service.yaml
+  - hermes-httproute.yaml
+  # ⚠️ AUCUNE CiliumNetworkPolicy ici : ce composant a une SORTIE RÉSEAU LIBRE. C'était d'abord
+  # le témoin d'une comparaison avec un jumeau contraint (`hermes-close`), depuis supprimé.
+  # L'absence de policy est donc désormais un choix par défaut hérité, pas une décision motivée
+  # — la réexaminer avant tout usage sérieux. L'agent exécute du code décidé par un LLM.
+
+# `config.yaml` d'Hermes. C'est le canal de configuration NON secrète — les clés d'API passent
+# par le Secret `hermes-env`, jamais ici.
+#
+# Généré plutôt qu'écrit à la main pour le suffixe de hash : kustomize nomme le ConfigMap
+# `hermes-config-<hash du contenu>` et réécrit la référence dans le `volumes:` du StatefulSet.
+# Éditer `config/config.yaml` change donc le pod template, ce qui suffit à déclencher le rollout
+# — indispensable ici, parce que l'initContainer ne recopie le fichier dans le volume qu'au
+# démarrage du pod. Sans ce mécanisme, un ConfigMap mis à jour restait sans effet jusqu'à un
+# `rollout restart` manuel, et rien ne le signalait (ArgoCD `Synced`, aucun log).
+#
+# L'ancien ConfigMap est supprimé par le `prune: true` de l'Application.
+configMapGenerator:
+  - name: hermes-config
+    files:
+      - config/config.yaml
+      # Semé en /opt/data/home/.profile. Rétablit /opt/hermes/bin dans le PATH des shells de
+      # login de l'outil terminal, que /etc/profile écrase. Le fichier documente le détail.
+      - config/profile
+      # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
+      # la révision du secret entre dans le hash. Le Secret `hermes-env` est produit par le
+      # contrôleur sealed-secrets, pas par kustomize — son contenu ne peut donc pas influencer
+      # le pod template, et un `envFrom` dont le Secret change ne redémarre rien. Resceller
+      # change ce fichier (kubeseal régénère un nonce à chaque passe, même à valeurs égales),
+      # donc le hash, donc le nom du ConfigMap, donc le pod template : le rollout part avec le
+      # nouveau secret.
+      #
+      # Le fichier atterrit dans le volume `config` monté en lecture seule sur /config, où
+      # l'initContainer ne recopie que `config.yaml` — il n'entre jamais dans `/opt/data`. Son
+      # contenu est chiffré et déjà présent dans Git : rien de neuf n'est exposé. (Le dépôt est
+      # privé depuis, mais l'argument ne reposait pas là-dessus — il repose sur le chiffrement.)
+      #
+      # Alternative écartée : `replacements` copiant le nom d'un ConfigMap généré dans une
+      # annotation du pod template. Kustomize y résout le nom AVANT d'appliquer le suffixe de
+      # hash — l'annotation reçoit `hermes-env-revision` nu, constant, donc sans effet.
+      - hermes-env.sealed.yaml
+
+  # Variables d'environnement NON secrètes du conteneur, injectées par `envFrom` (cf.
+  # statefulset.yaml). `envs:` et non `files:` : kustomize parse le KEY=VALUE et produit une clé
+  # de ConfigMap par variable, ce que `envFrom` sait exporter.
+  #
+  # ConfigMap SÉPARÉ de `hermes-config`, et pas une entrée de plus dans celui-ci : `hermes-config`
+  # est monté comme volume et ses clés sont des noms de FICHIERS (`config.yaml`, `profile`). Un
+  # `envFrom` dessus tenterait d'en faire des noms de variables — un point est interdit, le kubelet
+  # les rejette avec un event et sans autre signal.
+  #
+  # Même bénéfice de hash que `hermes-config` : éditer `config/hermes.env` renomme le ConfigMap,
+  # kustomize réécrit le `configMapRef` du StatefulSet, le rollout part. Pas de `rollout restart`
+  # manuel.
+  - name: hermes-vars
+    envs:
+      - config/hermes.env

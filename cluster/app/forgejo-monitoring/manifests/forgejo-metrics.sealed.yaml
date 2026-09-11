@@ -1,0 +1,16 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: forgejo-metrics
+  namespace: monitoring
+spec:
+  encryptedData:
+    token: AgC4vI0pVqAK6qd/8uT7yFqFjaJyTGssx5y1AMCHx402assINgiU7Z2MDrd4Lgpne24eidGfsqggtB44hth4aW2EIXchIFpipt6tboTyzQ8J2hUCRPCTlyyj6Vkj7MYAlnUECGulW2kqhFMVy6vZm5LVnWQ3iJvfJ42AhrgU7sPAADKV8WGHMdIAPQqk2ugEURe1qjYcIrT8v7hjFcIlYvGNpPjwN6TUocay7VD/iAlbnh4DVToQzV2m6+f/FmUHujpF1qX/DCGVPpTMs2MbYNtAX/7vuXL8BpufAvKKVcfcK3S+L5vThaWePLFTuaTs39MVrofObLwl0bBPnC4WDQ++3jRQq646oNjp92r9b054GA1yXhhCE5kpLmHIiBgalN22CkdD1H7XUEjhVMOQ3zTOP5r5eOThGH9EOH4erwiUP566lOZHCZgPlGeEJXorQosJQpJ1Y/uxe/WQoOe4ME+ke+4LBrAXbZ6fmKEgQCS0UcBCPRplVOVUXv45QollOLYAFHqRu4vtwQBTwT1upAD+XF3KI9VGlVSGHc+swLkW77UFu/ouQA0WL1tm4YbMDsbgqZnhRTyDrf+DhYbqJdTU5WcBmjqnDqL/D+HGgU0uSAEA172spGNnKxhAln6F+WyNpnBnX0HbKDT1HWyMOlr6/JezeuoiCyUmiBGb28xSycmXWOrvDV7tv17+zxM2zpoxuw0/CTH8GnNuubJXI8HwU7fr4aWlNHu/aeOa4JGQQ+TECPH4Y1KH+XthcA8ayguIhqf/lpk2OzXUnKCg5Q6A
+  template:
+    metadata:
+      labels:
+        velero.io/exclude-from-backup: "true"
+      name: forgejo-metrics
+      namespace: monitoring
+    type: Opaque

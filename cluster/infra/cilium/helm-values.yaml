@@ -1,0 +1,46 @@
+# helm-values.yaml — values Cilium du cluster `bleu-kalecgos`, le seul où tourne ce composant.
+# ⚠️ Ce fichier est aussi celui que passe le `helm install cilium` de l'étape 3 du runbook de
+# bootstrap : les deux doivent rester alignés, sinon l'Application diverge dès le premier sync.
+ipam:
+  mode: kubernetes
+kubeProxyReplacement: true
+operator:
+  replicas: 2
+k8sServiceHost: localhost
+k8sServicePort: 7445
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+# Features gérées ici, communes aux deux consommateurs :
+l2announcements:
+  enabled: true
+  leaseDuration: 3s
+  leaseRenewDeadline: 1s
+  leaseRetryPeriod: 500ms
+k8sClientRateLimit:
+  qps: 10
+  burst: 20
+# Gateway API — contrôleur Cilium. Les CRDs sont posées par l'Application `gateway-api`, dont le
+# tag upstream doit rester compatible avec la mineure Cilium ci-dessus (cf. le commentaire de
+# cluster/infra/gateway-api/manifests/kustomization.yaml).
+gatewayAPI:
+  enabled: true

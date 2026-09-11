@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cnpg-monitoring
+  namespace: argocd
+  annotations:
+    # Wave 2, comme velero-monitoring et openebs-monitoring : ses objets sont
+    # des CRs `monitoring.coreos.com`, absentes au bootstrap à froid. Personne ne dépend de cette
+    # wave, donc une sync en échec ne retient rien.
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: cnpg-monitoring
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: database
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Volet observabilité de [cnpg](../cnpg/README.md) et de sa sauvegarde native
+  # (archétype (c), path → `manifests/`).
+  #
+  # POURQUOI CE COMPOSANT EXISTE, ET POURQUOI IL EST LOAD-BEARING. Le PVC des bases CNPG a été
+  # RETIRÉ du périmètre de copie kopia de velero
+  # (`cluster/infra/velero/manifests/volume-policies.yaml`, règle `pvcLabels`) au profit de la
+  # sauvegarde native barman-cloud. Cet arbitrage n'est défendable QUE parce qu'une détection
+  # passive d'une chaîne native morte en
+  # silence a été posée en face. Supprimer ce composant ne dégrade pas l'observabilité : il rend
+  # l'exclusion de velero indéfendable. Les deux décisions se tiennent ensemble.
+  #
+  # POURQUOI LE PodMonitor EST ÉCRIT À LA MAIN. Le `Cluster` CNPG sait en poser un
+  # (`spec.monitoring.enablePodMonitor: true`), mais l'opérateur ne lui met pas le label
+  # `release: kube-prometheus-stack` qu'exige le sélecteur de Prometheus : l'objet existerait,
+  # paraîtrait sain, et ne serait jamais scrapé. Exactement le motif de
+  # [velero-monitoring](../../infra/velero-monitoring/README.md).
+  #
+  # ⚠️ Dépendance sur kube-prometheus-stack, qui vit dans le MÊME app-of-apps (`cluster/app/`) :
+  # la wave 2 suffit à l'ordonner, contrairement aux composants `*-monitoring` de `cluster/infra/`
+  # qui, eux, dépendent cross-tier.
+  source:
+    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/cnpg-monitoring/manifests
+  destination:
+    name: bleu-kalecgos
+    # ns `cnpg-system` — créé par le composant [cnpg](../cnpg/README.md). Pas de
+    # `CreateNamespace` : ce composant ne le possède pas.
+    #
+    # ⚠️ Les objets vivent ici alors que les pods scrapés vivent, eux, dans les namespaces des
+    # applications consommatrices : le PodMonitor traverse les namespaces par son
+    # `namespaceSelector`. C'est délibéré — un jeu d'alertes unique pour toutes les bases, plutôt
+    # qu'une copie par application consommatrice. ⚠️ Il n'y en a AUCUNE aujourd'hui : `forgejo-db`
+    # est partie avec la forge (archive/forgejo), `authentik` reste le candidat connu.
+    namespace: cnpg-system
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

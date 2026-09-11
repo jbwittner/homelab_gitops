@@ -1,0 +1,16 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: argocd-notifications-secret
+  namespace: argocd
+spec:
+  encryptedData:
+    grafana-api-key: AgA89RK5g4c2zctLMX1SgllGOMSh8ZS37Gd475MXlTD7t32cquqH827nNyIzFyfw27XsxE8r/6pZbhsIYN7c1mGl3r1oBbTmKbQ8z6a5zNg3DpElRhFJqjQ9WM+o4LiCQNpN0IwrNJiBr/kP0ytS4PwhIWpJP89fBxmL11NSXTHDZaW++rGR8PvstzKIjHnmXji0FH9asxEQM79L5Mm7zyv8wHK+e+TE8MF46TW/p1Cx12cwcdThBiRRouwqOrPxunzwqSmOIqLMbpXVRj02RKLq36Ak+z0KVr30RU55TJLvXE9Mif38obdnY1N0s0uFo+ZXlJyQuJwHHVIzlw6nzD0bXPXNi2xjRImiUxKK0RLvWJ/eARsUQtUmMR20fodvbKq6no8XWpVqwkv2m+o7Fl+1RNYozv856IAUiVYia6jvsVgSCT9jYzvlixyZPZGDC+hifdmVWS2aMOmHQph3dzim8cuJpEkfJRNmk2yhBVx5QXvH32Usy6RnAMenhnbP+GKQT5dk7l0PdFsoQrcP8dsm/jrjAWtdtnewEwYI29XxETv1TpVKKYgwT0NlHGkT1+DmfySLur6i1Uh/gVwgsbFNyCgSOIlcf1nhYfs56a/iVBdvufBXkC2tmrlQpEGFWZKVk34rI0Pg6mpHRVL6T0IdV3xPVGATCD1oCaM0M29uh/Y3zMoZQtIrg4EdDFg4ZMWN5b5vFlm7w3Q=
+  template:
+    metadata:
+      annotations:
+        sealedsecrets.bitnami.com/managed: "true"
+      name: argocd-notifications-secret
+      namespace: argocd
+    type: Opaque

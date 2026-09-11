@@ -1,0 +1,67 @@
+# `robots.txt` servi par Forgejo sur `https://forgejo.wittner.tech/robots.txt`.
+#
+# Il n'existe AUCUNE clé d'`app.ini` pour ce fichier : Forgejo ne sert un `robots.txt` que s'il
+# en trouve un dans son `CUSTOM_PATH` (`/data/gitea` ici). D'où ce ConfigMap, monté sur le chemin
+# exact par `extraVolumes` / `extraContainerVolumeMounts` (helm-values.yaml). Sans montage, ce
+# ConfigMap ne fait rien.
+#
+# ⚠️ Forgejo ne teste la présence du fichier QU'UNE FOIS, au démarrage (`setting.HasRobotsTxt`).
+# Éditer ce ConfigMap ne suffit donc pas — il faut redémarrer le pod :
+#   kubectl -n forgejo rollout restart deploy/forgejo
+#
+# ⚠️ ConfigMap ÉCRIT À LA MAIN, et non généré par `configMapGenerator` : le générateur suffixe le
+# nom par un hash du contenu, or helm-values.yaml référence un nom FIXE (`forgejo-robots`) et ne
+# peut pas suivre ce suffixe. Le prix à payer est le redémarrage manuel ci-dessus, qui est de
+# toute façon nécessaire.
+#
+# Ce que ce fichier fait, et ce qu'il ne fait pas : il s'adresse aux robots qui le respectent.
+# Ce n'est PAS un contrôle d'accès (rien de privé n'est listé ici — un `Disallow` désigne ce
+# qu'on veut cacher), et ce n'est PAS non plus une protection de charge : un crawler agressif ou
+# malveillant l'ignore. La limitation de débit reste à faire, côté Gateway (cf. README).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forgejo-robots
+  namespace: forgejo
+  labels:
+    app.kubernetes.io/name: forgejo
+    app.kubernetes.io/part-of: homelab-gitops
+data:
+  robots.txt: |
+    # Les pages d'accueil de dépôts et de profils restent indexables : c'est l'intérêt d'avoir
+    # des dépôts publics. Tout le reste est fermé.
+    User-agent: *
+
+    # Les quatre familles d'URL coûteuses. Chacune fait travailler le serveur bien plus qu'une
+    # page statique, et un crawler les visite pour CHAQUE commit et CHAQUE fichier :
+    #   archive/  fabrique un .zip/.tar.gz à la demande, et le stocke sur le PVC
+    #   raw/      sert le contenu de chaque fichier, à chaque révision
+    #   blame/    recalcule l'annotation ligne à ligne
+    #   commits/  pagine l'historique sans fin
+    # ⚠️ Le joker en milieu de chemin (`/*/`) est une extension de facto, comprise par les gros
+    # moteurs mais pas garantie par la spécification d'origine. C'est le seul moyen d'exprimer
+    # `/<propriétaire>/<dépôt>/…`.
+    Disallow: /*/*/archive/
+    Disallow: /*/*/raw/
+    Disallow: /*/*/blame/
+    Disallow: /*/*/commits/
+    Disallow: /*/*/commit/
+    Disallow: /*/*/src/commit/
+    Disallow: /*/*/compare/
+    Disallow: /*/*/find/
+    Disallow: /*/*/graph
+    Disallow: /*/*/activity
+    Disallow: /*/*/search
+    Disallow: /*/*/rss/
+    Disallow: /*/*/atom/
+
+    # Surfaces d'authentification et d'API : rien à indexer, et les référencer ne sert qu'à
+    # cataloguer des points d'entrée.
+    Disallow: /user/
+    Disallow: /api/
+    Disallow: /explore/
+    Disallow: /-/
+
+    # Filet pour les robots qui l'honorent (Bing, Yandex ; Google l'ignore et se règle depuis sa
+    # console). Sans intérêt sur une page, décisif sur un historique de dépôt.
+    Crawl-delay: 10

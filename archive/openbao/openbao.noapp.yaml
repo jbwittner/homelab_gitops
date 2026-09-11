@@ -1,0 +1,78 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao
+  namespace: argocd
+  annotations:
+    # APRÈS openebs (wave 0) : le coffre a un PVC, et sans la StorageClass par défaut il reste
+    # `Pending`. Ce n'est possible que depuis qu'openbao est un composant d'INFRA : les waves
+    # ne s'ordonnent qu'à l'intérieur d'un même app-of-apps, donc tant qu'openbao vivait sous
+    # `cluster/app/` aucune relation d'ordre ne le liait à openebs.
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: openbao
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: secrets
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Gestionnaire de secrets, stockage raft intégré (archétype b : chart + `$values` +
+  # `manifests/`). Second canal de secrets du repo à côté de sealed-secrets, consommé via
+  # [external-secrets](../external-secrets/README.md) : la différence n'est pas le rôle mais
+  # l'emplacement du chiffré — dans Git pour un SealedSecret, dans le PVC pour openbao.
+  # Critère de choix entre les deux : doc/regles-gitops.md.
+  sources:
+    - repoURL: https://openbao.github.io/openbao-helm
+      chart: openbao
+      targetRevision: 0.29.0
+      helm:
+        releaseName: openbao
+        valueFiles:
+          - $values/cluster/infra/openbao/helm-values.yaml
+    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    # Ressources annexes : namespace + HTTPRoute (le chart sait générer un HTTPRoute,
+    # mais pas avec les champs explicites qu'exige ArgoCD — cf. README).
+    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: cluster/infra/openbao/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: openbao
+  # Le cert-controller de l'agent injector génère son certificat au démarrage et PATCHE lui-même
+  # le `caBundle` du MutatingWebhookConfiguration. Le chart, lui, rend le champ vide
+  # (`injector.certs.caBundle` non renseigné) : Git ne peut pas connaître cette valeur, elle
+  # naît dans le cluster. Sans cette exception, l'Application est OutOfSync en permanence.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: openbao-agent-injector-cfg
+      # jqPathExpressions plutôt que jsonPointers : couvre tous les webhooks de l'objet sans
+      # coder en dur un index `/webhooks/0/...` qui casserait si le chart en ajoutait un.
+      jqPathExpressions:
+        - '.webhooks[]?.clientConfig.caBundle'
+    # Bug du chart openbao-0.29.0, `templates/snapshotagent-configmap.yaml` : la garde porte sur
+    # `baoAuthPath` mais la valeur émise est `baoAuthNamespace` — deux clés différentes. Comme
+    # `snapshotAgent.config.baoAuthPath` est renseigné (helm-values.yaml) le bloc est rendu, alors
+    # que `baoAuthNamespace` n'existe ni dans nos values ni dans celles du chart : la ligne sort
+    # vide, donc `null`. L'API k8s droppe les clés nulles du `data` d'un ConfigMap, si bien que le
+    # désiré porte la clé et le live jamais → OutOfSync permanent, sync après sync.
+    # Pas contournable côté values : le chart ne quote pas la valeur, `""` rend aussi une ligne
+    # vide. À retirer quand le chart corrige la garde.
+    - group: ""
+      kind: ConfigMap
+      name: openbao-snapshot
+      jqPathExpressions:
+        - '.data.BAO_AUTH_NAMESPACE'
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      # ⚠️ Load-bearing, et pas seulement cosmétique : sans lui `ignoreDifferences` masque le
+      # diff dans l'UI mais la sync réapplique quand même le manifeste de Git, donc remet le
+      # caBundle à vide — le webhook devient injoignable et l'admission échoue. Avec lui, ArgoCD
+      # laisse le champ tel que le cert-controller l'a écrit.
+      - RespectIgnoreDifferences=true

@@ -1,0 +1,65 @@
+# Scrape des métriques du SERVEUR velero (Deployment) : tout ce qui concerne les sauvegardes
+# elles-mêmes — succès/échecs, durée, taille du tarball d'objets, état du BackupStorageLocation.
+# Reproduit ce que rendrait `metrics.serviceMonitor.enabled` du chart ; la raison pour laquelle ce
+# flag est coupé est dans l'en-tête de l'Application.
+#
+# Les métriques des DONNÉES de PV (kopia) ne sont PAS ici : elles sont servies par le DaemonSet
+# node-agent, sans Service, d'où le PodMonitor voisin.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: velero
+  namespace: velero
+  labels:
+    # Sélecteur du prometheus-operator de kube-prometheus-stack
+    # (`serviceMonitorSelectorNilUsesHelmValues`) : sans ce label, l'objet est ignoré en silence.
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - velero
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velero
+      app.kubernetes.io/instance: velero
+  endpoints:
+    # Nom du port du Service `velero` (8085). Le Service n'existe que parce que `metrics.enabled`
+    # est resté à `true` dans le helm-values du composant velero — c'est la seule partie de
+    # l'observabilité qui vit là-bas, et la couper viderait ce ServiceMonitor sans rien dire.
+    - port: http-monitoring
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      # ⚠️ LOAD-BEARING. velero étiquette ses métriques par `schedule`, et met une chaîne VIDE pour
+      # les sauvegardes lancées à la main. Or Prometheus ne stocke pas les labels vides : il les
+      # SUPPRIME. Conséquences en cascade, toutes silencieuses :
+      #   - `label_values(velero_backup_last_status, schedule)` ne renvoie que `velero-daily`,
+      #     donc la variable d'un dashboard ne propose jamais les backups manuels ;
+      #   - le « All » de cette variable s'interpole en `schedule=~"(velero-daily)"`, qui exclut
+      #     les séries sans label — les sauvegardes manuelles disparaissent des graphes alors que
+      #     leurs métriques existent bel et bien.
+      # On réécrit donc le label vide en `manuel` AU MOMENT DU SCRAPE : les séries deviennent
+      # sélectionnables comme n'importe quelle schedule, sans `label_replace` dans chaque requête.
+      metricRelabelings:
+        - sourceLabels: [__name__, schedule]
+          # `<nom>;` = le label schedule est vide ou absent (séparateur ';' entre les deux sources).
+          regex: "velero_backup_.*;"
+          targetLabel: schedule
+          replacement: manuel
+        # ⚠️ RATTRAPAGE de la règle ci-dessus, pas une règle indépendante — les deux se déplacent
+        # ensemble. `velero_backup_.*` est plus large qu'il n'y paraît : il attrape aussi
+        # `velero_backup_location_status_gauge`, qui décrit une DESTINATION et n'a aucun rapport
+        # avec une schedule. Résultat sans ce rattrapage : les séries de BackupStorageLocation
+        # portent `schedule="manuel"` alors qu'aucune schedule de ce nom n'existe, et le label
+        # ressort tel quel dans le MAIL de `VeleroBackupStorageLocationUnavailable` — où il
+        # ressemble à un indice et envoie chercher une schedule fantôme en pleine panne.
+        # Constaté le 2026-09-09 en lisant le mail d'un exercice d'injection.
+        #
+        # Le rattrapage plutôt qu'un regex plus étroit : RE2 (Prometheus) n'a PAS de lookahead
+        # négatif, donc `velero_backup_(?!location)` n'est pas exprimable. Un `replacement` vide
+        # supprime le label — c'est le seul moyen propre de le retirer après coup.
+        - sourceLabels: [__name__]
+          regex: "velero_backup_location_.*"
+          targetLabel: schedule
+          replacement: ""
+

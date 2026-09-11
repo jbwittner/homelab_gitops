@@ -1,0 +1,57 @@
+# Scrape du `/metrics` de Forgejo — prérequis du dashboard « Forge — forgejo »
+# (cf. cluster/app/kube-prometheus-stack/manifests/dashboard-forgejo.yaml).
+#
+# Écrit à la main plutôt qu'activé par le chart (`gitea.metrics.serviceMonitor.enabled`), pour
+# deux raisons dont chacune suffirait :
+#   - l'objet rendu par le chart ne sait pas porter d'`authorization`. L'endpoint est protégé par
+#     `[metrics] TOKEN` : sans en-tête, Forgejo répond 401 et la cible reste muette ;
+#   - il ne porte pas le label `release: kube-prometheus-stack` qu'exige le sélecteur du
+#     prometheus-operator (`serviceMonitorSelectorNilUsesHelmValues`) — il serait ignoré en
+#     silence, sans erreur nulle part.
+#
+# Il vit dans le ns `forgejo` et non à côté du dashboard (contrairement aux ServiceMonitors
+# ArgoCD, qui sont dans `monitoring` pour une raison d'ordre de bootstrap) : l'opérateur ne lit le
+# Secret d'`authorization` que dans le namespace du ServiceMonitor. Ici, un seul Secret
+# `forgejo-metrics` sert donc à la fois au pod Forgejo et au scrape. Déplacer cet objet dans
+# `monitoring` obligerait à sceller le MÊME token deux fois, dans deux namespaces.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: forgejo-metrics
+  namespace: forgejo
+  labels:
+    # Sélecteur du prometheus-operator de kube-prometheus-stack. Sans ce label, l'objet est
+    # ignoré en silence — c'est le premier point à vérifier si la cible n'apparaît pas.
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      # Posé par `service.http.labels` dans helm-values.yaml, et pas un label du chart : les
+      # Services `forgejo-http` et `forgejo-ssh` portent les mêmes `app.kubernetes.io/*`, un
+      # sélecteur écrit dessus prendrait les deux.
+      monitoring: forgejo-metrics
+  endpoints:
+    # Port nommé du Service `forgejo-http` (3000) — le port applicatif. Forgejo ne sait pas servir
+    # `/metrics` ailleurs, c'est tout le problème que les trois couches du README §Métriques
+    # traitent.
+    - port: http
+      path: /metrics
+      scheme: http
+      # ⚠️ 60s et non 30s comme ailleurs. Chaque scrape déclenche une trentaine de `SELECT
+      # count(*)` sur la base (le collecteur amont recompte tout, il ne met rien en cache) : la
+      # fréquence de scrape est une charge SQL directe. Ce sont des jauges de dépôts et de
+      # comptes, elles ne bougent pas à la seconde. Passer à `5m` est le levier si la base souffre.
+      interval: 60s
+      scrapeTimeout: 20s
+      # `Authorization: Bearer <token>`, comparé à temps constant côté Forgejo. La MÊME valeur que
+      # `FORGEJO__METRICS__TOKEN` (helm-values.yaml) : les deux viennent de la clé `token` du même
+      # Secret, ce qui est précisément ce qui les empêche de diverger.
+      #
+      # ⚠️ `type: Bearer` est le défaut, mais il est explicité : la valeur envoyée est
+      # `<type> <credentials>`, et un type vide enverrait le token nu — que Forgejo refuserait
+      # avec un 401 sans rien dire de plus.
+      authorization:
+        type: Bearer
+        credentials:
+          name: forgejo-metrics
+          key: token

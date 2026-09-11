@@ -1,0 +1,61 @@
+# Deux routes, deux hostnames : les `hostnames` d'un HTTPRoute s'appliquent à toutes ses règles,
+# on ne peut donc pas router deux noms vers deux ports dans un seul objet.
+#
+# Listener `https-internal` uniquement (*.lan.wittner.tech) : ni le dashboard ni le serveur
+# d'API n'ont vocation à être joignables depuis Internet. La doc amont documente une campagne
+# de compromission (juin 2026) où des scanners ont atteint des dashboards et des serveurs d'API
+# exposés et ont fait planter une porte dérobée SSH à l'agent.
+#
+# group/kind/weight/sectionName et matches explicites : le CRD les injecte comme défauts côté
+# live — sans eux, OutOfSync permanent dans ArgoCD.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hermes-dashboard
+  namespace: hermes
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: shared-gw
+      namespace: gateway
+      sectionName: https-internal
+  hostnames:
+    - hermes.lan.wittner.tech
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: hermes
+          port: 9119
+          weight: 1
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hermes-api
+  namespace: hermes
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: shared-gw
+      namespace: gateway
+      sectionName: https-internal
+  hostnames:
+    - hermes-api.lan.wittner.tech
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: hermes
+          port: 8642
+          weight: 1

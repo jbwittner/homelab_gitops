@@ -1,0 +1,97 @@
+# Scrape de la machine `vert-emeriss` — `node-exporter-emeriss.lan.wittner.tech`.
+#
+# ⚠️ CE QU'IL RÉPARE. Jusqu'au 2026-09-11, la forge tournait dans ce cluster et le DaemonSet
+# node-exporter de kube-prometheus-stack mesurait ses nœuds. La bascule vers Docker
+# (doc/forgejo-docker-bascule-et-sauvegarde.md) a emporté cette source SANS la remplacer : entre
+# cette date et cet objet, **le disque de la machine n'était surveillé par personne** — alors que
+# c'est le mode de panne le plus probable de ce qu'elle porte, dépôts, base et dumps se partageant
+# un seul stockage.
+#
+# ⚠️ CE SCRAPE NE PARLE PAS DE LA FORGE, et c'est pour cela qu'il n'est pas dans
+# `forgejo-monitoring`. Il parle d'une MACHINE, qui précède le service qu'elle héberge et lui
+# survit. Même critère que la séparation des piles `node-exporter/` et `forgejo/` côté
+# homelab_emeriss.
+#
+# ⚠️ IL TRANSPORTE POURTANT LES MÉTRIQUES DE SAUVEGARDE DE LA FORGE, et c'est le seul endroit où
+# les deux périmètres se touchent : `forgejo-ctl backup` écrit un `.prom` dans le collecteur
+# `textfile` de node-exporter, donc `forgejo_backup_*` arrive PAR ICI. Les trois alertes qui s'en
+# servent vivent dans `forgejo-monitoring` — elles parlent de la forge. Conséquence : si cette
+# cible tombe, elles deviennent aveugles, et c'est `ExternalNodeScrapeMissing` qui le dit.
+#
+# ⚠️ LE HOSTNAME PORTE LE NOM DE LA MACHINE (`-emeriss`) et non `node-exporter` tout court : la
+# pile d'en face est duplicable sur un autre hôte, et un nom générique ferait collision au premier
+# second exportateur — côté Traefik comme côté résolveur DNS.
+#
+# ⚠️ `job="external-node"` ET NON `job="node-exporter"`. Prendre ce dernier ferait hériter
+# gratuitement des ~40 alertes `node-exporter.rules` de kube-prometheus-stack — et ferait entrer
+# une machine qui n'est PAS un nœud du cluster dans les dashboards, les règles et les agrégations
+# des nœuds Talos, avec un `instance` qui n'existe nulle part ailleurs. Le coût de ce choix est
+# assumé et payé dans `prometheusrule.yaml` : les quelques règles qui comptent y sont écrites à la
+# main.
+#
+# ⚠️ Le `job` est COMMUN à toutes les machines de ce composant, la ventilation se fait par
+# `instance`. En ajouter une seconde ne demande donc aucune règle nouvelle.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: node-exporter-vert-emeriss
+  namespace: monitoring
+  labels:
+    # ⚠️ OBLIGATOIRE : sélecteur du prometheus-operator
+    # (`scrapeConfigSelectorNilUsesHelmValues`). Sans ce label, l'objet est ignoré SANS ERREUR —
+    # la cible n'apparaît simplement jamais dans /targets.
+    release: kube-prometheus-stack
+spec:
+  staticConfigs:
+    - targets:
+        # Host SANS schéma ni chemin : ils sont portés par `scheme` et `metricsPath` ci-dessous.
+        - node-exporter-emeriss.lan.wittner.tech
+  scheme: HTTPS
+  metricsPath: /metrics
+  # 30s, contrairement aux 60s du scrape de la forge. La raison de ces 60s-là est une charge SQL
+  # (une trentaine de `SELECT count(*)` par scrape) ; ici il n'y en a aucune — node-exporter lit
+  # `/proc` et `/sys`. Et ce sont des séries dont la PENTE est le signal : `predict_linear` sur le
+  # remplissage disque a besoin de points rapprochés pour valoir quelque chose.
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  # `Authorization: Basic ...`, comparé côté exportateur par `exporter-toolkit`. MÊME paire que
+  # `/etc/node-exporter/web-config.yml` sur la machine — recopiée, jamais générée ici. Les deux
+  # vivent dans deux systèmes différents et RIEN ne les empêche de diverger : c'est le coût de la
+  # sortie du cluster. Une divergence se lit en 401, donc en `up == 0`, donc en
+  # `ExternalNodeDown`.
+  #
+  # ⚠️ SECRET PROPRE À CE COMPOSANT, distinct de celui du `postgres-exporter` de la même machine
+  # (`forgejo-db-metrics`, dans forgejo-monitoring). Les deux exportateurs tournent pourtant sur le
+  # même hôte : ce n'est donc pas une isolation cryptographique, c'est une INDÉPENDANCE DE CYCLE DE
+  # VIE. Retirer la forge du parc doit pouvoir supprimer son Secret sans toucher à la supervision
+  # de la machine. Un secret partagé aurait réintroduit exactement le couplage que la séparation
+  # de ces deux composants sert à défaire.
+  #
+  # ⚠️ Le Secret est nommé au pluriel (`node-exporters`) : il est destiné à porter le credential de
+  # TOUTES les machines de ce composant, pas seulement de `vert-emeriss`.
+  basicAuth:
+    username:
+      name: node-exporters
+      key: username
+    password:
+      name: node-exporters
+      key: password
+  # TLS : le proxy sert le wildcard Let's Encrypt `*.lan.wittner.tech`, CA publique déjà dans le
+  # magasin du conteneur Prometheus. Pas de `tlsConfig`, et surtout PAS d'`insecureSkipVerify`.
+  relabelings:
+    # Fixe le label `job`. Sans ça, une ScrapeConfig nomme son job
+    # `scrapeConfig/monitoring/node-exporter-vert-emeriss`.
+    # ⚠️ SEUL point de couplage entre cet objet et les règles — celles de `prometheusrule.yaml`
+    # ici, ET les trois de `forgejo-backup.rules` dans forgejo-monitoring, qui sélectionnent le
+    # même job. Le changer les casse toutes, dans DEUX composants, silencieusement.
+    - targetLabel: job
+      replacement: external-node
+    # ⚠️ Sans ce relabeling, `instance` vaut le hostname de scrape
+    # (`node-exporter-emeriss.lan.wittner.tech`) — le nom du CHEMIN D'ACCÈS, pas celui de la
+    # machine. Une alerte de disque plein afficherait une URL de supervision là où on attend un
+    # nom d'hôte, et changer le hostname du proxy réécrirait `instance` sur toutes les séries,
+    # cassant la continuité des graphes sans qu'aucune machine n'ait bougé.
+    # ⚠️ C'est AUSSI ce qui rend le composant extensible : les règles ne nomment aucune machine,
+    # elles se ventilent sur cette étiquette.
+    - targetLabel: instance
+      replacement: vert-emeriss
