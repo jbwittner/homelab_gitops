@@ -240,6 +240,33 @@ alertmanager:
     templates:
       - '/etc/alertmanager/config/*.tmpl'
 
+# --- Règles par défaut du chart : exclusions assumées ---
+#
+# KubeClientCertificateExpiration — DÉSACTIVÉE le 2026-09-15 après enquête.
+#
+# La règle ne regarde aucune date d'expiration : elle prend le 1er centile de
+# `apiserver_client_certificate_expiration_seconds_bucket` sur 5 min et alerte sous 86400 s.
+# `histogram_quantile` interpole DANS le premier bucket, donc la moindre observation tombant
+# dans `le="0"` — certificat non parsable par l'apiserver, requête passée par l'aggregator —
+# écrase le centile à ~0 quelle que soit la santé réelle des certificats. L'alerte devient un
+# voyant allumé à vie, en `severity: critical`, sur les deux apiservers.
+#
+# Vérifié nœud par nœud avant de couper : TOUS les clients cert-auth du cluster sont à un an,
+# émis au bootstrap du 2026-08-29 et valables jusqu'au 2027-08-29 :
+#   - kubelet            /var/lib/kubelet/pki/kubelet-client-current.pem
+#   - controller-manager /system/secrets/kubernetes/kube-controller-manager/kubeconfig
+#   - scheduler          /system/secrets/kubernetes/kube-scheduler/kubeconfig
+#   - admin              kubeconfig local (O=system:masters)
+# Aucun ne passe sous 24 h. L'alerte est donc fausse par construction, pas prématurée.
+#
+# CE QU'ON PERD. Le vrai cas — un certificat client réellement mourant — ne sera plus signalé.
+# Assumé : sur Talos les certificats sont émis et rotés par la machine, et leur échéance se
+# surveille avec `talosctl`, pas avec cette métrique. Procédure de contrôle dans le README.
+# Le nom couvre les DEUX variantes de la règle (warning 7 j et critical 24 h).
+defaultRules:
+  disabled:
+    KubeClientCertificateExpiration: true
+
 # --- node-exporter : `instance` = nom du nœud au lieu de l'IP:port du pod.
 #     Par défaut la ServiceMonitor du chart n'applique aucun relabeling, donc toutes
 #     les séries node-* sortent avec instance="192.168.1.11:9100". Corrigé ici plutôt

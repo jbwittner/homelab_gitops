@@ -135,6 +135,9 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - Les trois morceaux du SSO (`envValueFrom`, `auth.generic_oauth`, la ligne
   `grafana-oidc.externalsecret.yaml` du `kustomization.yaml`) se décommentent **ensemble** :
   un provider OIDC sans `client_secret` fait démarrer Grafana en erreur.
+- `defaultRules.disabled` est indexé par **nom de règle** : un renommage amont la réactive
+  silencieusement, sans erreur Helm ni écart de sync ArgoCD. Revérifier ce bloc à chaque bump du
+  chart — cf. [la règle `KubeClientCertificateExpiration`](#règle-kubeclientcertificateexpiration-désactivée-depuis-le-2026-09-15).
 
 ## Opérations
 
@@ -543,6 +546,79 @@ Ce que les logs disent quand ça rate, en revanche :
 - **`tplConfig: false`** dans ce chart (revérifié en **88.6.5** au rendu) : les `{{ }}` du `Subject`
   partent tels quels vers Alertmanager. Si ce flag passait à `true`, Helm les interpréterait
   d'abord et le sujet arriverait vide — il faudrait les échapper.
+
+### Règle `KubeClientCertificateExpiration` désactivée (depuis le 2026-09-15)
+
+Elle sonnait en `critical` sur les deux apiservers (`192.168.1.11`, `192.168.1.12`) sans
+interruption. `defaultRules.disabled` dans `helm-values.yaml` la coupe — **les deux variantes**,
+warning 7 j et critical 24 h, partagent ce nom.
+
+**Elle ne mesure pas ce que son résumé annonce.** Son expression ne lit aucune date d'expiration :
+
+```promql
+histogram_quantile(0.01, sum without (namespace, service, endpoint) (rate(apiserver_client_certificate_expiration_seconds_bucket{job="apiserver"}[5m]))) < 86400
+and
+on (job, cluster, instance) apiserver_client_certificate_expiration_seconds_count{job="apiserver"} > 0
+```
+
+C'est le **1er centile** de la vie restante des certificats présentés dans les 5 dernières
+minutes. Le `sum without (...)` conserve le label `instance` : le centile est calculé **par
+apiserver**, d'où deux alertes distinctes pour une seule cause. Or `histogram_quantile` interpole **à l'intérieur du premier bucket** : dès qu'une
+observation tombe dans `le="0"` — certificat que l'apiserver ne sait pas parser, requête arrivant
+par l'aggregator — le centile s'écrase vers 0 et y reste. La règle passe alors `firing` en
+permanence, indépendamment de l'état réel des certificats. Un seul client marginal suffit ; il n'y
+a pas de seuil à remonter qui rende la mesure juste.
+
+**Les certificats ont été vérifiés un par un avant de couper.** Tous émis au bootstrap du
+2026-08-29, tous valables jusqu'au 2027-08-29 :
+
+| Client | Emplacement | Sujet |
+| --- | --- | --- |
+| kubelet | `/var/lib/kubelet/pki/kubelet-client-current.pem` | `O=system:nodes` |
+| controller-manager | `/system/secrets/kubernetes/kube-controller-manager/kubeconfig` | `O=system:kube-controller-manager` |
+| scheduler | `/system/secrets/kubernetes/kube-scheduler/kubeconfig` | `O=system:kube-scheduler` |
+| admin | kubeconfig local | `O=system:masters` |
+
+Aucun sous 24 h, aucun sous 7 j. L'alerte était fausse **par construction**, pas en avance.
+
+**Ce qu'on perd, et comment on le compense.** Un certificat client réellement mourant ne déclenche
+plus rien. La compensation n'est pas un composant de plus mais un contrôle manuel, à passer avant
+chaque anniversaire de bootstrap (**échéance : 2027-08-29**) — depuis le dépôt `homelab_talos` :
+
+```bash
+# Certificat client du kubelet
+talosctl --talosconfig=./clusterconfig/talosconfig -n 192.168.1.11 \
+  read /var/lib/kubelet/pki/kubelet-client-current.pem \
+  | openssl x509 -noout -subject -startdate -enddate
+
+# Kubeconfigs générés par Talos pour le control-plane
+for c in kube-controller-manager kube-scheduler; do
+  echo "=== $c ==="
+  talosctl --talosconfig=./clusterconfig/talosconfig -n 192.168.1.11 \
+    read /system/secrets/kubernetes/$c/kubeconfig \
+    | yq -r '.users[0].user."client-certificate-data"' | base64 -d \
+    | openssl x509 -noout -subject -startdate -enddate
+done
+
+# Kubeconfig admin local
+kubectl config view --raw \
+  -o jsonpath='{.users[?(@.name=="admin@bleu-kalecgos")].user.client-certificate-data}' \
+  | base64 -d | openssl x509 -noout -subject -startdate -enddate
+```
+
+Sur Talos ces certificats sont émis et rotés par la machine elle-même : leur échéance relève de
+`talosctl`, pas d'une métrique de l'apiserver. Renouvellement par `talosctl kubeconfig --force`
+pour l'admin, par la rotation Talos pour les autres.
+
+**Si l'alerte devait revenir** — parce qu'un `defaultRules.disabled` a sauté à un bump de chart —
+la requête qui tranche vrai/faux positif est la répartition des buckets :
+
+```promql
+sum by (le) (rate(apiserver_client_certificate_expiration_seconds_bucket{job="apiserver"}[5m]))
+```
+
+`le="0"` nourri et constant → artefact. `le="86400"` qui se remplit progressivement alors que
+`le="0"` reste vide → certificat réellement en fin de vie, et là il faut agir.
 
 ### Accès Prometheus / Alertmanager
 
