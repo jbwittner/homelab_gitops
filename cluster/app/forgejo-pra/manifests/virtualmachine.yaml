@@ -32,7 +32,7 @@ spec:
   # ⚠️ ALLUMER SE FAIT PAR GIT, pas par `virtctl start` : `selfHeal: true` est actif sur
   # l'Application et ré-imposerait `Halted` dans la minute. Passer cette valeur à `Always`,
   # commiter, pousser — ArgoCD démarre la VM. C'est aussi ce qui date l'exercice dans l'historique.
-  runStrategy: Halted
+  runStrategy: Always
 
   dataVolumeTemplates:
     - metadata:
