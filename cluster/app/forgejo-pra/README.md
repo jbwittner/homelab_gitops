@@ -77,6 +77,9 @@ Ce que ça **n'achète pas** : la VM démarre sur une Debian neuve, mais son clo
   **indéfiniment**, et l'import de l'image se paierait le jour de l'exercice. ⚠️ Le prix : le PVC
   est provisionné sans savoir où la VM se schedulera, et le `nodeAffinity` du PV l'y cloue
   ensuite. Sans conséquence sur trois nœuds équivalents.
+- **VM éteinte ⇒ l'Application est `Synced`/`Suspended`, jamais `Healthy`.** C'est le verdict
+  d'ArgoCD pour une `VirtualMachine` en `runStrategy: Halted`, et c'est l'état NOMINAL entre deux
+  exercices — pas un composant en panne. `Healthy` n'apparaît que pendant un exercice.
 - **VM éteinte = Service sans endpoint.** État normal, pas une panne.
 - **L'image Debian est épinglée sur un build daté** et n'est suivie par aucun manager Renovate
   (`cloud.debian.org` n'est pas une datasource). Elle se rafraîchit à la main, à l'exercice
@@ -130,7 +133,7 @@ ssh <hôte-forge> sudo forgejo-ctl health
 sed -i '' 's/^  runStrategy: Halted/  runStrategy: Always/' \
   cluster/app/forgejo-pra/manifests/virtualmachine.yaml
 git commit -am "exercice PRA: allumage de la VM" && git push
-kubectl -n argocd get app forgejo-pra -w          # Synced/Healthy
+kubectl -n argocd get app forgejo-pra -w          # Synced/Healthy (Suspended tant qu'elle est éteinte)
 
 # --- Suivre le démarrage. L'image est DÉJÀ importée (elle l'est au déploiement du composant,
 #     pas à l'allumage — cf. l'annotation de liaison immédiate) : le DataVolume doit être
