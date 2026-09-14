@@ -63,10 +63,56 @@ Ce que ça **n'achète pas** : la VM démarre sur une Debian neuve, mais son clo
   ⚠️ Corollaire du protocole : `FORGEJO_DOMAIN` reste **inchangé** dans le `.env` d'exercice, donc
   Forgejo répond `404` à une requête portant un autre `Host`. L'accès par IP se fait avec l'en-tête :
   `curl -H 'Host: forgejo.wittner.tech' http://192.168.1.81:3001/api/healthz`.
+- **Le `userData` inline plafonne à 2048 octets**, plafond dur du webhook
+  `virtualmachine-validator.kubevirt.io`. Au-delà, le sync ArgoCD échoue sur
+  `userdata exceeds 2048 byte limit. Should use UserDataSecretRef` — pas au démarrage de la VM,
+  **à l'admission**. C'est pourquoi le bloc cloud-init ne porte aucun commentaire : ils comptent
+  dans les 2048, et ils sont donc placés autour, dans le manifeste. Marge actuelle : ~600 octets.
+  ⚠️ Passer par un `Secret` (`userDataSecretRef`) le jour où ça déborde est la porte de sortie
+  upstream — mais ce cloud-init ne contient **aucun secret**, et un Secret non scellé dans un
+  dépôt public est un mauvais signal. Élaguer avant d'en créer un.
 - **VM éteinte = Service sans endpoint.** État normal, pas une panne.
 - **L'image Debian est épinglée sur un build daté** et n'est suivie par aucun manager Renovate
   (`cloud.debian.org` n'est pas une datasource). Elle se rafraîchit à la main, à l'exercice
   complet annuel.
+
+## Prérequis dans la VM
+
+> [!CAUTION]
+> **Le cloud-init ne suffit PAS à lancer l'exercice.** Il pose la machine, pas la capacité à
+> parler au bucket. Cinq gestes manuels restent entre le premier `ssh` et l'étape 1 du protocole,
+> et `forgejo-ctl restore` s'arrête net sur chacun d'eux.
+
+| # | Ce qui manque | Le symptôme si on l'oublie |
+|---|---|---|
+| 1 | **`sops`** | `sops absent — cf. §4 de doc/bootstrap-debian.md`. Debian ne l'empaquette pas ; c'est le binaire de la release GitHub, **somme de contrôle à vérifier**. ⚠️ C'est pour ça qu'il n'est PAS dans le cloud-init : l'automatiser ferait sauter le contrôle |
+| 2 | **Clé `age`** en `/root/.config/sops/age/keys.txt` | `clé age introuvable ou illisible`. Prendre celle du **poste** — 2ᵉ destinataire de `homelab_emeriss/.sops.yaml` — pas celle de `vert-emeriss`. À effacer en fin d'exercice |
+| 3 | **Le clone** en `/opt/homelab/homelab_emeriss` + `forgejo-ctl deploy` | `pile introuvable : /opt/homelab/homelab_emeriss/forgejo` — c'est le `STACK_DIR` par défaut de l'outil |
+| 4 | **`/etc/forgejo/backup.env`** | `/etc/forgejo/backup.env introuvable ou illisible` |
+| 5 | **`/etc/forgejo/restic-password`** | `le dépôt EXISTE mais ce mot de passe ne l'ouvre pas`. En exercice **complet**, il vient de la copie HORS LIGNE — c'est précisément ce qu'on éprouve |
+
+⚠️ Aucun contournement pour 1 et 2 : `preparer_gcs()` est sur le chemin de **toute** invocation
+`restic` de l'outil, et il n'accepte pas de clé GCS en clair.
+
+Puis le `.env` d'exercice et le `compose.override.yaml` du § Protocole, qui restent **obligatoires**
+— la VM ne les remplace pas.
+
+## Ce que l'exercice prouve, et ce qu'il ne prouve pas
+
+| Prouvé | Non prouvé |
+|---|---|
+| le snapshot est lisible ; archive et dump sont cohérents entre eux | **le RTO de la production** — voir l'avertissement ci-dessous |
+| la séquence de restauration marche bout en bout | **scénario 3**, perte de l'hôte : le cloud-init court-circuite `bootstrap-debian.md`, or c'est le bootstrap qui est le poste de temps dominant |
+| les sept `FORGEJO_*` et `DB_PASSWORD` s'accordent avec l'archive (donc les données sont déchiffrables) | **le délai de détection** : rien n'alerte, il n'a pas de borne, et il domine les deux RTO |
+| que les copies **hors ligne** suffisent — à condition de partir d'elles | **scénarios 4 et 5** (bucket disparu, mot de passe `restic` perdu) : non testables par construction |
+| la rotation de `SECRET_KEY` — **si** on la joue (exercice complet annuel) | Traefik, DNS, certificat (autre dépôt) ; le **registre de paquets**, jamais restauré |
+
+> [!WARNING]
+> **Le RTO mesuré ici est OPTIMISTE, et ne se reporte pas dans la table des RTO de `pra.md`.**
+> 4 vCPU / 4 Gio sur du LVM de nœud, contre le plancher 2 Gio de l'hôte de production — et Git est
+> IOPS-bound, pas débit-bound. Le chiffre va dans le journal de `pra-exercices.md` **avec la
+> mention qu'il vient de la VM**. Les deux budgets de `pra.md` restent des raisonnements tant
+> qu'un exercice n'a pas tourné sur la machine réelle.
 
 ## Opérations
 

@@ -104,36 +104,47 @@ spec:
             name: forgejo-pra-root
         - name: cloudinit
           cloudInitNoCloud:
+            # ⚠️ PLAFOND DUR DE 2048 OCTETS sur `userData` inline, imposé par le webhook
+            # `virtualmachine-validator.kubevirt.io` (au-delà : `userdata exceeds 2048 byte
+            # limit. Should use UserDataSecretRef`). C'est pourquoi le bloc ci-dessous ne porte
+            # AUCUN commentaire : ils comptent dans les 2048. Ils sont ici, autour, où ils sont
+            # gratuits. ⚠️ Ne pas y ajouter une ligne sans revérifier la taille :
+            #   kustomize build cluster/app/forgejo-pra/manifests \
+            #     | yq -r 'select(.kind=="VirtualMachine")
+            #             | .spec.template.spec.volumes[1].cloudInitNoCloud.userData' | wc -c
+            #
             # ⚠️ VOLONTAIREMENT MINIMAL, et ce n'est pas de la paresse : ce cloud-init ne
             # REMPLACE PAS homelab_emeriss/doc/bootstrap-debian.md. Il pose le strict nécessaire
             # pour ouvrir un SSH et lancer un `docker compose` — compte, swap, Docker CE, les
-            # trois outils. Tout le reste (journalisation Docker, unattended-upgrades, horloge,
+            # trois paquets. Tout le reste (journalisation Docker, unattended-upgrades, horloge,
             # volume de sauvegarde dédié, durcissement SSH) reste dans le bootstrap, qui est la
             # procédure qu'on veut ÉPROUVER, pas recopier. Une procédure recopiée diverge.
             #
             # ⚠️ Aucun secret ici — ce dépôt est PUBLIC. Le mot de passe `restic`, les sept
             # `FORGEJO_*` et `DB_PASSWORD` se saisissent à la main dans la VM au moment de
-            # l'exercice, depuis les copies HORS LIGNE. C'est précisément ce que l'exercice
-            # complet annuel doit prouver (cf. pra-exercices.md § Ce que l'exercice doit prouver).
-            # Une clé publique SSH n'est pas un secret.
+            # l'exercice, depuis les copies HORS LIGNE. Une clé publique SSH n'est pas un secret.
+            # ⚠️ `sops` est ABSENT de cette liste à dessein : Debian ne l'empaquette pas, et le
+            # §4.2 du bootstrap impose de vérifier la somme de contrôle du binaire GitHub —
+            # l'installer ici ferait sauter ce contrôle. Cf. README § Prérequis dans la VM.
+            #
+            # Ce que fait le script, dans l'ordre :
+            #   1. swap 2 Go — sans lui un `git gc` ou un `pg_restore` qui déborde se fait tuer
+            #      par l'OOM killer AU MILIEU d'un repack (bootstrap-debian.md §3) ;
+            #   2. Docker CE depuis le dépôt Docker (§4) — PAS `docker.io`, qui n'a pas le
+            #      plugin `compose` v2 alors que tout le dépôt d'en face est en `docker compose` ;
+            #   3. `jbwittner` dans le groupe `docker` — ⚠️ équivalent root, assumé : VM jetable ;
+            #   4. l'arborescence d'exercice du § Protocole, aux MÊMES chemins que sur l'hôte de
+            #      production, ce qui permet de jouer la procédure sans traduire un seul chemin.
+            #
+            # `uid: 1000` est explicite parce que c'est celui de l'image Forgejo rootless, donc
+            # celui du `chown -R 1000:1000` de la procédure. Un compte en 1001 obligerait à
+            # traduire toute la restauration.
             userData: |
               #cloud-config
               hostname: pra-forgejo
-              preserve_hostname: false
               package_update: true
-              packages:
-                - ca-certificates
-                - curl
-                - gnupg
-                - git
-                - locales-all
-                - restic
-                - age
-                - apache2-utils
+              packages: [ca-certificates, curl, gnupg, git, locales-all, restic, age, apache2-utils]
               users:
-                # uid 1000 explicite : c'est celui de l'image Forgejo rootless, donc celui du
-                # `chown -R 1000:1000` de la procédure de restauration. Un compte en 1001
-                # oblige à traduire toute la procédure.
                 - name: jbwittner
                   uid: 1000
                   shell: /bin/bash
@@ -145,17 +156,11 @@ spec:
               runcmd:
                 - |
                   set -eux
-                  # Swap — sans lui, un `git gc` ou un `pg_restore` qui déborde se fait tuer par
-                  # l'OOM killer AU MILIEU d'un repack (cf. bootstrap-debian.md §3).
                   fallocate -l 2G /swapfile
                   chmod 600 /swapfile
                   mkswap /swapfile
                   swapon /swapfile
                   echo '/swapfile none swap sw 0 0' >> /etc/fstab
-
-                  # Docker CE — repris de bootstrap-debian.md §4. PAS `docker.io` : le paquet
-                  # Debian n'a pas le plugin `compose` v2, et toutes les commandes du dépôt
-                  # d'en face sont en `docker compose` (sous-commande).
                   install -m 0755 -d /etc/apt/keyrings
                   curl -fsSL https://download.docker.com/linux/debian/gpg \
                     | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -166,13 +171,7 @@ spec:
                   apt-get update
                   apt-get install -y docker-ce docker-ce-cli containerd.io \
                                      docker-buildx-plugin docker-compose-plugin
-                  # ⚠️ Le groupe `docker` est un équivalent root. Assumé : cette VM est jetable
-                  # et ne porte aucun secret entre deux exercices.
                   usermod -aG docker jbwittner
-
-                  # L'arborescence d'exercice du § Protocole, aux MÊMES chemins que sur l'hôte
-                  # de production — c'est ce qui permet de jouer la procédure sans traduire un
-                  # seul chemin.
                   install -d -m 700 /srv/pra-forgejo
                   install -d -m 750 /srv/pra-forgejo/data /srv/pra-forgejo/pgdata
                   install -d -m 700 /srv/pra-forgejo/restauration
