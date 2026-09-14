@@ -198,8 +198,9 @@ par le contrôleur ApplicationSet et déroulent leurs propres waves de ressource
 | -5 | `cert-manager` | émission TLS, ClusterIssuers et wildcards (dans son `manifests/`) |
 | -1 | `argocd` | self-management |
 | -1 | `cnpg-barman-plugin` | le plugin doit précéder le `Cluster` CNPG qui le référence |
-| 0 (défaut, non annoté) | `cilium`, `openebs`, `cnpg`, `kube-prometheus-stack`, `hermes`, `renovate` | reste de la stack |
+| 0 (défaut, non annoté) | `cilium`, `openebs`, `cnpg`, `kube-prometheus-stack`, `hermes`, `renovate`, `forgejo-pra` | reste de la stack |
 | 1 | `velero` | a besoin d'une StorageClass et des CRDs posées plus haut |
+| 1 | `kubevirt` | **même raison** : CDI a besoin d'une StorageClass pour ses PVC et son scratch space |
 | 2 | `cnpg-monitoring`, `velero-monitoring`, `openebs-monitoring`, `forgejo-monitoring`, `hosts-monitoring` | volets post-bootstrap : leurs `PrometheusRule`/`ServiceMonitor`/`ScrapeConfig` supposent les CRDs de `kube-prometheus-stack` |
 
 ⚠️ **Une wave n'ordonne qu'à l'intérieur d'un même app-of-apps.** `infra` et `app` sont deux

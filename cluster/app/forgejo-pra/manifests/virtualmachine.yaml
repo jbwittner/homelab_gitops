@@ -1,0 +1,180 @@
+# La machine d'EXERCICE du PRA de la forge. Ce n'est PAS un standby : rien ici ne prend le relais
+# de la production, et rien ici ne doit être joignable depuis Internet.
+#
+# ⚠️ Ce qu'elle remplace, c'est la pile parallèle montée SUR L'HÔTE DE PRODUCTION, décrite au
+# § Protocole de homelab_emeriss/forgejo/doc/pra-exercices.md. Ce que ça achète, et qui est la
+# seule justification de ce composant :
+#   - plus de contention mémoire : le protocole actuel avertit que deux Forgejo + deux PostgreSQL
+#     sur les 2 Gio de plancher laissent l'OOM killer choisir sa victime, sans garantie que ce
+#     soit la copie ;
+#   - plus de collision de ports : `postgres-exporter` publie `9187` EN DUR, d'où la surcharge
+#     `profiles: ["jamais-en-exercice"]` du protocole — inutile ici, la VM a ses propres ports ;
+#   - plus de risque de chemin : le `rm -rf` de l'étape 3 ne peut PAS atteindre `/srv/forgejo` de
+#     la production, il n'existe pas dans cette VM. Aujourd'hui seul le préfixe `pra-` sépare la
+#     commande destructrice de la perte de la production ;
+#   - l'exercice se joue N'IMPORTE QUAND — plus de fenêtre interdite autour de 3h30 ni pendant
+#     qu'on pousse sur la forge.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: forgejo-pra
+  labels:
+    app.kubernetes.io/name: forgejo-pra
+    app.kubernetes.io/part-of: homelab-gitops
+spec:
+  # ⚠️ ÉTEINTE PAR DÉFAUT, et c'est l'état normal entre deux exercices. Trois raisons :
+  #   1. une seconde forge qui tourne sans surveillance porte les MÊMES identifiants de miroir
+  #      poussé que la production — `update_mirrors` passe 24 h après le démarrage du conteneur,
+  #      donc une VM oubliée en marche finit par pousser vers le dépôt GitHub, la copie de survie ;
+  #   2. 4 vCPU + 4 Gio réservés en permanence sur un nœud, pour rien ;
+  #   3. le disque de la VM porte une copie des données de la forge après un exercice.
+  #
+  # ⚠️ ALLUMER SE FAIT PAR GIT, pas par `virtctl start` : `selfHeal: true` est actif sur
+  # l'Application et ré-imposerait `Halted` dans la minute. Passer cette valeur à `Always`,
+  # commiter, pousser — ArgoCD démarre la VM. C'est aussi ce qui date l'exercice dans l'historique.
+  runStrategy: Halted
+
+  dataVolumeTemplates:
+    - metadata:
+        name: forgejo-pra-root
+      spec:
+        storage:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: openebs-lvm-thin
+          resources:
+            requests:
+              # Sans commune mesure avec les ~26 Mio de la forge : ce qui dimensionne, c'est la
+              # COEXISTENCE de l'étape 3 — l'archive rapatriée dans `restauration/`, `data/`
+              # déballé, et `pgdata/` restauré, plus les images Docker. Le VG a ~930 Gio libres
+              # par nœud : la place n'est pas la contrainte, la re-télécharger l'est.
+              storage: 40Gi
+        source:
+          http:
+            # Debian 13 (trixie) générique, build DATÉ — pas le lien `latest/`, qui bouge sous le
+            # manifeste et rendrait la VM non reproductible. Renovate NE SUIT PAS cette URL
+            # (aucun manager ne connaît cloud.debian.org) : elle se rafraîchit à la main, à
+            # l'exercice COMPLET annuel. Une image de quelques mois est sans conséquence ici —
+            # le premier geste dans la VM est de toute façon un `apt update`.
+            url: https://cloud.debian.org/images/cloud/trixie/20260914-2601/debian-13-generic-amd64-20260914-2601.qcow2
+
+  template:
+    metadata:
+      labels:
+        app: forgejo-pra
+        kubevirt.io/domain: forgejo-pra
+    spec:
+      # Même raison que le `evictionStrategy` du KubeVirt CR : volume node-local, migration à
+      # chaud impossible. Drainer le nœud éteint cette VM — ce qui est acceptable pour un
+      # composant d'exercice, et ne le serait pas pour de l'exploitation.
+      evictionStrategy: None
+      terminationGracePeriodSeconds: 60
+      domain:
+        cpu:
+          # Colonne « confortable » du tableau de dimensionnement de
+          # homelab_emeriss/forgejo/README.md § Matériel minimum. Le plancher (2 vCPU / 2 Gio)
+          # n'est PAS la bonne cible ici : c'est justement le plancher qui rend le protocole
+          # actuel risqué, et un exercice sous-dimensionné mesure un RTO qui n'est pas le vrai.
+          cores: 4
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: root
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              # `masquerade` : la VM est NATée derrière l'IP du pod. Sortie LAN et Internet OK
+              # (indispensable — `restic` parle à GCS, et le dépôt se clone depuis la forge) ;
+              # entrée par le Service seulement. Sans `ports:`, TOUS les ports sont transférés.
+              masquerade: {}
+          # Sans RNG virtio, la génération d'entropie de la VM est lente au point de faire traîner
+          # le premier démarrage de PostgreSQL et de sshd.
+          rng: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: root
+          dataVolume:
+            name: forgejo-pra-root
+        - name: cloudinit
+          cloudInitNoCloud:
+            # ⚠️ VOLONTAIREMENT MINIMAL, et ce n'est pas de la paresse : ce cloud-init ne
+            # REMPLACE PAS homelab_emeriss/doc/bootstrap-debian.md. Il pose le strict nécessaire
+            # pour ouvrir un SSH et lancer un `docker compose` — compte, swap, Docker CE, les
+            # trois outils. Tout le reste (journalisation Docker, unattended-upgrades, horloge,
+            # volume de sauvegarde dédié, durcissement SSH) reste dans le bootstrap, qui est la
+            # procédure qu'on veut ÉPROUVER, pas recopier. Une procédure recopiée diverge.
+            #
+            # ⚠️ Aucun secret ici — ce dépôt est PUBLIC. Le mot de passe `restic`, les sept
+            # `FORGEJO_*` et `DB_PASSWORD` se saisissent à la main dans la VM au moment de
+            # l'exercice, depuis les copies HORS LIGNE. C'est précisément ce que l'exercice
+            # complet annuel doit prouver (cf. pra-exercices.md § Ce que l'exercice doit prouver).
+            # Une clé publique SSH n'est pas un secret.
+            userData: |
+              #cloud-config
+              hostname: pra-forgejo
+              preserve_hostname: false
+              package_update: true
+              packages:
+                - ca-certificates
+                - curl
+                - gnupg
+                - git
+                - locales-all
+                - restic
+                - age
+                - apache2-utils
+              users:
+                # uid 1000 explicite : c'est celui de l'image Forgejo rootless, donc celui du
+                # `chown -R 1000:1000` de la procédure de restauration. Un compte en 1001
+                # oblige à traduire toute la procédure.
+                - name: jbwittner
+                  uid: 1000
+                  shell: /bin/bash
+                  groups: [sudo]
+                  sudo: "ALL=(ALL) NOPASSWD:ALL"
+                  lock_passwd: true
+                  ssh_authorized_keys:
+                    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJB5ArFSObC1wh8qZ8r5+u8Vm9TpPPM8qGf5h1aFlzab jbwittner@MBPJB.local
+              runcmd:
+                - |
+                  set -eux
+                  # Swap — sans lui, un `git gc` ou un `pg_restore` qui déborde se fait tuer par
+                  # l'OOM killer AU MILIEU d'un repack (cf. bootstrap-debian.md §3).
+                  fallocate -l 2G /swapfile
+                  chmod 600 /swapfile
+                  mkswap /swapfile
+                  swapon /swapfile
+                  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+                  # Docker CE — repris de bootstrap-debian.md §4. PAS `docker.io` : le paquet
+                  # Debian n'a pas le plugin `compose` v2, et toutes les commandes du dépôt
+                  # d'en face sont en `docker compose` (sous-commande).
+                  install -m 0755 -d /etc/apt/keyrings
+                  curl -fsSL https://download.docker.com/linux/debian/gpg \
+                    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                  chmod a+r /etc/apt/keyrings/docker.gpg
+                  . /etc/os-release
+                  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian ${VERSION_CODENAME} stable" \
+                    > /etc/apt/sources.list.d/docker.list
+                  apt-get update
+                  apt-get install -y docker-ce docker-ce-cli containerd.io \
+                                     docker-buildx-plugin docker-compose-plugin
+                  # ⚠️ Le groupe `docker` est un équivalent root. Assumé : cette VM est jetable
+                  # et ne porte aucun secret entre deux exercices.
+                  usermod -aG docker jbwittner
+
+                  # L'arborescence d'exercice du § Protocole, aux MÊMES chemins que sur l'hôte
+                  # de production — c'est ce qui permet de jouer la procédure sans traduire un
+                  # seul chemin.
+                  install -d -m 700 /srv/pra-forgejo
+                  install -d -m 750 /srv/pra-forgejo/data /srv/pra-forgejo/pgdata
+                  install -d -m 700 /srv/pra-forgejo/restauration
+                  install -d -m 700 /etc/forgejo
+                  install -d -m 700 /var/backups/forgejo

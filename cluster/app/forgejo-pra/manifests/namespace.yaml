@@ -1,0 +1,14 @@
+# ⚠️ PSA `privileged` OBLIGATOIRE, et ce n'est pas un raccourci : KubeVirt l'exige pour tout
+# namespace qui porte des VM. `virt-launcher` tourne en seccomp `unconfined` et réclame
+# `NET_BIND_SERVICE` + `SYS_NICE` ; Talos impose `baseline` à tout le cluster (seul `kube-system`
+# est exempté), donc sans ce label le pod de la VM est REJETÉ à l'admission et la
+# VirtualMachineInstance reste `Scheduling` sans message dans la VM elle-même — il faut lire les
+# events du namespace pour le voir.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgejo-pra
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

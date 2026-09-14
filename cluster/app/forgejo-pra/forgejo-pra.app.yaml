@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo-pra
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: forgejo-pra
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: disaster-recovery
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/forgejo-pra/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: forgejo-pra
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

@@ -70,6 +70,7 @@ pour tout ce qui est dans `archive/`.
 | [argocd](cluster/infra/argocd/README.md) | -1 | le moteur GitOps, self-managed |
 | [cilium](cluster/infra/cilium/README.md) | 0 | CNI, LB-IPAM et L2, implémentation Gateway API |
 | [openebs](cluster/infra/openebs/README.md) | 0 | stockage local LVM, `openebs-lvm-thin` |
+| [kubevirt](cluster/infra/kubevirt/README.md) | 1 | hyperviseur (KubeVirt + CDI) — **un seul consommateur**, `forgejo-pra` |
 | [openebs-monitoring](cluster/infra/openebs-monitoring/README.md) | 2 | alertes de remplissage des volumes |
 
 *Non déployés :*
@@ -90,6 +91,7 @@ pour tout ce qui est dans `archive/`.
 | [kube-prometheus-stack](cluster/app/kube-prometheus-stack/README.md) | 0 | Prometheus, Alertmanager, Grafana et ses dashboards |
 | [hermes](cluster/app/hermes/README.md) | 0 | agent LLM en mode gateway |
 | [renovate](cluster/app/renovate/README.md) | 0 | mises à jour de dépendances |
+| [forgejo-pra](cluster/app/forgejo-pra/README.md) | 0 | VM d'**exercice** du PRA de la forge — éteinte par défaut, jamais un standby |
 | [cnpg-monitoring](cluster/app/cnpg-monitoring/README.md) | 2 | archivage WAL — ⚠️ les 3 règles de **sauvegarde** sont commentées (plus de plugin barman) |
 | [forgejo-monitoring](cluster/app/forgejo-monitoring/README.md) | 2 | la forge et sa base, scrapées **hors du cluster** — 9 alertes |
 | [hosts-monitoring](cluster/app/hosts-monitoring/README.md) | 2 | les **machines** hors cluster (disque, mémoire, collecteur textfile) — 6 alertes |

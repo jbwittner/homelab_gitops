@@ -11,6 +11,12 @@ Exposer un service = un `HTTPRoute` qui s'y attache.
   (`192.168.1.80-89`, [`ip-pool.yaml`](../cluster/infra/cilium/manifests/ip-pool.yaml)) et annoncée
   en **L2** (`bleu-kalecgos-l2`, `loadBalancerIPs: true`). En pratique `shared-gw` prend
   **`192.168.1.80`**.
+  ⚠️ **Une seconde IP du pool est prise, et elle n'a aucun hostname** : `192.168.1.81`, figée par
+  annotation `lbipam.cilium.io/ips` sur le Service de
+  [forgejo-pra](../cluster/app/forgejo-pra/README.md). C'est **délibérément** le seul service du
+  cluster joignable par IP nue : c'est une copie d'exercice de la forge, avec ses vrais comptes,
+  et lui donner un nom serait le premier pas vers sa déclaration au proxy. Elle ne répond que
+  VM allumée, c'est-à-dire pendant un exercice.
 - **TLS terminé au Gateway** : secrets `wildcard-public-tls` et `wildcard-lan-tls` (ns `gateway`),
   émis par cert-manager (Let's Encrypt DNS-01 Cloudflare,
   [`certificates.yaml`](../cluster/infra/cert-manager/manifests/certificates.yaml)) et référencés en
