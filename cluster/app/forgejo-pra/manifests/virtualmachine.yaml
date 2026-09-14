@@ -132,46 +132,41 @@ spec:
             name: forgejo-pra-root
         - name: cloudinit
           cloudInitNoCloud:
-            # ⚠️ PLAFOND DUR DE 2048 OCTETS sur `userData` inline, imposé par le webhook
-            # `virtualmachine-validator.kubevirt.io` (au-delà : `userdata exceeds 2048 byte
-            # limit. Should use UserDataSecretRef`). C'est pourquoi le bloc ci-dessous ne porte
-            # AUCUN commentaire : ils comptent dans les 2048. Ils sont ici, autour, où ils sont
-            # gratuits. ⚠️ Ne pas y ajouter une ligne sans revérifier la taille :
+            # ⚠️ CE CLOUD-INIT NE FAIT QUE LE §1 DE bootstrap-debian.md — compte, sudo, clé SSH.
+            # Rien d'autre. Pas de paquets, pas de Docker, pas de swap, pas d'arborescence.
+            #
+            # C'est le point le plus important de ce composant, et il est contre-intuitif : tout
+            # ce qu'on pré-installe ici, c'est autant que l'exercice NE MESURE PAS. Or `pra.md`
+            # désigne le bootstrap — pas la restauration — comme le POSTE DE TEMPS DOMINANT du
+            # scénario 3. Une VM livrée avec Docker, `restic` et `/srv` déjà en place mesure
+            # confortablement la seule partie qui n'était pas en cause.
+            #
+            # Le §1 fait exception parce qu'il faut bien un chemin d'entrée : sans compte ni clé,
+            # on n'atteint la machine que par la console série et sans mot de passe. C'est ce
+            # qu'un installateur Debian ou une console de VM ferait de toute façon.
+            #
+            # ⚠️ Donc l'exercice COMMENCE par jouer bootstrap-debian.md §2 à §5 DANS la VM. Ce
+            # n'est pas un préalable pénible à l'exercice : c'est l'exercice.
+            #
+            # ⚠️ `NOPASSWD` parce que `lock_passwd: true` : le compte n'a aucun mot de passe,
+            # donc un `sudo` interactif serait impossible. Écart assumé avec le §1, qui durcit
+            # sudo sur une vraie machine. Celle-ci est jetable et n'est joignable que du LAN.
+            #
+            # ⚠️ Aucun secret ici — ce dépôt est PUBLIC. Une clé publique SSH n'en est pas un.
+            #
+            # ⚠️ Plafond dur de 2048 octets sur `userData` inline (webhook
+            # `virtualmachine-validator.kubevirt.io`) : les commentaires comptent dedans, d'où
+            # leur place ici, autour. Vérifier après toute modification :
             #   kustomize build cluster/app/forgejo-pra/manifests \
             #     | yq -r 'select(.kind=="VirtualMachine")
             #             | .spec.template.spec.volumes[1].cloudInitNoCloud.userData' | wc -c
             #
-            # ⚠️ VOLONTAIREMENT MINIMAL, et ce n'est pas de la paresse : ce cloud-init ne
-            # REMPLACE PAS homelab_emeriss/doc/bootstrap-debian.md. Il pose le strict nécessaire
-            # pour ouvrir un SSH et lancer un `docker compose` — compte, swap, Docker CE, les
-            # trois paquets. Tout le reste (journalisation Docker, unattended-upgrades, horloge,
-            # volume de sauvegarde dédié, durcissement SSH) reste dans le bootstrap, qui est la
-            # procédure qu'on veut ÉPROUVER, pas recopier. Une procédure recopiée diverge.
-            #
-            # ⚠️ Aucun secret ici — ce dépôt est PUBLIC. Le mot de passe `restic`, les sept
-            # `FORGEJO_*` et `DB_PASSWORD` se saisissent à la main dans la VM au moment de
-            # l'exercice, depuis les copies HORS LIGNE. Une clé publique SSH n'est pas un secret.
-            # ⚠️ `sops` est ABSENT de cette liste à dessein : Debian ne l'empaquette pas, et le
-            # §4.2 du bootstrap impose de vérifier la somme de contrôle du binaire GitHub —
-            # l'installer ici ferait sauter ce contrôle. Cf. README § Prérequis dans la VM.
-            #
-            # Ce que fait le script, dans l'ordre :
-            #   1. swap 2 Go — sans lui un `git gc` ou un `pg_restore` qui déborde se fait tuer
-            #      par l'OOM killer AU MILIEU d'un repack (bootstrap-debian.md §3) ;
-            #   2. Docker CE depuis le dépôt Docker (§4) — PAS `docker.io`, qui n'a pas le
-            #      plugin `compose` v2 alors que tout le dépôt d'en face est en `docker compose` ;
-            #   3. `jbwittner` dans le groupe `docker` — ⚠️ équivalent root, assumé : VM jetable ;
-            #   4. l'arborescence d'exercice du § Protocole, aux MÊMES chemins que sur l'hôte de
-            #      production, ce qui permet de jouer la procédure sans traduire un seul chemin.
-            #
-            # `uid: 1000` est explicite parce que c'est celui de l'image Forgejo rootless, donc
-            # celui du `chown -R 1000:1000` de la procédure. Un compte en 1001 obligerait à
-            # traduire toute la restauration.
+            # `uid: 1000` explicite : c'est celui de l'image Forgejo rootless, donc celui du
+            # `chown -R 1000:1000` de la procédure de restauration. Un compte en 1001 obligerait
+            # à traduire toute la séquence.
             userData: |
               #cloud-config
               hostname: pra-forgejo
-              package_update: true
-              packages: [ca-certificates, curl, gnupg, git, locales-all, restic, age, apache2-utils]
               users:
                 - name: jbwittner
                   uid: 1000
@@ -181,27 +176,3 @@ spec:
                   lock_passwd: true
                   ssh_authorized_keys:
                     - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJB5ArFSObC1wh8qZ8r5+u8Vm9TpPPM8qGf5h1aFlzab jbwittner@MBPJB.local
-              runcmd:
-                - |
-                  set -eux
-                  fallocate -l 2G /swapfile
-                  chmod 600 /swapfile
-                  mkswap /swapfile
-                  swapon /swapfile
-                  echo '/swapfile none swap sw 0 0' >> /etc/fstab
-                  install -m 0755 -d /etc/apt/keyrings
-                  curl -fsSL https://download.docker.com/linux/debian/gpg \
-                    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-                  chmod a+r /etc/apt/keyrings/docker.gpg
-                  . /etc/os-release
-                  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian ${VERSION_CODENAME} stable" \
-                    > /etc/apt/sources.list.d/docker.list
-                  apt-get update
-                  apt-get install -y docker-ce docker-ce-cli containerd.io \
-                                     docker-buildx-plugin docker-compose-plugin
-                  usermod -aG docker jbwittner
-                  install -d -m 700 /srv/pra-forgejo
-                  install -d -m 750 /srv/pra-forgejo/data /srv/pra-forgejo/pgdata
-                  install -d -m 700 /srv/pra-forgejo/restauration
-                  install -d -m 700 /etc/forgejo
-                  install -d -m 700 /var/backups/forgejo

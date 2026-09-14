@@ -26,18 +26,20 @@ que la VM en fait :
 | Le `rm -rf` de l'étape 3 n'est séparé de la production que par le préfixe `pra-` | `/srv/forgejo` **n'existe pas** dans la VM |
 | Fenêtres interdites : autour de 3h30 (timer de sauvegarde), et pendant qu'on pousse | l'exercice se joue n'importe quand |
 
-Ce que ça **n'achète pas** : la VM démarre sur une Debian neuve, mais son cloud-init ne rejoue pas
-`homelab_emeriss/doc/bootstrap-debian.md`. Le scénario 3 (perte totale de l'hôte) reste donc
-**non éprouvé** par cet outil seul.
+Et elle rend le **scénario 3** (perte totale de l'hôte) jouable pour la première fois : la VM part
+d'une Debian neuve où **rien n'est installé**, donc l'exercice commence par jouer
+`homelab_emeriss/doc/bootstrap-debian.md` pour de vrai. C'est le poste de temps que `pra.md`
+désigne comme dominant, et que l'exercice sur l'hôte de production ne pouvait pas mesurer — l'hôte
+était déjà bootstrappé.
 
 ## Fichiers
 
 - `forgejo-pra.app.yaml` — Application (archétype (c) : kustomize seul), wave par défaut.
 - `manifests/namespace.yaml` — ns `forgejo-pra` labellisé **PSA `privileged`** (wave -1). Exigé
   par KubeVirt pour tout namespace portant des VM (d'où : pas de `CreateNamespace`).
-- `manifests/virtualmachine.yaml` — la VM : `runStrategy: Halted`, disque importé depuis l'image
-  cloud Debian par un `dataVolumeTemplate`, cloud-init inline. Le fichier porte le détail de
-  chaque choix.
+- `manifests/virtualmachine.yaml` — la VM : `runStrategy`, disque importé depuis l'image cloud
+  Debian par un `dataVolumeTemplate`, cloud-init inline **réduit au §1 du bootstrap**. Le fichier
+  porte le détail de chaque choix.
 - `manifests/service.yaml` — Service LoadBalancer, IP **figée** dans le pool Cilium, `3001`→3000
   et `22`.
 
@@ -63,6 +65,13 @@ Ce que ça **n'achète pas** : la VM démarre sur une Debian neuve, mais son clo
   ⚠️ Corollaire du protocole : `FORGEJO_DOMAIN` reste **inchangé** dans le `.env` d'exercice, donc
   Forgejo répond `404` à une requête portant un autre `Host`. L'accès par IP se fait avec l'en-tête :
   `curl -H 'Host: forgejo.wittner.tech' http://192.168.1.81:3001/api/healthz`.
+- **Le cloud-init ne fait que le §1 de `bootstrap-debian.md`** — compte, sudo, clé SSH — et
+  **c'est délibéré**. Tout ce qu'on y pré-installerait serait autant que l'exercice ne mesure pas,
+  or `pra.md` désigne le bootstrap comme le poste de temps dominant du scénario 3. Le §1 fait
+  exception parce qu'il faut un chemin d'entrée : sans compte ni clé, la machine n'est joignable
+  que par la console série et sans mot de passe.
+  ⚠️ **Ne pas y rajouter de paquets « pour gagner du temps ».** Le temps gagné est exactement le
+  temps qu'on voulait chronométrer.
 - **Le `userData` inline plafonne à 2048 octets**, plafond dur du webhook
   `virtualmachine-validator.kubevirt.io`. Au-delà, le sync ArgoCD échoue sur
   `userdata exceeds 2048 byte limit. Should use UserDataSecretRef` — pas au démarrage de la VM,
