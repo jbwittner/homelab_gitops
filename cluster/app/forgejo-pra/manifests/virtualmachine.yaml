@@ -37,6 +37,25 @@ spec:
   dataVolumeTemplates:
     - metadata:
         name: forgejo-pra-root
+        annotations:
+          # ⚠️ SANS CETTE LIGNE, LE DISQUE NE S'IMPORTE JAMAIS TANT QUE LA VM EST ÉTEINTE.
+          # `openebs-lvm-thin` est en `WaitForFirstConsumer` et le CR CDI porte le feature gate
+          # `HonorWaitForFirstConsumer` : pas de pod `virt-launcher` ⇒ pas de consommateur ⇒ le
+          # PVC reste `Pending` et le DataVolume `PendingPopulation`, indéfiniment. L'événement
+          # du PVC le dit : `waiting for first consumer to be created before binding`.
+          #
+          # Ça n'a l'air que d'un délai, mais ça vide le composant de son intérêt : les ~10 min
+          # de téléchargement de l'image se paieraient LE JOUR DE L'EXERCICE et gonfleraient le
+          # RTO mesuré d'un temps qui n'a rien à voir avec la restauration.
+          #
+          # Annotation CIBLÉE sur ce volume, et pas `featureGates: []` sur le CR CDI : le feature
+          # gate vaut pour tout le cluster, cette annotation pour ce DataVolume seul.
+          #
+          # ⚠️ Ce qu'on paie en échange : le PVC est provisionné MAINTENANT, sur un nœud choisi
+          # sans savoir où la VM se schedulera — et le `nodeAffinity` du PV y cloue ensuite la VM.
+          # C'est exactement ce que `WaitForFirstConsumer` sert à éviter. Sans conséquence ici :
+          # trois nœuds équivalents, une seule VM, aucune autre contrainte de placement.
+          cdi.kubevirt.io/storage.bind.immediate.requested: "true"
       spec:
         storage:
           accessModes:

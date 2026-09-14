@@ -71,6 +71,12 @@ Ce que ça **n'achète pas** : la VM démarre sur une Debian neuve, mais son clo
   ⚠️ Passer par un `Secret` (`userDataSecretRef`) le jour où ça déborde est la porte de sortie
   upstream — mais ce cloud-init ne contient **aucun secret**, et un Secret non scellé dans un
   dépôt public est un mauvais signal. Élaguer avant d'en créer un.
+- **Le DataVolume porte `cdi.kubevirt.io/storage.bind.immediate.requested`, et il n'est pas
+  optionnel.** `openebs-lvm-thin` est en `WaitForFirstConsumer` et CDI honore ce mode : sans
+  l'annotation, VM éteinte = aucun consommateur = PVC `Pending` et DataVolume `PendingPopulation`
+  **indéfiniment**, et l'import de l'image se paierait le jour de l'exercice. ⚠️ Le prix : le PVC
+  est provisionné sans savoir où la VM se schedulera, et le `nodeAffinity` du PV l'y cloue
+  ensuite. Sans conséquence sur trois nœuds équivalents.
 - **VM éteinte = Service sans endpoint.** État normal, pas une panne.
 - **L'image Debian est épinglée sur un build daté** et n'est suivie par aucun manager Renovate
   (`cloud.debian.org` n'est pas une datasource). Elle se rafraîchit à la main, à l'exercice
@@ -126,8 +132,10 @@ sed -i '' 's/^  runStrategy: Halted/  runStrategy: Always/' \
 git commit -am "exercice PRA: allumage de la VM" && git push
 kubectl -n argocd get app forgejo-pra -w          # Synced/Healthy
 
-# --- Suivre le démarrage. Le PREMIER allumage attend l'import de l'image (~10 min) :
-kubectl -n forgejo-pra get dv forgejo-pra-root -w   # Phase: ImportInProgress → Succeeded
+# --- Suivre le démarrage. L'image est DÉJÀ importée (elle l'est au déploiement du composant,
+#     pas à l'allumage — cf. l'annotation de liaison immédiate) : le DataVolume doit être
+#     `Succeeded` AVANT qu'on allume. S'il est `PendingPopulation`, l'annotation a sauté.
+kubectl -n forgejo-pra get dv forgejo-pra-root      # Phase: Succeeded
 kubectl -n forgejo-pra get vmi forgejo-pra -w       # Running
 virtctl -n forgejo-pra console forgejo-pra          # console série — cloud-init s'y déroule
 ssh jbwittner@192.168.1.81                          # une fois cloud-init terminé
