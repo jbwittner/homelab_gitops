@@ -29,10 +29,13 @@ spec:
   #   2. 4 vCPU + 4 Gio réservés en permanence sur un nœud, pour rien ;
   #   3. le disque de la VM porte une copie des données de la forge après un exercice.
   #
-  # ⚠️ ALLUMER SE FAIT PAR GIT, pas par `virtctl start` : `selfHeal: true` est actif sur
-  # l'Application et ré-imposerait `Halted` dans la minute. Passer cette valeur à `Always`,
-  # commiter, pousser — ArgoCD démarre la VM. C'est aussi ce qui date l'exercice dans l'historique.
-  runStrategy: Always
+  # ⚠️ ALLUMER ET ÉTEINDRE SE FONT PAR GIT, pas par `virtctl start/stop` : `selfHeal: true` est
+  # actif sur l'Application et rétablirait la valeur du dépôt dans la minute. On intervertit les
+  # deux lignes ci-dessous, on commite, on pousse — ArgoCD fait le reste, et l'historique Git date
+  # le début et la fin de chaque exercice. C'est ce que demande le journal de `pra-exercices.md`.
+  #
+  # runStrategy: Halted      # <-- AU REPOS : la ligne à décommenter en fin d'exercice
+  runStrategy: Always        # <-- EN EXERCICE
 
   dataVolumeTemplates:
     - metadata:

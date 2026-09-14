@@ -132,9 +132,9 @@ Puis le `.env` d'exercice et le `compose.override.yaml` du § Protocole, qui res
 # --- Avant : la production doit être saine, sinon on diagnostique deux pannes à la fois
 ssh <hôte-forge> sudo forgejo-ctl health
 
-# --- Allumer : PAR GIT (cf. Contraintes)
-sed -i '' 's/^  runStrategy: Halted/  runStrategy: Always/' \
-  cluster/app/forgejo-pra/manifests/virtualmachine.yaml
+# --- Allumer : PAR GIT (cf. Contraintes). Les deux valeurs sont cote a cote dans le manifeste,
+#     l'une commentee : intervertir le `#`, commiter, pousser.
+$EDITOR cluster/app/forgejo-pra/manifests/virtualmachine.yaml   # -> runStrategy: Always
 git commit -am "exercice PRA: allumage de la VM" && git push
 kubectl -n argocd get app forgejo-pra -w          # Synced/Healthy (Suspended tant qu'elle est éteinte)
 
@@ -150,9 +150,9 @@ ssh jbwittner@192.168.1.81                          # une fois cloud-init termin
 #     Les chemins /srv/pra-forgejo/{data,pgdata,restauration} sont déjà en place.
 #     ⚠️ `compose.override.yaml` reste OBLIGATOIRE (mirror, mailer, cron, ROOT_URL, indexer).
 
-# --- Éteindre : par Git, dans l'autre sens
-sed -i '' 's/^  runStrategy: Always/  runStrategy: Halted/' \
-  cluster/app/forgejo-pra/manifests/virtualmachine.yaml
+# --- Éteindre : par Git, dans l'autre sens. ⚠️ NE PAS OUBLIER — une VM laissée en marche
+#     finit par pousser vers le miroir GitHub (cf. Contraintes).
+$EDITOR cluster/app/forgejo-pra/manifests/virtualmachine.yaml   # -> runStrategy: Halted
 git commit -am "exercice PRA: extinction" && git push
 
 # --- Repartir d'un disque VIERGE (exercice complet annuel, ou VM salie).
