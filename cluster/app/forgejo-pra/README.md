@@ -71,12 +71,15 @@ Ce que ça **n'achète pas** : la VM démarre sur une Debian neuve, mais son clo
   ⚠️ Passer par un `Secret` (`userDataSecretRef`) le jour où ça déborde est la porte de sortie
   upstream — mais ce cloud-init ne contient **aucun secret**, et un Secret non scellé dans un
   dépôt public est un mauvais signal. Élaguer avant d'en créer un.
-- **Le DataVolume porte `cdi.kubevirt.io/storage.bind.immediate.requested`, et il n'est pas
-  optionnel.** `openebs-lvm-thin` est en `WaitForFirstConsumer` et CDI honore ce mode : sans
-  l'annotation, VM éteinte = aucun consommateur = PVC `Pending` et DataVolume `PendingPopulation`
-  **indéfiniment**, et l'import de l'image se paierait le jour de l'exercice. ⚠️ Le prix : le PVC
-  est provisionné sans savoir où la VM se schedulera, et le `nodeAffinity` du PV l'y cloue
-  ensuite. Sans conséquence sur trois nœuds équivalents.
+- **Le DataVolume porte `cdi.kubevirt.io/storage.bind.immediate.requested`.**
+  `openebs-lvm-thin` est en `WaitForFirstConsumer` et CDI honore ce mode : sans l'annotation, VM
+  éteinte = aucun consommateur = PVC `Pending` et DataVolume `PendingPopulation` tant qu'on
+  n'allume pas. Ce n'est **pas** une affaire de temps — l'import mesure 69 s (2026-09-14) et se
+  ferait de toute façon au premier allumage. C'est une affaire de **lisibilité au repos** : sans
+  l'annotation, l'état permanent du composant est indiscernable d'une panne de stockage ; avec,
+  l'état nominal éteint est `DV Succeeded` + `PVC Bound`, et tout le reste est un vrai problème.
+  ⚠️ Le prix : le PVC est provisionné sans savoir où la VM se schedulera, et le `nodeAffinity` du
+  PV l'y cloue ensuite — ici `vert-ysondre`. Sans conséquence sur trois nœuds équivalents.
 - **VM éteinte ⇒ l'Application est `Synced`/`Suspended`, jamais `Healthy`.** C'est le verdict
   d'ArgoCD pour une `VirtualMachine` en `runStrategy: Halted`, et c'est l'état NOMINAL entre deux
   exercices — pas un composant en panne. `Healthy` n'apparaît que pendant un exercice.

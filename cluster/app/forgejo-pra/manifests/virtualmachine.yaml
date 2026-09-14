@@ -44,9 +44,15 @@ spec:
           # PVC reste `Pending` et le DataVolume `PendingPopulation`, indéfiniment. L'événement
           # du PVC le dit : `waiting for first consumer to be created before binding`.
           #
-          # Ça n'a l'air que d'un délai, mais ça vide le composant de son intérêt : les ~10 min
-          # de téléchargement de l'image se paieraient LE JOUR DE L'EXERCICE et gonfleraient le
-          # RTO mesuré d'un temps qui n'a rien à voir avec la restauration.
+          # Ce qu'on y gagne n'est PAS du temps : mesuré le 2026-09-14, l'import prend 69 s, et
+          # sans l'annotation il aurait lieu au premier allumage (le pod `virt-launcher` EST un
+          # premier consommateur). 69 s contre un budget RTO d'une heure ne justifient rien.
+          #
+          # Ce qu'on y gagne, c'est la LISIBILITÉ DE L'ÉTAT AU REPOS. Sans l'annotation, le
+          # composant vit en permanence en `PVC Pending` + `DV PendingPopulation` — état
+          # rigoureusement indiscernable d'une panne de stockage, à l'œil comme pour une alerte.
+          # Avec, l'état nominal éteint est `DV Succeeded` + `PVC Bound`, et tout autre état est
+          # un vrai problème. Un composant dormant doit être vert, sinon on cesse de le regarder.
           #
           # Annotation CIBLÉE sur ce volume, et pas `featureGates: []` sur le CR CDI : le feature
           # gate vaut pour tout le cluster, cette annotation pour ce DataVolume seul.
