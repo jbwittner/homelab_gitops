@@ -25,17 +25,18 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   `{*.app.yaml,*.appset.yaml}` de `app.bootstrap.yaml` le ramasse.
 - `manifests/namespace.yaml` — ns `hermes` (`sync-wave: -1`), **sans** label PodSecurity
   restrictif
-- `manifests/hermes-env.sealed.yaml` — `SealedSecret` : `API_SERVER_KEY` et identifiants du
-  dashboard (cf. §Câblage des secrets). Également listé dans le `configMapGenerator`, pour la
-  seule raison expliquée en §Contraintes
-- `manifests/config/config.yaml` — le `config.yaml` d'Hermes (modèle, backend terminal, plugins,
-  dashboard), assemblé en ConfigMap par le `configMapGenerator` du `kustomization.yaml`
+- `manifests/hermes-env.sealed.yaml` — `SealedSecret` : secrets runtime, dont
+  `FORGEJO_TOKEN` (cf. §Câblage des secrets). Sa révision entre dans le hash de bootstrap.
+- `homelab_hermes` — source de vérité du profil Hermes dans `/opt/data` : `config.yaml`, skills,
+  workspace, règles et mémoire durable. Le dépôt est cloné au premier boot d'un PVC neuf.
 - `manifests/config/hermes.env` — variables d'environnement **non secrètes** du conteneur
   (`KEY=value`), assemblées en ConfigMap `hermes-vars` et injectées par `envFrom`
 - `manifests/config/profile` — profil shell semé par l'initContainer, également monté par le
-  `configMapGenerator`
-- `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`,
-  initContainer de semis du `config.yaml`
+  ConfigMap de bootstrap
+- `manifests/sync/` — scripts Git read-only dans des ConfigMaps : bootstrap HTTPS et réplication
+  déterministe du worktree Hermes vers Forgejo
+- `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`, deux
+  initContainers de bootstrap/profil et un sidecar de synchronisation Git
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
 - `manifests/hermes-httproute.yaml` — `hermes.lan.wittner.tech` → dashboard,
   `hermes-api.lan.wittner.tech` → API
@@ -84,43 +85,18 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   retirer la variable, pas y laisser un placeholder.
 - **L'authentification au fournisseur LLM n'est pas dans Git.** Le provider `openai-codex` est
   en `auth_type: oauth_external` : ses jetons vivent dans `/opt/data/auth.json`, écrits par un
-  flux device code lancé à la main. Aucune clé d'API à sceller — `OPENAI_API_KEY` ne concerne
-  que le provider `openai-api`, et n'a rien à voir avec `API_SERVER_KEY`. Contrepartie : c'est
-  le seul état du composant que Git ne reconstruit pas. Perdre le PVC impose de refaire le
-  device code.
-- **`API_SERVER_KEY` : 16 caractères minimum**, pas 8 comme l'annonce la doc amont. En dessous,
-  le hook de démarrage refuse de lancer `api_server`.
-- **Le modèle se déclare sous `model.default`, jamais `model.name`.** `load_config()` normalise
-  les deux, mais un chemin du runtime lit la config brute (`read_raw_config()`) où l'alias n'est
-  pas résolu : la session démarre alors avec un modèle vide et chaque tour échoue en « Codex
-  Responses request 'model' must be a non-empty string ». Symptôme trompeur — le corriger dans
-  l'interface répare le pod courant, puis la panne revient au déploiement suivant, quand
-  l'initContainer restaure le fichier de Git.
-- **`_config_version` doit figurer dans le fichier.** Le script de migration du conteneur
-  (`scripts/docker_config_migrate.py:70`) lit une version absente comme `0` et refuse tout ce qui
-  est sous le plancher 12, là où le chemin CLI épargne explicitement les fichiers sans clé de
-  version. Sans le stamp, chaque boot journalise « This config predates version 12 » et la
-  migration ne tourne pas.
-- **`config.yaml` est recopié depuis le ConfigMap à chaque démarrage.** Un `hermes config set`
-  fait à la main dans le pod est écrasé au redémarrage suivant — c'est le but.
-- **Le ConfigMap est généré avec un suffixe de hash**, et c'est load-bearing : Hermes ne relit
-  pas son `config.yaml` à chaud, et l'initContainer ne le recopie qu'au démarrage du pod. Sans
-  le hash, un ConfigMap mis à jour resterait sans effet jusqu'à un `rollout restart` manuel,
-  sans qu'aucun signal ne l'indique (ArgoCD `Synced`, aucun log). Avec, éditer
-  `config/config.yaml` renomme le ConfigMap, donc le `volumes:` du StatefulSet, donc le pod
-  template : le rollout part tout seul. Ne pas poser `generatorOptions.disableNameSuffixHash`.
-- **`hermes-env.sealed.yaml` est listé dans le `configMapGenerator` alors que ce n'est pas de la
-  configuration.** C'est le même mécanisme étendu au secret : le Secret `hermes-env` est produit
-  par le contrôleur sealed-secrets, hors de portée de kustomize, et un `envFrom` dont le Secret
-  change ne redémarre rien. Le faire entrer dans le hash rend le rollout automatique au
-  rescellement. Le fichier n'est monté que sur `/config`, l'initContainer ne recopie que
-  `config.yaml`, et son contenu est chiffré et déjà dans Git — le retirer de cette liste rendrait
-  silencieusement les rotations de secret sans effet jusqu'au prochain redémarrage.
+  flux device code lancé à la main. Le bootstrap Git reconstruit le profil déclaratif mais pas
+  cette autorisation ; perdre le PVC impose de refaire le device code.
+- **`config.yaml` appartient à `homelab_hermes`.** Les réglages modifiables au runtime (modèle,
+  plugins, mémoire, compression…) sont commités par le sidecar Git ; GitOps ne les recopie pas
+  au redémarrage.
+- **Le bootstrap ne clone que sur un PVC neuf.** Si `/opt/data/.git` existe, il est autoritaire et
+  aucun redémarrage ne le remplace par Forgejo.
+- **Le sidecar récupère `origin/main` avant de pousser.** Il rebase les commits Hermes lorsque
+  possible, puis push normalement. En conflit seulement, il annule le rebase et force le main
+  local : le worktree Hermes gagne sans qu'une résolution soit confiée à l'IA.
 - **Le PVC est RWO** : le pod sortant doit mourir avant que le nouveau monte le volume. Les
   rollouts ne sont pas sans coupure.
-- **L'identifiant de modèle du ConfigMap (`gpt-5.6-terra`, `manifests/config/config.yaml:37`) est
-  à confirmer** contre le compte OpenAI réellement utilisé. Un id invalide ne bloque pas le démarrage du pod : il fait échouer le
-  premier tour d'agent.
 
 ## Opérations
 
@@ -153,6 +129,30 @@ rm cluster/app/hermes/manifests/hermes-env.secret.yaml
 
 Le `SealedSecret` est chiffré pour le couple (`hermes-env`, `hermes`) : le renommer ou le déplacer
 de namespace exige de le resceller.
+
+### Réplication du profil Hermes
+
+`FORGEJO_TOKEN` autorise le checkout HTTPS de `jbwittner/homelab_hermes`. Il n'est injecté dans
+le sidecar `git-sync` et l'initContainer `bootstrap-home` que comme clé individuelle
+`secretKeyRef` : ces conteneurs ne reçoivent ni les autres secrets runtime ni un token Kubernetes.
+
+- Sur un PVC neuf, `bootstrap-home` clone `main` dans `/opt/data` avant le démarrage d'Hermes. Si
+  `homelab_hermes` ne contient encore aucun commit, il initialise simplement le checkout local ;
+  le sidecar poussera le premier commit au cycle suivant, une fois les fichiers Hermes créés.
+- Toutes les cinq minutes, le sidecar copie les chemins déclarés depuis le worktree Hermes dans un
+  checkout privé `emptyDir`, récupère `origin/main`, rebase les commits locaux et pousse normalement.
+  Les hooks, l'index et la configuration Git modifiables par Hermes ne sont jamais utilisés.
+- Si le rebase signale un conflit, il est annulé et le main local est force-pushé : le worktree
+  Hermes est alors la source de vérité.
+- Le bootstrap n'écrase jamais un PVC qui contient déjà `/opt/data/.git`, et le sidecar ne résout
+  aucun conflit. Son script et sa cadence viennent des ConfigMaps GitOps montés en lecture seule ;
+  Hermes ne peut pas les modifier.
+
+Les logs sont accessibles sans écrire dans le cluster :
+
+```bash
+kubectl -n hermes logs sts/hermes -c git-sync -f
+```
 
 ### État & accès
 
@@ -205,6 +205,7 @@ seule présence), et resceller.
 
 ### Sauvegarde
 
-Tout l'état est dans le PVC `data-hermes-0` : sessions, mémoires, skills, cron, `.env` semé. Il
-n'est reconstructible depuis Git que pour sa partie configuration — les mémoires et sessions, non.
-À couvrir par [velero](../../infra/velero/README.md) si l'on veut les garder.
+Tout l'état vivant est dans le PVC `data-hermes-0`. `homelab_hermes` reconstruit le profil
+versionné (`config.yaml`, skills, workspace, règles et mémoire durable) lors d'un nouveau PVC ;
+`auth.json`, sessions, bases SQLite et caches restent hors Git. À couvrir par
+[velero](../../infra/velero/README.md) si l'on veut les conserver.
