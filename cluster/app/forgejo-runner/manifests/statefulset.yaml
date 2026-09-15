@@ -96,42 +96,58 @@ spec:
           # L'ENTRYPOINT (`dockerd-entrypoint.sh`) reste en place : il prépare cgroups et iptables
           # avant d'exécuter ces arguments.
           args:
-            # ⚠️ `0.0.0.0` ET PAS `127.0.0.1`, contrairement à ce que l'intuition suggère. Les job
-            # containers vivent dans le bridge de dind et joignent le démon par l'adresse de la
-            # PASSERELLE de ce bridge (`--add-host=pod.docker.internal:host-gateway`), jamais par
-            # la loopback. Écouter sur 127.0.0.1 casse tout accès Docker depuis les workflows.
+            # ⚠️ SOCKET UNIX, ET AUCUNE ÉCOUTE TCP. C'est le choix structurant de ce fichier, pour
+            # deux raisons qui se cumulent :
             #
-            # ⚠️⚠️ CONSÉQUENCE DE SÉCURITÉ, ET C'EST LE POINT LE PLUS IMPORTANT DE CE FICHIER :
-            # un démon Docker sans TLS ni authentification devient joignable sur l'IP DU POD, donc
-            # depuis n'importe quel pod du cluster. Qui atteint ce port est root sur le nœud Talos
-            # (`docker run -v /:/host --privileged`). C'est `netpol.yaml` — et lui seul — qui ferme
-            # ce port : une CiliumNetworkPolicy en default-deny d'ingress.
-            # NE JAMAIS RETIRER `netpol.yaml` SANS RETIRER CE COMPOSANT.
+            # 1. SÉCURITÉ. Une écoute `tcp://0.0.0.0:2375` — la forme que décrit la doc Forgejo,
+            #    pensée pour deux conteneurs Docker séparés — rendrait le démon joignable sur l'IP
+            #    DU POD, donc depuis n'importe quel pod du cluster, sans TLS ni authentification.
+            #    Qui atteint ce port est root sur le nœud Talos
+            #    (`docker run -v /:/host --privileged`). Ici, le runner et le démon sont dans le
+            #    MÊME pod : un socket dans un emptyDir partagé leur suffit, et il n'existe alors
+            #    plus aucun port à fermer. `netpol.yaml` reste, mais en défense de profondeur et
+            #    non plus comme seul rempart.
+            #
+            # 2. DÉPRÉCIATION DOCKER. Depuis la 29, `dockerd` journalise « API is accessible on
+            #    http://0.0.0.0:2375 without encryption » suivi de « In future versions this will
+            #    be a hard failure preventing the daemon from starting! » (moby#36357, ouvert
+            #    depuis 2018, milestone `v-future`). Aucun drapeau d'opt-out n'existe ni n'est
+            #    prévu : les seules issues supportées sont TLS, socket Unix ou SSH. Le socket
+            #    supprime le problème au lieu de le chiffrer.
+            #
+            # ⚠️ Le chemin n'est PAS `/var/run/docker.sock` : `/var/run` de l'image dind porte
+            # déjà l'état de containerd, y monter un emptyDir l'écraserait. D'où un répertoire
+            # dédié, partagé par les trois conteneurs.
+            #
+            # ⚠️ Alternative écartée : TLS via `DOCKER_TLS_CERTDIR`. L'image `docker:dind` sait
+            # générer ses certificats seule, mais le certificat serveur ne porte pas
+            # `pod.docker.internal` dans ses SAN — toute vérification depuis un job container
+            # échouerait. Il faudrait émettre les nôtres (cert-manager est là), soit un Issuer, un
+            # Certificate, trois montages de Secret et une rotation à surveiller, pour un résultat
+            # MOINS bon : le port resterait ouvert, simplement chiffré.
             - "dockerd"
             - "-H"
-            - "tcp://0.0.0.0:2375"
-            - "--tls=false"
+            - "unix:///run/docker-sock/docker.sock"
           env:
-            # Sans ça, l'image `docker:dind` génère des certificats et bascule d'elle-même sur
-            # 2376 en TLS mutuel, en ignorant `--tls=false`. Le symptôme est un `dockerd` qui
-            # démarre sans erreur et un runner qui ne joint jamais 2375.
+            # Neutralise la génération automatique de certificats de l'image, qui ajouterait
+            # d'elle-même une écoute `tcp://0.0.0.0:2376` — exactement ce que ce montage supprime.
             - { name: DOCKER_TLS_CERTDIR, value: "" }
           securityContext:
             # Le seul privilège du composant, et il est irréductible : overlayfs, netns et
             # iptables du bridge Docker. C'est ce que le label PSA du namespace autorise.
             privileged: true
-          # Sondes EXEC et non TCP, volontairement : une sonde réseau partirait du kubelet, donc
-          # de l'identité `host` de Cilium, et exigerait d'ouvrir une règle d'ingress — ce qui
-          # rouvrirait précisément le port que `netpol.yaml` ferme. En `exec`, aucun paquet ne
-          # traverse la policy.
+          # Sondes EXEC, et il n'y a de toute façon plus de port à sonder : le démon n'écoute
+          # que sur un socket Unix. Une sonde `tcpSocket` supposerait de rouvrir une écoute
+          # réseau, et partirait en plus de l'identité `host` de Cilium, ce qui exigerait une
+          # règle d'ingress. En `exec`, aucun paquet ne traverse la policy.
           startupProbe:
             exec:
-              command: ["docker", "-H", "tcp://127.0.0.1:2375", "info"]
+              command: ["docker", "-H", "unix:///run/docker-sock/docker.sock", "info"]
             periodSeconds: 5
             failureThreshold: 30
           livenessProbe:
             exec:
-              command: ["docker", "-H", "tcp://127.0.0.1:2375", "info"]
+              command: ["docker", "-H", "unix:///run/docker-sock/docker.sock", "info"]
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 3
@@ -147,6 +163,9 @@ spec:
             # ⚠️ PVC et non emptyDir : c'est le cache d'images. En emptyDir, l'image de job de
             # 1,5 Go et toutes les images testcontainers seraient retéléchargées à chaque rollout.
             - { name: dind-storage, mountPath: /var/lib/docker }
+            # Le socket. Partagé avec `runner` et `prune`, et c'est tout le montage : rien ne sort
+            # du pod.
+            - { name: docker-sock, mountPath: /run/docker-sock }
 
         # ───────────────────────────────────────────────────────────────────────────────────────
         # 2. LE RUNNER
@@ -161,10 +180,11 @@ spec:
             - "--config"
             - "/run/forgejo-runner/config.yml"
           env:
-            # Par où le runner CRÉE les job containers. Loopback : le démon est dans la même
-            # netns que ce conteneur. À ne pas confondre avec `runner.envs.DOCKER_HOST` de
-            # config.yml, qui est ce que voient les JOBS.
-            - { name: DOCKER_HOST, value: "tcp://127.0.0.1:2375" }
+            # Par où le runner CRÉE les job containers : le socket du sidecar `dind`, partagé
+            # par un emptyDir. À ne pas confondre avec `container.docker_host` de config.yml, qui
+            # dit au runner quel socket MONTER dans les job containers — ils valent la même chose
+            # ici, mais ils ne répondent pas à la même question.
+            - { name: DOCKER_HOST, value: "unix:///run/docker-sock/docker.sock" }
             # Le runner écrit divers fichiers relatifs à $HOME ; le pointer vers le PVC évite la
             # couche éphémère.
             - { name: HOME, value: "/data" }
@@ -188,19 +208,20 @@ spec:
           volumeMounts:
             - { name: data, mountPath: /data }
             - { name: runtime, mountPath: /run/forgejo-runner, readOnly: true }
+            - { name: docker-sock, mountPath: /run/docker-sock }
 
         # ───────────────────────────────────────────────────────────────────────────────────────
         # 3. LE RAMASSE-MIETTES
         #
         # ⚠️ SIDECAR ET NON CronJob, pour une raison de sécurité et non de commodité : un CronJob
-        # est un autre pod, il devrait donc joindre le démon PAR LE RÉSEAU, ce qui imposerait un
-        # Service sur 2375 et une brèche dans `netpol.yaml` — exactement ce que ce composant
-        # ferme. Ici le socket ne sort jamais de la netns du pod.
+        # est un autre pod, il ne partage donc ni le socket ni son emptyDir. Il faudrait rouvrir
+        # une écoute TCP et un Service pour qu'il joigne le démon — exactement le montage que ce
+        # composant a supprimé. Ici le socket ne sort jamais du pod.
         # ───────────────────────────────────────────────────────────────────────────────────────
         - name: prune
           image: docker.io/library/docker:29.8.0-cli
           env:
-            - { name: DOCKER_HOST, value: "tcp://127.0.0.1:2375" }
+            - { name: DOCKER_HOST, value: "unix:///run/docker-sock/docker.sock" }
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -220,6 +241,8 @@ spec:
           resources:
             requests: { cpu: "10m", memory: 32Mi }
             limits: { memory: 128Mi }
+          volumeMounts:
+            - { name: docker-sock, mountPath: /run/docker-sock }
 
       volumes:
         - name: config
@@ -232,6 +255,13 @@ spec:
         # Le config.yml assemblé. emptyDir et non PVC : il est reconstruit à chaque démarrage du
         # pod, et il contient le token EN CLAIR — il n'a rien à faire sur un disque persistant.
         - name: runtime
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        # Le socket du démon Docker, partagé par les trois conteneurs du pod. emptyDir : il se
+        # recrée à chaque démarrage et ne doit RIEN garder entre deux vies du pod — un fichier de
+        # socket périmé sur un volume persistant empêcherait `dockerd` de démarrer.
+        - name: docker-sock
           emptyDir:
             medium: Memory
             sizeLimit: 1Mi

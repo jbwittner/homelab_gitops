@@ -35,14 +35,21 @@ runner:
   # Variables injectées dans LE JOB CONTAINER (et dans chaque `docker exec` d'une étape).
   # C'est ici que se joue l'accès Docker des workflows.
   envs:
-    # `pod.docker.internal` est résolu par `container.options` ci-dessous, en `--add-host`.
-    # Il désigne la netns DU POD vue depuis l'intérieur de dind. Deux services y écoutent :
-    # le démon Docker (2375) et le proxy de cache du runner.
-    DOCKER_HOST: tcp://pod.docker.internal:2375
-    # Testcontainers déduit normalement l'adresse des ports publiés depuis `DOCKER_HOST`, ce qui
-    # donnerait déjà la bonne valeur. Posé explicitement quand même : la déduction a changé
-    # plusieurs fois entre versions des bibliothèques, et le mode d'échec est un test qui se
-    # connecte à `localhost` et part en timeout — indiscernable d'un conteneur lent à démarrer.
+    # ⚠️ PAS de `DOCKER_HOST` ici, et c'est délibéré. Le runner MONTE le socket du démon dans
+    # chaque job container à l'emplacement standard `/var/run/docker.sock` (cf.
+    # `container.docker_host` plus bas) : le `docker` du job le trouve tout seul. Poser un
+    # `DOCKER_HOST` le détournerait vers une écoute réseau qui n'existe plus.
+    #
+    # ⚠️ EN REVANCHE, `TESTCONTAINERS_HOST_OVERRIDE` DEVIENT INDISPENSABLE — il ne l'était
+    # qu'en ceinture du temps de l'écoute TCP. Testcontainers déduit l'adresse où joindre les
+    # ports publiés à partir de `DOCKER_HOST` ; face à un socket Unix, il conclut `localhost`.
+    # Or les ports sont publiés dans la netns DU POD, pas dans celle du job container : sans cet
+    # override, chaque test partirait en timeout sur un conteneur pourtant démarré — et le
+    # symptôme est indiscernable d'un service lent à s'initialiser.
+    #
+    # `pod.docker.internal` est résolu par `container.options` ci-dessous, en `--add-host`. Il
+    # désigne la netns DU POD vue depuis l'intérieur de dind : c'est là que sont publiés les
+    # ports des conteneurs, et c'est là qu'écoute aussi le proxy de cache du runner.
     TESTCONTAINERS_HOST_OVERRIDE: pod.docker.internal
     # Ryuk (le ramasse-miettes de testcontainers) monte `/var/run/docker.sock`. Ce socket existe
     # bien À L'INTÉRIEUR de dind, donc Ryuk fonctionne et n'a pas à être désactivé. Le laisser
@@ -107,8 +114,8 @@ cache:
   # netns DU POD ; les job containers, eux, vivent dans le réseau bridge de dind. L'autodétection
   # annoncerait une adresse que ces conteneurs ne savent pas joindre, et `actions/cache` échouerait
   # en timeout — sans faire échouer le job, juste en le ralentissant à chaque run. Panne muette.
-  # On réutilise l'alias posé par `container.options` : il désigne la netns du pod, où vit aussi
-  # le proxy de cache.
+  # Même alias que `TESTCONTAINERS_HOST_OVERRIDE`, posé par `container.options` : les deux
+  # désignent la netns du pod, seul endroit joignable depuis un job container.
   host: pod.docker.internal
   port: 0
   proxy_port: 0
@@ -126,11 +133,12 @@ container:
   # dans le démon dind, ce dont rien n'a besoin ici.
   privileged: false
 
-  # Étape 3b de la procédure DinD de la doc Forgejo. `host-gateway` est résolu PAR DIND, et vaut
-  # l'adresse de sa passerelle de bridge — c'est-à-dire la netns du pod. Ce seul alias sert à la
-  # fois à `DOCKER_HOST` (runner.envs) et à `cache.host`.
-  # ⚠️ Retirer cette ligne ne casse pas le démarrage : les jobs partent, puis Docker et le cache
-  # échouent en « no such host ». Le lien entre les deux réglages n'est visible que d'ici.
+  # `host-gateway` est résolu PAR DIND, et vaut l'adresse de sa passerelle de bridge —
+  # c'est-à-dire la netns du pod. Ce seul alias sert au PLAN DE DONNÉES : les ports publiés par
+  # les conteneurs de test (`TESTCONTAINERS_HOST_OVERRIDE`) et le proxy de cache (`cache.host`).
+  # Le plan de contrôle, lui, ne passe plus par le réseau du tout — c'est le socket monté.
+  # ⚠️ Retirer cette ligne ne casse pas le démarrage : les jobs partent, `docker build` marche
+  # même, puis testcontainers et le cache échouent en « no such host ».
   options: "--add-host=pod.docker.internal:host-gateway"
 
   workdir_parent: /workspace
@@ -140,14 +148,18 @@ container:
   # montage devient nécessaire, lister le chemin exact, jamais un glob large.
   valid_volumes: []
 
-  # Étape 2 de la procédure DinD : le runner CRÉE les job containers sur le démon dind, joint
-  # dans la netns du pod. `tcp://` et non `unix://` — donc le socket n'est PAS monté dans le job
-  # container (la doc précise qu'un `tcp://` ne peut pas l'être). L'accès Docker des workflows
-  # passe uniquement par `runner.envs.DOCKER_HOST`.
-  # ⚠️ Ne JAMAIS mettre `automount` ici : sur Talos il n'existe aucun `/var/run/docker.sock`
-  # (containerd, pas Docker), la valeur retomberait silencieusement sur `-` et tout accès Docker
-  # depuis les workflows cesserait.
-  docker_host: "tcp://127.0.0.1:2375"
+  # Deux effets d'un seul réglage, et c'est ce qui rend le socket Unix supérieur au TCP ici :
+  #   1. le runner CRÉE les job containers sur ce démon ;
+  #   2. `unix://` étant partageable, il MONTE ce socket dans chaque job container, à
+  #      l'emplacement standard `/var/run/docker.sock`. La doc Forgejo précise qu'un `tcp://` ne
+  #      peut pas l'être — c'est pourquoi l'ancien montage devait passer par
+  #      `runner.envs.DOCKER_HOST`, devenu inutile.
+  # Le chemin est celui de l'emptyDir partagé avec le sidecar `dind` (cf. statefulset.yaml) ;
+  # le démon n'écoute sur aucun port.
+  # ⚠️ Ne JAMAIS mettre `automount` ici : sur Talos il n'existe aucun `/var/run/docker.sock` au
+  # niveau du pod (containerd, pas Docker), l'autodétection ne trouverait rien et retomberait
+  # silencieusement sur `-` — tout accès Docker depuis les workflows cesserait.
+  docker_host: "unix:///run/docker-sock/docker.sock"
 
   # `false` : c'est ce qui donne sa valeur au PVC de dind. À `true`, l'image de 1,5 Go serait
   # retéléchargée à chaque job.

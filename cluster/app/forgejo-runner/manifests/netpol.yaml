@@ -1,15 +1,20 @@
-# ⚠️⚠️ LE FICHIER LE PLUS IMPORTANT DE CE COMPOSANT. Sans lui, le composant est une porte ouverte
-# sur le nœud Talos, et il n'y a aucun signe visible.
+# Filtrage réseau du pod runner : rien n'entre, et ce qui sort est borné.
 #
-# Le sidecar `dind` expose un démon Docker SANS TLS ET SANS AUTHENTIFICATION sur `0.0.0.0:2375`
-# (il le doit : les job containers le joignent par la passerelle de son bridge, pas par la
-# loopback — cf. statefulset.yaml). Ce port est donc atteignable sur l'IP DU POD. Or, qui atteint
-# un démon Docker est root sur la machine qui l'héberge :
+# ⚠️ HISTORIQUE À CONNAÎTRE, parce qu'il explique la forme de ce fichier. Le premier montage
+# faisait écouter le démon dind sur `tcp://0.0.0.0:2375`, sans TLS ni authentification, donc
+# joignable sur l'IP DU POD — et qui atteint un démon Docker est root sur la machine qui
+# l'héberge :
 #
 #   docker -H tcp://<ip-du-pod>:2375 run -v /:/host --privileged alpine chroot /host
 #
-# Cette policy est la SEULE chose qui referme ce port. Elle n'est pas du durcissement en plus,
-# elle fait partie du composant au même titre que le StatefulSet.
+# Cette policy était alors la SEULE chose qui refermait ce port. Le démon n'écoute plus que sur
+# un socket Unix dans un emptyDir du pod (cf. statefulset.yaml) : il n'y a plus de port à fermer,
+# et le default-deny d'ingress ci-dessous est redevenu de la défense en profondeur.
+#
+# ⚠️ NE PAS EN CONCLURE QUE CE FICHIER EST FACULTATIF. Il porte aussi tout le filtrage SORTANT,
+# qui contraint les workflows eux-mêmes (cf. la section `egress`) — c'est lui qui tient le LAN
+# hors de portée d'un build. Et le jour où quelqu'un rouvrirait une écoute TCP sur le démon,
+# l'ingress fermé serait de nouveau le seul rempart, sans que rien ne le signale.
 #
 # ⚠️ Le mode d'échec d'une policy Cilium est un TIMEOUT, jamais un refus lisible. En cas de doute
 # après un sync :
@@ -37,15 +42,15 @@ spec:
   # INGRESS : RIEN. Pas une règle.
   #
   # Ce pod n'a aucune raison d'être joint : il n'expose pas de service, il n'a pas de Service, pas
-  # d'HTTPRoute, et il va CHERCHER ses jobs auprès de la forge (`fetch_interval`). Le trafic est
-  # sortant de bout en bout.
+  # d'HTTPRoute, aucun conteneur n'écoute sur le réseau, et il va CHERCHER ses jobs auprès de la
+  # forge (`fetch_interval`). Le trafic est sortant de bout en bout.
   #
   # ⚠️ Les sondes du kubelet ne font pas exception et n'ont PAS besoin d'une règle `host` : elles
-  # sont en `exec`, précisément pour ça (cf. statefulset.yaml, conteneur `dind`). Toute sonde
-  # convertie en `tcpSocket` ou `httpGet` échouerait ici — et la « correction » évidente
-  # (ouvrir `fromEntities: [host]` sur 2375) rouvrirait le port à tout pod en hostNetwork.
-  # Si une sonde réseau devient nécessaire un jour : exposer un port de santé DISTINCT, jamais
-  # 2375.
+  # sont en `exec`, précisément pour ça (cf. statefulset.yaml, conteneur `dind`). Une sonde
+  # convertie en `tcpSocket` ou `httpGet` supposerait d'avoir rouvert une écoute réseau sur le
+  # démon — et la « correction » évidente, `fromEntities: [host]` sur ce port, l'exposerait à
+  # tout pod en hostNetwork. Si une sonde réseau devient nécessaire un jour : un port de santé
+  # DISTINCT, jamais celui du démon Docker.
   # ═══════════════════════════════════════════════════════════════════════════════════════════
 
   egress:

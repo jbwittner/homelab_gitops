@@ -22,15 +22,28 @@ chemin**, ce n'est pas une préférence.
 **2. DinD exige un conteneur privilégié.** D'où le label `pod-security.kubernetes.io/enforce:
 privileged` sur le namespace — le deuxième du dépôt après `openebs`.
 
-**3. Le démon DinD doit écouter sur `0.0.0.0`.** Les job containers vivent dans le bridge de dind
-et joignent le démon par la passerelle de ce bridge, jamais par la loopback. Un démon Docker sans
-TLS ni authentification devient donc atteignable sur l'IP du pod — et qui atteint un démon Docker
-est root sur le nœud. **C'est la `CiliumNetworkPolicy` qui referme ce port, et elle seule.**
+**3. Le démon n'écoute sur aucun port — un socket Unix dans un `emptyDir` partagé.** La recette
+DinD de la doc Forgejo fait écouter le démon en `tcp://0.0.0.0:2375` sans TLS, parce qu'elle
+suppose deux conteneurs Docker séparés. Ici le runner et le démon sont dans le **même pod** : un
+socket leur suffit. Le premier montage de ce composant suivait la doc, et rendait le démon
+joignable sur l'IP du pod — soit un accès root au nœud Talos pour tout pod du cluster, tenu par la
+seule `CiliumNetworkPolicy`. Le socket supprime le port au lieu de le garder fermé.
+
+C'est aussi la réponse à la dépréciation Docker : depuis la 29, `dockerd` avertit qu'une écoute
+TCP sans chiffrement deviendra *« a hard failure preventing the daemon from starting »*
+([moby#36357](https://github.com/moby/moby/issues/36357), ouvert depuis 2018, milestone
+`v-future`). Aucun drapeau d'opt-out n'existe ni n'est prévu.
+*Alternative écartée* : TLS via `DOCKER_TLS_CERTDIR`. L'image `docker:dind` génère ses
+certificats seule, mais le certificat serveur ne porte pas `pod.docker.internal` dans ses SAN —
+toute vérification depuis un job container échouerait. Émettre les nôtres avec cert-manager
+coûterait un Issuer, un Certificate, trois montages de Secret et une rotation à surveiller, pour
+un résultat **moins bon** : le port resterait ouvert, simplement chiffré.
 
 > [!IMPORTANT]
-> `manifests/netpol.yaml` n'est pas du durcissement optionnel : il fait partie du composant au
-> même titre que le StatefulSet. Le retirer expose un accès root au nœud Talos à tout pod du
-> cluster, **sans aucun signe visible** — tout continue de fonctionner normalement.
+> `manifests/netpol.yaml` n'est pas du durcissement optionnel pour autant. Il porte tout le
+> filtrage **sortant**, qui contraint les workflows eux-mêmes et tient le LAN hors de portée d'un
+> build. Et si quelqu'un rouvrait un jour une écoute TCP sur le démon, son default-deny d'ingress
+> redeviendrait le seul rempart — sans que rien ne le signale.
 
 ## Fichiers
 
@@ -46,21 +59,29 @@ est root sur le nœud. **C'est la `CiliumNetworkPolicy` qui referme ce port, et 
 
 ## Le montage Docker, en clair
 
-Trois adresses différentes désignent le même démon, et les confondre est l'erreur la plus facile.
+Deux plans distincts, et les confondre est l'erreur la plus facile.
 
-| Qui | Variable | Valeur | Pourquoi |
-|---|---|---|---|
-| le conteneur `runner` | `DOCKER_HOST` (statefulset) | `tcp://127.0.0.1:2375` | même netns que `dind` — c'est par là qu'il **crée** les job containers |
-| le runner, pour placer les jobs | `container.docker_host` (config.yml) | `tcp://127.0.0.1:2375` | étape 2 de la procédure DinD de la doc |
-| le **job container** | `runner.envs.DOCKER_HOST` (config.yml) | `tcp://pod.docker.internal:2375` | il est dans le bridge de dind ; `pod.docker.internal` est posé par `container.options: --add-host=…:host-gateway` |
+**Plan de contrôle — parler au démon.** Un seul socket, jamais le réseau :
 
-`pod.docker.internal` désigne **la netns du pod vue depuis l'intérieur de dind**. Deux services y
-écoutent : le démon Docker (2375) et le **proxy de cache** du runner — d'où le même alias en
-`cache.host`.
+| Qui | Réglage | Valeur |
+|---|---|---|
+| le conteneur `runner` | `DOCKER_HOST` (statefulset) | `unix:///run/docker-sock/docker.sock` |
+| le conteneur `prune` | `DOCKER_HOST` (statefulset) | idem |
+| le runner, pour placer les jobs | `container.docker_host` (config.yml) | idem |
+| le **job container** | *rien* | le runner **monte** le socket à `/var/run/docker.sock` — c'est ce qu'un `docker_host` en `unix://` permet et qu'un `tcp://` interdit |
 
-Chaîne testcontainers complète : la bibliothèque lit `DOCKER_HOST`, crée ses conteneurs **dans
-dind**, leurs ports publiés atterrissent dans la netns du pod, et le job les rejoint par le même
-alias. Ryuk fonctionne sans réglage : `/var/run/docker.sock` existe bien *à l'intérieur* de dind.
+**Plan de données — joindre ce que les conteneurs publient.** Là, le réseau est inévitable :
+les ports publiés atterrissent dans la netns **du pod**, pas dans celle du job container.
+`container.options: --add-host=pod.docker.internal:host-gateway` pose l'alias qui y mène, et deux
+réglages s'en servent : `TESTCONTAINERS_HOST_OVERRIDE` et `cache.host` (le proxy de cache du
+runner écoute au même endroit).
+
+⚠️ **`TESTCONTAINERS_HOST_OVERRIDE` est devenu indispensable** avec le socket. Testcontainers
+déduit l'adresse des ports publiés depuis `DOCKER_HOST` ; face à un socket Unix il conclut
+`localhost`, qui est faux ici. Sans l'override, chaque test part en timeout sur un conteneur
+pourtant démarré — indiscernable d'un service lent à s'initialiser.
+
+Ryuk fonctionne sans réglage : `/var/run/docker.sock` est bien présent dans le job container.
 
 ## Contraintes
 
@@ -234,7 +255,8 @@ La clé `connection-1.yml` peut rester scellée : elle ne coûte rien et évite 
   # 2. le config.yml a-t-il été assemblé ?
   kubectl -n forgejo-runner logs forgejo-runner-0 -c render-config
   # 3. le démon Docker répond-il ?
-  kubectl -n forgejo-runner exec forgejo-runner-0 -c dind -- docker -H tcp://127.0.0.1:2375 info
+  kubectl -n forgejo-runner exec forgejo-runner-0 -c dind -- \
+    docker -H unix:///run/docker-sock/docker.sock info
   # 4. les logs du runner (authentification, fetch)
   kubectl -n forgejo-runner logs forgejo-runner-0 -c runner --tail=50
   ```
@@ -256,7 +278,7 @@ La clé `connection-1.yml` peut rester scellée : elle ne coûte rien et évite 
         | sed 's|docker://||' | sort -u)
   for i in $IMG; do
     kubectl -n forgejo-runner exec forgejo-runner-0 -c dind -- \
-      docker -H tcp://127.0.0.1:2375 pull "$i"
+      docker -H unix:///run/docker-sock/docker.sock pull "$i"
   done
   ```
 - **Élaguer tout de suite** sans attendre le passage quotidien du sidecar :
