@@ -265,6 +265,43 @@ La clé `connection-1.yml` peut rester scellée : elle ne coûte rien et évite 
   ⚠️ À distinguer d'un **blocage réseau**, qui lui est bruyant : le conteneur `runner` sort en
   `Error` et redémarre en boucle, sur un `deadline_exceeded` à l'appel `Declare`. Timeout et non
   refus = signature d'un drop Cilium, donc la règle `192.168.1.50` de `netpol.yaml`.
+- **⚠️ Un rollout peut bloquer ~1 h sur `Init:0/1`, et ce n'est pas une panne.** Observé le
+  2026-09-15. Le nouveau pod reste en `Init`, avec en événement :
+  ```
+  MountVolume.SetUp failed ... verifyMount: device already mounted at
+  [/var/lib/kubelet/pods/<uid-DU-POD-MORT>/volumes/kubernetes.io~csi/pvc-.../mount]
+  ```
+  Le répertoire du pod précédent est resté **orphelin** sur le nœud : `node.status.volumesInUse`
+  est déjà vide (le kubelet ne suit plus ces volumes, il ne les démontera donc pas de lui-même),
+  mais les montages sont encore là, et le CSI LVM refuse de monter un device monté ailleurs.
+  Interaction kubelet / openebs-lvm-localpv au recyclage d'un pod à PVC, pas un défaut de ce
+  composant — mais ce composant y est exposé à chaque rollout, avec deux PVC.
+
+  **Ne rien faire est la bonne réponse** : le kubelet finit par récupérer l'orphelin. Le délai
+  mesuré est de **~50 minutes**. Constater l'avancement :
+  ```bash
+  NODE=$(kubectl -n forgejo-runner get pod forgejo-runner-0 -o jsonpath='{.spec.nodeName}')
+  CSI=$(kubectl -n openebs get pod -l app=openebs-lvm-node --field-selector spec.nodeName=$NODE \
+        -o jsonpath='{.items[0].metadata.name}')
+  UID_MORT=<uid lu dans le message FailedMount>
+  kubectl -n openebs exec $CSI -c openebs-lvm-plugin -- grep -c "$UID_MORT" /proc/mounts
+  ```
+  Le compte tombe à 0, et le pod démarre dans la foulée.
+
+  ⚠️ **Le forcer est possible mais ne doit pas devenir le réflexe** — démonter à la main depuis le
+  plugin CSI (qui monte `/var/lib/kubelet/` en propagation bidirectionnelle) puis supprimer le
+  répertoire du pod mort. C'est une action impérative sur le nœud, à réserver au cas où l'attente
+  n'est pas tenable :
+  ```bash
+  kubectl -n openebs exec $CSI -c openebs-lvm-plugin -- sh -c '
+    for m in $(grep '"$UID_MORT"' /proc/mounts | awk "{print \$2}" | sort -r); do
+      umount "$m" || umount -l "$m"
+    done
+    rm -rf /var/lib/kubelet/pods/'"$UID_MORT"'
+  '
+  ```
+  ⚠️ Vérifier AVANT qu'aucun conteneur du pod mort ne subsiste, sinon on démonte sous un
+  processus vivant.
 - **Soupçonner la policy réseau** (mode d'échec : timeout, jamais un refus lisible) :
   ```bash
   cilium monitor --type drop -n forgejo-runner
