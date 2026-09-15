@@ -15,6 +15,10 @@ spec:
   podManagementPolicy: OrderedReady
   updateStrategy:
     type: RollingUpdate
+  # Aucune ControllerRevision ancienne conservée : seule la révision courante reste dans etcd.
+  # Le rollback via `kubectl rollout undo` n'est donc plus possible — la source de vérité est
+  # Git, ArgoCD resynchronise le template précédent en revenant sur le commit.
+  revisionHistoryLimit: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: hermes

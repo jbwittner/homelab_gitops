@@ -56,8 +56,21 @@ if [ -f "$SOURCE_DIR/memories/USER.md" ]; then
   cp -a "$SOURCE_DIR/memories/USER.md" memories/USER.md
 fi
 
+# Hermes clone des dépôts dans son workspace. Sans ça, `git add` enregistre un gitlink
+# (mode 160000, un simple SHA) : le contenu ne part jamais sur Forgejo et un PVC neuf le
+# reconstruit vide. On aplatit donc les dépôts imbriqués — uniquement dans cette copie
+# privée du sidecar, /opt/data n'est jamais modifié. Le `.git` du checkout de synchro est
+# à la racine, hors des chemins parcourus ici.
+for tree in workspace skills; do
+  [ -d "$tree" ] || continue
+  find "$tree" -name .git -prune -exec rm -rf {} +
+done
+
 git add --all -- config.yaml .hermes.md SOUL.md memories workspace skills
-git diff --cached --check
+# PAS de `git diff --cached --check` ici : sous `set -e`, un espace en fin de ligne dans un
+# fichier écrit par Hermes faisait échouer TOUT le cycle, donc aucun commit n'était jamais
+# poussé. Ceci est une sauvegarde automatique de l'état de l'agent, pas une revue de code :
+# la propreté du whitespace n'est pas un critère de refus.
 if git diff --cached --quiet; then
   exit 0
 fi

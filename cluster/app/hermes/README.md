@@ -144,6 +144,12 @@ le sidecar `git-sync` et l'initContainer `bootstrap-home` que comme clé individ
   Les hooks, l'index et la configuration Git modifiables par Hermes ne sont jamais utilisés.
 - Si le rebase signale un conflit, il est annulé et le main local est force-pushé : le worktree
   Hermes est alors la source de vérité.
+- Les dépôts Git qu'Hermes clone dans son workspace sont aplatis : le `.git` imbriqué est retiré
+  de la copie privée du sidecar avant le `git add`. Sans ça, Git enregistre un gitlink et le
+  contenu ne part jamais sur Forgejo — un PVC neuf reconstruirait le dossier vide.
+- Le sidecar ne refuse rien sur le contenu : ni whitespace, ni taille, ni `.gitignore` du worktree.
+  C'est une sauvegarde de l'état de l'agent, pas une revue. Tout ce qu'Hermes écrit sous les
+  chemins déclarés part sur Forgejo, y compris un secret qu'il y déposerait.
 - Le bootstrap n'écrase jamais un PVC qui contient déjà `/opt/data/.git`, et le sidecar ne résout
   aucun conflit. Son script et sa cadence viennent des ConfigMaps GitOps montés en lecture seule ;
   Hermes ne peut pas les modifier.
