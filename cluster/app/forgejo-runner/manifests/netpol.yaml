@@ -86,15 +86,36 @@ spec:
             - 127.0.0.0/8
             - 100.64.0.0/10       # CGNAT
 
-    # ⚠️ VÉRIFICATION À FAIRE AU PREMIER DÉPLOIEMENT : la règle ci-dessus suppose que
-    # `forgejo.wittner.tech` résout vers une adresse PUBLIQUE. Si la résolution est à double
-    # horizon et renvoie une IP du LAN, le runner ne joint jamais la forge — et le symptôme est un
-    # runner qui démarre proprement, reste `offline` dans l'UI Forgejo, sans une seule erreur
-    # explicite dans ses logs. Contrôle :
+    # --- LA FORGE, par le reverse proxy du LAN ---
+    #
+    # ⚠️ C'EST LA SEULE BRÈCHE DANS LE REFUS DU LAN CI-DESSUS, ET ELLE EST OBLIGATOIRE.
+    # `forgejo.wittner.tech` est à double horizon : depuis le cluster il résout vers
+    # `192.168.1.50`, le reverse proxy du LAN (cf. doc/reseau.md), et non vers l'adresse publique.
+    # Sans cette règle le runner ne joint jamais la forge.
+    #
+    # Le mode d'échec observé au premier déploiement, à reconnaître si la règle saute :
+    #   level=error msg="fail to invoke Declare" error="deadline_exceeded: Post
+    #     "https://forgejo.wittner.tech/api/actions/runner.v1.RunnerService/Declare": ...
+    #     (Client.Timeout exceeded while awaiting headers)"
+    # puis le conteneur `runner` sort en `Error` et redémarre en boucle. Un TIMEOUT, jamais un
+    # refus — signature d'un drop Cilium. Contrôle de la résolution :
     #   kubectl -n forgejo-runner exec forgejo-runner-0 -c runner -- getent hosts forgejo.wittner.tech
-    # Si l'adresse est privée, ajouter ici une règle explicite plutôt que d'élargir l'exception :
-    #   - toCIDR: ["192.168.1.50/32"]
-    #     toPorts: [{ ports: [{ port: "443", protocol: TCP }] }]
+    #
+    # ⚠️ CE QUE CETTE RÈGLE OUVRE VRAIMENT, et qui dépasse la forge : `192.168.1.50:443` sert
+    # TOUS les vhosts `*.lan.wittner.tech` du proxy, pas seulement la forge — dont
+    # `forgejo-metrics` et `forgejo-db-metrics`. Une workflow peut donc les solliciter. Ce qui les
+    # protège n'est pas cette policy mais leur authentification (Bearer et Basic, cf.
+    # `forgejo-monitoring`). C'est une surface assumée, pas un oubli : la refermer demanderait que
+    # la forge soit joignable autrement qu'à travers ce proxy.
+    #
+    # ⚠️ Un `except: 192.168.1.50/32` retiré de la règle `toCIDRSet` ci-dessus NE MARCHERAIT PAS à
+    # la place : il rouvrirait tous les ports de cette machine, pas seulement 443. La forme
+    # `toCIDR` + `toPorts` est ce qui garde la brèche étroite.
+    - toCIDR:
+        - 192.168.1.50/32
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
 
     # ⚠️ AUCUNE règle vers `kube-apiserver`, et c'est volontaire : ce pod n'a rien à y dire, et il
     # n'a de toute façon pas de jeton à présenter (`automountServiceAccountToken: false`). Les

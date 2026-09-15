@@ -87,7 +87,15 @@ alias. Ryuk fonctionne sans réglage : `/var/run/docker.sock` existe bien *à l'
 - **La policy réseau contraint aussi les workflows, et c'est voulu.** Le trafic d'un job sort par
   le bridge de dind, masqué derrière l'IP du pod : il se présente à Cilium avec l'identité de ce
   pod. Internet public est ouvert (registres, Maven Central, npm, proxy Go) ; **tout le LAN est
-  fermé**, reverse proxy `192.168.1.50` compris.
+  fermé — à une exception près**.
+- **L'exception : `192.168.1.50:443`, et elle était inévitable.** `forgejo.wittner.tech` est à
+  double horizon : depuis le cluster, il résout vers le reverse proxy du LAN et non vers l'adresse
+  publique. Sans cette règle le runner ne joint jamais la forge.
+  ⚠️ **Elle ouvre plus que la forge** : ce `:443` sert *tous* les vhosts `*.lan.wittner.tech` du
+  proxy, dont `forgejo-metrics` et `forgejo-db-metrics`. Une workflow peut les solliciter ; ce qui
+  les protège est leur authentification (Bearer, Basic — cf.
+  [forgejo-monitoring](../forgejo-monitoring/README.md)), pas cette policy. Surface assumée : la
+  refermer supposerait que la forge soit joignable autrement qu'à travers ce proxy.
 - **Le risque résiduel est réel et assumé.** Le dind contient l'essentiel : un `docker run -v /:/h`
   dans une workflow monte la racine du *conteneur dind*, pas celle du nœud. Ce qui reste est une
   évasion du dind privilégié lui-même. Acceptable ici parce que la forge est privée, sans forks
@@ -220,7 +228,8 @@ La clé `connection-1.yml` peut rester scellée : elle ne coûte rien et évite 
 - **Diagnostiquer un runner qui ne prend aucun job**, dans cet ordre — les trois premières causes
   sont muettes :
   ```bash
-  # 1. la forge résout-elle vers une adresse PUBLIQUE ? (le LAN est fermé par netpol.yaml)
+  # 1. vers quelle adresse la forge résout-elle ? (attendu : 192.168.1.50, le reverse proxy —
+  #    seule adresse du LAN que netpol.yaml laisse passer, et seulement sur 443)
   kubectl -n forgejo-runner exec forgejo-runner-0 -c runner -- getent hosts forgejo.wittner.tech
   # 2. le config.yml a-t-il été assemblé ?
   kubectl -n forgejo-runner logs forgejo-runner-0 -c render-config
@@ -231,6 +240,9 @@ La clé `connection-1.yml` peut rester scellée : elle ne coûte rien et évite 
   ```
   Puis l'UI Forgejo, `/user/settings/actions/runners` : un runner `offline` alors que le pod est
   `Running` désigne un token périmé — rien dans le cluster ne le dira.
+  ⚠️ À distinguer d'un **blocage réseau**, qui lui est bruyant : le conteneur `runner` sort en
+  `Error` et redémarre en boucle, sur un `deadline_exceeded` à l'appel `Declare`. Timeout et non
+  refus = signature d'un drop Cilium, donc la règle `192.168.1.50` de `netpol.yaml`.
 - **Soupçonner la policy réseau** (mode d'échec : timeout, jamais un refus lisible) :
   ```bash
   cilium monitor --type drop -n forgejo-runner
