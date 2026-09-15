@@ -130,6 +130,15 @@ Ryuk fonctionne sans réglage : `/var/run/docker.sock` est bien présent dans le
   cluster qu'ArgoCD déploie. Pas bloquant — le runner ne sert pas le GitOps, il ne fait que ne
   pas exister tant que le cluster n'est pas remonté. **Rien à construire là-dessus** ; c'est écrit
   pour que personne ne « répare » plus tard un problème qui n'en est pas un.
+- **L'élagage se fait par PRESSION DISQUE, pas par ancienneté — parce que Docker ne sait pas
+  quand une image a servi.** `.Created` est la date de build en amont, `.Metadata.LastTagTime`
+  celle du pull : une image tirée une fois et utilisée tous les jours garde un `LastTagTime` d'il
+  y a un an. « Supprimer les images les moins utilisées » est donc **impossible**, l'information
+  n'existe pas. Seul le cache de *build* a une vraie date d'usage (`buildx prune --unused-for`),
+  parce que BuildKit la suit lui-même.
+  D'où le renversement : le sidecar fait chaque jour le ménage qui ne peut rien coûter
+  (conteneurs, volumes, couches orphelines, cache de build), et ne sacrifie le cache d'images
+  qu'au-dessus de **85 % du PVC de dind**. Tant qu'il reste de la place, tout reste.
 - **Les images ne sont jamais rafraîchies d'elles-mêmes** (`force_pull: false`) — c'est la
   contrepartie du cache sur PVC. Cf. *Opérations*.
 
@@ -320,9 +329,20 @@ La clé `connection-1.yml` peut rester scellée : elle ne coûte rien et évite 
   ```
 - **Élaguer tout de suite** sans attendre le passage quotidien du sidecar :
   ```bash
-  kubectl -n forgejo-runner exec forgejo-runner-0 -c prune -- \
-    docker system prune -af --filter "until=24h"
+  # le ménage sans risque (conteneurs, volumes, couches orphelines, cache de build)
+  kubectl -n forgejo-runner exec forgejo-runner-0 -c prune -- sh -c '
+    docker container prune -f --filter "until=24h"
+    docker volume prune -f
+    docker image prune -f
+    docker buildx prune -f --filter "unused-for=168h"'
+  # le remplissage du volume, ce que surveille le niveau 2 du sidecar
+  kubectl -n forgejo-runner exec forgejo-runner-0 -c prune -- df -h /var/lib/docker
   ```
+  ⚠️ **Ne pas ajouter `--filter until=` à un `docker image prune -a`.** Sur une image, `until`
+  filtre `.Created`, la date de construction **en amont** — `catthehacker/ubuntu:act-22.04` est
+  publiée depuis des semaines, elle part au premier passage. C'est le bug qui a motivé la
+  réécriture du sidecar. Pour vider volontairement le cache :
+  `docker image prune -af`, sans filtre, en sachant qu'on perd 2,2 Go à retélécharger.
 - **Retirer le composant** : renommer `forgejo-runner.app.yaml` en `.noapp.yaml`. Le `prune`
   d'ArgoCD emporte le namespace, les PVC et la policy **ensemble** — ne jamais supprimer la policy
   seule.

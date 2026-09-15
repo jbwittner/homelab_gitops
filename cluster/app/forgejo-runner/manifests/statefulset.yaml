@@ -226,23 +226,59 @@ spec:
           args:
             - |
               set -u
+              # Seuil de remplissage du PVC de dind au-delà duquel on sacrifie le cache
+              # d'images. Cf. le commentaire du niveau 2 plus bas.
+              BUDGET=85
               while true; do
                 # `sleep` D'ABORD : au démarrage d'un pod, le cache vient précisément d'être
                 # restauré depuis le PVC, c'est le pire moment pour l'élaguer.
                 sleep 86400
-                # `until=168h` et pas un `-a` sec : garder une semaine d'images chaudes est tout
-                # l'intérêt du PVC. Les images, réseaux et conteneurs EN COURS D'USAGE ne sont
-                # jamais touchés par `prune`, un job qui tourne pendant le passage ne risque rien.
-                docker system prune -af --filter "until=168h" || true
+
+                # ─── NIVEAU 1 : quotidien, sans risque pour le cache ────────────────────────
+                # Rien ici ne peut supprimer une image utile.
+                #
+                # ⚠️ `until` n'a PAS la même sémantique selon l'objet, et c'est le piège qui a
+                # motivé cette réécriture : sur un CONTENEUR il filtre la date de création de ce
+                # conteneur (ce qu'on veut), mais sur une IMAGE il filtre `.Created`, la date de
+                # construction EN AMONT. `nginx:alpine` et `catthehacker/ubuntu:act-22.04` sont
+                # publiées depuis des semaines : un `docker image prune -a --filter until=168h`
+                # les supprime au tout premier passage, et vide donc le PVC que ce cache justifie.
+                # Panne muette — le run suivant retélécharge 2,2 Go sans qu'aucune alerte bouge.
+                docker container prune -f --filter "until=24h" || true
                 # Volumes anonymes laissés par testcontainers. Seuls ceux qu'aucun conteneur ne
                 # référence partent.
                 docker volume prune -f || true
+                # SANS `-a` : uniquement les couches orphelines (dangling), jamais une image
+                # taguée. C'est la seule forme de `image prune` qui ne peut pas coûter un cache.
+                docker image prune -f || true
+                # Le cache de BUILD est le seul objet dont Docker connaisse vraiment la dernière
+                # utilisation — BuildKit la suit lui-même. `unused-for` est donc exact ICI, et
+                # n'a d'équivalent nulle part ailleurs.
+                docker buildx prune -f --filter "unused-for=168h" || true
+
+                # ─── NIVEAU 2 : seulement sous pression disque ──────────────────────────────
+                # Docker n'expose AUCUNE date de dernier usage pour une image (`.Created` est la
+                # date amont, `.Metadata.LastTagTime` la date du pull — une image tirée une fois
+                # et utilisée tous les jours garde un LastTagTime d'il y a un an). Élaguer « les
+                # moins utilisées » est donc impossible : l'information n'existe pas.
+                # D'où le renversement : on n'élague pas par ancienneté, on élague par PRESSION.
+                # Tant qu'il reste de la place, tout reste. Au-delà du seuil, balayage complet et
+                # le cache se reconstruit au run suivant (~15 s pour l'image de job, mesuré).
+                USED=$(df -P /var/lib/docker | awk 'NR==2 {print $5}' | tr -d '%')
+                if [ "${USED:-0}" -ge "$BUDGET" ]; then
+                  echo "prune: /var/lib/docker a ${USED}% (seuil ${BUDGET}%) - balayage complet"
+                  docker image prune -af || true
+                fi
               done
           resources:
             requests: { cpu: "10m", memory: 32Mi }
             limits: { memory: 128Mi }
           volumeMounts:
             - { name: docker-sock, mountPath: /run/docker-sock }
+            # ⚠️ Le MÊME PVC que `dind`, monté ici en lecture seule, uniquement pour son `df`.
+            # Sans lui, le niveau 2 ne peut pas connaître le taux de remplissage : `docker system
+            # df` ne rapporte que la taille des objets Docker, pas la capacité du volume.
+            - { name: dind-storage, mountPath: /var/lib/docker, readOnly: true }
 
       volumes:
         - name: config
@@ -284,8 +320,10 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           # Thin : l'espace n'est consommé qu'à l'écriture réelle. Dimensionné pour l'image de job
-          # (~1,5 Go), les images testcontainers d'un homelab et les couches de build.
-          # ⚠️ Surveillé par `openebs-monitoring` : si cette taille est atteinte malgré le sidecar
-          # `prune`, c'est le `until=168h` qu'il faut resserrer, pas le PVC qu'il faut agrandir.
+          # (~2,2 Go), les images testcontainers d'un homelab et les couches de build.
+          # ⚠️ Surveillé par `openebs-monitoring`. Le sidecar `prune` vide tout le cache au-delà
+          # de `BUDGET=85` % de CE volume : si `openebs-monitoring` sonne quand même, c'est le
+          # seuil qu'il faut baisser, pas le PVC qu'il faut agrandir — un volume plus grand
+          # repousse simplement le même mur.
           requests:
             storage: 50Gi
