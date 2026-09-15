@@ -1,0 +1,16 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: forgejo-runner-connections
+  namespace: forgejo-runner
+spec:
+  encryptedData:
+    connection-0.yml: AgASEuXJvPnF/QgHcEZ48aAvch2vfthPUSawIOpdhkXXgQ343noJ+gwQdIS6LaGU4IdnI2ZBOMNRb5M/ZyCAYBFiuN7kWX9RKkbuXuilD/RbyLXrOlS4BWsV81k9AWfTjI5ciHUYuR0C4UAFzmETSD2oawnwxVpCl7wkl35v1teOqNG+vtyrTs0wGboWdwMIcF4h2voQz/SZTXIQHJ9w/IJGKAxgPY2fKaFCOrIhWOQtaSpDjq1qGKB0OLDLdo8IGNdQQxgu/v8ZP+C/HzHmSf1WU/wOu+p1tLQvKt0YMwRm9EE+5sDNI6m/Njs3FNuVfIoqXRiU22QesJu3VfDoX1GyZss1bGDGy2S3z9njDoGPhCUPfehS0YwcXpIkBt9h7LZhZeWsRJlmjr478eLn3sTssaW9rX8CIme7c9Gi0DAUIf5oSOoICG+qNHZ8D+3bmtXw5lh8qo+eAJReWjj8/cCHXSTezPgv7Cy/Rq4KpD5R5eEdYd9hfnvAjobyhSQ226WBZqvYiMsiqh00ZsQJfNL8RpF+5Jx39IUiCd2BFKY+xJXdLdD7oHUwk8sjMcF5/pAiZqq4DNE2m/oeRBe0IHrV5WrSs+G1itBVKuStjnfskYOGAhxULXJTblEnGnHTAJvs4ufRfwwCosv9UoJNTrZP3eYejVKqm1kqggPxlkKIx6OIWEOpFuwsjaTpwfYXIawki1Ianl7FrhNpOHtEvlAHvn+NHPUkR3DnhJOKZ60S5z9o/pL0B+F3uHTfHqNMeX1ljAv2/cTgF94tiXphVuvEIqJXxw+MA0TKlJntmxW19ZLeS2IaYYVV2iRWZk0L/uwtvfN8WTET4F3VKmiiEeYQwyKHjzU5AwoVuELurxOomqA6xIio7QIob6i2EqWR+kShJP0GSqqYnUJws22KqoY2SNCbMJoOVmhvxIM1Y8LNUiUm+L4=
+  template:
+    metadata:
+      labels:
+        velero.io/exclude-from-backup: "true"
+      name: forgejo-runner-connections
+      namespace: forgejo-runner
+    type: Opaque

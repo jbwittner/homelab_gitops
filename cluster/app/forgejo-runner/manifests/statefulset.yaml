@@ -1,0 +1,261 @@
+# Le runner Forgejo Actions, et le démon Docker qui le sert.
+#
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# POURQUOI UN STATEFULSET ET PAS UN DEPLOYMENT — deux raisons, et la seconde est la vraie.
+#
+# 1. Deux PVC en RWO par pod (le cache d'actions, et `/var/lib/docker` de dind). Même argument que
+#    `hermes`.
+# 2. ⚠️ CHAQUE REPLICA A SA PROPRE IDENTITÉ AUPRÈS DE LA FORGE. Un couple (uuid, token) ne se
+#    partage pas entre deux daemons : deux processus présentant le même uuid se disputent les
+#    jobs et la forge n'en voit qu'un. Il faut donc qu'un pod sache QUEL enregistrement est le
+#    sien — c'est l'ordinal stable du StatefulSet (`forgejo-runner-0`, `-1`, …) qui le lui dit,
+#    et l'initContainer `render-config` ci-dessous qui va chercher la bonne clé du Secret.
+#    Un Deployment, dont les pods ont des noms aléatoires, ne peut pas faire ça.
+#
+# ⚠️ CONSÉQUENCE OPÉRATOIRE : `replicas: N` exige N enregistrements DÉJÀ scellés. Monter le chiffre
+# sans avoir scellé `connection-<N-1>.yml` laisse le nouveau pod en `Init:CrashLoopBackOff`.
+# L'échec est franc et le message le dit — mais l'ordre est : enregistrer sur la forge, sceller,
+# PUIS monter le chiffre. Cf. README §Monter le parallélisme.
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: forgejo-runner
+  namespace: forgejo-runner
+  labels:
+    app.kubernetes.io/name: forgejo-runner
+spec:
+  serviceName: forgejo-runner
+  # ⚠️ Le nombre de jobs exécutables en parallèle. `runner.capacity` reste à 1 dans config.yml :
+  # c'est ICI que se règle le parallélisme, pour que deux jobs concurrents aient deux démons
+  # Docker distincts. Cf. config/config.yml, section `runner.capacity`.
+  replicas: 1
+  # `Parallel` et non `OrderedReady` : contrairement à `hermes`, les pods ne partagent RIEN — un
+  # jeu de PVC par ordinal, une identité par ordinal. Rien à sérialiser, et `OrderedReady` ferait
+  # attendre `-1` derrière un `-0` bloqué sur un job long.
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo-runner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forgejo-runner
+    spec:
+      # Ce pod exécute du code arbitraire venu des dépôts, dans un conteneur privilégié. Aucun
+      # jeton de ServiceAccount ne doit s'y trouver : sinon une workflow malveillante — ou
+      # simplement une dépendance compromise tirée par un build — parle à l'API Kubernetes avec
+      # les droits du SA.
+      automountServiceAccountToken: false
+      # Laisse le temps à `shutdown_timeout` (1 h, config.yml) de terminer un job en cours avant
+      # que le kubelet n'envoie SIGKILL. Sans ça, tout rollout tue les jobs en vol.
+      terminationGracePeriodSeconds: 3660
+
+      initContainers:
+        # ───────────────────────────────────────────────────────────────────────────────────────
+        # Assemble le config.yml final : partie commune (ConfigMap, en clair) + section `server:`
+        # du replica (SealedSecret, chiffrée). Simple concaténation — `server:` est une clé racine,
+        # le YAML se recolle sans outil.
+        # ───────────────────────────────────────────────────────────────────────────────────────
+        - name: render-config
+          # Même image que le sidecar `prune`, pour n'introduire aucune image de plus.
+          image: docker.io/library/docker:29.8.0-cli
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              # `forgejo-runner-0` → `0`. L'ordinal est la seule chose stable qui distingue un
+              # pod de StatefulSet ; c'est ce qui rend le montage déclaratif.
+              ORDINAL="${HOSTNAME##*-}"
+              SRC="/secrets/connection-${ORDINAL}.yml"
+              if [ ! -f "$SRC" ]; then
+                echo "FATAL: aucune connexion scellée pour l'ordinal ${ORDINAL} (${SRC} absent)." >&2
+                echo "Chaque replica a son propre enregistrement sur la forge. Enregistrer le" >&2
+                echo "runner, sceller la cle connection-${ORDINAL}.yml, PUIS monter replicas." >&2
+                echo "Cf. cluster/app/forgejo-runner/README.md, section Monter le parallelisme." >&2
+                exit 1
+              fi
+              cat /config/config.yml "$SRC" > /run/forgejo-runner/config.yml
+              echo "config.yml assemble pour l'ordinal ${ORDINAL}"
+          volumeMounts:
+            - { name: config, mountPath: /config, readOnly: true }
+            - { name: connections, mountPath: /secrets, readOnly: true }
+            - { name: runtime, mountPath: /run/forgejo-runner }
+          resources:
+            requests: { cpu: "10m", memory: 16Mi }
+            limits: { memory: 64Mi }
+
+      containers:
+        # ───────────────────────────────────────────────────────────────────────────────────────
+        # 1. LE DÉMON DOCKER
+        # ───────────────────────────────────────────────────────────────────────────────────────
+        - name: dind
+          image: docker.io/library/docker:29.8.0-dind
+          # L'ENTRYPOINT (`dockerd-entrypoint.sh`) reste en place : il prépare cgroups et iptables
+          # avant d'exécuter ces arguments.
+          args:
+            # ⚠️ `0.0.0.0` ET PAS `127.0.0.1`, contrairement à ce que l'intuition suggère. Les job
+            # containers vivent dans le bridge de dind et joignent le démon par l'adresse de la
+            # PASSERELLE de ce bridge (`--add-host=pod.docker.internal:host-gateway`), jamais par
+            # la loopback. Écouter sur 127.0.0.1 casse tout accès Docker depuis les workflows.
+            #
+            # ⚠️⚠️ CONSÉQUENCE DE SÉCURITÉ, ET C'EST LE POINT LE PLUS IMPORTANT DE CE FICHIER :
+            # un démon Docker sans TLS ni authentification devient joignable sur l'IP DU POD, donc
+            # depuis n'importe quel pod du cluster. Qui atteint ce port est root sur le nœud Talos
+            # (`docker run -v /:/host --privileged`). C'est `netpol.yaml` — et lui seul — qui ferme
+            # ce port : une CiliumNetworkPolicy en default-deny d'ingress.
+            # NE JAMAIS RETIRER `netpol.yaml` SANS RETIRER CE COMPOSANT.
+            - "dockerd"
+            - "-H"
+            - "tcp://0.0.0.0:2375"
+            - "--tls=false"
+          env:
+            # Sans ça, l'image `docker:dind` génère des certificats et bascule d'elle-même sur
+            # 2376 en TLS mutuel, en ignorant `--tls=false`. Le symptôme est un `dockerd` qui
+            # démarre sans erreur et un runner qui ne joint jamais 2375.
+            - { name: DOCKER_TLS_CERTDIR, value: "" }
+          securityContext:
+            # Le seul privilège du composant, et il est irréductible : overlayfs, netns et
+            # iptables du bridge Docker. C'est ce que le label PSA du namespace autorise.
+            privileged: true
+          # Sondes EXEC et non TCP, volontairement : une sonde réseau partirait du kubelet, donc
+          # de l'identité `host` de Cilium, et exigerait d'ouvrir une règle d'ingress — ce qui
+          # rouvrirait précisément le port que `netpol.yaml` ferme. En `exec`, aucun paquet ne
+          # traverse la policy.
+          startupProbe:
+            exec:
+              command: ["docker", "-H", "tcp://127.0.0.1:2375", "info"]
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command: ["docker", "-H", "tcp://127.0.0.1:2375", "info"]
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "200m"
+              memory: 512Mi
+            limits:
+              # Pas de limite CPU : un build est par nature en dents de scie, et une limite CPU
+              # sur le démon étrangle tous les conteneurs de test qu'il héberge.
+              memory: 6Gi
+          volumeMounts:
+            # ⚠️ PVC et non emptyDir : c'est le cache d'images. En emptyDir, l'image de job de
+            # 1,5 Go et toutes les images testcontainers seraient retéléchargées à chaque rollout.
+            - { name: dind-storage, mountPath: /var/lib/docker }
+
+        # ───────────────────────────────────────────────────────────────────────────────────────
+        # 2. LE RUNNER
+        # ───────────────────────────────────────────────────────────────────────────────────────
+        - name: runner
+          image: data.forgejo.org/forgejo/runner:13.1.0
+          command:
+            - "forgejo-runner"
+            - "daemon"
+            # Fichier ASSEMBLÉ par l'initContainer, dans l'emptyDir `runtime`. Jamais le ConfigMap
+            # directement : il lui manque la section `server:`.
+            - "--config"
+            - "/run/forgejo-runner/config.yml"
+          env:
+            # Par où le runner CRÉE les job containers. Loopback : le démon est dans la même
+            # netns que ce conteneur. À ne pas confondre avec `runner.envs.DOCKER_HOST` de
+            # config.yml, qui est ce que voient les JOBS.
+            - { name: DOCKER_HOST, value: "tcp://127.0.0.1:2375" }
+            # Le runner écrit divers fichiers relatifs à $HOME ; le pointer vers le PVC évite la
+            # couche éphémère.
+            - { name: HOME, value: "/data" }
+          workingDir: /data
+          securityContext:
+            # ⚠️ Root, et c'est assumé plutôt que subi. Descendre en non-root ne réduirait RIEN :
+            # ce conteneur partage la netns du pod avec un démon Docker privilégié qu'il pilote
+            # déjà — il peut donc de toute façon obtenir tout ce que ce démon peut faire. Un
+            # `runAsUser` ici donnerait l'apparence d'un durcissement sans en être un, et coûterait
+            # un `fsGroup` sur deux PVC. Le vrai périmètre de confinement est le pod, pas ce
+            # conteneur.
+            runAsUser: 0
+            privileged: false
+            allowPrivilegeEscalation: false
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: runtime, mountPath: /run/forgejo-runner, readOnly: true }
+
+        # ───────────────────────────────────────────────────────────────────────────────────────
+        # 3. LE RAMASSE-MIETTES
+        #
+        # ⚠️ SIDECAR ET NON CronJob, pour une raison de sécurité et non de commodité : un CronJob
+        # est un autre pod, il devrait donc joindre le démon PAR LE RÉSEAU, ce qui imposerait un
+        # Service sur 2375 et une brèche dans `netpol.yaml` — exactement ce que ce composant
+        # ferme. Ici le socket ne sort jamais de la netns du pod.
+        # ───────────────────────────────────────────────────────────────────────────────────────
+        - name: prune
+          image: docker.io/library/docker:29.8.0-cli
+          env:
+            - { name: DOCKER_HOST, value: "tcp://127.0.0.1:2375" }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -u
+              while true; do
+                # `sleep` D'ABORD : au démarrage d'un pod, le cache vient précisément d'être
+                # restauré depuis le PVC, c'est le pire moment pour l'élaguer.
+                sleep 86400
+                # `until=168h` et pas un `-a` sec : garder une semaine d'images chaudes est tout
+                # l'intérêt du PVC. Les images, réseaux et conteneurs EN COURS D'USAGE ne sont
+                # jamais touchés par `prune`, un job qui tourne pendant le passage ne risque rien.
+                docker system prune -af --filter "until=168h" || true
+                # Volumes anonymes laissés par testcontainers. Seuls ceux qu'aucun conteneur ne
+                # référence partent.
+                docker volume prune -f || true
+              done
+          resources:
+            requests: { cpu: "10m", memory: 32Mi }
+            limits: { memory: 128Mi }
+
+      volumes:
+        - name: config
+          configMap:
+            name: forgejo-runner-config
+        - name: connections
+          secret:
+            # Produit par le contrôleur sealed-secrets depuis `connections.sealed.yaml`.
+            secretName: forgejo-runner-connections
+        # Le config.yml assemblé. emptyDir et non PVC : il est reconstruit à chaque démarrage du
+        # pod, et il contient le token EN CLAIR — il n'a rien à faire sur un disque persistant.
+        - name: runtime
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+
+  volumeClaimTemplates:
+    # Un jeu de volumes PAR REPLICA — c'est ce qui donne à chaque runner son propre cache et son
+    # propre démon, sans aucune contention.
+    - metadata:
+        name: data
+      spec:
+        storageClassName: openebs-lvm-thin
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: dind-storage
+      spec:
+        storageClassName: openebs-lvm-thin
+        accessModes: [ReadWriteOnce]
+        resources:
+          # Thin : l'espace n'est consommé qu'à l'écriture réelle. Dimensionné pour l'image de job
+          # (~1,5 Go), les images testcontainers d'un homelab et les couches de build.
+          # ⚠️ Surveillé par `openebs-monitoring` : si cette taille est atteinte malgré le sidecar
+          # `prune`, c'est le `until=168h` qu'il faut resserrer, pas le PVC qu'il faut agrandir.
+          requests:
+            storage: 50Gi

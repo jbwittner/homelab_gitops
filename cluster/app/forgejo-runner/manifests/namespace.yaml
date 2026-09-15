@@ -1,0 +1,25 @@
+# Namespace créé AVANT le StatefulSet (sync-wave -1).
+#
+# ⚠️ `pod-security.kubernetes.io/enforce: privileged` — c'est le label le plus lourd de
+# conséquence du dépôt après celui d'`openebs`, et il n'est PAS un contournement de confort : le
+# sidecar `dind` de ce composant ne peut pas démarrer autrement. Un démon Docker a besoin de
+# `CAP_SYS_ADMIN` (montage d'overlayfs, création de netns, règles iptables de son bridge). Sous
+# `baseline` (le défaut) le pod est refusé À L'ADMISSION, avec un message explicite — le mode
+# d'échec est donc franc, pas silencieux.
+#
+# ⚠️ Corollaire à ne jamais perdre de vue : ce namespace accepte N'IMPORTE QUEL pod privilégié,
+# pas seulement celui-ci. Il ne doit contenir que ce composant. Un second composant qui viendrait
+# s'y loger hériterait du droit de monter la racine du nœud Talos sans que rien ne le signale.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgejo-runner
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    # Les deux autres modes restent en `restricted` : ils n'interdisent rien, ils font apparaître
+    # un warning à l'`apply` et une ligne d'audit pour chaque pod privilégié. C'est la trace qui
+    # permet de voir arriver un pod indésirable dans ce namespace.
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

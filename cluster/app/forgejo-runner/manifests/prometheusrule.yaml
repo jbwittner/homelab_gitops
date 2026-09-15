@@ -1,0 +1,94 @@
+# Alertes du runner.
+#
+# ⚠️ PRINCIPE DIRECTEUR, hérité de l'incident du 2026-09-09 (cf. `forgejo-monitoring`) : une
+# expression qui compare une série ABSENTE ne se déclenche JAMAIS. **Série absente ≠ série à
+# zéro.** Chaque valeur surveillée est donc doublée d'un `absent(...)`. Les deux se déplacent
+# ensemble ; en garder une seule rouvre le trou.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# POURQUOI ICI ET NON DANS UN COMPOSANT `forgejo-runner-monitoring`
+#
+# Les composants `*-monitoring` du dépôt existent pour des cibles HORS CLUSTER : ils portent une
+# `ScrapeConfig` statique, des secrets d'authentification, et un cycle de vie indépendant de ce
+# qu'ils surveillent. Rien de tout ça ici — la cible est un StatefulSet local, déjà exposé par
+# kube-state-metrics, et il n'y a aucun secret de scrape. Un composant de plus serait du
+# cérémonial, et il ferait disparaître l'alerte au `prune` du jour où le runner est retiré, ce qui
+# est justement le comportement voulu.
+#
+# ⚠️ Le PrometheusRule vit donc dans le namespace `forgejo-runner` et non `monitoring`. C'est sans
+# effet : `ruleNamespaceSelector` est vide dans les values de kube-prometheus-stack, donc TOUS les
+# namespaces sont scrutés. Seul le label `release:` ci-dessous est obligatoire.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# CE QUI N'EST PAS SURVEILLÉ, ET POURQUOI
+#
+# ⚠️ forgejo-runner N'EXPOSE AUCUN `/metrics`. Il n'y a donc aucune visibilité sur les jobs :
+# ni leur nombre, ni leur durée, ni leurs échecs. Ces alertes disent seulement « le processus
+# tourne ». Un runner vivant qui échoue à s'authentifier auprès de la forge, ou qui ne reçoit
+# jamais de job, est INDISTINGUABLE d'un runner au repos. Le seul témoin est l'état `offline`
+# dans l'UI Forgejo, que rien ici ne lit.
+#
+# Le remplissage du PVC de dind, lui, est couvert par `openebs-monitoring` — ne pas le doubler.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: forgejo-runner-alerts
+  namespace: forgejo-runner
+  labels:
+    # ⚠️ OBLIGATOIRE : sélecteur du prometheus-operator (`ruleSelectorNilUsesHelmValues`). Sans ce
+    # label, l'objet est ignoré SANS ERREUR — les règles n'existent simplement jamais.
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # ═══════════════════════════════════════════════════════════════════════════════════════════
+    - name: forgejo-runner.rules
+      rules:
+        # La série existe et vaut zéro : le StatefulSet est là, aucun pod n'est prêt.
+        # Cause la plus fréquente au premier déploiement : `Init:CrashLoopBackOff` parce que la
+        # clé `connection-<ordinal>.yml` manque au Secret.
+        - alert: ForgejoRunnerDown
+          expr: kube_statefulset_status_replicas_ready{namespace="forgejo-runner", statefulset="forgejo-runner"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Aucun runner Forgejo Actions disponible"
+            description: >-
+              Le StatefulSet forgejo-runner n'a aucun pod prêt depuis 10 min. Plus aucun workflow
+              ne s'exécute ; les jobs s'empilent en attente côté forge sans expirer.
+              Regarder d'abord `kubectl -n forgejo-runner logs forgejo-runner-0 -c render-config`
+              (clé de connexion manquante), puis le conteneur `dind`.
+
+        # Le pendant `absent()`. Se déclenche si le StatefulSet est SUPPRIMÉ — ce que la règle
+        # précédente ne verrait jamais, la série disparaissant avec lui. C'est exactement le
+        # scénario du 2026-09-09.
+        - alert: ForgejoRunnerAbsent
+          expr: absent(kube_statefulset_status_replicas_ready{namespace="forgejo-runner", statefulset="forgejo-runner"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "La série du runner Forgejo a disparu"
+            description: >-
+              Aucune métrique kube_statefulset_status_replicas_ready pour forgejo-runner depuis
+              15 min. Soit le StatefulSet a été supprimé (retrait du composant, prune ArgoCD),
+              soit kube-state-metrics ne répond plus — auquel cas beaucoup d'autres alertes
+              sonnent en même temps et c'est LUI qu'il faut traiter d'abord.
+
+        # Un replica déclaré mais jamais prêt. Le cas typique : `replicas` monté sans que
+        # l'enregistrement correspondant ait été scellé. La règle `Down` ci-dessus ne le voit pas,
+        # puisqu'il reste au moins un pod prêt.
+        - alert: ForgejoRunnerReplicaMismatch
+          expr: >-
+            kube_statefulset_status_replicas_ready{namespace="forgejo-runner", statefulset="forgejo-runner"}
+            < kube_statefulset_replicas{namespace="forgejo-runner", statefulset="forgejo-runner"}
+          for: 30m
+          labels:
+            severity: info
+          annotations:
+            summary: "Un replica de runner Forgejo ne démarre pas"
+            description: >-
+              Moins de pods prêts que de replicas demandés depuis 30 min. Cause la plus probable :
+              `replicas` a été monté sans que la clé connection-<ordinal>.yml correspondante ait
+              été enregistrée sur la forge et scellée dans le Secret.
+              Cf. cluster/app/forgejo-runner/README.md, section « Monter le parallélisme ».

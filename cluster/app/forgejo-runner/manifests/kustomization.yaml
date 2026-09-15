@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: forgejo-runner
+resources:
+  - namespace.yaml
+  # ⚠️ Produit par kubeseal (cf. connections.secret.example.yaml). À DÉCOMMENTER dans le même
+  # commit que le scellement. Tant qu'il manque, le Secret `forgejo-runner-connections` n'existe
+  # pas et le pod reste bloqué : le volume `connections` ne peut pas être monté
+  # (`FailedMount`, puis `Init:CrashLoopBackOff`).
+  - connections.sealed.yaml
+  - statefulset.yaml
+  # ⚠️ NE JAMAIS RETIRER SANS RETIRER LE COMPOSANT. C'est ce qui ferme le démon Docker sans
+  # authentification exposé sur l'IP du pod. Cf. l'en-tête de netpol.yaml.
+  - netpol.yaml
+  - prometheusrule.yaml
+
+# ⚠️ AUCUN Service, AUCUN HTTPRoute, et c'est un choix : ce pod n'est jamais joint, il va chercher
+# ses jobs. Rien à déclarer au reverse proxy 192.168.1.50 (cf. doc/reseau.md).
+# Un Service sur 2375 serait la pire chose à ajouter ici — il annulerait netpol.yaml.
+
+# Partie COMMUNE du config.yml du runner, générée plutôt qu'écrite à la main pour le suffixe de
+# hash : kustomize nomme le ConfigMap `forgejo-runner-config-<hash>` et réécrit la référence dans
+# le `volumes:` du StatefulSet. Éditer `config/config.yml` change donc le pod template, ce qui
+# suffit à déclencher le rollout — indispensable, parce que l'initContainer n'assemble le fichier
+# final qu'au démarrage du pod. Sans ce mécanisme, un ConfigMap mis à jour resterait sans effet
+# jusqu'à un `rollout restart` manuel, et rien ne le signalerait (ArgoCD `Synced`, aucun log).
+#
+# Même raison que pour `hermes`, et `connections.sealed.yaml` est ajouté au générateur pour la
+# même raison qu'y est ajouté `hermes-env.sealed.yaml` : le Secret est produit par le contrôleur
+# sealed-secrets, son contenu ne peut donc pas influencer le pod template. Resceller change ce
+# fichier (kubeseal régénère un nonce à chaque passe, même à valeurs égales), donc le hash, donc
+# le nom du ConfigMap, donc le pod template : le rollout part avec le nouveau token.
+#
+# Le fichier atterrit dans le volume `config` monté en lecture seule sur /config, où
+# l'initContainer ne lit que `config.yml`. Son contenu est chiffré et déjà présent dans Git.
+#
+# ⚠️ À décommenter EN MÊME TEMPS que la ligne `connections.sealed.yaml` ci-dessus : référencer un
+# fichier absent fait échouer le rendu kustomize, donc le sync ArgoCD entier.
+configMapGenerator:
+  - name: forgejo-runner-config
+    files:
+      - config/config.yml
+      - connections.sealed.yaml

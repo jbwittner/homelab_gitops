@@ -1,0 +1,101 @@
+# ⚠️⚠️ LE FICHIER LE PLUS IMPORTANT DE CE COMPOSANT. Sans lui, le composant est une porte ouverte
+# sur le nœud Talos, et il n'y a aucun signe visible.
+#
+# Le sidecar `dind` expose un démon Docker SANS TLS ET SANS AUTHENTIFICATION sur `0.0.0.0:2375`
+# (il le doit : les job containers le joignent par la passerelle de son bridge, pas par la
+# loopback — cf. statefulset.yaml). Ce port est donc atteignable sur l'IP DU POD. Or, qui atteint
+# un démon Docker est root sur la machine qui l'héberge :
+#
+#   docker -H tcp://<ip-du-pod>:2375 run -v /:/host --privileged alpine chroot /host
+#
+# Cette policy est la SEULE chose qui referme ce port. Elle n'est pas du durcissement en plus,
+# elle fait partie du composant au même titre que le StatefulSet.
+#
+# ⚠️ Le mode d'échec d'une policy Cilium est un TIMEOUT, jamais un refus lisible. En cas de doute
+# après un sync :
+#   kubectl -n forgejo-runner delete ciliumnetworkpolicy forgejo-runner   # ArgoCD la repose
+#   cilium monitor --type drop -n forgejo-runner                          # ce qui est jeté
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: forgejo-runner
+  namespace: forgejo-runner
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo-runner
+
+  # ⚠️ Forme EXPLICITE du default-deny (Cilium ≥ 1.16), et pas un `ingress: []` nu. Une liste vide
+  # est ambiguë : selon la version, elle peut être lue comme « aucune règle d'ingress déclarée »,
+  # donc direction NON sélectionnée, donc tout autorisé — c'est-à-dire l'inverse exact de
+  # l'intention, sans le moindre message. La forme déclarative ne laisse pas ce doute.
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════
+  # INGRESS : RIEN. Pas une règle.
+  #
+  # Ce pod n'a aucune raison d'être joint : il n'expose pas de service, il n'a pas de Service, pas
+  # d'HTTPRoute, et il va CHERCHER ses jobs auprès de la forge (`fetch_interval`). Le trafic est
+  # sortant de bout en bout.
+  #
+  # ⚠️ Les sondes du kubelet ne font pas exception et n'ont PAS besoin d'une règle `host` : elles
+  # sont en `exec`, précisément pour ça (cf. statefulset.yaml, conteneur `dind`). Toute sonde
+  # convertie en `tcpSocket` ou `httpGet` échouerait ici — et la « correction » évidente
+  # (ouvrir `fromEntities: [host]` sur 2375) rouvrirait le port à tout pod en hostNetwork.
+  # Si une sonde réseau devient nécessaire un jour : exposer un port de santé DISTINCT, jamais
+  # 2375.
+  # ═══════════════════════════════════════════════════════════════════════════════════════════
+
+  egress:
+    # --- DNS ---
+    # Sans cette règle, rien ne résout : ni la forge, ni les registres d'images, ni les dépôts de
+    # dépendances. C'est aussi la règle qui sert les JOB CONTAINERS : ils héritent du
+    # `/etc/resolv.conf` du pod à travers dind.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+
+    # --- Internet, et rien que lui ---
+    #
+    # ⚠️ CETTE RÈGLE CONTRAINT AUSSI LES WORKFLOWS, et c'est sa vraie valeur. Le trafic d'un job
+    # container sort par le bridge de dind, est masqué derrière l'IP du pod, et se présente donc à
+    # Cilium avec l'identité de CE pod. Ce qui est fermé ici est fermé pour les builds.
+    #
+    # Les besoins sortants sont larges et légitimes : la forge, ghcr.io et data.forgejo.org pour
+    # les images, Maven Central, le registre npm, le proxy de modules Go, les toolchains de
+    # `setup-java` / `setup-go`. Tout cela est public.
+    #
+    # ⚠️ `toEntities: [world]` ne conviendrait PAS : en Cilium, `world` désigne tout ce qui n'a pas
+    # d'identité de cluster — les machines du LAN en 192.168.1.x COMPRISES. C'est exactement ce
+    # qu'il faut refuser à un exécuteur de code arbitraire. D'où le `toCIDRSet` avec exceptions.
+    # Même construction que l'ancienne policy de `archive/forgejo`.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16      # dont le reverse proxy 192.168.1.50, le NAS, l'hyperviseur
+            - 169.254.0.0/16      # link-local, dont les endpoints de métadonnées
+            - 127.0.0.0/8
+            - 100.64.0.0/10       # CGNAT
+
+    # ⚠️ VÉRIFICATION À FAIRE AU PREMIER DÉPLOIEMENT : la règle ci-dessus suppose que
+    # `forgejo.wittner.tech` résout vers une adresse PUBLIQUE. Si la résolution est à double
+    # horizon et renvoie une IP du LAN, le runner ne joint jamais la forge — et le symptôme est un
+    # runner qui démarre proprement, reste `offline` dans l'UI Forgejo, sans une seule erreur
+    # explicite dans ses logs. Contrôle :
+    #   kubectl -n forgejo-runner exec forgejo-runner-0 -c runner -- getent hosts forgejo.wittner.tech
+    # Si l'adresse est privée, ajouter ici une règle explicite plutôt que d'élargir l'exception :
+    #   - toCIDR: ["192.168.1.50/32"]
+    #     toPorts: [{ ports: [{ port: "443", protocol: TCP }] }]
+
+    # ⚠️ AUCUNE règle vers `kube-apiserver`, et c'est volontaire : ce pod n'a rien à y dire, et il
+    # n'a de toute façon pas de jeton à présenter (`automountServiceAccountToken: false`). Les
+    # deux garde-fous se tiennent — ne pas en retirer un seul.

@@ -91,6 +91,7 @@ pour tout ce qui est dans `archive/`.
 | [kube-prometheus-stack](cluster/app/kube-prometheus-stack/README.md) | 0 | Prometheus, Alertmanager, Grafana et ses dashboards |
 | [hermes](cluster/app/hermes/README.md) | 0 | agent LLM en mode gateway |
 | [renovate](cluster/app/renovate/README.md) | 0 | mises à jour de dépendances |
+| [forgejo-runner](cluster/app/forgejo-runner/README.md) | 0 | Forgejo Actions — ⚠️ **inerte** tant que son `SealedSecret` d'enregistrement n'est pas scellé |
 | [forgejo-pra](cluster/app/forgejo-pra/README.md) | 0 | VM d'**exercice** du PRA de la forge — éteinte par défaut, jamais un standby |
 | [cnpg-monitoring](cluster/app/cnpg-monitoring/README.md) | 2 | archivage WAL — ⚠️ les 3 règles de **sauvegarde** sont commentées (plus de plugin barman) |
 | [forgejo-monitoring](cluster/app/forgejo-monitoring/README.md) | 2 | la forge et sa base, scrapées **hors du cluster** — 9 alertes |
