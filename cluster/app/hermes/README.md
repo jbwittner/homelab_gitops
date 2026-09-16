@@ -144,9 +144,13 @@ le sidecar `git-sync` et l'initContainer `bootstrap-home` que comme clé individ
   Les hooks, l'index et la configuration Git modifiables par Hermes ne sont jamais utilisés.
 - Si le rebase signale un conflit, il est annulé et le main local est force-pushé : le worktree
   Hermes est alors la source de vérité.
-- Les dépôts Git qu'Hermes clone dans son workspace sont aplatis : le `.git` imbriqué est retiré
-  de la copie privée du sidecar avant le `git add`. Sans ça, Git enregistre un gitlink et le
-  contenu ne part jamais sur Forgejo — un PVC neuf reconstruirait le dossier vide.
+- `workspace/` est copié entrée par entrée : une entrée de premier niveau qui porte son propre
+  `.git` est **exclue**, et l'exclusion est tracée dans les logs du sidecar
+  (`skipping embedded repo workspace/<nom>`). Elle a son propre remote et se reconstruit par un
+  clone ; sans exclusion Git l'enregistrerait en gitlink — un SHA nu sans contenu ni URL, que
+  Forgejo ne reçoit pas et qu'un PVC neuf reconstruit vide. **Un clone du workspace n'est donc
+  pas sauvegardé** : après un reset, il est à refaire à la main. Le filtre ne regarde que le
+  premier niveau, là où Hermes clone ; un dépôt enfoui plus profond repasserait en gitlink.
 - Le sidecar ne refuse rien sur le contenu : ni whitespace, ni taille, ni `.gitignore` du worktree.
   C'est une sauvegarde de l'état de l'agent, pas une revue. Tout ce qu'Hermes écrit sous les
   chemins déclarés part sur Forgejo, y compris un secret qu'il y déposerait.
@@ -215,3 +219,77 @@ Tout l'état vivant est dans le PVC `data-hermes-0`. `homelab_hermes` reconstrui
 versionné (`config.yaml`, skills, workspace, règles et mémoire durable) lors d'un nouveau PVC ;
 `auth.json`, sessions, bases SQLite et caches restent hors Git. À couvrir par
 [velero](../../infra/velero/README.md) si l'on veut les conserver.
+
+### Repartir de zéro
+
+Deux états indépendants peuvent être remis à neuf : le **PVC** `data-hermes-0` (ce qu'Hermes vit)
+et le dépôt **`homelab_hermes`** (ce qui en est versionné). Les remettre à neuf ensemble ou
+séparément ne donne pas le même résultat, d'où trois gestes distincts.
+
+> [!WARNING]
+> Le StatefulSet est sous `selfHeal: true`. Un `kubectl scale` est **annulé par ArgoCD en moins de
+> trois minutes**, au milieu de la manipulation : la mise à zéro passe obligatoirement par un
+> commit de `replicas: 0` dans `statefulset.yaml`. La suppression du PVC, elle, ne peut pas passer
+> par Git — il naît de `volumeClaimTemplates`, ArgoCD ne le voit pas et `prune` ne le touche pas.
+> C'est la seule écriture impérative de la procédure.
+
+#### A. Hermes neuf, historique conservé
+
+Remet `/opt/data` dans l'état du **dernier commit poussé**. C'est la sortie de secours d'un
+worktree corrompu ou d'un cache SQLite en vrac, pas un vrai « clean » : tout ce qui est versionné
+revient. Les dépôts qu'Hermes avait clonés dans son workspace, eux, ne reviennent pas — ils sont
+exclus de la synchronisation et sont à re-cloner.
+
+```bash
+# 1. Le dernier cycle a-t-il poussé ? C'est la seule sauvegarde du profil.
+kubectl -n hermes logs sts/hermes -c git-sync --tail=5
+
+# 2. replicas: 0 dans statefulset.yaml → commit → push → attendre la fin du pod
+kubectl -n hermes get pod -w
+
+# 3. Irréversible : libère le thin LV. Tout le hors-Git part (auth.json, sessions, caches).
+kubectl -n hermes delete pvc data-hermes-0
+
+# 4. replicas: 1 → commit → push. Le StatefulSet recrée le PVC, bootstrap-home clone main.
+kubectl -n hermes logs hermes-0 -c bootstrap-home
+```
+
+#### B. Historique neuf, Hermes intact
+
+Écrase l'historique de `homelab_hermes` par un commit unique portant l'état courant. Utile après
+qu'un fichier volumineux ou un secret y soit entré — le sidecar ne filtre rien.
+
+1. Dans Forgejo : supprimer puis recréer `jbwittner/homelab_hermes`, **sans** README ni
+   `.gitignore` initial (un commit de départ ferait diverger le premier push).
+2. Jeter le checkout privé du sidecar, qui porte encore l'ancien historique dans son `emptyDir` :
+
+```bash
+kubectl -n hermes delete pod hermes-0
+```
+
+Au cycle suivant (≤ 5 min), `sync-once.sh` ne trouve plus de `main` distant, réinitialise son
+checkout et pousse un commit unique. Le `.git` de `/opt/data` garde des références mortes, sans
+effet : le sidecar ne s'en sert jamais, et `bootstrap-home` ne lit que celui d'un PVC neuf.
+
+#### C. Jour 0 complet
+
+L'ordre compte : tant qu'un pod tourne, le sidecar repousse l'état courant dans les cinq minutes
+qui suivent la remise à neuf du dépôt.
+
+1. `replicas: 0` dans `statefulset.yaml` → commit → push → attendre la disparition de `hermes-0`.
+2. `kubectl -n hermes delete pvc data-hermes-0`.
+3. Supprimer et recréer `homelab_hermes` vide dans Forgejo.
+4. `replicas: 1` → commit → push.
+
+`bootstrap-home` ne trouve pas de `main` distant, fait un `git init` dans `/opt/data` et rend la
+main ; Hermes démarre vierge et le sidecar pousse le premier commit dès qu'il a écrit quelque
+chose. C'est exactement l'état du premier déploiement.
+
+```bash
+kubectl -n hermes logs hermes-0 -c bootstrap-home   # « Initialized empty Git repository »
+kubectl -n hermes logs hermes-0 -c git-sync --tail=20
+```
+
+`hermes-env` n'est concerné par aucun des trois : le `SealedSecret` reste valide, `FORGEJO_TOKEN`
+est réutilisé tel quel et rien n'est à resceller. Recréer le dépôt Forgejo ne révoque pas le token,
+mais vérifier que `hermes_agent` a toujours les droits d'écriture sur le dépôt recréé.

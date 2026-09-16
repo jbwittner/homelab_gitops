@@ -46,27 +46,54 @@ fi
 # directory, index and .gitignore are never consulted to decide what may be committed.
 rm -rf workspace skills memories
 rm -f config.yaml .hermes.md SOUL.md
-for path in config.yaml .hermes.md SOUL.md workspace skills; do
+for path in config.yaml .hermes.md SOUL.md skills; do
   if [ -e "$SOURCE_DIR/$path" ]; then
     cp -a "$SOURCE_DIR/$path" .
   fi
 done
+
+# `workspace` est copié entrée par entrée et non en bloc : une entrée qui porte son propre `.git`
+# est un dépôt à elle — remote propre, reconstructible par un clone — n'appartient pas au profil
+# Hermes, et n'est donc pas copiée. Sans ce filtre `git add` l'enregistrerait en gitlink (mode
+# 160000, un SHA nu sans contenu ni URL) : Forgejo ne recevrait rien et un PVC neuf reconstruirait
+# un dossier vide. Chaque exclusion est tracée — une sauvegarde qui saute un dossier en silence
+# est pire que pas de sauvegarde.
+# Le filtre ne regarde que le premier niveau, là où Hermes clone. Un dépôt enfoui plus profond
+# repasserait en gitlink.
+if [ -d "$SOURCE_DIR/workspace" ]; then
+  mkdir -p workspace
+  for entry in "$SOURCE_DIR"/workspace/* "$SOURCE_DIR"/workspace/.[!.]*; do
+    [ -e "$entry" ] || continue
+    name=${entry##*/}
+    if [ "$name" = .git ]; then
+      # Hermes a fait de tout son workspace un dépôt. Son contenu reste sauvegardé, seul le
+      # `.git` est laissé de côté.
+      printf '%s workspace is a git repo, .git not copied\n' "$(date -Iseconds)" >&2
+      continue
+    fi
+    if [ -e "$entry/.git" ]; then
+      printf '%s skipping embedded repo workspace/%s\n' "$(date -Iseconds)" "$name" >&2
+      continue
+    fi
+    cp -a "$entry" workspace/
+  done
+fi
+
 if [ -f "$SOURCE_DIR/memories/USER.md" ]; then
   mkdir -p memories
   cp -a "$SOURCE_DIR/memories/USER.md" memories/USER.md
 fi
 
-# Hermes clone des dépôts dans son workspace. Sans ça, `git add` enregistre un gitlink
-# (mode 160000, un simple SHA) : le contenu ne part jamais sur Forgejo et un PVC neuf le
-# reconstruit vide. On aplatit donc les dépôts imbriqués — uniquement dans cette copie
-# privée du sidecar, /opt/data n'est jamais modifié. Le `.git` du checkout de synchro est
-# à la racine, hors des chemins parcourus ici.
-for tree in workspace skills; do
-  [ -d "$tree" ] || continue
-  find "$tree" -name .git -prune -exec rm -rf {} +
+# Un seul chemin absent à la fois du worktree et de l'index fait échouer `git add` EN ENTIER
+# (« fatal: pathspec ... did not match any files »). Au jour 0, ou après un reset complet, cela
+# bloquerait tous les cycles tant qu'Hermes n'a pas créé les six chemins. On ne stage donc que
+# ce qui existe quelque part. `--all` reste indispensable : c'est lui qui propage les
+# suppressions faites par Hermes.
+for path in config.yaml .hermes.md SOUL.md memories workspace skills; do
+  if [ -e "$path" ] || git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+    git add --all -- "$path"
+  fi
 done
-
-git add --all -- config.yaml .hermes.md SOUL.md memories workspace skills
 # PAS de `git diff --cached --check` ici : sous `set -e`, un espace en fin de ligne dans un
 # fichier écrit par Hermes faisait échouer TOUT le cycle, donc aucun commit n'était jamais
 # poussé. Ceci est une sauvegarde automatique de l'état de l'agent, pas une revue de code :
