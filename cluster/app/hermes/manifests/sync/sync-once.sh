@@ -4,7 +4,10 @@ set -eu
 SOURCE_DIR=/opt/data
 WORK_DIR=/sync-work/repo
 BRANCH=main
-REMOTE_URL=https://forgejo.wittner.tech/jbwittner/homelab_hermes.git
+# Même source que l'init container bootstrap-home : le ConfigMap `hermes-git`. Les deux scripts
+# ne peuvent donc pas viser deux dépôts différents. Absente, la variable fait échouer le cycle
+# plutôt que de pousser vers un remote implicite.
+REMOTE_URL=${HERMES_REPO_URL:?HERMES_REPO_URL is required}
 
 export GIT_ASKPASS=/sync/git-askpass.sh
 export GIT_TERMINAL_PROMPT=0

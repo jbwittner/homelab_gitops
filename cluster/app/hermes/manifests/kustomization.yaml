@@ -33,6 +33,15 @@ configMapGenerator:
       # passe, même à valeurs égales), donc le hash, donc le nom du ConfigMap, donc le pod template.
       - hermes-env.sealed.yaml
 
+  # Dépôt distant du profil Hermes, référencé par `configMapKeyRef` dans l'init container
+  # bootstrap-home ET dans le sidecar git-sync : une seule valeur pour les deux, impossible de
+  # cloner depuis un dépôt et de pousser vers un autre. Le suffixe de hash fait qu'un changement
+  # d'URL déclenche un rollout — le sidecar repart donc sur un emptyDir neuf, sans le clone
+  # pointant vers l'ancien remote.
+  - name: hermes-git
+    literals:
+      - HERMES_REPO_URL=https://forgejo.wittner.tech/jbwittner/homelab_hermes.git
+
   # Script déterministe de réplication de homelab_hermes. C'est un ConfigMap séparé et monté en
   # lecture seule dans un sidecar : Hermes ne contrôle ni sa fréquence ni ses règles Git.
   - name: hermes-git-sync

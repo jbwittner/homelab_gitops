@@ -42,6 +42,14 @@ spec:
           image: alpine/git:2.47.2
           command: ["/bootstrap/bootstrap-home.sh"]
           env:
+            # Dépôt source du profil. Défini une seule fois dans le ConfigMap `hermes-git`, que
+            # le sidecar git-sync lit également : le clone initial et les push suivants visent
+            # forcément le même dépôt.
+            - name: HERMES_REPO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: hermes-git
+                  key: HERMES_REPO_URL
             - name: FORGEJO_USERNAME
               value: hermes_agent
             - name: FORGEJO_TOKEN
@@ -132,6 +140,12 @@ spec:
                 sleep 300
               done
           env:
+            # Même clé que l'init container bootstrap-home, cf. le ConfigMap `hermes-git`.
+            - name: HERMES_REPO_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: hermes-git
+                  key: HERMES_REPO_URL
             - name: FORGEJO_USERNAME
               value: hermes_agent
             # Intentionally inject only this key, never the complete hermes-env Secret.

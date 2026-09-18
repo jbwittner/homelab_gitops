@@ -2,7 +2,10 @@
 set -eu
 
 REPO_DIR=/opt/data
-REPO_URL=https://forgejo.wittner.tech/jbwittner/homelab_hermes.git
+# The remote is injected from the `hermes-git` ConfigMap so that this script and the git-sync
+# sidecar can never disagree on which repository holds the profile. Fail loudly rather than
+# bootstrapping against an implicit default.
+REPO_URL=${HERMES_REPO_URL:?HERMES_REPO_URL is required}
 BRANCH=main
 
 # An existing checkout is the authoritative live worktree. Only an empty PVC (apart from the
