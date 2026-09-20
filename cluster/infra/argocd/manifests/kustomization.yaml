@@ -48,3 +48,11 @@ patches:
     target:
       kind: Secret
       name: argocd-notifications-secret
+  # Annotation `sealedsecrets.bitnami.com/patch` sur `argocd-secret` : autorise le contrôleur à y
+  # AJOUTER `webhook.github.secret` sans écraser `server.secretkey` ni le hash admin, qu'Argo y
+  # écrit lui-même. ⚠️ `patch` et non `managed` — cf. l'en-tête du fichier, l'écart est
+  # load-bearing.
+  - path: argocd-secret.yaml
+    target:
+      kind: Secret
+      name: argocd-secret

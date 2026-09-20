@@ -9,6 +9,9 @@ Le dépôt de référence est la forge auto-hébergée
 C'est aussi la source que lit ArgoCD : les 32 `repoURL` de `cluster/` y pointent, et
 `argocd-repo-server` s'y authentifie avec un jeton `read:repository` (cf.
 [`cluster/infra/argocd/README.md`](cluster/infra/argocd/README.md) §Accès au dépôt privé).
+Un **webhook « push »** de la forge appelle `/api/webhook` sur `argocd-server` : la sync part au
+commit au lieu d'attendre le polling de 3 min — accélération seulement, le polling reste le filet
+(cf. [`cluster/infra/argocd/README.md`](cluster/infra/argocd/README.md) §Webhook Forgejo).
 
 **La forge tourne hors du cluster**, en Docker sur une machine dédiée, et ce n'est pas un choix
 d'hébergement : tant qu'elle était un composant `cluster/app/`, en faire la source du GitOps aurait

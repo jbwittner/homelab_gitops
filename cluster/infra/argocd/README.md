@@ -65,6 +65,15 @@ kubectl apply -f cluster/root.yaml
 - `manifests/argocd-notifications-secret.yaml` — patch qui pose
   `sealedsecrets.bitnami.com/managed: "true"` sur le Secret livré **vide** par l'upstream, sans
   quoi le contrôleur sealed-secrets refuse d'y écrire (cf. §Notifications)
+- `manifests/argocd-secret.yaml` — patch qui pose `sealedsecrets.bitnami.com/patch: "true"` sur
+  `argocd-secret`. ⚠️ **`patch` et non `managed`**, et l'écart est load-bearing : `managed`
+  remplacerait l'objet entier, donc `server.secretkey` et le hash admin qu'Argo y écrit lui-même
+  (cf. §Webhook Forgejo et l'encadré §Pourquoi le patch survit à la sync)
+- `post-bootstrap/argocd-webhook.sealed.yaml` — `SealedSecret` **`argocd-secret`**, clé
+  `webhook.github.secret` : le HMAC partagé avec le webhook « push » de la forge
+  (cf. §Webhook Forgejo)
+- `post-bootstrap/argocd-webhook.secret.example.yaml` — template de scellement, versionné et sans
+  valeur, porteur de la procédure. Jamais dans `kustomization.yaml`
 - `post-bootstrap/argocd-oidc.sealed.yaml` — `SealedSecret` `argocd-oidc`, clé `client-secret`
   (OIDC). **Présent dans le repo, mais sa ligne reste commentée** dans le `kustomization.yaml` :
   le SSO est désactivé faute d'authentik (cf. §SSO)
@@ -90,10 +99,12 @@ kubectl apply -f cluster/root.yaml
 > | Objet | CRD posée par | Wave |
 > |---|---|---|
 > | `SealedSecret` (`repo-homelab-gitops`) | [sealed-secrets](../sealed-secrets/README.md) | `-8` |
+> | `SealedSecret` (`argocd-secret`, webhook) | [sealed-secrets](../sealed-secrets/README.md) | `-8` |
 > | `HTTPRoute` (UI) | [gateway-api](../gateway-api/README.md) | `-10` |
 >
-> ⚠️ Seul `repo-homelab-gitops.sealed.yaml` est effectivement dans le `kustomization.yaml` ; ceux
-> d'OIDC et des notifications sont présents dans le dossier mais **commentés**.
+> ⚠️ Seuls `repo-homelab-gitops.sealed.yaml` et `argocd-webhook.sealed.yaml` sont effectivement
+> dans le `kustomization.yaml` ; ceux d'OIDC et des notifications sont présents dans le dossier
+> mais **commentés**.
 >
 > Les deux arrivent donc **après** l'amorçage manuel, mais **avant** la wave `-1` où Argo
 > synchronise cette Application : le tour de piste est complet, la route et les secrets sont
@@ -291,6 +302,128 @@ kubectl -n argocd get secret repo-homelab-gitops -o jsonpath='{.metadata.ownerRe
 ```
 
 
+## Webhook Forgejo — sync immédiate sur push
+
+Sans webhook, ArgoCD ne découvre un commit qu'à son **polling**, toutes les **3 min** par
+Application (`timeout.reconciliation`, défaut amont non surchargé ici). Le webhook « push » de la
+forge appelle `/api/webhook` sur `argocd-server`, qui invalide immédiatement le cache du dépôt et
+rafraîchit **toutes les Applications dont le `repoURL` et le `targetRevision` correspondent au
+payload** — c'est-à-dire ici la totalité du parc, les 32 `repoURL` pointant le même dépôt sur
+`main`. Celles en `automated` enchaînent la sync dans la foulée.
+
+> [!IMPORTANT]
+> **Le webhook est une accélération, jamais un mécanisme de correction.** Le polling reste le
+> filet : une livraison perdue (forge arrêtée, proxy en panne, secret désaligné) coûte **3 min de
+> retard**, pas une désynchronisation. Corollaire à tenir : ce n'est pas une raison d'allonger
+> `timeout.reconciliation`, qui est la seule chose qui rattrape une livraison manquée.
+
+### Le chemin
+
+Forge (Docker, **hors cluster**) → `https://argocd.lan.wittner.tech/api/webhook` → reverse proxy
+`192.168.1.50` → `shared-gw` → `argocd-server`.
+
+**Aucun objet réseau n'est ajouté** : c'est l'`HTTPRoute` de l'UI (`post-bootstrap/argocd-httproute.yaml`,
+`PathPrefix: /`), et le hostname est déjà déclaré au proxy puisque l'UI répond. Si l'UI s'ouvre
+depuis le LAN, le chemin du webhook est le même — cf. [doc/reseau.md](../../../doc/reseau.md).
+
+⚠️ `/api/webhook` **n'est pas protégé par une session ArgoCD** : c'est un endpoint anonyme, par
+conception. Ce qui l'authentifie est le HMAC ci-dessous — et sans clé configurée, ArgoCD accepte
+**toute** livraison non signée.
+
+### Pourquoi la clé s'appelle `webhook.github.secret`
+
+ArgoCD n'a **pas** de parseur Forgejo. Ses clés connues sont `webhook.github.secret`,
+`webhook.gitlab.secret`, `webhook.gogs.secret`, `webhook.bitbucket.uuid`,
+`webhook.bitbucketserver.secret`, `webhook.azuredevops.username`/`.password` — et rien d'autre.
+Une clé `webhook.gitea.secret` serait **ignorée en silence**, et le webhook fonctionnerait quand
+même : non signé.
+
+Ça marche parce que Forgejo ajoute à **chaque** livraison, quel que soit le type de webhook
+choisi, les en-têtes de compatibilité GitHub (`X-GitHub-Event`, `X-Hub-Signature-256`) à côté des
+siens (`X-Forgejo-*`, `X-Gitea-*`, `X-Gogs-*`). Le handler d'ArgoCD teste `X-GitHub-Event` avant
+`X-Gogs-Event` : la livraison part donc dans le parseur GitHub, dont le payload de push Forgejo
+a le format.
+
+### Ce qu'il faut côté forge — deux gestes, hors de ce dépôt
+
+Comme le miroir GitHub et le reverse proxy, ces réglages ne sont vérifiables par aucun manifeste
+d'ici. Ils vivent dans `homelab_emeriss`.
+
+**1. Autoriser la destination** — `forgejo/compose.yaml` :
+
+```yaml
+FORGEJO__webhook__ALLOWED_HOST_LIST: external,argocd.lan.wittner.tech
+```
+
+puis `docker compose up -d forgejo` sur l'hôte.
+
+> [!CAUTION]
+> ⚠️ **`external` SEUL refuse la livraison**, et c'est le mode d'échec principal de ce montage :
+> `argocd.lan.wittner.tech` résout en `192.168.1.x`, que le mot-clé `external` exclut par
+> définition. Symptôme : échec instantané dans l'onglet « Livraisons » du webhook, **sans aucune
+> requête sortante** — rien n'arrive côté cluster, et les logs d'`argocd-server` sont muets.
+>
+> ⚠️ **Ajouter le HOSTNAME exact, jamais `private` ni une plage.** Forgejo compare la liste au
+> nom d'hôte *et* à l'IP résolue : un nom suffit. Ce réglage est le **dernier filet applicatif
+> anti-SSRF** depuis que la bascule hors cluster a emporté la `CiliumNetworkPolicy` qui le
+> doublait ; y ouvrir `private`, c'est autoriser n'importe quel webhook du dépôt à viser
+> n'importe quoi sur le LAN.
+
+**2. Créer le webhook** — dépôt `jbwittner/homelab_gitops` → Paramètres → Webhooks → **Forgejo** :
+
+| Champ | Valeur |
+|---|---|
+| URL cible | `https://argocd.lan.wittner.tech/api/webhook` |
+| Méthode HTTP | `POST` |
+| Type de contenu | `application/json` |
+| Secret | la valeur scellée dans `post-bootstrap/argocd-webhook.sealed.yaml` |
+| Déclencheurs | **Évènements push uniquement** |
+| Filtre de branche | `main` |
+| Actif | oui |
+
+⚠️ **Le filtre de branche n'est pas cosmétique** : sans lui, le push d'une branche de travail ou
+d'une branche Renovate déclenche un refresh de **32 Applications** qui sont toutes sur `main` —
+du bruit et de la charge sur `argocd-repo-server`, pour zéro changement d'état désiré.
+
+⚠️ Le type `Forgejo` (défaut) convient ; `Gitea` aussi. Ne PAS choisir `GitHub` : le champ
+« secret » y est remplacé par une autre mécanique et le payload change de forme.
+
+### Vérifier
+
+```bash
+# 1. La clé est arrivée — ET les trois autres sont toujours là. C'est le contrôle qui prouve que
+#    le mode `patch` a fait son travail : trouver `webhook.github.secret` SEUL ici voudrait dire
+#    que le Secret a été remplacé et que `server.secretkey` et le mot de passe admin sont perdus.
+kubectl -n argocd get secret argocd-secret -o go-template='{{range $k,$v := .data}}{{$k}}{{"\n"}}{{end}}'
+#   attendu : admin.password, admin.passwordMtime, server.secretkey, webhook.github.secret
+
+# 2. Le SealedSecret n'a PAS pris la propriété de l'objet (mode `patch`) : doit être VIDE.
+kubectl -n argocd get secret argocd-secret -o jsonpath='{.metadata.ownerReferences}' ; echo
+
+# 3. Une livraison de test ; puis, côté cluster :
+kubectl -n argocd logs deploy/argocd-server --tail=100 | grep -i 'webhook\|Refreshing app'
+```
+
+Côté forge, le bouton **« Tester la livraison »** envoie un vrai payload de push : la réponse
+attendue est **200**, et le champ `reconciledAt` des Applications doit bouger dans la seconde.
+
+| Réponse de la livraison | Où chercher |
+|---|---|
+| Aucune requête, échec immédiat | `ALLOWED_HOST_LIST` côté forge (geste 1) |
+| `401` | le secret diffère entre Forgejo et `webhook.github.secret` |
+| `404` | `argocd.lan.wittner.tech` absent du reverse proxy `192.168.1.50` |
+| `200` mais rien ne bouge | `repoURL` du payload ≠ celui des Applications (suffixe `.git`, casse), ou branche poussée ≠ `targetRevision` |
+
+⚠️ `200` **n'est pas une preuve de sync** : ArgoCD répond 200 même quand aucune Application ne
+correspond au dépôt du payload. C'est `reconciledAt` qui tranche, pas le code HTTP.
+
+### Rotation
+
+Refaire les étapes 1-2 de `post-bootstrap/argocd-webhook.secret.example.yaml`, committer le
+`.sealed.yaml`, puis remplacer la valeur dans le webhook Forgejo. Pendant l'intervalle les
+livraisons sont rejetées en `401` — le seul effet est le retour au polling de 3 min.
+
+
 ## Contraintes — self-management
 
 > [!WARNING]
@@ -445,12 +578,20 @@ server-side apply sans jamais posséder la clé `admin.password` : `selfHeal: tr
 donc pas, et le mot de passe survit aux syncs comme aux redémarrages.
 
 > [!CAUTION]
-> **Ne pas mettre `argocd-secret` en `SealedSecret`.** Le Secret ne porte pas que le hash admin :
-> `argocd-server` y génère aussi `server.secretkey`, la clé de signature des JWT. Un
-> `SealedSecret` en prendrait la propriété et écraserait ce que le serveur y écrit — toutes les
-> sessions invalidées à chaque sync, et une valeur de rotation figée dans Git. Le mot de passe
-> admin est un secret **de break-glass**, il se gère à la main dans le cluster ; les seuls
-> secrets scellés de ce composant sont ceux listés en §Fichiers.
+> **Ne jamais mettre `argocd-secret` en `SealedSecret` `managed`.** Le Secret ne porte pas que le
+> hash admin : `argocd-server` y génère aussi `server.secretkey`, la clé de signature des JWT. Un
+> `SealedSecret` en mode `managed` en prendrait la propriété et **remplacerait l'objet entier** —
+> toutes les sessions invalidées à chaque sync, le mot de passe admin perdu (c'est-à-dire le seul
+> moyen d'entrer, le SSO étant désactivé), et la suppression du `SealedSecret` emporterait le
+> Secret avec elle. Le mot de passe admin est un secret **de break-glass**, il se gère à la main
+> dans le cluster et n'a pas vocation à être en Git.
+>
+> ⚠️ **Il y a pourtant un `SealedSecret` nommé `argocd-secret` dans ce dossier**
+> (`post-bootstrap/argocd-webhook.sealed.yaml`, cf. §Webhook Forgejo) — et ce n'est pas une
+> entorse : il porte `sealedsecrets.bitnami.com/patch: "true"`, pas `managed`. En mode `patch` le
+> contrôleur **ajoute** les clés qu'il porte et ne supprime ni les autres clés, ni les labels, ni
+> les annotations, et **ne prend pas la propriété** de l'objet. C'est le seul mode acceptable
+> ici : tout ce qui écrit dans `argocd-secret` depuis Git doit y écrire en `patch`.
 
 Désactiver complètement le compte local (`admin.enabled: "false"` dans `argocd-cm`) n'a de sens
 qu'une fois le SSO rétabli — voir ci-dessous. En l'état ce serait se verrouiller dehors.

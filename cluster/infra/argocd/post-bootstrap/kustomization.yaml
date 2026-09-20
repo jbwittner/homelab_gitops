@@ -35,4 +35,11 @@ resources:
   # (cf. README §Accès au dépôt privé), et ce SealedSecret ne fait que le REPRENDRE en gestion —
   # ce que permet l'annotation `sealedsecrets.bitnami.com/managed` qu'il porte.
   - repo-homelab-gitops.sealed.yaml
+  # `argocd-webhook.sealed.yaml` : clé `webhook.github.secret` AJOUTÉE à `argocd-secret` (mode
+  # `patch`, cf. `../manifests/argocd-secret.yaml`). HMAC partagé avec le webhook « push » de la
+  # forge, qui déclenche un refresh immédiat au lieu d'attendre le polling de 3 min.
+  # ⚠️ Ici et non dans `manifests/` pour la raison habituelle : la CRD `SealedSecret` (wave -8)
+  # n'existe pas à l'amorçage. L'ANNOTATION qui autorise ce patch, elle, est bien dans
+  # `manifests/` — c'est un simple Secret, et elle doit être posée sur l'objet existant.
+  - argocd-webhook.sealed.yaml
   - argocd-httproute.yaml

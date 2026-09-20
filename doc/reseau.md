@@ -52,6 +52,14 @@ l'enregistrement DNS : `grafana.lan.wittner.tech` est couvert, `a.b.lan.wittner.
 | `hermes.lan.wittner.tech` | `https-internal` | [hermes](../cluster/app/hermes/README.md) — dashboard (9119) |
 | `hermes-api.lan.wittner.tech` | `https-internal` | [hermes](../cluster/app/hermes/README.md) — API (8642) |
 
+⚠️ **`argocd.lan.wittner.tech` n'est pas qu'une UI** : `/api/webhook` y reçoit le webhook « push »
+de la forge, qui déclenche la sync immédiate au lieu du polling de 3 min
+([argocd §Webhook Forgejo](../cluster/infra/argocd/README.md)). C'est donc un flux **entrant**
+depuis la machine Docker de la forge, par le même proxy et la même `HTTPRoute` que l'UI — rien à
+ajouter côté réseau, mais deux couplages hors dépôt de plus : le webhook lui-même et
+`FORGEJO__webhook__ALLOWED_HOST_LIST`, qui doit nommer ce hostname (`external` seul le refuse,
+l'adresse étant privée).
+
 ⚠️ **Plus aucun service de ce cluster n'est public depuis le 2026-09-11**, et le listener
 `https-public` n'a plus aucune route : Forgejo était le seul, il tourne maintenant en Docker sur
 une machine dédiée ([archive/forgejo](../archive/forgejo/README.md)). Le listener reste déclaré —
