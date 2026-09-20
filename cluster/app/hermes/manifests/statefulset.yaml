@@ -39,7 +39,7 @@ spec:
         # Bootstrap homelab_hermes seulement sur un PVC sans checkout. Le worktree actif reste
         # autoritaire : aucun redémarrage ne le remplace par l'état Forgejo.
         - name: bootstrap-home
-          image: alpine/git:2.47.2
+          image: alpine/git:v2.52.0
           command: ["/bootstrap/bootstrap-home.sh"]
           env:
             # Dépôt source du profil. Défini une seule fois dans le ConfigMap `hermes-git`, que
@@ -122,7 +122,7 @@ spec:
         # Hors du processus Hermes : ce sidecar détient une cadence Git déclarée dans GitOps.
         # Il partage le PVC RWO avec Hermes, mais le script et sa planification sont read-only.
         - name: git-sync
-          image: alpine/git:2.47.2
+          image: alpine/git:v2.52.0
           securityContext:
             runAsUser: 10000
             runAsGroup: 10000
