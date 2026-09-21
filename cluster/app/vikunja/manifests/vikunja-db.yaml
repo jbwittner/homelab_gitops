@@ -9,6 +9,9 @@ spec:
   bootstrap:
     initdb:
       database: vikunja
+      # Explicite : sans ce champ CNPG fait déjà owner = database, mais le laisser
+      # implicite avait fait croire à un rôle `app`.
+      owner: vikunja
   storage:
     storageClass: openebs-lvm-thin
     size: 5Gi

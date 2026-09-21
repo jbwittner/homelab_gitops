@@ -35,7 +35,7 @@ vikunja:
     VIKUNJA_DATABASE_TYPE: postgres
     VIKUNJA_DATABASE_HOST: vikunja-db-rw
     VIKUNJA_DATABASE_DATABASE: vikunja
-    VIKUNJA_DATABASE_USER: app
+    VIKUNJA_DATABASE_USER: vikunja
     VIKUNJA_DATABASE_SSLMODE: disable
     VIKUNJA_DATABASE_PASSWORD:
       valueFrom:
