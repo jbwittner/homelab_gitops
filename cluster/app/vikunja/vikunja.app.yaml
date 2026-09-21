@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vikunja
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: vikunja
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: task-tracker
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/go-vikunja/helm-chart.git
+      targetRevision: v2.3.0
+      path: .
+      helm:
+        releaseName: vikunja
+        valueFiles:
+          - $values/cluster/app/vikunja/helm-values.yaml
+    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: cluster/app/vikunja/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: vikunja
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

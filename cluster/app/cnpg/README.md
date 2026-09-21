@@ -7,17 +7,13 @@ Opérateur **CloudNativePG** : gestion déclarative de clusters PostgreSQL (CRD
 déclarées par les applications consommatrices.
 
 > [!IMPORTANT]
-> **Il n'y a plus AUCUNE base dans ce cluster depuis le 2026-09-11.** `forgejo-db` était la seule,
-> et la forge a quitté le cluster ([archive/forgejo](../../../archive/forgejo/README.md)), base
-> comprise. L'opérateur reste déployé — il ne coûte qu'un pod, et il est le prérequis du prochain
-> consommateur ([`authentik`](../../../archive/authentik/README.md) est le candidat connu,
-> lui-même archivé). Corollaire à connaître : **les deux alertes en `absent(...)` de
-> [cnpg-monitoring](../cnpg-monitoring/README.md) sont commentées** tant que ce cluster n'a pas de
-> base, et se remettent avec la première.
+> `vikunja-db` est la seule base actuellement déclarée dans le cluster. Elle est portée par
+> [`vikunja`](../vikunja/README.md), sans sauvegarde native pendant sa phase de test. Les alertes
+> CNPG de sauvegarde restent commentées : les réactiver exige d'abord le plugin barman-cloud, un
+> `ObjectStore` et une `ScheduledBackup` pour cette base.
 
-Anciens consommateurs, tous archivés :
-[`forgejo`](../../../archive/forgejo/README.md), [`authentik`](../../../archive/authentik/README.md)
-et [`test-nginx`](../../../archive/test-nginx/README.md).
+Anciens consommateurs archivés : [`forgejo`](../../../archive/forgejo/README.md),
+[`authentik`](../../../archive/authentik/README.md) et [`test-nginx`](../../../archive/test-nginx/README.md).
 
 ## Fichiers
 
