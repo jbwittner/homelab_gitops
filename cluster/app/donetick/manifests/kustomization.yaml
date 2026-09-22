@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: donetick
+resources:
+  - namespace.yaml
+  - donetick-env.externalsecret.yaml
+  - statefulset.yaml
+  - service.yaml
+  - donetick-httproute.yaml
+
+# Le suffixe de hash fait redémarrer le StatefulSet quand la configuration non
+# secrète change. Le Secret est produit par External Secrets et reste hors Git.
+configMapGenerator:
+  - name: donetick-vars
+    envs:
+      - config/donetick.env

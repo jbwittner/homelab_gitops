@@ -7,10 +7,9 @@ Opérateur **CloudNativePG** : gestion déclarative de clusters PostgreSQL (CRD
 déclarées par les applications consommatrices.
 
 > [!IMPORTANT]
-> `vikunja-db` est la seule base actuellement déclarée dans le cluster. Elle est portée par
-> [`vikunja`](../vikunja/README.md), sans sauvegarde native pendant sa phase de test. Les alertes
-> CNPG de sauvegarde restent commentées : les réactiver exige d'abord le plugin barman-cloud, un
-> `ObjectStore` et une `ScheduledBackup` pour cette base.
+> Aucune base CNPG n'est actuellement déclarée dans le cluster. Les alertes CNPG de sauvegarde
+> restent commentées : les réactiver exige d'abord le plugin barman-cloud, un `ObjectStore` et une
+> `ScheduledBackup` pour la prochaine base.
 
 Anciens consommateurs archivés : [`forgejo`](../../../archive/forgejo/README.md),
 [`authentik`](../../../archive/authentik/README.md) et [`test-nginx`](../../../archive/test-nginx/README.md).

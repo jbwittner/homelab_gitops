@@ -90,10 +90,10 @@ pour tout ce qui est dans `archive/`.
 
 | Composant | Wave | Rôle |
 |---|---|---|
-| [cnpg](cluster/app/cnpg/README.md) | 0 | opérateur PostgreSQL — `vikunja-db` est en test, sans sauvegarde native |
+| [cnpg](cluster/app/cnpg/README.md) | 0 | opérateur PostgreSQL — aucune base déclarée actuellement |
 | [kube-prometheus-stack](cluster/app/kube-prometheus-stack/README.md) | 0 | Prometheus, Alertmanager, Grafana et ses dashboards |
 | [hermes](cluster/app/hermes/README.md) | 0 | agent LLM en mode gateway |
-| [vikunja](cluster/app/vikunja/README.md) | 0 | gestionnaire de tâches personnel, PostgreSQL via CNPG |
+| [donetick](cluster/app/donetick/README.md) | 0 | gestionnaire de tâches et de corvées personnel, SQLite sur PVC |
 | [renovate](cluster/app/renovate/README.md) | 0 | mises à jour de dépendances |
 | [forgejo-runner](cluster/app/forgejo-runner/README.md) | 0 | Forgejo Actions — ⚠️ **inerte** tant que son `SealedSecret` d'enregistrement n'est pas scellé |
 | [forgejo-pra](cluster/app/forgejo-pra/README.md) | 0 | VM d'**exercice** du PRA de la forge — éteinte par défaut, jamais un standby |
