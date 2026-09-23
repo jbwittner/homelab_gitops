@@ -37,7 +37,7 @@ configuration:
       # autre chaîne de sauvegarde : velero fait son propre GC des backups expirés, et un lifecycle
       # GCS posé pour un autre usage casserait ses restaurations. Le suffixe aléatoire vient du côté Terraform (unicité globale des
       # noms de bucket GCS) : le recopier tel quel, il n'est pas déductible.
-      bucket: homelab-velero-backups-b788806f
+      bucket: homelab-velero-backups-157294d1
       default: true
       accessMode: ReadWrite
       credential:

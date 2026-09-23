@@ -1,37 +1,47 @@
 # velero
 
 
-> [!CAUTION]
-> **RETIRÉ DU DÉPLOIEMENT LE 11 SEPTEMBRE 2026.** Le fichier `velero.noapp.yaml` porte l'extension
-> `.noapp.yaml` : il ne matche plus le glob du tier-2, l'`Application` a donc été *prunée* et son
-> finalizer `resources-finalizer.argocd.argoproj.io` a emporté les ressources gérées.
+> [!IMPORTANT]
+> **REMIS EN SERVICE LE 2026-09-23**, après un retrait le 2026-09-11. `velero.app.yaml` matche de
+> nouveau le glob du tier-2 : contrôleur, node-agent, BSL et dépôt kopia sont debout, et la
+> schedule `daily` est active sur le périmètre `hermes`.
 >
-> **Pourquoi :** la forge était son seul périmètre et elle a quitté le cluster le 2026-09-11 ([archive/forgejo](../../../archive/forgejo/README.md)). La schedule `daily` était déjà `disabled: true` depuis, et les deux règles de fraîcheur commentées. Le composant ne sauvegardait donc plus rien depuis des semaines — mais il continuait à produire du BRUIT : `VeleroBackupStorageLocationUnavailable` et `VeleroRepoMaintenanceFailing` étaient toutes deux `firing` au moment du retrait, le bucket GCS étant injoignable.
+> ⚠️ **`velero-monitoring` est encore en `.noapp.yaml`.** Les deux composants sont censés partir et
+> revenir ENSEMBLE : en l'état velero tourne **non surveillé**, et aucune alerte ne signalera une
+> sauvegarde absente, vide ou un dépôt kopia en échec de maintenance. C'est déjà arrivé le
+> 2026-09-23 — la `BackupStorageLocation` était `Unavailable` (le bucket avait été recréé sous un
+> nouveau suffixe et `helm-values.yaml` pointait encore l'ancien), et c'est
+> `script/velero-script.sh` qui l'a dit, pas une alerte. À remettre.
 >
-> **Ce qui restait au moment du retrait**, vérifié : **zéro `Backup`, zéro `Schedule`**, une seule `BackupStorageLocation` en phase `Unavailable`, et des jobs `kopia-maintain` en échec répété. Aucun index de sauvegarde n'a donc été perdu. Le bucket GCS, lui, avait survécu au retrait — **il a été supprimé depuis, le tout début de la semaine du 2026-09-22**, comme inutile. Cette page a affirmé le contraire jusqu'au 2026-09-23 ; la remise en service en dépend entièrement, cf. ci-dessous.
+> **Pourquoi il avait été retiré :** la forge était son seul périmètre et elle a quitté le cluster
+> le 2026-09-11 ([archive/forgejo](../../../archive/forgejo/README.md)). La schedule `daily` était
+> `disabled: true` depuis, les deux règles de fraîcheur commentées. Le composant ne sauvegardait
+> donc plus rien — mais continuait à produire du BRUIT :
+> `VeleroBackupStorageLocationUnavailable` et `VeleroRepoMaintenanceFailing` étaient toutes deux
+> `firing`, le bucket GCS étant injoignable. Au retrait, vérifié : **zéro `Backup`, zéro
+> `Schedule`**, aucun index de sauvegarde perdu.
 >
-> **Remise en service engagée le 2026-09-23**, et le renommage n'en est PAS le premier geste — le
-> faire seul redonne exactement le bruit pour lequel le composant a été retiré. Ordre réel :
+> **Le bucket a changé de nom entre-temps.** Il avait survécu au retrait, puis a été supprimé
+> comme inutile ; Terraform l'a reposé le 2026-09-23 sous
+> `homelab-velero-backups-157294d1`, l'ancien étant `…-b788806f`. Le suffixe est tiré côté
+> Terraform et **n'est pas déductible** : toute recréation impose de reporter le nom ici. Le
+> compte de service, lui, n'a pas été régénéré — `velero-backups@homelab-499008.iam.gserviceaccount.com`,
+> et `velero-gcs.sealed.yaml` reste donc valide sans rescellement.
 >
-> 1. **Terraform** — reposer le bucket GCS **et** son compte de service. Ils viennent de l'autre
->    dépôt ; rien ici ne les crée.
-> 2. `helm-values.yaml` — reporter le nom du bucket. Le champ pointe encore
->    `homelab-velero-backups-b788806f` ; le suffixe est tiré côté Terraform et **n'est pas
->    déductible**. Si le bucket est recréé sous le même nom, il n'y a rien à changer.
-> 3. `manifests/velero-gcs.sealed.yaml` — resceller la clé JSON du compte de service **si** elle a
->    été régénérée. Le clair (`*.secret.yaml`) est gitignoré, cf. §Câblage des secrets.
-> 4. Renommer les **deux** fichiers en `.app.yaml`. ⚠️ `velero-monitoring` part avec, retiré le même
->    jour et pour la même raison — sans lui, un velero qui échoue est de nouveau silencieux.
-> 5. `helm-values.yaml` — `schedules.daily.disabled: false`. Le périmètre, lui, est **déjà rempli**
->    (`includedNamespaces: [hermes]`, posé le 2026-09-23) : le geste qui restait à faire est
->    celui-ci, et lui seul.
-> 6. Poser le hook `pre.hook.backup.velero.io/command` sur le podTemplate de
->    [hermes](../../app/hermes/README.md) — sans lui la copie de `state.db` est cohérente-CRASH.
->    Préalable non levé : vérifier que `hermes backup` existe dans l'image épinglée `v2026.9.14`.
+> **Reste à faire :**
+>
+> 1. Renommer `velero-monitoring.noapp.yaml` en `.app.yaml` — cf. l'avertissement ci-dessus.
+> 2. Poser le hook `pre.hook.backup.velero.io/command` sur le podTemplate de
+>    [hermes](../../app/hermes/README.md), lançant `hermes backup`. Sans lui, kopia copie
+>    `state.db` et ses sidecars `-wal`/`-shm` à des instants différents : cohérent-CRASH. Préalable
+>    non levé : vérifier que `hermes backup` existe dans l'image épinglée `v2026.9.14`.
+> 3. Arbitrer `donetick`, absent du périmètre : même forme que hermes (SQLite sur PVC, aucune
+>    chaîne native), écarté seulement parce que l'arbitrage a précédé son arrivée dans le dépôt.
 >
 > ⚠️ Créer la `Schedule` déclenche une sauvegarde **immédiate**, elle n'attend pas 03:00 UTC
-> (`skipImmediately`, cf. helm-values.yaml). Le premier run est donc l'épreuve : vérifier les
-> `podvolumebackups` du namespace `hermes` plutôt que la seule phase du `Backup`.
+> (`skipImmediately`, cf. helm-values.yaml). Le premier run est l'épreuve : vérifier les
+> `podvolumebackups` du namespace `hermes` plutôt que la seule phase du `Backup` — une sauvegarde
+> sans node-agent est verte ET vide.
 
 ## Rôle
 
@@ -147,11 +157,12 @@ CNPG de la copie kopia, cf. Contraintes.
   entre en boucle avec `selfHeal` — ArgoCD le repose, velero le retire, sans fin. Le levier
   déclaratif équivalent est le flag serveur `--schedule-skip-immediately=true`. Corollaire : créer
   ou recréer la Schedule déclenche une sauvegarde immédiate.
-- **LA SCHEDULE EST DÉSACTIVÉE DEPUIS LE 2026-09-11 : CE CLUSTER NE SAUVEGARDE PLUS RIEN.**
-  ⚠️ Toujours vrai au 2026-09-23, malgré le périmètre rempli : ce qui manque désormais n'est plus
-  le périmètre mais la **destination** — le bucket GCS a été supprimé. Le bandeau en tête de page
-  porte l'ordre des gestes. Son
-  unique périmètre était le namespace `forgejo` ; la forge a quitté le cluster
+- **LA SCHEDULE A TOURNÉ À VIDE DU 2026-09-11 AU 2026-09-23 : CE CLUSTER NE SAUVEGARDAIT PLUS
+  RIEN.** Elle est de nouveau active (`disabled: false`, périmètre `hermes`), mais ⚠️ tant que
+  `velero-monitoring` reste en `.noapp.yaml`, **rien ne signalera qu'elle a cessé de fonctionner**
+  — c'est exactement l'angle mort qui a laissé passer une `BackupStorageLocation` `Unavailable` le
+  jour de la remise en service. Son
+  unique périmètre était alors le namespace `forgejo` ; la forge a quitté le cluster
   ([archive/forgejo](../../../archive/forgejo/README.md)) et sa sauvegarde se joue désormais sur la
   machine Docker (§B de
   [`doc/forgejo-docker-bascule-et-sauvegarde.md`](../../../doc/forgejo-docker-bascule-et-sauvegarde.md)).
@@ -226,8 +237,8 @@ CNPG de la copie kopia, cf. Contraintes.
   `velero@homelab-499008.iam.gserviceaccount.com` (sortie `velero_service_account_email`), et il
   lui faut `roles/storage.objectAdmin` **sur le bucket** :
   ```bash
-  gcloud storage buckets describe gs://homelab-velero-backups-b788806f --project=homelab-499008
-  gcloud storage buckets get-iam-policy gs://homelab-velero-backups-b788806f --project=homelab-499008
+  gcloud storage buckets describe gs://homelab-velero-backups-157294d1 --project=homelab-499008
+  gcloud storage buckets get-iam-policy gs://homelab-velero-backups-157294d1 --project=homelab-499008
   ```
   Ne pas poser de règle de cycle de vie sur ce bucket : la rétention est celle du `ttl` de la
   schedule, et velero supprime lui-même ce qui expire.
@@ -426,14 +437,14 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
   kubectl -n velero get backups.velero.io \
     -o custom-columns=NAME:.metadata.name,NS:.spec.includedNamespaces
   kubectl -n velero delete backuprepository <ns>-default-kopia
-  gcloud storage rm -r gs://homelab-velero-backups-b788806f/kopia/<ns> --project=homelab-499008
+  gcloud storage rm -r gs://homelab-velero-backups-157294d1/kopia/<ns> --project=homelab-499008
   ```
 - **Repartir de zéro** (⚠️ **irréversible** — détruit toutes les sauvegardes). L'ordre est
   load-bearing : vider le bucket **d'abord**, sinon le contrôleur `backup-sync` recrée les objets
   `Backup` depuis les métadonnées restées en ligne, dans la minute.
   ```bash
   # 1. Bucket (le bucket lui-même est conservé : il vient de Terraform)
-  gcloud storage rm --recursive "gs://homelab-velero-backups-b788806f/**" --project=homelab-499008
+  gcloud storage rm --recursive "gs://homelab-velero-backups-157294d1/**" --project=homelab-499008
 
   # 2. CRs — les Backup disparaissent souvent d'eux-mêmes une fois leurs données absentes
   kubectl -n velero delete backups.velero.io --all
@@ -446,7 +457,7 @@ NAME:.metadata.name,PHASE:.status.phase,NS:.spec.includedNamespaces,ITEMS:.statu
   kubectl -n velero rollout restart deploy/velero ds/node-agent
 
   # 4. Contrôle
-  gcloud storage du -s gs://homelab-velero-backups-b788806f --project=homelab-499008   # 0
+  gcloud storage du -s gs://homelab-velero-backups-157294d1 --project=homelab-499008   # 0
   kubectl -n velero get backupstoragelocation default                                   # Available
   ```
   Ne PAS supprimer le Secret `velero-repo-credentials` : la passphrase kopia sert aux dépôts

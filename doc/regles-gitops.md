@@ -112,7 +112,7 @@ bascule elle-même suit cet ordre, et chaque étape se vérifie avant la suivant
 1. Masquage du login Brevo d'archive et réécriture du commit → force-push.
 2. GC du dépôt Forgejo, puis 404 confirmé sur l'ancien SHA (commandes ci-dessus).
 3. ACL des buckets : aucun binding `allUsers` / `allAuthenticatedUsers` sur
-   `homelab-velero-backups-b788806f`, `homelab-cnpg-backups-8b8ff253`,
+   `homelab-velero-backups-157294d1`, `homelab-cnpg-backups-8b8ff253`,
    `homelab-openbao-snapshots-6d84c670`. Leur suffixe aléatoire cesse d'être une protection le
    jour où le dépôt est lisible.
 4. `app.ini` et tunnel Cloudflare : inscription fermée, limitation de débit.

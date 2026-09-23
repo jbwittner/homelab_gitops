@@ -10,7 +10,16 @@
 >
 > **Ce qui restait au moment du retrait**, vérifié : six règles, dont deux déjà `firing` (`VeleroBackupStorageLocationUnavailable`, `VeleroRepoMaintenanceFailing`) et deux commentées depuis la bascule de la forge.
 >
-> **Pour le remettre :** renommer en `.app.yaml`, ⚠️ dans le MÊME commit que `velero` — l'un sans l'autre est soit un service non surveillé, soit une alerte perpétuelle. Ce n'est PAS le premier geste : la remise en service est engagée depuis le 2026-09-23 et bloque sur le bucket GCS, supprimé depuis le retrait. L'ordre complet est dans le bandeau de [velero](../velero/README.md).
+> ⚠️ **`velero` EST REVENU LE 2026-09-23 SANS CE COMPOSANT.** La règle « les deux partent et
+> reviennent ensemble » n'a donc pas été tenue, et le cluster est dans le cas explicitement
+> déconseillé : **un service de sauvegarde non surveillé**. Conséquence observée le jour même —
+> la `BackupStorageLocation` était `Unavailable` (bucket recréé sous un nouveau suffixe) et
+> c'est `script/velero-script.sh` qui l'a signalé, pas `VeleroBackupStorageLocationUnavailable`,
+> dont c'est pourtant le rôle exact.
+>
+> **Pour le remettre :** renommer en `.app.yaml`. Il n'y a plus rien à attendre — la raison du
+> retrait (l'absence de `velero`) a disparu, et les deux règles de fraîcheur peuvent être
+> décommentées maintenant que la schedule tourne sur un périmètre réel (`hermes`).
 
 ## Rôle
 

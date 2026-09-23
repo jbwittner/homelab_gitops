@@ -74,21 +74,18 @@ pour tout ce qui est dans `archive/`.
 | [cilium](cluster/infra/cilium/README.md) | 0 | CNI, LB-IPAM et L2, implémentation Gateway API |
 | [openebs](cluster/infra/openebs/README.md) | 0 | stockage local LVM, `openebs-lvm-thin` |
 | [kubevirt](cluster/infra/kubevirt/README.md) | 1 | hyperviseur (KubeVirt + CDI) — **un seul consommateur**, `forgejo-pra` |
+| [velero](cluster/infra/velero/README.md) | 1 | sauvegarde vers GCS — ⚠️ **non surveillé** tant que `velero-monitoring` reste en `.noapp.yaml` |
 | [openebs-monitoring](cluster/infra/openebs-monitoring/README.md) | 2 | alertes de remplissage des volumes |
 
 *Non déployés :*
 - [external-secrets](cluster/infra/external-secrets/README.md) (`.noapp.yaml`) — le backend de
   secrets qu'il desservait a été retiré du dépôt.
-- [velero](cluster/infra/velero/README.md) et
-  [velero-monitoring](cluster/infra/velero-monitoring/README.md) (`.noapp.yaml`, **2026-09-11**) —
-  la forge était le seul périmètre de la schedule ; elle a quitté le cluster. Au retrait :
-  **zéro `Backup`, zéro `Schedule`**, et deux alertes déjà `firing` faute de bucket joignable.
-  ⚠️ Les deux partent **ensemble** : velero seul deviendrait un service non surveillé,
-  velero-monitoring seul ferait sonner `VeleroDown` en permanence.
-  **Remise en service engagée (2026-09-23)** : le périmètre de la schedule est désormais rempli
-  (`hermes`), mais le **bucket GCS a été supprimé depuis** — les deux `Application` restent donc
-  en `.noapp.yaml` et la schedule en `disabled: true`. Le renommage n'est PAS le premier geste :
-  la procédure réelle est dans [velero](cluster/infra/velero/README.md).
+- [velero-monitoring](cluster/infra/velero-monitoring/README.md) (`.noapp.yaml`, **2026-09-11**) —
+  ⚠️ **retard à rattraper** : `velero` est revenu le **2026-09-23** sans lui, alors que les deux
+  sont censés partir et revenir ensemble. Le cluster sauvegarde donc sans surveillance, et l'effet
+  s'est vu le jour même — une `BackupStorageLocation` `Unavailable` (bucket recréé sous un nouveau
+  suffixe) repérée par `script/velero-script.sh` et non par l'alerte prévue pour ça. Plus rien ne
+  retient son renommage.
 
 **Applications** — `cluster/app/`
 
