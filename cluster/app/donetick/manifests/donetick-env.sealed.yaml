@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: donetick-env
+  namespace: donetick
+spec:
+  encryptedData:
+    DT_JWT_SECRET: AgAkzGnmCUoQty6LAWd1xO0uIADMRYL+m/t4z7jZBxWUEs7Wh5Xf+taldtuqVjA9Ox9X0lZ7EUa0WHM7dJwou2RJclh67Be9GTkbuAXDK4j8VMsV88JOmU5r8r+nDgAX/6GXZkJgraBEpmO5vbd6f897Huh5ypYfwUoIkZOctSgxUDommb94qUz0uGw/e5r6dfs2NP5e0TGrgny26HaBpv2xkf7sSnjukHPJyCBpO4055qDJJvcdEPSqtSGtaeT+Hbud0eWcK9KuwkS+/ju/PdfivqQx8MTWflM1Cz5aZXoQm1HBvgwnAWQkCrodMRL/l3hRfA8IEqw1BlJVgp0zu75B7Q0CHSidwWED+KH8f3DB/oYXn5y7hndu+ykHtYzggvBWyX1c+bC6BoD0lpX9zgYDRg3dgipWUZJuQoiH7trxmvNfydMHs/BYts08HXoWZDYTCAVbK2c2/HzZxdktYao5M5LdbkeGVWj7j5GB3uMSp6oG1S08jDCyITS66U7HBtHElUit63lXNSj4Wp9XOX9C2cahwvnnEuoW2tXa9j7hdUFSjpR8krbCD/+smMJ2yeH21fR6Iu6eSz8QayNwo5RcGz49Kz4CcoMgT0KB2eNQDPJkZhKB4POShxrWXa3azGyYYZuOGH5jN2vkNXYJIzsRtAZn92S6pDyF1Bvhi+obuGRHFzdkBrk10Es8lbjtHh2C8udI49aX2xfOAwtqT0OB6cdVP9akNYL4wHh7yFC6bQ==
+  template:
+    metadata:
+      name: donetick-env
+      namespace: donetick
+    type: Opaque

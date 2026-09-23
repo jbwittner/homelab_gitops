@@ -85,6 +85,10 @@ pour tout ce qui est dans `archive/`.
   **zéro `Backup`, zéro `Schedule`**, et deux alertes déjà `firing` faute de bucket joignable.
   ⚠️ Les deux partent **ensemble** : velero seul deviendrait un service non surveillé,
   velero-monitoring seul ferait sonner `VeleroDown` en permanence.
+  **Remise en service engagée (2026-09-23)** : le périmètre de la schedule est désormais rempli
+  (`hermes`), mais le **bucket GCS a été supprimé depuis** — les deux `Application` restent donc
+  en `.noapp.yaml` et la schedule en `disabled: true`. Le renommage n'est PAS le premier geste :
+  la procédure réelle est dans [velero](cluster/infra/velero/README.md).
 
 **Applications** — `cluster/app/`
 
@@ -93,7 +97,7 @@ pour tout ce qui est dans `archive/`.
 | [cnpg](cluster/app/cnpg/README.md) | 0 | opérateur PostgreSQL — aucune base déclarée actuellement |
 | [kube-prometheus-stack](cluster/app/kube-prometheus-stack/README.md) | 0 | Prometheus, Alertmanager, Grafana et ses dashboards |
 | [hermes](cluster/app/hermes/README.md) | 0 | agent LLM en mode gateway |
-| [donetick](cluster/app/donetick/README.md) | 0 | gestionnaire de tâches et de corvées personnel, SQLite sur PVC |
+| [donetick](cluster/app/donetick/README.md) | 0 | gestionnaire de tâches et de corvées personnel, SQLite sur PVC — ⚠️ **inerte** tant que son `SealedSecret` `donetick-env` n'est pas scellé |
 | [renovate](cluster/app/renovate/README.md) | 0 | mises à jour de dépendances |
 | [forgejo-runner](cluster/app/forgejo-runner/README.md) | 0 | Forgejo Actions — ⚠️ **inerte** tant que son `SealedSecret` d'enregistrement n'est pas scellé |
 | [forgejo-pra](cluster/app/forgejo-pra/README.md) | 0 | VM d'**exercice** du PRA de la forge — éteinte par défaut, jamais un standby |

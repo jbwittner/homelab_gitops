@@ -217,8 +217,15 @@ seule présence), et resceller.
 
 Tout l'état vivant est dans le PVC `data-hermes-0`. `homelab_hermes` reconstruit le profil
 versionné (`config.yaml`, skills, workspace, règles et mémoire durable) lors d'un nouveau PVC ;
-`auth.json`, sessions, bases SQLite et caches restent hors Git. À couvrir par
-[velero](../../infra/velero/README.md) si l'on veut les conserver.
+`auth.json`, sessions, bases SQLite et caches restent hors Git.
+
+Le namespace `hermes` est, depuis le 2026-09-23, le **seul périmètre déclaré** de la schedule
+[velero](../../infra/velero/README.md) — mais elle ne tourne pas encore : le bucket GCS a été
+supprimé et doit être reposé côté Terraform. Rien de ce qui est hors Git n'est donc sauvegardé à
+ce jour. ⚠️ Quand elle tournera, il faudra un hook `pre.hook.backup.velero.io/command` lançant
+`hermes backup` sur ce podTemplate : sans lui kopia copie `state.db` et ses sidecars `-wal`/`-shm`
+à des instants différents, donc en cohérence-CRASH. Préalable non levé : la présence de la
+commande `hermes backup` dans l'image épinglée `v2026.9.14` n'a pas été vérifiée.
 
 ### Repartir de zéro
 

@@ -8,9 +8,30 @@
 >
 > **Pourquoi :** la forge était son seul périmètre et elle a quitté le cluster le 2026-09-11 ([archive/forgejo](../../../archive/forgejo/README.md)). La schedule `daily` était déjà `disabled: true` depuis, et les deux règles de fraîcheur commentées. Le composant ne sauvegardait donc plus rien depuis des semaines — mais il continuait à produire du BRUIT : `VeleroBackupStorageLocationUnavailable` et `VeleroRepoMaintenanceFailing` étaient toutes deux `firing` au moment du retrait, le bucket GCS étant injoignable.
 >
-> **Ce qui restait au moment du retrait**, vérifié : **zéro `Backup`, zéro `Schedule`**, une seule `BackupStorageLocation` en phase `Unavailable`, et des jobs `kopia-maintain` en échec répété. Aucun index de sauvegarde n'a donc été perdu. ⚠️ Le bucket GCS lui-même n'est PAS supprimé par ce retrait — il survit, avec ce qu'il contient, et se détruit côté Terraform si on le veut.
+> **Ce qui restait au moment du retrait**, vérifié : **zéro `Backup`, zéro `Schedule`**, une seule `BackupStorageLocation` en phase `Unavailable`, et des jobs `kopia-maintain` en échec répété. Aucun index de sauvegarde n'a donc été perdu. Le bucket GCS, lui, avait survécu au retrait — **il a été supprimé depuis, le tout début de la semaine du 2026-09-22**, comme inutile. Cette page a affirmé le contraire jusqu'au 2026-09-23 ; la remise en service en dépend entièrement, cf. ci-dessous.
 >
-> **Pour le remettre :** renommer en `.app.yaml`. ⚠️ Remettre aussi `velero-monitoring`, retiré le même jour et pour la même raison — sans lui, un velero qui échoue est de nouveau silencieux.
+> **Remise en service engagée le 2026-09-23**, et le renommage n'en est PAS le premier geste — le
+> faire seul redonne exactement le bruit pour lequel le composant a été retiré. Ordre réel :
+>
+> 1. **Terraform** — reposer le bucket GCS **et** son compte de service. Ils viennent de l'autre
+>    dépôt ; rien ici ne les crée.
+> 2. `helm-values.yaml` — reporter le nom du bucket. Le champ pointe encore
+>    `homelab-velero-backups-b788806f` ; le suffixe est tiré côté Terraform et **n'est pas
+>    déductible**. Si le bucket est recréé sous le même nom, il n'y a rien à changer.
+> 3. `manifests/velero-gcs.sealed.yaml` — resceller la clé JSON du compte de service **si** elle a
+>    été régénérée. Le clair (`*.secret.yaml`) est gitignoré, cf. §Câblage des secrets.
+> 4. Renommer les **deux** fichiers en `.app.yaml`. ⚠️ `velero-monitoring` part avec, retiré le même
+>    jour et pour la même raison — sans lui, un velero qui échoue est de nouveau silencieux.
+> 5. `helm-values.yaml` — `schedules.daily.disabled: false`. Le périmètre, lui, est **déjà rempli**
+>    (`includedNamespaces: [hermes]`, posé le 2026-09-23) : le geste qui restait à faire est
+>    celui-ci, et lui seul.
+> 6. Poser le hook `pre.hook.backup.velero.io/command` sur le podTemplate de
+>    [hermes](../../app/hermes/README.md) — sans lui la copie de `state.db` est cohérente-CRASH.
+>    Préalable non levé : vérifier que `hermes backup` existe dans l'image épinglée `v2026.9.14`.
+>
+> ⚠️ Créer la `Schedule` déclenche une sauvegarde **immédiate**, elle n'attend pas 03:00 UTC
+> (`skipImmediately`, cf. helm-values.yaml). Le premier run est donc l'épreuve : vérifier les
+> `podvolumebackups` du namespace `hermes` plutôt que la seule phase du `Backup`.
 
 ## Rôle
 
@@ -126,7 +147,10 @@ CNPG de la copie kopia, cf. Contraintes.
   entre en boucle avec `selfHeal` — ArgoCD le repose, velero le retire, sans fin. Le levier
   déclaratif équivalent est le flag serveur `--schedule-skip-immediately=true`. Corollaire : créer
   ou recréer la Schedule déclenche une sauvegarde immédiate.
-- **LA SCHEDULE EST DÉSACTIVÉE DEPUIS LE 2026-09-11 : CE CLUSTER NE SAUVEGARDE PLUS RIEN.** Son
+- **LA SCHEDULE EST DÉSACTIVÉE DEPUIS LE 2026-09-11 : CE CLUSTER NE SAUVEGARDE PLUS RIEN.**
+  ⚠️ Toujours vrai au 2026-09-23, malgré le périmètre rempli : ce qui manque désormais n'est plus
+  le périmètre mais la **destination** — le bucket GCS a été supprimé. Le bandeau en tête de page
+  porte l'ordre des gestes. Son
   unique périmètre était le namespace `forgejo` ; la forge a quitté le cluster
   ([archive/forgejo](../../../archive/forgejo/README.md)) et sa sauvegarde se joue désormais sur la
   machine Docker (§B de
@@ -138,13 +162,15 @@ CNPG de la copie kopia, cf. Contraintes.
   [velero-monitoring](../velero-monitoring/README.md) sont commentées en conséquence : **rien ne
   signalera l'absence de sauvegarde**, parce qu'elle est voulue.
 - **La schedule fonctionne en liste blanche : ce qui n'est pas listé n'est pas sauvegardé, sans le
-  dire.** `includedNamespaces` est aujourd'hui **vide**, et ⚠️ **une liste vide vaut TOUS les
-  namespaces** côté velero — c'est la raison pour laquelle la schedule est désactivée par le flag
-  plutôt que laissée active sans périmètre. La réactiver demande donc **deux** gestes dans le même
-  commit : `disabled: false` ET une liste remplie, plus la remise des deux alertes de fraîcheur.
-  Candidat connu : `monitoring` (27Gi, dont 20Gi de TSDB Prometheus reconstructible). ⚠️ Toute
+  dire.** ⚠️ **Une liste vide vaut TOUS les namespaces** côté velero — c'est la raison pour
+  laquelle la schedule est neutralisée par le flag `disabled` plutôt que laissée active sans
+  périmètre. `includedNamespaces` porte **`hermes`, et lui seul**, depuis le 2026-09-23 : c'est le
+  seul composant du cluster dont l'état n'est couvert par rien, et le moins coûteux pour
+  revalider la chaîne (10Gi, un seul volume, pas de base CNPG). Candidat suivant, écarté pour
+  l'instant : `monitoring` (27Gi, dont 20Gi de TSDB Prometheus reconstructible). ⚠️ Toute
   base CNPG d'un namespace ajouté ici sera exclue de kopia par la règle ci-dessous : elle a besoin
-  de son propre `ObjectStore` pour être réellement sauvegardée.
+  de son propre `ObjectStore` pour être réellement sauvegardée — il n'y a plus aucun `Cluster`
+  CNPG déclaré depuis le retrait de vikunja le 2026-09-23, cf. [cnpg](../../app/cnpg/README.md).
 - **Les PVC des bases CloudNativePG sont exclus de la copie de données** (`volume-policies.yaml`,
   règle `pvcLabels: {app.kubernetes.io/managed-by: cloudnative-pg}`, 2026-09-08). Même arbitrage
   que ci-dessus : la sauvegarde native barman-cloud

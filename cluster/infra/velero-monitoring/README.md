@@ -10,7 +10,7 @@
 >
 > **Ce qui restait au moment du retrait**, vérifié : six règles, dont deux déjà `firing` (`VeleroBackupStorageLocationUnavailable`, `VeleroRepoMaintenanceFailing`) et deux commentées depuis la bascule de la forge.
 >
-> **Pour le remettre :** renommer en `.app.yaml`. ⚠️ Dans le MÊME commit que `velero` : l'un sans l'autre est soit un service non surveillé, soit une alerte perpétuelle.
+> **Pour le remettre :** renommer en `.app.yaml`, ⚠️ dans le MÊME commit que `velero` — l'un sans l'autre est soit un service non surveillé, soit une alerte perpétuelle. Ce n'est PAS le premier geste : la remise en service est engagée depuis le 2026-09-23 et bloque sur le bucket GCS, supprimé depuis le retrait. L'ordre complet est dans le bandeau de [velero](../velero/README.md).
 
 ## Rôle
 
