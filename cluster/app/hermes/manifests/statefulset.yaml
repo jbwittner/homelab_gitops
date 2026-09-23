@@ -36,30 +36,6 @@ spec:
       securityContext:
         fsGroup: 10000
       initContainers:
-        # Bootstrap homelab_hermes seulement sur un PVC sans checkout. Le worktree actif reste
-        # autoritaire : aucun redémarrage ne le remplace par l'état Forgejo.
-        - name: bootstrap-home
-          image: alpine/git:v2.52.0
-          command: ["/bootstrap/bootstrap-home.sh"]
-          env:
-            # Dépôt source du profil. Défini une seule fois dans le ConfigMap `hermes-git`, que
-            # le sidecar git-sync lit également : le clone initial et les push suivants visent
-            # forcément le même dépôt.
-            - name: HERMES_REPO_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: hermes-git
-                  key: HERMES_REPO_URL
-            - name: FORGEJO_USERNAME
-              value: hermes_agent
-            - name: FORGEJO_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: hermes-env
-                  key: FORGEJO_TOKEN
-          volumeMounts:
-            - { name: data, mountPath: /opt/data }
-            - { name: bootstrap, mountPath: /bootstrap, readOnly: true }
         - name: seed-profile
           image: busybox:1.38.0
           command:
@@ -119,57 +95,11 @@ spec:
               memory: 4Gi
           volumeMounts:
             - { name: data, mountPath: /opt/data }
-        # Hors du processus Hermes : ce sidecar détient une cadence Git déclarée dans GitOps.
-        # Il partage le PVC RWO avec Hermes, mais le script et sa planification sont read-only.
-        - name: git-sync
-          image: alpine/git:v2.52.0
-          securityContext:
-            runAsUser: 10000
-            runAsGroup: 10000
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-          command:
-            - sh
-            - -c
-            - |
-              while true; do
-                /sync/sync-once.sh || \
-                  printf '%s git-sync cycle failed\n' "$(date -Iseconds)" >&2
-                sleep 300
-              done
-          env:
-            # Même clé que l'init container bootstrap-home, cf. le ConfigMap `hermes-git`.
-            - name: HERMES_REPO_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: hermes-git
-                  key: HERMES_REPO_URL
-            - name: FORGEJO_USERNAME
-              value: hermes_agent
-            # Intentionally inject only this key, never the complete hermes-env Secret.
-            - name: FORGEJO_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: hermes-env
-                  key: FORGEJO_TOKEN
-          volumeMounts:
-            - { name: data, mountPath: /opt/data }
-            - { name: git-sync, mountPath: /sync, readOnly: true }
-            - { name: git-sync-work, mountPath: /sync-work }
       volumes:
         - name: bootstrap
           configMap:
             name: hermes-bootstrap
             defaultMode: 0555
-        - name: git-sync
-          configMap:
-            name: hermes-git-sync
-            defaultMode: 0555
-        # Private sidecar checkout. It is intentionally not mounted in the Hermes container.
-        - name: git-sync-work
-          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data
