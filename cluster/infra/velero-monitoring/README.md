@@ -1,25 +1,25 @@
 # velero-monitoring
 
 
-> [!CAUTION]
-> **RETIRÉ DU DÉPLOIEMENT LE 11 SEPTEMBRE 2026.** Le fichier `velero-monitoring.noapp.yaml` porte l'extension
-> `.noapp.yaml` : il ne matche plus le glob du tier-2, l'`Application` a donc été *prunée* et son
-> finalizer `resources-finalizer.argocd.argoproj.io` a emporté les ressources gérées.
+> [!IMPORTANT]
+> **REMIS EN SERVICE LE 2026-09-23**, en rattrapage : [velero](../velero/README.md) était revenu
+> quelques heures plus tôt **sans** ce composant, alors que les deux sont censés partir et revenir
+> ensemble. Le cluster a donc sauvegardé sans surveillance, et l'effet s'est vu tout de suite —
+> une `BackupStorageLocation` `Unavailable` (bucket recréé sous un nouveau suffixe) repérée par
+> `script/velero-script.sh` et non par `VeleroBackupStorageLocationUnavailable`, dont c'est
+> pourtant le rôle exact.
 >
-> **Pourquoi :** il n'a plus de sujet : `velero` est passé en `.noapp.yaml` le même jour. **Le laisser actif aurait fait sonner `VeleroDown` en permanence** — son expression est `absent(up{job="velero"} == 1)`, qui se déclenche précisément quand la cible disparaît. Une alerte qui sonne toujours n'est plus lue, et c'est celle-là qu'on ne veut surtout pas apprendre à ignorer.
+> **Les deux règles de fraîcheur ont été rétablies dans le même mouvement.** Commentées depuis le
+> 2026-09-11 faute de périmètre à surveiller, elles couvrent de nouveau la schedule `daily`
+> (namespace `hermes`). Le groupe compte donc **huit** règles.
 >
-> **Ce qui restait au moment du retrait**, vérifié : six règles, dont deux déjà `firing` (`VeleroBackupStorageLocationUnavailable`, `VeleroRepoMaintenanceFailing`) et deux commentées depuis la bascule de la forge.
+> ⚠️ **`VeleroNoBackupMetric` sonnera 6 h après le déploiement** et s'éteindra au premier backup
+> réussi : aucune sauvegarde n'a encore abouti depuis la remise en service. Si elle persiste
+> au-delà du premier succès attendu, c'est le signal et non le bruit.
 >
-> ⚠️ **`velero` EST REVENU LE 2026-09-23 SANS CE COMPOSANT.** La règle « les deux partent et
-> reviennent ensemble » n'a donc pas été tenue, et le cluster est dans le cas explicitement
-> déconseillé : **un service de sauvegarde non surveillé**. Conséquence observée le jour même —
-> la `BackupStorageLocation` était `Unavailable` (bucket recréé sous un nouveau suffixe) et
-> c'est `script/velero-script.sh` qui l'a signalé, pas `VeleroBackupStorageLocationUnavailable`,
-> dont c'est pourtant le rôle exact.
->
-> **Pour le remettre :** renommer en `.app.yaml`. Il n'y a plus rien à attendre — la raison du
-> retrait (l'absence de `velero`) a disparu, et les deux règles de fraîcheur peuvent être
-> décommentées maintenant que la schedule tourne sur un périmètre réel (`hermes`).
+> **Pourquoi il avait été retiré :** `velero` était passé en `.noapp.yaml` le même jour. Le laisser
+> actif aurait fait sonner `VeleroDown` en permanence — son expression est
+> `absent(up{job="velero"} == 1)`, qui se déclenche précisément quand la cible disparaît.
 
 ## Rôle
 
@@ -58,16 +58,13 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
   `VeleroDown` utilise `absent(up == 1)` et `VeleroNodeAgentNotReady` interroge
   kube-state-metrics. Elles couvrent les deux pannes qu'aucun compteur d'échec ne peut voir : plus
   rien ne se déclenche, ou les sauvegardes réussissent **à vide** parce que node-agent n'est pas là.
-- **Plus aucune sauvegarde n'est planifiée dans ce cluster depuis le 2026-09-11.** La forge était
-  le seul namespace de `includedNamespaces` ; elle a quitté le cluster
-  ([archive/forgejo](../../../archive/forgejo/README.md)) et `schedules.daily` est passée à
-  `disabled: true` dans [velero](../velero/README.md). Le composant reste debout — contrôleur,
-  node-agent, BackupStorageLocation, dépôt kopia — et les backups existants restent restaurables
-  jusqu'à expiration de leur TTL. ⚠️ Les **deux règles de fraîcheur** sont commentées en
-  conséquence : elles sonneraient sans fin, et une alerte qui sonne toujours n'est plus lue. Elles
-  se remettent **dans le même commit** que la réactivation de la schedule, **ensemble** — et tant
-  qu'elles sont commentées, rien ne surveille la fraîcheur des sauvegardes, ce qui est exact : il
-  n'y en a aucune.
+- **Le cluster a passé douze jours sans aucune sauvegarde planifiée** (2026-09-11 → 2026-09-23).
+  La forge était le seul namespace de `includedNamespaces` ; elle a quitté le cluster
+  ([archive/forgejo](../../../archive/forgejo/README.md)) et `schedules.daily` était passée à
+  `disabled: true`. Les **deux règles de fraîcheur** avaient été commentées en conséquence —
+  elles auraient sonné sans fin, et une alerte qui sonne toujours n'est plus lue. La schedule
+  tourne de nouveau (périmètre `hermes`) et les deux règles sont rétablies, **ensemble** : le
+  couple valeur + `absent(...)` ne se scinde pas.
 - **`VeleroBackupTooOld` est aveugle sans `VeleroNoBackupMetric`.** Une expression
   `time() - <métrique> > seuil` ne se déclenche jamais quand la série est *absente* — or
   `velero_backup_last_successful_timestamp` disparaît à chaque redémarrage du pod velero et n'a

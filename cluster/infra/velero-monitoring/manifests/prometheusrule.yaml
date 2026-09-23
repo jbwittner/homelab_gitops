@@ -65,49 +65,50 @@ spec:
             summary: "velero : sauvegarde partiellement en échec ({{ $labels.schedule }})"
             description: "La sauvegarde s'est terminée en PartiallyFailed : elle est restaurable, mais incomplète. Vérifier les `podvolumebackups` associés avant de compter dessus."
 
-        # --- LES DEUX RÈGLES DE FRAÎCHEUR SONT DÉSACTIVÉES DEPUIS LE 2026-09-11 -----------------
+        # --- RÉTABLIES LE 2026-09-23, avec la remise en service de velero ------------------
         #
-        # ⚠️ ELLES SONT COMMENTÉES PARCE QU'IL N'Y A PLUS RIEN À SAUVEGARDER, PAS PARCE QU'ELLES
-        # ONT EU TORT. La forge était le seul périmètre de la schedule `daily` ; elle a quitté le
-        # cluster (archive/forgejo) et la schedule est `disabled: true`
-        # (cluster/infra/velero/helm-values.yaml). Laissées actives, elles sonneraient : la
-        # première 36 h après le dernier backup de l'ancienne schedule, la seconde **en
-        # permanence** dès que les séries expirent (TTL 30 j). Une alerte qui sonne toujours
-        # n'est plus lue — et c'est justement celle-là qu'on ne veut pas apprendre à ignorer.
+        # Elles avaient été commentées le 2026-09-11 non pas parce qu'elles avaient tort, mais
+        # parce qu'il n'y avait plus rien à sauvegarder : la forge était le seul périmètre de la
+        # schedule `daily`, et celle-ci était `disabled: true`. Laissées actives, elles auraient
+        # sonné en permanence — et c'est justement l'alerte qu'on ne veut pas apprendre à ignorer.
+        # La schedule tourne de nouveau (périmètre `hermes`), la condition de leur retrait est donc
+        # levée.
         #
-        # ⚠️ LES DEUX SE REMETTENT DANS LE MÊME COMMIT QUE LA RÉACTIVATION DE LA SCHEDULE, et
-        # ensemble : elles forment le couple valeur + `absent(...)`, en garder une seule rouvre le
-        # trou qu'elles bouchent. Tant qu'elles sont commentées, **rien ne surveille la fraîcheur
-        # des sauvegardes de ce cluster** — c'est vrai et c'est voulu, il n'y en a aucune.
+        # ⚠️ LES DEUX VONT ENSEMBLE : c'est le couple valeur + `absent(...)`. En garder une seule
+        # rouvre le trou qu'elles bouchent, cf. le commentaire de VeleroNoBackupMetric.
+
+        # Le vrai risque : plus rien ne tourne. 36 h laissent passer un décalage de la schedule
+        # quotidienne (03:00) sans crier, mais pas une journée entière sautée.
         #
-        # # Le vrai risque : plus rien ne tourne. 36 h laissent passer un décalage de la schedule
-        # # quotidienne (03:00) sans crier, mais pas une journée entière sautée.
-        # #
-        # # `schedule!="manuel"` est LOAD-BEARING : une sauvegarde manuelle est one-shot, sa série
-        # # vieillit donc pour toujours et franchit fatalement le seuil. Sans cette exclusion, un
-        # # backup lancé à la main allume une alerte critique 36 h plus tard, qui ne s'éteint plus.
-        # - alert: VeleroBackupTooOld
-        #   expr: (time() - max by (schedule) (velero_backup_last_successful_timestamp{schedule!="", schedule!="manuel"})) > 129600
-        #   for: 30m
-        #   labels:
-        #     severity: critical
-        #   annotations:
-        #     summary: "velero : aucune sauvegarde réussie depuis 36 h ({{ $labels.schedule }})"
-        #     description: "La dernière sauvegarde réussie de cette schedule remonte à plus de 36 h alors qu'elle est quotidienne."
+        # `schedule!="manuel"` est LOAD-BEARING : une sauvegarde manuelle est one-shot, sa série
+        # vieillit donc pour toujours et franchit fatalement le seuil. Sans cette exclusion, un
+        # backup lancé à la main allume une alerte critique 36 h plus tard, qui ne s'éteint plus.
+        - alert: VeleroBackupTooOld
+          expr: (time() - max by (schedule) (velero_backup_last_successful_timestamp{schedule!="", schedule!="manuel"})) > 129600
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "velero : aucune sauvegarde réussie depuis 36 h ({{ $labels.schedule }})"
+            description: "La dernière sauvegarde réussie de cette schedule remonte à plus de 36 h alors qu'elle est quotidienne."
+
+        # Complément indispensable de la précédente : `time() - <métrique>` ne se déclenche JAMAIS
+        # si la série n'existe pas. Or elle disparaît à chaque redémarrage du pod velero (le gauge
+        # n'est repeuplé qu'au prochain backup réussi) et n'a jamais existé si aucune sauvegarde
+        # n'a encore abouti. Sans cette règle, un velero qui n'a jamais sauvegardé est silencieux.
         #
-        # # Complément indispensable de la précédente : `time() - <métrique>` ne se déclenche JAMAIS
-        # # si la série n'existe pas. Or elle disparaît à chaque redémarrage du pod velero (le gauge
-        # # n'est repeuplé qu'au prochain backup réussi) et n'a jamais existé si aucune sauvegarde
-        # # n'a encore abouti. Sans cette règle, un velero qui n'a jamais sauvegardé est silencieux.
-        #
-        # - alert: VeleroNoBackupMetric
-        #   expr: absent(velero_backup_last_successful_timestamp)
-        #   for: 6h
-        #   labels:
-        #     severity: warning
-        #   annotations:
-        #     summary: "velero : aucune sauvegarde réussie connue"
-        #     description: "La métrique du dernier succès est absente depuis 6 h : soit aucune sauvegarde n'a jamais abouti, soit le serveur a redémarré et n'en a pas encore réussi une depuis. Dans les deux cas VeleroBackupTooOld est aveugle."
+        # ⚠️ ATTENDU JUSQU'AU PREMIER BACKUP RÉUSSI : au 2026-09-23 aucune sauvegarde n'a encore
+        # abouti dans ce cluster depuis la remise en service, cette règle sonnera donc 6 h après le
+        # déploiement et s'éteindra d'elle-même au premier succès. Si elle persiste au-delà, c'est
+        # le signal, pas le bruit.
+        - alert: VeleroNoBackupMetric
+          expr: absent(velero_backup_last_successful_timestamp)
+          for: 6h
+          labels:
+            severity: warning
+          annotations:
+            summary: "velero : aucune sauvegarde réussie connue"
+            description: "La métrique du dernier succès est absente depuis 6 h : soit aucune sauvegarde n'a jamais abouti, soit le serveur a redémarré et n'en a pas encore réussi une depuis. Dans les deux cas VeleroBackupTooOld est aveugle."
 
         # Le mode d'échec « vert et vide » : sans node-agent sur un nœud, les objets Kubernetes
         # sont sauvegardés mais AUCUNE donnée de PV de ce nœud ne l'est, et la sauvegarde est

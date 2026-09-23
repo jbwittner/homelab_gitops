@@ -6,12 +6,12 @@
 > nouveau le glob du tier-2 : contrôleur, node-agent, BSL et dépôt kopia sont debout, et la
 > schedule `daily` est active sur le périmètre `hermes`.
 >
-> ⚠️ **`velero-monitoring` est encore en `.noapp.yaml`.** Les deux composants sont censés partir et
-> revenir ENSEMBLE : en l'état velero tourne **non surveillé**, et aucune alerte ne signalera une
-> sauvegarde absente, vide ou un dépôt kopia en échec de maintenance. C'est déjà arrivé le
-> 2026-09-23 — la `BackupStorageLocation` était `Unavailable` (le bucket avait été recréé sous un
-> nouveau suffixe et `helm-values.yaml` pointait encore l'ancien), et c'est
-> `script/velero-script.sh` qui l'a dit, pas une alerte. À remettre.
+> [velero-monitoring](../velero-monitoring/README.md) a été remis **le même jour**, en rattrapage :
+> velero avait redémarré quelques heures sans lui. Ça s'est vu tout de suite — la
+> `BackupStorageLocation` était `Unavailable` (bucket recréé sous un nouveau suffixe,
+> `helm-values.yaml` pointant encore l'ancien) et c'est `script/velero-script.sh` qui l'a dit, pas
+> `VeleroBackupStorageLocationUnavailable`. Les deux règles de fraîcheur et le dashboard Grafana
+> sont rétablis avec.
 >
 > **Pourquoi il avait été retiré :** la forge était son seul périmètre et elle a quitté le cluster
 > le 2026-09-11 ([archive/forgejo](../../../archive/forgejo/README.md)). La schedule `daily` était
@@ -30,12 +30,11 @@
 >
 > **Reste à faire :**
 >
-> 1. Renommer `velero-monitoring.noapp.yaml` en `.app.yaml` — cf. l'avertissement ci-dessus.
-> 2. Poser le hook `pre.hook.backup.velero.io/command` sur le podTemplate de
+> 1. Poser le hook `pre.hook.backup.velero.io/command` sur le podTemplate de
 >    [hermes](../../app/hermes/README.md), lançant `hermes backup`. Sans lui, kopia copie
 >    `state.db` et ses sidecars `-wal`/`-shm` à des instants différents : cohérent-CRASH. Préalable
 >    non levé : vérifier que `hermes backup` existe dans l'image épinglée `v2026.9.14`.
-> 3. Arbitrer `donetick`, absent du périmètre : même forme que hermes (SQLite sur PVC, aucune
+> 2. Arbitrer `donetick`, absent du périmètre : même forme que hermes (SQLite sur PVC, aucune
 >    chaîne native), écarté seulement parce que l'arbitrage a précédé son arrivée dans le dépôt.
 >
 > ⚠️ Créer la `Schedule` déclenche une sauvegarde **immédiate**, elle n'attend pas 03:00 UTC

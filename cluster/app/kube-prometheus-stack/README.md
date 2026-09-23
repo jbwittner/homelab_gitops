@@ -470,8 +470,10 @@ Chaque warning a son critical en aval : un archivage WAL qui échoue finit en ba
 sauvegarde qui rate finit en sauvegarde trop vieille. Rien d'important n'est muet — **sauf ce que
 personne ne mesure**, à savoir la copie kopia étalée d'un PVC, qui produit une sauvegarde verte
 (cf. [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md), écrit du temps où la forge était
-sauvegardée ici). ⚠️ Le point est aujourd'hui sans objet dans ce cluster : **plus aucune
-sauvegarde n'y est planifiée** — cf. [velero](../../infra/velero/README.md).
+sauvegardée ici). ⚠️ Le point a de nouveau un objet depuis le **2026-09-23** : une schedule quotidienne tourne sur
+le namespace `hermes` — cf. [velero](../../infra/velero/README.md). C'est précisément le cas que
+le hook `hermes backup` doit couvrir, et il n'est pas encore posé : la copie kopia d'un `state.db`
+vivant est cohérente-CRASH.
 
 #### Éprouvé le 2026-09-09 — bout en bout, mails reçus
 
