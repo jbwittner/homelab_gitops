@@ -128,7 +128,7 @@ schedules:
     # bucket et compte de service côté Terraform donne une `BackupStorageLocation` `Unavailable`,
     # `VeleroBackupStorageLocationUnavailable` qui sonne et `kopia-maintain` en échec — l'état
     # exact pour lequel le composant a été retiré. L'ordre des gestes est dans le README.
-    disabled: true
+    disabled: false
     # ⚠️ CET HORAIRE EST EN **UTC**, et il ne peut pas être autre chose. Ni `Schedule` (velero) ni
     # `ScheduledBackup` (CNPG) n'exposent de champ `timezone` — seul un `CronJob` Kubernetes en a un
     # (`timeZone`), d'où le `Europe/Paris` des CronJobs renovate. Les deux chaînes de sauvegarde, elles,
