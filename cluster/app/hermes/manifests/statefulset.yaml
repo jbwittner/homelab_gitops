@@ -65,17 +65,17 @@ spec:
           # large : un premier boot sur PVC neuf repeuple /opt/data et réinstalle lazy-packages.
           # Passé ce délai, un redémarrage vaut mieux qu'un pod NotReady indéfiniment — la gateway
           # peut se figer au démarrage sans jamais sortir (vécu le 2026-09-25).
-          startupProbe:
-            tcpSocket: { port: api }
-            periodSeconds: 10
-            failureThreshold: 60
-          livenessProbe:
-            tcpSocket: { port: dashboard }
-            periodSeconds: 30
-            failureThreshold: 3
-          readinessProbe:
-            tcpSocket: { port: api }
-            periodSeconds: 15
+          # startupProbe:
+          #   tcpSocket: { port: api }
+          #   periodSeconds: 10
+          #   failureThreshold: 60
+          # livenessProbe:
+          #   tcpSocket: { port: dashboard }
+          #   periodSeconds: 30
+          #   failureThreshold: 3
+          # readinessProbe:
+          #   tcpSocket: { port: api }
+          #   periodSeconds: 15
           resources:
             requests:
               cpu: "500m"
