@@ -191,7 +191,6 @@ dur qu'aucune règle ajoutée plus tard ne contourne :
 
 # Repository documentation and collaboration rules
 !/.gitignore
-!/README.md
 !/.hermes.md
 
 # Existing durable, top-level documents
@@ -221,6 +220,11 @@ dur qu'aucune règle ajoutée plus tard ne contourne :
 # Curated durable memory only — not session history or runtime state
 !/memories/
 !/memories/USER.md
+
+# README.md du dépôt : écrit à la main, jamais par Hermes. Le refus ici ne couvre que le cas
+# « fichier non suivi » — README.md étant DÉJÀ suivi par le commit initial, c'est l'exclusion
+# de pathspec dans git-sync.sh qui l'empêche réellement d'être écrasé.
+/README.md
 
 # Never force-add these, even if a future rule changes
 .env

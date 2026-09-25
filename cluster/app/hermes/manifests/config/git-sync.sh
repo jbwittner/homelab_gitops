@@ -74,7 +74,11 @@ sync_once() {
     fi
   fi
 
-  if ! git_ add -A; then
+  # README.md est exclu du staging : c'est la présentation du dépôt, écrite à la main, et Hermes
+  # travaille dans ce même répertoire. Le .gitignore ne suffirait pas — il n'a aucun effet sur un
+  # fichier déjà suivi, et README.md l'est depuis le commit initial. L'exclusion couvre aussi la
+  # suppression : si l'agent efface le fichier, la suppression n'est pas enregistrée.
+  if ! git_ add -A -- . ':(exclude)README.md'; then
     log "ERREUR: git add a échoué"
     git_ reset -q >/dev/null 2>&1
     return 1
