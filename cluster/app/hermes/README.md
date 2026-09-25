@@ -182,6 +182,12 @@ sidecar ajoute une **seconde barrière indépendante** : si l'index contient un 
 `.env*`, `auth.json`, `.secrets/`, `*.key` ou `*.pem`, il refuse la passe entière et le log le dit.
 Raison : le `.gitignore` vit *dans* le dépôt qu'il protège, donc à portée de l'agent.
 
+`profiles/<nom>/` a sa propre allow-list, calquée sur celle de la racine. Un profil reproduit
+toute la structure de `/opt/data` — durable et runtime mêlés — donc un `!/profiles/**` global
+embarquerait le `.env`, le `state.db`, les `sessions/`, `cache/` et `logs/` de chaque profil. Les
+règles de refus dur, elles, ne sont **pas ancrées** : elles mordent à toute profondeur, profils
+compris.
+
 Deux exclusions supplémentaires vivent dans le script, pas dans l'allow-list, parce que le
 `.gitignore` ne sait pas les exprimer :
 
@@ -395,7 +401,6 @@ cat > /opt/data/.gitignore <<'GITIGNORE'
 
 # Repository documentation and collaboration rules
 !/.gitignore
-!/README.md
 !/.hermes.md
 
 # Existing durable, top-level documents
@@ -406,16 +411,10 @@ cat > /opt/data/.gitignore <<'GITIGNORE'
 !/workspace/**
 !/affinage/
 !/affinage/**
-!/affinage-live-nFl9v3/
-!/affinage-live-nFl9v3/**
 
 # Skills (including custom skills). Runtime caches remain ignored by default.
 !/skills/
 !/skills/**
-/skills/.bundled_manifest
-/skills/.curator_ledger.jsonl
-/skills/.curator_state
-/skills/.usage.json
 **/__pycache__/
 *.py[cod]
 
@@ -426,7 +425,33 @@ cat > /opt/data/.gitignore <<'GITIGNORE'
 !/memories/
 !/memories/USER.md
 
-# Never force-add these, even if a future rule changes
+# Profils (multi-profil Hermes). profiles/<nom>/ reproduit toute la structure de la racine,
+# durable ET runtime mêlés. On rouvre profiles/, on renie TOUT dans chaque profil, puis on
+# réautorise la même liste qu'à la racine. Un `!/profiles/**` global embarquerait .env,
+# state.db, sessions/, cache/ et logs/ de chaque profil.
+!/profiles/
+/profiles/*/*
+!/profiles/*/profile.yaml
+!/profiles/*/config.yaml
+!/profiles/*/*.md
+!/profiles/*/memories/
+!/profiles/*/memories/**
+!/profiles/*/skills/
+!/profiles/*/skills/**
+!/profiles/*/workspace/
+!/profiles/*/workspace/**
+!/profiles/*/scripts/
+!/profiles/*/scripts/**
+!/profiles/*/skins/
+!/profiles/*/skins/**
+
+# README.md du dépôt : écrit à la main, jamais par Hermes. Le refus ici ne couvre que le cas
+# « fichier non suivi » — README.md étant DÉJÀ suivi par le commit initial, c'est l'exclusion
+# de pathspec dans git-sync.sh qui l'empêche réellement d'être écrasé.
+/README.md
+
+# Never force-add these, even if a future rule changes. Non ancrés : ils mordent à TOUTE
+# profondeur, donc aussi dans profiles/<nom>/.
 .env
 .secrets/
 auth.json
@@ -447,6 +472,10 @@ lazy-packages/
 audio_cache/
 image_cache/
 lost+found/
+.bundled_manifest
+.curator_ledger.jsonl
+.curator_state
+.usage.json
 GITIGNORE
 
 # LOAD-BEARING : sans ce chown, .git appartient à root (l'exec tourne en root) et le sidecar,
