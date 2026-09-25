@@ -80,6 +80,16 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   relance en boucle, et le serveur d'API ne monte jamais. La `startupProbe` étant sur 8642, le
   conteneur finit par être redémarré au bout de 10 minutes — en boucle, sans que rien ne pointe
   vers la messagerie. Pas de messagerie voulue = retirer la variable, pas y laisser un placeholder.
+- **Les installations paresseuses sont coupées, et c'est load-bearing.**
+  `agent/bedrock_adapter.py` appelle `ensure("provider.bedrock")` **au niveau module**, à l'import,
+  sous un `try/except Exception: pass`. Le `config.yaml` livré par l'image porte
+  `model.provider: "auto"`, donc cet adaptateur est importé au démarrage : l'installation de
+  `boto3` par `uv` ne revient jamais, la gateway reste figée en `starting`, 8642 ne bind pas et le
+  pod n'est jamais `Ready`. Un gel ne lève pas d'exception — le `try/except` ne protège de rien.
+  D'où `HERMES_LAZY_INSTALL_TARGET=` (vide) dans `config/hermes.env` : sans cible durable, le
+  `HERMES_DISABLE_LAZY_INSTALLS=1` déjà posé par l'image reprend effet et `ensure()` **lève** au
+  lieu de bloquer. Contrepartie assumée : Edge TTS, Firecrawl, Exa, certains adaptateurs et
+  dépendances de plugins refusent avec un message explicite au lieu de s'installer à la demande.
 - **L'authentification au fournisseur LLM n'est pas dans Git.** Le provider `openai-codex` est
   en `auth_type: oauth_external` : ses jetons vivent dans `/opt/data/auth.json`, écrits par un
   flux device code lancé à la main.
