@@ -38,94 +38,6 @@ spec:
       securityContext:
         fsGroup: 10000
       initContainers:
-        # Rend /opt/data versionnable SANS jamais écraser un PVC vivant : pose .git, le remote et
-        # le .gitignore autoritaire, et ne restaure depuis la forge que si le dépôt n'a aucun
-        # commit ET que le répertoire est vierge — les deux, cf. le bloc `populated` plus bas.
-        # Tourne AVANT seed-profile : sur un PVC neuf, le `reset --hard` travaille dans un
-        # répertoire vide.
-        - name: seed-git
-          image: alpine/git:v2.54.0
-          # L'ENTRYPOINT de l'image est `git` : il faut l'écraser pour lancer un shell.
-          command:
-            - sh
-            - -c
-            - |
-              set -eu
-              REPO=/opt/data
-              BRANCH=main
-              URL=https://forgejo.wittner.tech/jbwittner/homelab_hermes.git
-
-              # Le jeton passe par GIT_ASKPASS, jamais par l'URL : il ne doit pas finir écrit dans
-              # .git/config, qui vit dans le PVC et que l'agent lit.
-              umask 077
-              cat > /tmp/git-askpass.sh <<'ASKPASS'
-              #!/bin/sh
-              case "$1" in
-                Username*) printf '%s\n' "hermes_agent" ;;
-                Password*) printf '%s\n' "${FORGEJO_TOKEN:-}" ;;
-              esac
-              ASKPASS
-              chmod 0700 /tmp/git-askpass.sh
-              export GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0
-
-              # Le dépôt appartient à l'uid 10000 et on opère en root : sans cette exception git
-              # refuse tout avec « detected dubious ownership ».
-              git config --global --add safe.directory "$REPO"
-
-              [ -d "$REPO/.git" ] || git init -q -b "$BRANCH" "$REPO"
-
-              # Allow-list autoritaire, réécrite à chaque démarrage : l'agent ne peut l'affaiblir
-              # que jusqu'au prochain rollout. Le fichier est aussi SUIVI par le dépôt distant —
-              # d'où l'obligation qu'il soit identique au contenu poussé, sinon chaque boot
-              # produit un commit de bruit.
-              install -o 10000 -g 10000 -m 0644 /bootstrap/gitignore "$REPO/.gitignore"
-
-              git -C "$REPO" remote remove origin 2>/dev/null || true
-              git -C "$REPO" remote add origin "$URL"
-              git -C "$REPO" config user.name "hermes_agent"
-              git -C "$REPO" config user.email "hermes_agent@wittner.tech"
-
-              # DEUX conditions pour restaurer, jamais une seule. « HEAD non né » ne prouve PAS
-              # que le PVC est neuf : ça arrive aussi quand .git a été détruit sous un /opt/data
-              # bien vivant (vécu le 2026-09-25). Dans ce cas un `reset --hard` écraserait
-              # config.yaml, SOUL.md et skills/ avec le contenu d'origin. On exige donc aussi que
-              # le répertoire soit vierge, et en cas de doute on ne touche à RIEN.
-              populated=""
-              for marker in config.yaml sessions skills memories .env auth.json; do
-                [ -e "$REPO/$marker" ] && populated="$populated $marker"
-              done
-
-              if git -C "$REPO" rev-parse --verify HEAD >/dev/null 2>&1; then
-                echo "[seed-git] dépôt déjà peuplé — aucune restauration, le PVC fait foi"
-              elif [ -n "$populated" ]; then
-                echo "[seed-git] ALERTE: HEAD absent mais /opt/data contient$populated"
-                echo "[seed-git] ALERTE: .git a probablement été détruit sur un PVC vivant."
-                echo "[seed-git] ALERTE: AUCUNE restauration — arbitrage manuel requis."
-              else
-                echo "[seed-git] aucun commit local et répertoire vierge (PVC neuf) — restauration depuis origin/$BRANCH"
-                if git -C "$REPO" fetch -q --depth=1 origin "$BRANCH"; then
-                  git -C "$REPO" reset --hard -q FETCH_HEAD
-                  echo "[seed-git] restauré à $(git -C "$REPO" rev-parse --short HEAD)"
-                else
-                  # Dépôt distant vide au tout premier déploiement, ou forge injoignable : on ne
-                  # bloque pas le démarrage d'Hermes pour ça.
-                  echo "[seed-git] origin vide ou injoignable — on démarre sur un dépôt neuf"
-                fi
-              fi
-
-              chown -R 10000:10000 "$REPO/.git" "$REPO/.gitignore"
-          env:
-            # Seule clé du Secret injectée ici : pas d'`envFrom` global sur un conteneur qui n'a
-            # besoin que du jeton de forge.
-            - name: FORGEJO_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: hermes-env
-                  key: FORGEJO_TOKEN
-          volumeMounts:
-            - { name: data, mountPath: /opt/data }
-            - { name: bootstrap, mountPath: /bootstrap, readOnly: true }
-            - { name: seed-tmp, mountPath: /tmp }
         - name: seed-profile
           image: busybox:1.38.0
           command:
@@ -227,13 +139,9 @@ spec:
             - { name: bootstrap, mountPath: /bootstrap, readOnly: true }
             - { name: git-tmp, mountPath: /tmp }
       volumes:
-        # /tmp inscriptible (askpass, objets temporaires de git) alors que la racine des conteneurs
-        # git est en lecture seule. Les emptyDir sont exclus de Velero par la ConfigMap
+        # /tmp inscriptible (askpass, objets temporaires de git) alors que la racine du conteneur
+        # git-sync est en lecture seule. Les emptyDir sont exclus de Velero par la ConfigMap
         # `velero-volume-policies` — rien à ajouter côté sauvegarde.
-        # Un emptyDir PAR conteneur git : seed-git écrit son askpass en root avec umask 077,
-        # git-sync tourne sur l'uid 10000 et ne pourrait pas le réécrire s'ils partageaient /tmp.
-        - name: seed-tmp
-          emptyDir: {}
         - name: git-tmp
           emptyDir: {}
         - name: bootstrap

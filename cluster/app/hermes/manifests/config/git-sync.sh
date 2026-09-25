@@ -5,6 +5,11 @@
 # Semé depuis Git par le ConfigMap `hermes-bootstrap` (cf. kustomization.yaml), monté en
 # /bootstrap/git-sync.sh. Modifier ce fichier déclenche un rollout du StatefulSet.
 #
+# Ce script ne fait QUE pousser. Il ne crée pas le dépôt, ne pose pas le remote, n'écrit pas le
+# .gitignore et ne restaure RIEN : l'init de /opt/data est une opération manuelle, faite une fois
+# (README §Versionnement). Un `reset --hard` automatique au démarrage a déjà écrasé un fichier
+# d'un PVC vivant le 2026-09-25 — ce composant ne réécrit plus jamais le PVC.
+#
 # CE N'EST PAS UN BACKUP. Velero sauvegarde déjà le PVC entier (kopia → GCS, 03:00 UTC, TTL 30 j).
 # Ce dépôt ne porte que ce que le .gitignore laisse passer : notes, skills, workspace, config.yaml,
 # mémoires. Sa valeur est l'historique lisible et la restauration sélective, pas la reprise.
@@ -54,7 +59,7 @@ EOF
 
 sync_once() {
   if [ ! -d "$REPO/.git" ]; then
-    log "ERREUR: $REPO/.git absent — l'initContainer seed-git n'a pas fait son travail"
+    log "ERREUR: $REPO/.git absent — l'init manuel n'a jamais été fait (README §Versionnement)"
     return 1
   fi
 

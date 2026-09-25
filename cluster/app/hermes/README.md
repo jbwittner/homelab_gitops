@@ -31,12 +31,10 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   (`KEY=value`), assemblées en ConfigMap `hermes-vars` et injectées par `envFrom`
 - `manifests/config/profile` — profil shell semé par l'initContainer, également monté par le
   ConfigMap de bootstrap
-- `manifests/config/gitignore` — allow-list de ce qui part dans `homelab_hermes`, semée en
-  `/opt/data/.gitignore` à chaque démarrage (cf. §Versionnement de `$HERMES_HOME`)
 - `manifests/config/git-sync.sh` — boucle du sidecar `git-sync` : une passe de commit + push par
-  jour
-- `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`, deux
-  initContainers (`seed-git` puis `seed-profile`) et un sidecar `git-sync`
+  jour (cf. §Versionnement de `$HERMES_HOME`)
+- `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`, un
+  initContainer de semis du profil shell et un sidecar `git-sync`
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
 - `manifests/hermes-httproute.yaml` — `hermes.lan.wittner.tech` → dashboard,
   `hermes-api.lan.wittner.tech` → API
@@ -86,14 +84,15 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
 - **L'authentification au fournisseur LLM n'est pas dans Git.** Le provider `openai-codex` est
   en `auth_type: oauth_external` : ses jetons vivent dans `/opt/data/auth.json`, écrits par un
   flux device code lancé à la main.
-- **Le PVC reste la source de vérité de l'état d'Hermes.** Depuis la mise en place du
-  versionnement (§Versionnement de `$HERMES_HOME`), la part **durable** — `config.yaml`, skills,
-  `workspace/`, notes, `memories/USER.md` — a une copie dans `homelab_hermes` et revient toute
-  seule sur un PVC neuf. Tout le reste n'en a pas : `auth.json`, `.env`, les sessions, `kanban.db`,
-  les caches, `home/` **ne sont pas versionnés et ne le seront pas** — ce sont des secrets ou de
-  l'état runtime. Pour ceux-là, le seul filet est Velero
+- **Le PVC est la seule source de vérité de l'état d'Hermes, et rien ici ne le reconstruit.** Le
+  versionnement (§Versionnement de `$HERMES_HOME`) donne une **copie** de la part durable
+  (`config.yaml`, skills, `workspace/`, notes, mémoires) dans `homelab_hermes`, mais **aucun
+  automatisme ne la rejoue** : un PVC neuf démarre VIDE et se repeuple à la main. Le reste
+  — `auth.json`, `.env`, sessions, `kanban.db`, caches, `home/` — n'a même pas de copie : ce sont
+  des secrets ou de l'état runtime, le seul filet est Velero
   ([velero](../../infra/velero/README.md), sauvegarde quotidienne du namespace `hermes`).
-  **Le dépôt git n'est pas un backup** : il ne porte que ce que l'allow-list laisse passer.
+  **Le dépôt git n'est pas un backup** : il ne porte que ce que l'allow-list laisse passer, et il
+  ne se restaure pas tout seul.
 - **Le PVC est RWO** : le pod sortant doit mourir avant que le nouveau monte le volume. Les
   rollouts ne sont pas sans coupure.
 
@@ -129,10 +128,10 @@ rm cluster/app/hermes/manifests/hermes-env.secret.yaml
 Le `SealedSecret` est chiffré pour le couple (`hermes-env`, `hermes`) : le renommer ou le déplacer
 de namespace exige de le resceller.
 
-`FORGEJO_TOKEN` (jeton de `hermes_agent`) sert deux choses : l'initContainer `seed-git` et le
-sidecar `git-sync` (§Versionnement de `$HERMES_HOME`), qui le reçoivent par un `secretKeyRef`
-ciblé ; et **Hermes lui-même**, pour cloner des dépôts Forgejo depuis son terminal — là il arrive
-par l'`envFrom` global, donc dans l'environnement d'un agent qui exécute du code décidé par un LLM.
+`FORGEJO_TOKEN` (jeton de `hermes_agent`) sert deux choses : le sidecar `git-sync`
+(§Versionnement de `$HERMES_HOME`), qui le reçoit par un `secretKeyRef` ciblé ; et **Hermes
+lui-même**, pour cloner des dépôts Forgejo depuis son terminal — là il arrive par l'`envFrom`
+global, donc dans l'environnement d'un agent qui exécute du code décidé par un LLM.
 Le rayon d'action de ce jeton est celui des droits de `hermes_agent` sur la forge : les restreindre
 est le seul garde-fou.
 
@@ -154,61 +153,143 @@ bornées type `0.0.0.0/0`).
 
 ### Versionnement de `$HERMES_HOME`
 
-`$HERMES_HOME` vaut `/opt/data`, c'est-à-dire le PVC. Sa part durable est versionnée dans
+`$HERMES_HOME` vaut `/opt/data`, c'est-à-dire le PVC. Sa part durable est poussée dans
 [`jbwittner/homelab_hermes`](https://forgejo.wittner.tech/jbwittner/homelab_hermes) (dépôt
-**privé**). Objectif : historique lisible, diff d'un skill ou d'une mémoire, restauration
-sélective, et repeuplement automatique d'un PVC neuf. **Ce n'est pas un backup** — cf. §Contraintes.
+**privé**). Objectif : historique lisible, diff d'un skill ou d'une mémoire, copie hors cluster des
+artefacts durables. **Ce n'est pas un backup**, cf. §Contraintes.
 
-Trois pièces, toutes déclaratives :
-
-| Pièce | Où | Rôle |
-| --- | --- | --- |
-| `manifests/config/gitignore` | ConfigMap `hermes-bootstrap` | allow-list, recopiée en `/opt/data/.gitignore` à **chaque** démarrage |
-| initContainer `seed-git` | `statefulset.yaml` | `git init` + remote + allow-list, et **restauration** depuis `origin/main` sous deux conditions cumulées (cf. ci-dessous) |
-| sidecar `git-sync` | `statefulset.yaml` + `config/git-sync.sh` | une passe `add`/`commit`/`push` par jour à **04:30 UTC** (après la fenêtre Velero de 03:00) |
-
-Le jeton est `FORGEJO_TOKEN`, déjà dans `hermes-env` — rien à resceller. Il n'entre dans les deux
-conteneurs git que par un `secretKeyRef` ciblé (pas l'`envFrom` global) et passe par `GIT_ASKPASS` :
-il n'est **jamais** écrit dans `.git/config`, que l'agent peut lire.
-
-**Ce qui part** est décidé par `config/gitignore` : deny-all `/*`, puis allow-list (`*.md`,
-`workspace/`, `affinage/`, `skills/`, `config.yaml`, `memories/USER.md`), puis un bloc de deny dur
-qu'aucune règle future ne contourne (`.env`, `auth.json`, `.secrets/`, `sessions/`, `cache/`,
-`*.db`, `*.lock`, `lazy-packages/`…). Le sidecar ajoute une **seconde barrière indépendante** :
-si l'index contient un chemin matchant `.env*`, `auth.json`, `.secrets/`, `*.key` ou `*.pem`, il
-refuse la passe entière et le log le dit. Raison : le `.gitignore` vit *dans* le dépôt qu'il
-protège, donc à portée de l'agent.
-
-> [!IMPORTANT]
-> L'allow-list se modifie **ici**, dans `manifests/config/gitignore`, jamais dans le pod : elle est
-> réécrite à chaque démarrage. Et comme `.gitignore` est aussi **suivi** par `homelab_hermes`, les
-> deux copies doivent rester identiques — sinon chaque boot produit un commit de bruit. Après avoir
-> modifié l'une, vérifier :
->
-> ```bash
-> diff <(kubectl -n hermes exec hermes-0 -c hermes -- cat /opt/data/.gitignore) \
->      cluster/app/hermes/manifests/config/gitignore
-> ```
-
-`seed-git` ne restaure que si **deux** conditions sont réunies : `/opt/data` n'a aucun commit **et**
-le répertoire est vierge (ni `config.yaml`, ni `sessions/`, ni `skills/`, ni `memories/`, ni `.env`,
-ni `auth.json`). Sur un PVC vivant il ne fait que reposer le remote et l'allow-list.
+**Une seule pièce automatique, et elle ne fait que pousser** : le sidecar `git-sync`
+(`config/git-sync.sh`), une passe `add` / `commit` / `push` par jour à **04:30 UTC** — après la
+fenêtre Velero de 03:00. Il ne crée pas le dépôt, ne pose pas le remote, n'écrit pas le
+`.gitignore`, et ne restaure **rien**.
 
 > [!CAUTION]
-> La seconde condition n'est pas du zèle. Le 2026-09-25, `.git` a été détruit sous un `/opt/data`
-> bien vivant : `HEAD` ne résolvait plus, la version d'alors de ce script en a conclu « PVC neuf »
-> et a fait un `reset --hard` sur `origin/main`. Les dégâts se sont limités à `README.md` parce
-> qu'`origin` ne contenait qu'un README — avec le dépôt peuplé d'aujourd'hui, le même enchaînement
-> écraserait `config.yaml`, `SOUL.md` et tout `skills/`. Quand `HEAD` manque mais que le répertoire
-> est peuplé, `seed-git` **ne touche à rien** et hurle dans ses logs : c'est un arbitrage manuel.
+> Ce composant n'écrit jamais dans le PVC pour le compte de git, et c'est une décision, pas un
+> manque. Une version antérieure avait un initContainer `seed-git` qui restaurait depuis
+> `origin/main` quand `HEAD` ne résolvait pas. Le 2026-09-25, `.git` a été détruit sous un
+> `/opt/data` bien vivant : le script en a conclu « PVC neuf » et a fait un `reset --hard`. Les
+> dégâts se sont limités à `README.md` parce qu'`origin` ne contenait alors qu'un README. Avec un
+> dépôt peuplé, le même enchaînement écrase `config.yaml`, `SOUL.md` et tout `skills/`. **L'init et
+> la restauration sont donc manuelles, et le resteront.**
+
+Le jeton est `FORGEJO_TOKEN`, déjà dans `hermes-env` — rien à resceller. Le sidecar ne le reçoit que
+par un `secretKeyRef` ciblé (pas l'`envFrom` global) et le passe par `GIT_ASKPASS` : il n'est
+**jamais** écrit dans `.git/config`, que l'agent peut lire.
+
+#### Ce qui part
+
+Décidé par `/opt/data/.gitignore`, qui vit dans le PVC et est lui-même suivi par le dépôt. Le
+sidecar ajoute une **seconde barrière indépendante** : si l'index contient un chemin matchant
+`.env*`, `auth.json`, `.secrets/`, `*.key` ou `*.pem`, il refuse la passe entière et le log le dit.
+Raison : le `.gitignore` vit *dans* le dépôt qu'il protège, donc à portée de l'agent.
+
+Contenu de référence de l'allow-list — deny-all puis autorisations explicites, et un bloc de deny
+dur qu'aucune règle ajoutée plus tard ne contourne :
+
+```gitignore
+# /opt/data is Hermes' runtime home. Ignore everything by default.
+/*
+
+# Repository documentation and collaboration rules
+!/.gitignore
+!/README.md
+!/.hermes.md
+
+# Existing durable, top-level documents
+!/*.md
+
+# Durable work products
+!/workspace/
+!/workspace/**
+!/affinage/
+!/affinage/**
+!/affinage-live-nFl9v3/
+!/affinage-live-nFl9v3/**
+
+# Skills (including custom skills). Runtime caches remain ignored by default.
+!/skills/
+!/skills/**
+/skills/.bundled_manifest
+/skills/.curator_ledger.jsonl
+/skills/.curator_state
+/skills/.usage.json
+**/__pycache__/
+*.py[cod]
+
+# Explicitly chosen configuration documents (never credentials)
+!/config.yaml
+
+# Curated durable memory only — not session history or runtime state
+!/memories/
+!/memories/USER.md
+
+# Never force-add these, even if a future rule changes
+.env
+.secrets/
+auth.json
+sessions/
+logs/
+cache/
+gateway/
+state/
+pending_messages/
+*.db
+*.db-*
+*.db-wal
+*.db-shm
+*.lock
+*.pid
+*.sock
+lazy-packages/
+audio_cache/
+image_cache/
+lost+found/
+```
+
+#### Init, une fois par PVC
+
+À faire à la main après tout PVC neuf. Aucune de ces commandes n'est rejouée par le cluster.
+
+```bash
+# 1. Dépôt, remote, identité. Depuis le conteneur hermes (root, safe.directory obligatoire :
+#    /opt/data appartient à l'uid 10000).
+kubectl -n hermes exec -it hermes-0 -c hermes -- sh -c '
+  cd /opt/data
+  git config --global --add safe.directory /opt/data
+  git init -b main
+  git remote add origin https://forgejo.wittner.tech/jbwittner/homelab_hermes.git
+  git config user.name  "hermes_agent"
+  git config user.email "hermes_agent@wittner.tech"
+'
+
+# 2. Poser le .gitignore (bloc ci-dessus) en /opt/data/.gitignore, puis :
+kubectl -n hermes exec hermes-0 -c hermes -- chown 10000:10000 /opt/data/.gitignore
+
+# 3. Premier push : par le sidecar, qui a déjà GIT_ASKPASS câblé — aucun jeton à manipuler.
+kubectl -n hermes exec hermes-0 -c git-sync -- sh /bootstrap/git-sync.sh --once
+```
+
+Pour **restaurer** un PVC neuf depuis le dépôt (étape 1 puis, à la place de l'étape 3) :
+
+```bash
+kubectl -n hermes exec hermes-0 -c git-sync -- sh -c '
+  export GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0
+  G="git -c safe.directory=/opt/data -C /opt/data"
+  $G fetch --depth=1 origin main && $G reset --hard FETCH_HEAD'
+```
+
+> [!WARNING]
+> `reset --hard` écrase les fichiers suivis par le contenu d'`origin`. Ne le lancer que sur un
+> `/opt/data` dont on sait qu'il est vierge. Sur un PVC peuplé, utiliser `reset --mixed` et
+> arbitrer fichier par fichier.
+
+#### Exploitation
 
 ```bash
 # Forcer une passe sans attendre 04:30
 kubectl -n hermes exec hermes-0 -c git-sync -- sh /bootstrap/git-sync.sh --once
 
-# Logs du sidecar et du semis
 kubectl -n hermes logs hermes-0 -c git-sync
-kubectl -n hermes logs hermes-0 -c seed-git
 
 # Ce qui est réellement suivi (doit être vide)
 kubectl -n hermes exec hermes-0 -c hermes -- \
@@ -216,9 +297,13 @@ kubectl -n hermes exec hermes-0 -c hermes -- \
   | grep -E '\.env|auth\.json|\.secrets|\.key$|\.pem$'
 ```
 
-**Push rejeté.** Le sidecar ne fait **jamais** de `--force` ni de `pull --rebase` : un rejet
-signale une divergence réelle (push manuel depuis le pod, écriture directe sur la forge). Les
-commits locaux sont conservés et la passe suivante retente ; l'arbitrage est manuel, depuis le pod.
+**Push rejeté.** Le sidecar ne fait **jamais** de `--force` ni de `pull --rebase` : un rejet signale
+une divergence réelle (push manuel depuis le pod, écriture directe sur la forge). Les commits locaux
+sont conservés et la passe suivante retente ; l'arbitrage est manuel, depuis le pod.
+
+**`.git` absent.** Le sidecar log `ERREUR: /opt/data/.git absent` et ne fait rien d'autre : l'init
+ci-dessus n'a jamais été fait, ou le dépôt a été détruit. Dans les deux cas c'est une décision
+humaine, pas un cas à automatiser.
 
 > [!WARNING]
 > Le trafic vers Forgejo sort du cluster par le tunnel Cloudflare (plafond 100 Mo par requête sur
@@ -261,11 +346,12 @@ seule présence), et resceller.
 
 ### Repartir de zéro
 
-Un seul état peut être remis à neuf : le **PVC** `data-hermes-0`. Ce n'est plus une perte totale —
-l'initContainer `seed-git` restaure les artefacts durables depuis `homelab_hermes` (§Versionnement
-de `$HERMES_HOME`). Restent PERDUS, faute de copie : `auth.json`, `.env`, les sessions,
-`kanban.db`, les caches et `home/`. Pour les récupérer réellement, c'est une restauration Velero,
-pas cette procédure.
+Un seul état peut être remis à neuf, et **rien ne revient tout seul** : le **PVC**
+`data-hermes-0`. Les artefacts durables ont une copie dans `homelab_hermes`, mais la restauration
+est une opération manuelle (§Versionnement de `$HERMES_HOME`, sous-section « Init, une fois par
+PVC »). Restent PERDUS, faute de toute copie : `auth.json`, `.env`, les sessions, `kanban.db`, les
+caches et `home/`. Pour les récupérer réellement, c'est une restauration Velero, pas cette
+procédure.
 
 > [!WARNING]
 > Le StatefulSet est sous `selfHeal: true`. Un `kubectl scale` est **annulé par ArgoCD en moins de
@@ -285,7 +371,7 @@ kubectl -n hermes delete pvc data-hermes-0
 kubectl -n hermes logs hermes-0 -f
 ```
 
-Au redémarrage, `seed-git` refait `git init`, repose le remote et `reset --hard` sur
-`origin/main` : skills, `config.yaml` et mémoires reviennent. Le device code du provider LLM est à
-refaire (`auth.json`, cf. §Contraintes). `hermes-env` n'est
-pas concerné : le `SealedSecret` reste valide, rien n'est à resceller.
+Le PVC recréé est **vide**. Pour y remettre les artefacts durables : §Versionnement de
+`$HERMES_HOME`, « Init, une fois par PVC ». Le device code du provider LLM est à refaire
+(`auth.json`, cf. §Contraintes). `hermes-env` n'est pas concerné : le `SealedSecret` reste valide,
+rien n'est à resceller.
