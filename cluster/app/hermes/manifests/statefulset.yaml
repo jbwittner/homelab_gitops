@@ -57,10 +57,18 @@ spec:
             - { name: dashboard, containerPort: 9119, protocol: TCP }
           # Sondes TCP et non HTTP : les deux endpoints sont derrière une auth (clé d'API,
           # gate de login), une sonde HTTP se ferait renvoyer un 401 lu comme un échec.
+          # Sur l'API (8642) et PAS sur le dashboard : le dashboard bind bien avant la fin du
+          # démarrage de la gateway. Tant qu'une startupProbe court, readiness et liveness sont
+          # suspendues — c'est ce qui évite les `Unhealthy` en rafale pendant tout le boot, et le
+          # pod passe 2/2 pile quand l'API répond.
+          # 60 × 10 s = 10 min avant que kubelet ne redémarre le conteneur. Marge volontairement
+          # large : un premier boot sur PVC neuf repeuple /opt/data et réinstalle lazy-packages.
+          # Passé ce délai, un redémarrage vaut mieux qu'un pod NotReady indéfiniment — la gateway
+          # peut se figer au démarrage sans jamais sortir (vécu le 2026-09-25).
           startupProbe:
-            tcpSocket: { port: dashboard }
+            tcpSocket: { port: api }
             periodSeconds: 10
-            failureThreshold: 30
+            failureThreshold: 60
           livenessProbe:
             tcpSocket: { port: dashboard }
             periodSeconds: 30
