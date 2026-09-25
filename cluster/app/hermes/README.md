@@ -603,6 +603,120 @@ l'allow-list).
 > script descend sur l'uid 10000 avant d'ouvrir. Il n'y a d'ailleurs pas de binaire `sqlite3`
 > dans l'image — tout passe par le module `sqlite3` de Python.
 
+#### Lire ce que le script affiche
+
+Le modèle est petit — quatre tables utiles, et des tables `facts_fts_*` qui sont la mécanique
+interne de FTS5, jamais à lire directement :
+
+| Table | Ce qu'elle porte |
+| --- | --- |
+| `facts` | **la mémoire**. Une ligne par fait : contenu, catégorie, tags, confiance, compteurs, vecteur |
+| `entities` + `fact_entities` | les entités extraites du contenu, et leur rattachement aux faits |
+| `facts_fts` | index plein texte FTS5, **contentless** (`content=facts`) — tenu à jour par trois triggers |
+| `memory_banks` | une superposition vectorielle par catégorie (`cat:<catégorie>`), pour les requêtes algébriques |
+
+> [!CAUTION]
+> **NumPy est absent de l'image, et toute la partie « holographique » est donc inerte.** Vérifié le
+> 2026-09-25 : `/opt/hermes/.venv/bin/python -c "import numpy"` répond `ModuleNotFoundError`, et
+> `stats` affiche `0/2 faits portent un vecteur HRR`. Les conséquences sont silencieuses — aucune
+> erreur nulle part :
+>
+> - `facts.hrr_vector` n'est **jamais** calculé (`show` dit « vecteur HRR absent ») ;
+> - `memory_banks` reste **vide** en permanence ;
+> - `search` **redistribue ses poids** : 0.6 FTS + 0.4 Jaccard + 0 HRR, au lieu de 0.4 / 0.3 / 0.3 ;
+> - `probe`, `related` et `reason` **retombent sur la recherche FTS** — ils rendent exactement ce
+>   que rendrait `search`, sans le dire ;
+> - `contradict` renvoie **toujours une liste vide**.
+>
+> En l'état, le provider est donc *FTS5 + un score de confiance*. C'est utile, mais ce n'est pas ce
+> que le nom promet : `probe`, `reason` et `contradict` — l'argument du provider — ne font rien.
+> Les activer demande NumPy dans l'image, ce qu'aucun réglage de `config.yaml` ne procure.
+
+**Les colonnes de `list`, et les deux qui mentent.**
+
+| Colonne | Source | Ce qu'elle vaut |
+| --- | --- | --- |
+| `ID` | `fact_id` | identifiant, à passer à `show` |
+| `CONFIANCE` | `trust_score` | barre de dix crans + valeur, bornée `[0, 1]` |
+| `LU` | `retrieval_count` | ⚠️ **toujours 0** |
+| `+` | `helpful_count` | ⚠️ ne compte que les retours **positifs** |
+| `CATÉGORIE` | `category` | `general` par défaut ; c'est elle qui découpe les banques HRR |
+
+⚠️ `retrieval_count` **n'est incrémenté nulle part**. La colonne existe dans le schéma et dans les
+`SELECT` du plugin, mais aucun code ne l'écrit — un fait lu cent fois affiche `0`. Ne rien en
+déduire sur ce que l'agent consulte.
+
+⚠️ `helpful_count` ne bouge que sur un retour **utile**. Un retour inutile baisse la confiance sans
+laisser de trace dans ce compteur : `0.30` avec `+0` ne veut pas dire « jamais noté », ça veut dire
+**deux retours inutiles**. La confiance est le seul témoin des votes négatifs.
+
+**La confiance, et le seuil qui fait disparaître un fait.** `0.5` à la création
+(`default_trust`), `+0.05` par retour utile, `-0.10` par retour inutile, borné à `[0, 1]`.
+
+> [!WARNING]
+> `search` ne retient que les faits dont la confiance atteint **`min_trust` = 0.3**. Un fait tombé
+> à `0.20` **disparaît des recherches** — de celles de l'agent comme de celles du script — tout en
+> restant en base. **Trois retours inutiles y suffisent** (0.5 → 0.4 → 0.3 → 0.2). C'est la seule
+> façon dont un fait devient invisible sans être supprimé, et `list` reste le seul moyen de le
+> revoir :
+>
+> ```bash
+> ./script/hermes-memory-script.sh sql \
+>   "SELECT fact_id, trust_score, substr(content,1,60) FROM facts WHERE trust_score < 0.3"
+> ```
+
+**Comment `search` classe, et ce que le script montre à la place.** Côté plugin : candidats FTS5
+(trois fois la limite, confiance ≥ 0.3) → `score = (0.6 × rang FTS + 0.4 × Jaccard) × confiance`,
+puis décroissance temporelle `0.5^(âge / demi-vie)` si `temporal_decay_half_life` ≠ 0 — désactivé
+par défaut. **Le script, lui, classe par le `rank` FTS5 brut** : il montre ce que contient la base,
+pas l'ordre dans lequel l'agent verra les faits. Pour reproduire la pondération par confiance, la
+requête est à écrire en `sql`.
+
+Syntaxe de `search` : c'est celle de `MATCH` en FTS5 — mots, `"phrase exacte"`, `AND` / `OR` /
+`NOT`, `préfixe*`, et `tags:terme` pour ne chercher que dans les tags.
+
+**Pourquoi `entities` est presque toujours vide.** Les entités ne sont **pas** fournies par
+l'agent : elles sont extraites du contenu **par regex**, à chaque ajout et à chaque modification.
+Trois motifs, appliqués dans cet ordre :
+
+1. **deux mots capitalisés consécutifs** — `[A-Z][a-z]+( [A-Z][a-z]+)+`, donc « Jean Baptiste »
+   oui, « Kubernetes » non ;
+2. les termes entre **guillemets** doubles ou simples ;
+3. « X **aka** Y » / « X **also known as** Y » — les deux côtés sont retenus.
+
+Dédoublonnage insensible à la casse, résolution par nom exact puis par alias. `entity_type` reste
+`unknown` : rien ne le renseigne dans ce plugin.
+
+Conséquence : une phrase française ordinaire, avec une seule majuscule en tête, ne produit
+**aucune** entité. Zéro entité n'est donc pas un symptôme — c'est le cas normal tant que les faits
+ne nomment pas de personnes ou ne citent pas de termes entre guillemets. Et sans entités, `probe`
+et `reason` n'auraient rien à relier même avec NumPy.
+
+**Ce que dit `stats`.** Les tailles de fichiers sont la vraie mesure : un `.db` de 4 Ko avec un
+`-wal` de 170 Ko est **normal** en mode WAL, pas un signe de corruption — les écritures récentes
+vivent dans le WAL jusqu'au prochain checkpoint. La ligne `banques HRR` restera à 0 tant que NumPy
+manque. Pour mémoire, la capacité d'une banque est `SNR = √(dim / n)` avec avertissement sous
+`2.0`, soit **plus de 256 faits par catégorie** à `hrr_dim = 1024`.
+
+**Les réglages qui changent tout ce qui précède.** La doc amont n'en documente que trois ; le
+plugin en lit sept, sous `plugins.hermes-memory-store` dans `config.yaml` :
+
+| Clé | Défaut | Effet sur la lecture |
+| --- | --- | --- |
+| `db_path` | `$HERMES_HOME/memory_store.db` | où le script va chercher (`HERMES_DB` de son côté) |
+| `auto_extract` | `false` | extraction de faits en fin de session — sinon, seul l'agent écrit |
+| `default_trust` | `0.5` | la valeur qui signifie « jamais noté » |
+| `min_trust_threshold` | `0.3` | **le seuil de disparition en recherche** |
+| `temporal_decay_half_life` | `0` (désactivé) | demi-vie en jours ; activé, un vieux fait recule |
+| `hrr_dim` | `1024` | dimension des vecteurs, donc capacité des banques |
+| `hrr_weight` | `0.3` | poids du HRR dans le score — **forcé à 0 sans NumPy** |
+
+**Deux propriétés du schéma qui surprennent.** `facts.content` est **`UNIQUE`** : le même texte ne
+peut pas être stocké deux fois, un doublon exact échoue au lieu de créer une seconde ligne. Et
+`facts_fts` étant contentless, un `SELECT content FROM facts_fts` rend des colonnes **vides sans
+erreur** — toute requête `sql` qui touche l'index doit rejoindre `facts` par
+`facts_fts.rowid = facts.fact_id`.
+
 ### Agrandir le PVC
 
 Deux opérations distinctes, et faire l'une sans l'autre est le piège :
