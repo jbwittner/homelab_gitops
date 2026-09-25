@@ -596,8 +596,11 @@ Deux opérations distinctes, et faire l'une sans l'autre est le piège :
 
 1. **Le `volumeClaimTemplates` en Git** ne vaut que pour un PVC **à créer**. Le modifier ne
    redimensionne **jamais** `data-hermes-0`, qui existe déjà.
-2. **Le PVC existant** se redimensionne à chaud, en éditant l'objet. `allowVolumeExpansion: true`
-   sur la SC et lvm-localpv gère l'extension en ligne : pas de redémarrage du pod.
+2. **Le PVC existant** se redimensionne en éditant l'objet (`allowVolumeExpansion: true` sur la
+   SC). Le LV grossit tout de suite, **mais le système de fichiers non** : le PVC reste en
+   `FileSystemResizePending` — `Waiting for user to (re-)start a pod to finish file system resize
+   of volume on node` — et `status.capacity` affiche encore l'ancienne taille. Un redémarrage du
+   pod est nécessaire pour finir. Ce n'est donc pas sans coupure.
 
 > [!CAUTION]
 > Le champ étant dans `volumeClaimTemplates`, **immuable**, le commit fait passer ArgoCD en
@@ -613,7 +616,18 @@ kubectl -n hermes get statefulset hermes -w
 # 2. le PVC existant, séparément
 kubectl -n hermes patch pvc data-hermes-0 \
   -p '{"spec":{"resources":{"requests":{"storage":"15Gi"}}}}'
-kubectl -n hermes get pvc data-hermes-0 -w   # CAPACITY passe à 15Gi, sans redémarrage
+
+# 3. le pod redémarre pour que le système de fichiers suive le LV
+kubectl -n hermes delete pod hermes-0
+kubectl -n hermes rollout status statefulset/hermes --timeout=12m
+kubectl -n hermes get pvc data-hermes-0     # CAPACITY passe à 15Gi
+```
+
+Tant que le pod n'a pas redémarré :
+
+```
+kubectl -n hermes get pvc data-hermes-0 -o jsonpath='{.status.conditions[*].type}'
+  → Resizing FileSystemResizePending
 ```
 
 > [!WARNING]
