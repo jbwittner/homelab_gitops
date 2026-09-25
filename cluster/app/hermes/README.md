@@ -33,6 +33,7 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   jour (cf. §Versionnement de `$HERMES_HOME`). Seul fichier du ConfigMap de bootstrap.
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`, un
   sidecar `git-sync`. **Aucun initContainer** : rien n'écrit dans le PVC (cf. §Versionnement).
+  `startupProbe` sur l'API (8642) et non sur le dashboard, qui bind trop tôt.
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
 - `manifests/hermes-httproute.yaml` — `hermes.lan.wittner.tech` → dashboard,
   `hermes-api.lan.wittner.tech` → API
@@ -76,9 +77,9 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   D'où `sectionName: https-internal` sur les deux routes.
 - **Un token de messagerie invalide fait sortir toute la gateway.** L'échec de connexion à la
   plateforme est traité comme un conflit de démarrage non rejouable : le processus quitte, s6 le
-  relance en boucle, et le serveur d'API ne monte jamais — la `readinessProbe` sur 8642 laisse
-  alors le pod `NotReady` sans que rien ne pointe vers la messagerie. Pas de messagerie voulue =
-  retirer la variable, pas y laisser un placeholder.
+  relance en boucle, et le serveur d'API ne monte jamais. La `startupProbe` étant sur 8642, le
+  conteneur finit par être redémarré au bout de 10 minutes — en boucle, sans que rien ne pointe
+  vers la messagerie. Pas de messagerie voulue = retirer la variable, pas y laisser un placeholder.
 - **L'authentification au fournisseur LLM n'est pas dans Git.** Le provider `openai-codex` est
   en `auth_type: oauth_external` : ses jetons vivent dans `/opt/data/auth.json`, écrits par un
   flux device code lancé à la main.
@@ -348,7 +349,8 @@ celle-ci annonce un `DISCORD_CHANNEL_ID` qui n'existe pas.
 
 Les trois premières sont **commentées** dans le template en clair, et doivent le rester tant que
 le vrai token n'est pas en main : un token invalide fait sortir la gateway au démarrage (conflit
-non rejouable), ce qui emporte aussi le serveur d'API et laisse le pod `NotReady`.
+non rejouable), ce qui emporte aussi le serveur d'API : la `startupProbe` sur 8642 finit alors par
+faire redémarrer le conteneur en boucle.
 
 `DISCORD_ALLOWED_USERS` est **dans le Secret**, bien que ce soient des identifiants publics :
 cette allow-list décide qui pilote un agent à exécution de code arbitraire, elle ne se modifie
