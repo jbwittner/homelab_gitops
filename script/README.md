@@ -36,6 +36,25 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   >   n'est pas un événement mais un `Cluster` neuf en `bootstrap.recovery` — donc un état
   >   désiré, donc du Git. C'est la règle GitOps qui s'applique, pas une limitation du script.
   >   Redirigée, sa sortie ne contient **que** le manifeste : le récapitulatif part sur stderr.
+- [`hermes-memory-script.sh`](hermes-memory-script.sh) — inspection de la **base mémoire
+  d'Hermes** (provider `holographic`) : `list`, `show`, `search`, `entities`, `stats`, `schema`,
+  `sql`, `dump`. **Seul script du dossier qui n'écrit nulle part** : ni dans le cluster, ni dans
+  la base — la mémoire de l'agent se modifie par l'agent (`fact_store`, `fact_feedback`), pas
+  d'ici. Documentation du composant dans
+  [`cluster/app/hermes/README.md`](../cluster/app/hermes/README.md), section Mémoire.
+
+  > [!IMPORTANT]
+  > Deux précautions que le script prend et qu'une commande tapée à la main oublie :
+  > - il descend sur **l'uid 10000 avant d'ouvrir la base**. `kubectl exec` entre en root, et un
+  >   `-wal` / `-shm` créé par root sur une base ouverte en écriture rend la base **inaccessible
+  >   à la gateway**, qui tourne en 10000 ;
+  > - il n'utilise **pas** `immutable=1`. Ce serait la façon évidente de « lire sans rien
+  >   toucher », et elle fait ignorer le WAL — où vit l'essentiel des écritures récentes (4 Ko de
+  >   `.db` pour 170 Ko de `-wal`). On lirait une base périmée sans la moindre erreur.
+  >
+  > Même raison pour `dump`, qui passe par `Connection.backup()` et non par un `cp` du `.db`.
+  > Sa sortie contient la mémoire de l'agent en clair : elle n'a rien à faire dans un dépôt.
+
 > [!CAUTION]
 > **Les deux scripts `forgejo-pra-*` ne fonctionnent plus.** Ils lisent la production de la forge
 > **dans ce cluster** — namespace `forgejo`, PVC `forgejo-data`, `Cluster` CNPG `forgejo-db`, les

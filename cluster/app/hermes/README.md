@@ -586,6 +586,23 @@ holographic repart d'une base vide.
 En multi-profil, le réglage est **par profil** (`profiles/<nom>/config.yaml`, déjà dans
 l'allow-list).
 
+#### Inspecter la base
+
+[`script/hermes-memory-script.sh`](../../../script/hermes-memory-script.sh) — lecture seule :
+`list`, `show`, `search` (FTS5), `entities`, `stats`, `schema`, `sql`, `dump`.
+
+```bash
+./script/hermes-memory-script.sh stats
+./script/hermes-memory-script.sh list 20
+./script/hermes-memory-script.sh search 'kubernetes OR argocd'
+```
+
+> [!IMPORTANT]
+> Ne pas ouvrir la base à la main depuis un `kubectl exec` : l'exec entre en **root**, et un
+> `-wal` / `-shm` créé par root rend la base inaccessible à la gateway, qui tourne en 10000. Le
+> script descend sur l'uid 10000 avant d'ouvrir. Il n'y a d'ailleurs pas de binaire `sqlite3`
+> dans l'image — tout passe par le module `sqlite3` de Python.
+
 ### Agrandir le PVC
 
 Deux opérations distinctes, et faire l'une sans l'autre est le piège :
