@@ -10,7 +10,9 @@ metadata:
     app.kubernetes.io/name: hermes
 spec:
   serviceName: hermes
-  replicas: 1
+  # Remise à zéro en cours (README §Repartir de zéro) : le pod doit être éteint pour que le PVC
+  # data-hermes-0 puisse être supprimé à la main. Repasser à 1 dans le commit suivant.
+  replicas: 0
   # Le PVC est RWO : le pod sortant doit être terminé avant que le nouveau monte le volume.
   podManagementPolicy: OrderedReady
   updateStrategy:
@@ -38,8 +40,9 @@ spec:
       initContainers:
         # Rend /opt/data versionnable SANS jamais écraser un PVC vivant : pose .git, le remote et
         # le .gitignore autoritaire, et ne restaure depuis la forge que si le dépôt n'a aucun
-        # commit (donc PVC neuf). Tourne AVANT seed-profile : sur un PVC neuf, le `reset --hard`
-        # travaille dans un répertoire vide.
+        # commit ET que le répertoire est vierge — les deux, cf. le bloc `populated` plus bas.
+        # Tourne AVANT seed-profile : sur un PVC neuf, le `reset --hard` travaille dans un
+        # répertoire vide.
         - name: seed-git
           image: alpine/git:v2.54.0
           # L'ENTRYPOINT de l'image est `git` : il faut l'écraser pour lancer un shell.
@@ -82,10 +85,24 @@ spec:
               git -C "$REPO" config user.name "hermes_agent"
               git -C "$REPO" config user.email "hermes_agent@wittner.tech"
 
+              # DEUX conditions pour restaurer, jamais une seule. « HEAD non né » ne prouve PAS
+              # que le PVC est neuf : ça arrive aussi quand .git a été détruit sous un /opt/data
+              # bien vivant (vécu le 2026-09-25). Dans ce cas un `reset --hard` écraserait
+              # config.yaml, SOUL.md et skills/ avec le contenu d'origin. On exige donc aussi que
+              # le répertoire soit vierge, et en cas de doute on ne touche à RIEN.
+              populated=""
+              for marker in config.yaml sessions skills memories .env auth.json; do
+                [ -e "$REPO/$marker" ] && populated="$populated $marker"
+              done
+
               if git -C "$REPO" rev-parse --verify HEAD >/dev/null 2>&1; then
                 echo "[seed-git] dépôt déjà peuplé — aucune restauration, le PVC fait foi"
+              elif [ -n "$populated" ]; then
+                echo "[seed-git] ALERTE: HEAD absent mais /opt/data contient$populated"
+                echo "[seed-git] ALERTE: .git a probablement été détruit sur un PVC vivant."
+                echo "[seed-git] ALERTE: AUCUNE restauration — arbitrage manuel requis."
               else
-                echo "[seed-git] aucun commit local (PVC neuf) — restauration depuis origin/$BRANCH"
+                echo "[seed-git] aucun commit local et répertoire vierge (PVC neuf) — restauration depuis origin/$BRANCH"
                 if git -C "$REPO" fetch -q --depth=1 origin "$BRANCH"; then
                   git -C "$REPO" reset --hard -q FETCH_HEAD
                   echo "[seed-git] restauré à $(git -C "$REPO" rev-parse --short HEAD)"

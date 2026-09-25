@@ -164,7 +164,7 @@ Trois pièces, toutes déclaratives :
 | Pièce | Où | Rôle |
 | --- | --- | --- |
 | `manifests/config/gitignore` | ConfigMap `hermes-bootstrap` | allow-list, recopiée en `/opt/data/.gitignore` à **chaque** démarrage |
-| initContainer `seed-git` | `statefulset.yaml` | `git init` + remote + allow-list, et **restauration** depuis `origin/main` si et seulement si le dépôt n'a aucun commit |
+| initContainer `seed-git` | `statefulset.yaml` | `git init` + remote + allow-list, et **restauration** depuis `origin/main` sous deux conditions cumulées (cf. ci-dessous) |
 | sidecar `git-sync` | `statefulset.yaml` + `config/git-sync.sh` | une passe `add`/`commit`/`push` par jour à **04:30 UTC** (après la fenêtre Velero de 03:00) |
 
 Le jeton est `FORGEJO_TOKEN`, déjà dans `hermes-env` — rien à resceller. Il n'entre dans les deux
@@ -190,9 +190,17 @@ protège, donc à portée de l'agent.
 >      cluster/app/hermes/manifests/config/gitignore
 > ```
 
-`seed-git` ne restaure **que** si `/opt/data` n'a aucun commit, c'est-à-dire sur un PVC neuf. Sur un
-PVC vivant il ne fait que reposer le remote et l'allow-list : jamais de `reset --hard` sur un état
-existant.
+`seed-git` ne restaure que si **deux** conditions sont réunies : `/opt/data` n'a aucun commit **et**
+le répertoire est vierge (ni `config.yaml`, ni `sessions/`, ni `skills/`, ni `memories/`, ni `.env`,
+ni `auth.json`). Sur un PVC vivant il ne fait que reposer le remote et l'allow-list.
+
+> [!CAUTION]
+> La seconde condition n'est pas du zèle. Le 2026-09-25, `.git` a été détruit sous un `/opt/data`
+> bien vivant : `HEAD` ne résolvait plus, la version d'alors de ce script en a conclu « PVC neuf »
+> et a fait un `reset --hard` sur `origin/main`. Les dégâts se sont limités à `README.md` parce
+> qu'`origin` ne contenait qu'un README — avec le dépôt peuplé d'aujourd'hui, le même enchaînement
+> écraserait `config.yaml`, `SOUL.md` et tout `skills/`. Quand `HEAD` manque mais que le répertoire
+> est peuplé, `seed-git` **ne touche à rien** et hurle dans ses logs : c'est un arbitrage manuel.
 
 ```bash
 # Forcer une passe sans attendre 04:30
