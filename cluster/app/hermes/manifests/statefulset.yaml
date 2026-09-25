@@ -10,9 +10,7 @@ metadata:
     app.kubernetes.io/name: hermes
 spec:
   serviceName: hermes
-  # Remise à zéro en cours (README §Repartir de zéro) : le pod doit être éteint pour que le PVC
-  # data-hermes-0 puisse être supprimé à la main. Repasser à 1 dans le commit suivant.
-  replicas: 0
+  replicas: 1
   # Le PVC est RWO : le pod sortant doit être terminé avant que le nouveau monte le volume.
   podManagementPolicy: OrderedReady
   updateStrategy:
