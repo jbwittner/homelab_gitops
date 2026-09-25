@@ -31,8 +31,7 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   (`KEY=value`), assemblées en ConfigMap `hermes-vars` et injectées par `envFrom`
 - `manifests/config/git-sync.sh` — boucle du sidecar `git-sync` : une passe de commit + push par
   jour (cf. §Versionnement de `$HERMES_HOME`). Seul fichier du ConfigMap de bootstrap.
-- `manifests/statefulset.yaml` — 1 replica, deux PVC `openebs-lvm-thin` de 10 Gi — `/opt/data`
-  et `/opt/memory` (base du provider mémoire, cf. §Mémoire) — et un
+- `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 15 Gi sur `/opt/data`, un
   sidecar `git-sync`. **Aucun initContainer** : rien n'écrit dans le PVC (cf. §Versionnement).
   `startupProbe` sur l'API (8642) et non sur le dashboard, qui bind trop tôt.
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
@@ -404,6 +403,11 @@ cache/
 gateway/
 state/
 pending_messages/
+# Bases SQLite : sessions, kanban, ET la base du provider mémoire `holographic`
+# (memory_store.db + ses -wal/-shm). Déjà couvertes par les globs, nommées ici pour
+# qu'une relecture ne croie pas la mémoire versionnée quelque part — elle ne l'est pas,
+# son seul filet est Velero (cf. §Mémoire).
+memory_store.db
 *.db
 *.db-*
 *.db-wal
@@ -522,82 +526,41 @@ Réglages, dans `config.yaml` sous `plugins.hermes-memory-store` :
 
 | Clé | Valeur ici | Défaut amont |
 | --- | --- | --- |
-| `db_path` | `/opt/memory/memory_store.db` | `$HERMES_HOME/memory_store.db` |
+| `db_path` | défaut | `$HERMES_HOME/memory_store.db` |
 | `auto_extract` | défaut | `false` |
 | `default_trust` | défaut | `0.5` |
 
-**La base a son propre volume** (`volumeClaimTemplates: memory`, 10 Gi, monté sur `/opt/memory`),
-distinct de celui de `data`. Deux raisons : la mémoire survit à un `data` recréé — le seul état
-d'Hermes dans ce cas —, et sa croissance ne dispute pas la place aux caches et `lazy-packages/`.
-Le volume n'est **pas** monté dans le sidecar `git-sync` : `*.db` est dans la liste « never
-force-add » de l'allow-list, il n'aurait rien à y lire.
+**La base reste dans le PVC `data`**, en `/opt/data/memory_store.db`. `db_path` accepte pourtant
+n'importe quel chemin absolu, et un volume dédié a bien été monté un temps sur `/opt/memory` —
+abandonné : deux volumes RWO collés au même nœud, deux PVC à restaurer et un réglage manuel de
+plus, pour isoler quelques dizaines de Mo. Le PVC est passé de 10 à **15 Gi** à la place. Si la
+base devait un jour sortir, c'est `db_path` qu'on déplace, pas le montage.
 
-> [!IMPORTANT]
-> `db_path` n'est **pas** dérivé du montage : sans le réglage ci-dessous, Hermes écrit
-> `$HERMES_HOME/memory_store.db`, donc dans `data`, et `/opt/memory` reste un volume vide. Le
-> montage et le réglage se posent ensemble ou pas du tout.
+Contrepartie assumée : **la mémoire meurt avec `data`**, comme le reste de l'état runtime.
 
 Où vit quoi :
 
 | Élément | Chemin | Versionné | Filet |
 | --- | --- | --- | --- |
-| provider + `db_path` | `/opt/data/config.yaml` | **oui** (`!/config.yaml`) | `homelab_hermes` |
-| base de faits | `/opt/memory/memory_store.db` | **non** (`*.db`) | Velero seul |
+| provider (`memory.provider`) | `/opt/data/config.yaml` | **oui** (`!/config.yaml`) | `homelab_hermes` |
+| base de faits | `/opt/data/memory_store.db` | **non** (`*.db`) | Velero seul |
 | plugin installé | `/opt/data/plugins/` | non | réinstallable |
 
-Velero est en opt-out (`defaultVolumesToFsBackup: true`) : le nouveau volume entre dans la
-sauvegarde quotidienne du namespace **sans annotation à ajouter**. C'est une copie fichier d'un
-SQLite vivant — WAL compris, donc potentiellement incohérente. Même situation que `kanban.db` et
-`state.db` dans `data` : acceptée, pas résolue.
+Velero est en opt-out (`defaultVolumesToFsBackup: true`) : le volume est déjà dans la sauvegarde
+quotidienne du namespace, rien à annoter. C'est une copie fichier d'un SQLite vivant — WAL
+compris, donc potentiellement incohérente. Même situation que `kanban.db` et `state.db` : acceptée,
+pas résolue.
 
-#### Ajout du volume (une fois, déjà fait en Git)
-
-> [!CAUTION]
-> `volumeClaimTemplates` est **immuable** sur un StatefulSet existant. ArgoCD reste en
-> `SyncFailed` sur `updates to statefulset spec for fields other than 'replicas' [...] are
-> forbidden` tant que l'objet n'a pas été supprimé à la main. La suppression en
-> `--cascade=orphan` ne touche **ni les pods ni les PVC** : `data-hermes-0` est conservé.
-
-```bash
-# 1. l'objet part, le pod et les PVC restent
-kubectl -n hermes delete statefulset hermes --cascade=orphan
-
-# 2. ArgoCD recrée le StatefulSet (selfHeal), qui adopte le pod orphelin
-kubectl -n hermes get statefulset hermes -w
-
-# 3. le rollout part seul, le nouveau pod crée le PVC manquant
-kubectl -n hermes get pvc -w       # memory-hermes-0 doit apparaître, puis Bound
-```
-
-Le pod orphelin tourne avec l'ancien spec, sans `/opt/memory`. Le StatefulSet recréé l'adopte,
-mais l'étiquette `controller-revision-hash` qu'il porte est celle de l'ancienne révision : comme
-le pod template change lui aussi ici (le `volumeMount` s'y ajoute), le hash diffère, et
-`RollingUpdate` remplace le pod de lui-même. Le PVC `memory-hermes-0` est créé à ce moment-là,
-par le contrôleur, au moment de créer le pod.
-
-> [!WARNING]
-> Ce remplacement automatique tient **uniquement** parce que le pod template change. Une
-> modification qui ne toucherait que `volumeClaimTemplates` — agrandir un volume, par exemple —
-> laisse le hash identique : le pod adopté est considéré à jour, rien n'est remplacé et le PVC
-> n'est jamais créé. Dans ce cas, et seulement dans ce cas, forcer :
->
-> ```bash
-> kubectl -n hermes delete pod hermes-0
-> ```
-
-Le point de montage est créé `root:10000` avec le bit setgid par le `fsGroup: 10000` du pod :
-l'uid 10000 y écrit sans que rien ne le prépare. s6 ne chown que `/opt/data`, et il n'y a **pas**
-d'initContainer — ce composant n'écrit jamais dans un PVC (cf. §Versionnement).
-
-#### Activation (à la main, une fois par PVC `data`)
+#### Activation (à la main, une fois par PVC)
 
 `kubectl exec` entre en **root** : tout fichier créé ici appartient à root, et le sidecar
 `git-sync` (uid 10000) échouerait ensuite sur `Permission denied`. Le `chown` final n'est pas
 optionnel. `hermes` nu ne résout pas non plus — `/etc/profile` écrase `PATH` (cf. §Versionnement).
 
 ```bash
-# Le plugin est-il déjà dans l'image ?
-kubectl -n hermes exec -it hermes-0 -c hermes -- /opt/hermes/bin/hermes plugins list
+# État courant, et le plugin est-il déjà dans l'image ?
+kubectl -n hermes exec -it hermes-0 -c hermes -- sh -lc \
+  '/opt/hermes/bin/hermes memory status; /opt/hermes/bin/hermes plugins list'
 ```
 
 S'il manque, l'installer — l'installation clone depuis le catalogue amont, ce que la sortie libre
@@ -608,26 +571,72 @@ kubectl -n hermes exec -it hermes-0 -c hermes -- \
   /opt/hermes/bin/hermes plugins install hermes-memory-store --enable
 ```
 
-Puis activer le provider, pointer la base sur son volume, et rendre la main à l'uid 10000 :
+Puis activer le provider et rendre la main à l'uid 10000 :
 
 ```bash
 kubectl -n hermes exec -i hermes-0 -c hermes -- sh -s <<'EOF'
 set -eu
 export PATH="/opt/hermes/bin:/opt/hermes/.venv/bin:$PATH"
 hermes config set memory.provider holographic
-hermes config set plugins.hermes-memory-store.db_path /opt/memory/memory_store.db
 hermes memory status
 chown -R 10000:10000 /opt/data/config.yaml /opt/data/plugins 2>/dev/null || true
 EOF
+kubectl -n hermes delete pod hermes-0      # la gateway relit config.yaml au démarrage
 ```
 
-Si `hermes config set` refuse la seconde clé, éditer `config.yaml` à la main — la valeur est lue
-depuis le fichier, pas depuis une variable d'environnement (le provider n'en a aucune).
-Vérification : `ls -l /opt/memory/` doit montrer `memory_store.db` après le premier fait stocké,
-et **pas** `/opt/data/memory_store.db`.
+**Aucune donnée ne se migre** entre providers : ce qui est dans la mémoire intégrée y reste,
+holographic repart d'une base vide.
 
 En multi-profil, le réglage est **par profil** (`profiles/<nom>/config.yaml`, déjà dans
-l'allow-list) ; un `db_path` partagé ferait écrire deux profils dans la même base.
+l'allow-list).
+
+### Agrandir le PVC
+
+Deux opérations distinctes, et faire l'une sans l'autre est le piège :
+
+1. **Le `volumeClaimTemplates` en Git** ne vaut que pour un PVC **à créer**. Le modifier ne
+   redimensionne **jamais** `data-hermes-0`, qui existe déjà.
+2. **Le PVC existant** se redimensionne à chaud, en éditant l'objet. `allowVolumeExpansion: true`
+   sur la SC et lvm-localpv gère l'extension en ligne : pas de redémarrage du pod.
+
+> [!CAUTION]
+> Le champ étant dans `volumeClaimTemplates`, **immuable**, le commit fait passer ArgoCD en
+> `SyncFailed` (`updates to statefulset spec for fields other than [...] are forbidden`) jusqu'à
+> ce que le StatefulSet soit supprimé à la main. `--cascade=orphan` ne touche **ni les pods ni
+> les PVC**.
+
+```bash
+# 1. l'objet part, le pod et les PVC restent ; ArgoCD (selfHeal) le recrée et adopte le pod
+kubectl -n hermes delete statefulset hermes --cascade=orphan
+kubectl -n hermes get statefulset hermes -w
+
+# 2. le PVC existant, séparément
+kubectl -n hermes patch pvc data-hermes-0 \
+  -p '{"spec":{"resources":{"requests":{"storage":"15Gi"}}}}'
+kubectl -n hermes get pvc data-hermes-0 -w   # CAPACITY passe à 15Gi, sans redémarrage
+```
+
+> [!WARNING]
+> Si le **pod template** change en même temps (un `volumeMount` ajouté, par exemple), le
+> StatefulSet recréé **ne remplace pas le pod tout seul** : il tente un update en place et boucle
+> sur
+> `Update Pod hermes-0 in StatefulSet hermes failed error: Pod "hermes-0" is invalid: spec:`
+> `Forbidden: pod updates may not change fields other than spec.containers[*].image [...]`.
+> Le pod adopté garde son ancien `controller-revision-hash` et tourne avec l'ancien spec. Il faut
+> le supprimer à la main — et tant qu'il n'est pas remplacé, un PVC ajouté au modèle reste
+> `Pending` sur `waiting for first consumer` (la SC est en `WaitForFirstConsumer`) :
+>
+> ```bash
+> kubectl -n hermes delete pod hermes-0
+> ```
+>
+> Vu le 2026-09-25 en tentant d'ajouter un volume dédié à la mémoire. Un changement de **taille
+> seule** ne touche pas le pod template et n'a pas ce problème.
+
+> [!NOTE]
+> La SC s'appelle `openebs-lvm-thin` mais porte `thinProvision: "no"` : les LV sont **thick**, la
+> taille demandée est réservée dans le VG dès la création. Vérifier la place avant d'agrandir :
+> `kubectl get lvmnodes -A -o custom-columns='NODE:.metadata.name,FREE:.volumeGroups[*].free'`.
 
 ### Activer Discord
 

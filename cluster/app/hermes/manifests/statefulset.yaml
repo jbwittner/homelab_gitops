@@ -101,13 +101,6 @@ spec:
               memory: 4Gi
           volumeMounts:
             - { name: data, mountPath: /opt/data }
-            # Base mémoire du provider `holographic` (SQLite + FTS5), sur SON PROPRE volume :
-            # elle survit à un `data` recréé, et sa croissance ne dispute pas les 10 Gi aux
-            # caches d'Hermes. Rien ne pointe ici tout seul — `db_path` est à poser à la main
-            # dans config.yaml, sinon la base retombe dans $HERMES_HOME (README §Mémoire).
-            # Volontairement ABSENT du sidecar git-sync : `*.db` est dans la liste « never
-            # force-add » de l'allow-list, il n'aurait rien à y lire.
-            - { name: memory, mountPath: /opt/memory }
         # Une passe de commit + push par jour vers homelab_hermes. Sidecar et non `CronJob` : le
         # PVC est RWO et déjà monté par ce pod — un Job devrait atterrir sur le même nœud pour
         # monter le volume, ce que rien ne garantit.
@@ -164,7 +157,8 @@ spec:
   # 'ordinals', 'template', 'updateStrategy', 'persistentVolumeClaimRetentionPolicy' and
   # 'minReadySeconds' are forbidden »), et ArgoCD boucle en SyncFailed. Y toucher impose de
   # supprimer le StatefulSet en `--cascade=orphan` d'abord — les PVC, eux, sont conservés.
-  # Procédure : README §Mémoire, « Ajout du volume ».
+  # ET la taille ci-dessous ne s'applique QU'AUX PVC À CRÉER : `data-hermes-0`, qui existe déjà,
+  # n'est jamais redimensionné par ce champ. Procédure complète : README §Agrandir le PVC.
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -173,18 +167,8 @@ spec:
         accessModes: [ReadWriteOnce]
         resources:
           requests:
-            storage: 10Gi
-    # Uniquement la base du provider mémoire. Quelques dizaines de Mo attendues (faits + index
-    # FTS5) : 10 Gi est très large, mais le thin provisioning ne réserve rien tant que ce n'est
-    # pas écrit, et agrandir un PVC coûte plus cher que de le surdimensionner ici.
-    # Le point de montage est créé root:10000 avec le bit setgid grâce au `fsGroup: 10000` du
-    # pod — c'est LUI qui rend ce volume inscriptible par l'uid 10000. s6 ne chown que /opt/data
-    # au premier boot : sans fsGroup, il faudrait un initContainer, qu'on refuse ici.
-    - metadata:
-        name: memory
-      spec:
-        storageClassName: openebs-lvm-thin
-        accessModes: [ReadWriteOnce]
-        resources:
-          requests:
-            storage: 10Gi
+            # 15 Gi : la base du provider mémoire vit ici, à côté des sessions et des caches.
+            # ⚠️ La SC s'appelle `openebs-lvm-thin` mais porte `thinProvision: "no"` — les LV
+            # sont THICK, la taille est réservée dans le VG dès la création. Ce n'est donc pas
+            # gratuit (cf. cluster/infra/openebs/manifests/storageclass.yaml).
+            storage: 15Gi
