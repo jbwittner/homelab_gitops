@@ -593,10 +593,13 @@ Deux opérations distinctes, et faire l'une sans l'autre est le piège :
 1. **Le `volumeClaimTemplates` en Git** ne vaut que pour un PVC **à créer**. Le modifier ne
    redimensionne **jamais** `data-hermes-0`, qui existe déjà.
 2. **Le PVC existant** se redimensionne en éditant l'objet (`allowVolumeExpansion: true` sur la
-   SC). Le LV grossit tout de suite, **mais le système de fichiers non** : le PVC reste en
-   `FileSystemResizePending` — `Waiting for user to (re-)start a pod to finish file system resize
-   of volume on node` — et `status.capacity` affiche encore l'ancienne taille. Un redémarrage du
-   pod est nécessaire pour finir. Ce n'est donc pas sans coupure.
+   SC), **en ligne, sans redémarrage** : lvm-localpv étend le LV puis le système de fichiers sur
+   le volume monté.
+
+   Le PVC passe par un état intermédiaire qui donne le change — `Resizing=True`,
+   `FileSystemResizePending=True`, `Waiting for user to (re-)start a pod to finish file system
+   resize of volume on node`, et `status.capacity` encore à l'ancienne taille. **Ne pas y obéir** :
+   la condition se résout seule en une minute ou deux, le pod ne redémarre jamais.
 
 > [!CAUTION]
 > Le champ étant dans `volumeClaimTemplates`, **immuable**, le commit fait passer ArgoCD en
@@ -613,18 +616,13 @@ kubectl -n hermes get statefulset hermes -w
 kubectl -n hermes patch pvc data-hermes-0 \
   -p '{"spec":{"resources":{"requests":{"storage":"15Gi"}}}}'
 
-# 3. le pod redémarre pour que le système de fichiers suive le LV
-kubectl -n hermes delete pod hermes-0
-kubectl -n hermes rollout status statefulset/hermes --timeout=12m
-kubectl -n hermes get pvc data-hermes-0     # CAPACITY passe à 15Gi
+# 3. attendre que CAPACITY suive, puis vérifier côté conteneur
+kubectl -n hermes get pvc data-hermes-0 -w
+kubectl -n hermes exec hermes-0 -c hermes -- df -h /opt/data
 ```
 
-Tant que le pod n'a pas redémarré :
-
-```
-kubectl -n hermes get pvc data-hermes-0 -o jsonpath='{.status.conditions[*].type}'
-  → Resizing FileSystemResizePending
-```
+Fait le 2026-09-25 : 10 → 15 Gi, `df` à `15G`, pod jamais redémarré (99 min d'uptime au travers
+de l'opération).
 
 > [!WARNING]
 > Si le **pod template** change en même temps (un `volumeMount` ajouté, par exemple), le
