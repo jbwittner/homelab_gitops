@@ -26,6 +26,20 @@
 #   5. `facts.hrr_vector` est un BLOB de vecteur, pas du texte. Il n'est jamais imprimé : un
 #      `SELECT *` naïf déverse des kilo-octets binaires dans le terminal. Le script n'en montre
 #      que la taille.
+#   6. IL Y A UNE BASE PAR PROFIL — en théorie. Chaque profil Hermes a son propre `$HERMES_HOME`
+#      (`/opt/data/profiles/<nom>`) et donc, `db_path` non renseigné, sa propre base. Viser une
+#      seule base en dur donnerait une lecture muette sur tous les autres profils. Le script
+#      RÉSOUT donc le chemin comme le plugin le fait, profil par profil (`profiles`, `--profile`),
+#      au lieu de le supposer.
+#
+#      ⚠️ Et la résolution réserve une surprise : le `db_path` écrit dans le `config.yaml` racine
+#      vaut `~/./memory_store.db`. Le `~` est le HOME du compte hermes (`/opt/data`), PAS le
+#      `$HERMES_HOME` du profil — et un profil sans `db_path` propre HÉRITE de cette valeur. Tous
+#      les profils retombent alors sur LA MÊME base. C'est ce que `profiles` affiche, plutôt que
+#      de laisser croire à une séparation qui n'a pas lieu.
+#
+# L'interpréteur utilisé dans le pod est celui du venv d'Hermes : la stdlib `sqlite3` suffirait,
+# mais la résolution des profils a besoin de `yaml`, absent de `/usr/bin/python3`.
 #
 # Le `dump` passe par `Connection.backup()` et non par un `cp` : la copie est prise sous verrou,
 # donc cohérente, WAL inclus. Un `kubectl cp` du `.db` seul, sur une base vivante, produit un
@@ -38,8 +52,11 @@ set -euo pipefail
 NS="${HERMES_NS:-hermes}"
 POD="${HERMES_POD:-hermes-0}"
 CTR="${HERMES_CTR:-hermes}"
-DB="${HERMES_DB:-/opt/data/memory_store.db}"
+PY_BIN="${HERMES_PY:-/opt/hermes/.venv/bin/python}"
 UID_HERMES="${HERMES_UID:-10000}"
+# Vides par défaut : la cible est RÉSOLUE dans le pod, pas supposée ici.
+PROFILE="${HERMES_PROFILE:-}"
+DB="${HERMES_DB:-}"
 
 log()  { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m/!\\\033[0m %s\n' "$*" >&2; }
@@ -57,10 +74,19 @@ Inspection (lecture seule) de la base mémoire d'Hermes — provider holographic
   hermes-memory-script.sh schema             schéma complet (sqlite_master)
   hermes-memory-script.sh sql <SELECT ...>   requête libre, lecture seule
   hermes-memory-script.sh dump [fichier]     copie cohérente en local (défaut ./memory_store.db)
+  hermes-memory-script.sh profiles           les profils, leur provider, LEUR base
 
-Variables d'environnement : HERMES_NS, HERMES_POD, HERMES_CTR, HERMES_DB, HERMES_UID.
+Choix de la cible (défaut : le profil `default`, soit $HERMES_HOME) :
+
+  -p, --profile <nom>   viser la base de ce profil, résolue comme le plugin la résout
+      --db <chemin>     viser un fichier précis, sans passer par la configuration
+
+Variables d'environnement : HERMES_NS, HERMES_POD, HERMES_CTR, HERMES_UID, HERMES_PY,
+HERMES_PROFILE (équivaut à --profile), HERMES_DB (équivaut à --db).
 
 Exemples :
+  hermes-memory-script.sh profiles
+  hermes-memory-script.sh -p jb list
   hermes-memory-script.sh search 'kubernetes OR argocd'
   hermes-memory-script.sh search 'tags:homelab'
   hermes-memory-script.sh sql "SELECT category, count(*) FROM facts GROUP BY 1"
@@ -84,21 +110,136 @@ require_pod() {
 # recherche et laisserait passer n'importe quel SQL.
 run_py() {
   kubectl -n "$NS" exec -i "$POD" -c "$CTR" -- \
-    python3 - "$DB" "$UID_HERMES" "$@" <<'PYEOF'
-import os, sys, sqlite3, textwrap
+    "$PY_BIN" - "$UID_HERMES" "$PROFILE" "$DB" "$@" <<'PYEOF'
+import os, sys, sqlite3, textwrap, glob, pwd
 
-db, uid = sys.argv[1], int(sys.argv[2])
-sub, args = sys.argv[3], sys.argv[4:]
+uid = int(sys.argv[1])
+want_profile, db_override = sys.argv[2] or None, sys.argv[3] or None
+sub, args = sys.argv[4], sys.argv[5:]
 
 # Piège n°1 : descendre sur l'uid d'Hermes AVANT d'ouvrir quoi que ce soit.
 if os.getuid() == 0:
     os.setgid(uid)
     os.setuid(uid)
 
+BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+HERMES_HOME = os.environ.get("HERMES_HOME", "/opt/data")
+# Piège n°6 : le `~` d'un db_path est le HOME DU COMPTE hermes, pas celui de `kubectl exec`
+# (root, /root) ni le $HERMES_HOME du profil. C'est cette valeur-là que voit la gateway.
+ACCOUNT_HOME = pwd.getpwuid(uid).pw_dir
+
+
+def _load(path):
+    if yaml is None or not os.path.exists(path):
+        return {}
+    try:
+        with open(path) as fh:
+            return yaml.safe_load(fh) or {}
+    except Exception:
+        return {}
+
+
+ROOT_CFG = _load(os.path.join(HERMES_HOME, "config.yaml"))
+
+
+def _get(cfg, *path):
+    cur = cfg
+    for key in path:
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(key)
+    return cur
+
+
+def _expand(raw, home):
+    raw = raw.replace("${HERMES_HOME}", home).replace("$HERMES_HOME", home)
+    if raw.startswith("~"):
+        raw = ACCOUNT_HOME + raw[1:]
+    return os.path.normpath(raw)
+
+
+def profiles():
+    """Les profils et LEUR base, résolus comme le plugin les résout : valeur propre si elle
+    existe, sinon héritage du config.yaml racine, sinon $HERMES_HOME/memory_store.db."""
+    homes = [("default", HERMES_HOME, ROOT_CFG)]
+    for d in sorted(glob.glob(os.path.join(HERMES_HOME, "profiles", "*"))):
+        if os.path.isdir(d):
+            homes.append((os.path.basename(d), d, _load(os.path.join(d, "config.yaml"))))
+    rows = []
+    for name, home, cfg in homes:
+        own = _get(cfg, "plugins", "hermes-memory-store", "db_path")
+        raw = own or _get(ROOT_CFG, "plugins", "hermes-memory-store", "db_path")
+        rows.append({
+            "name": name,
+            "home": home,
+            "provider": _get(cfg, "memory", "provider") or _get(ROOT_CFG, "memory", "provider"),
+            "db": _expand(raw, home) if raw else os.path.join(home, "memory_store.db"),
+            "raw": raw,
+            "inherited": own is None and raw is not None,
+        })
+    return rows
+
+
+def resolve_db():
+    if db_override:
+        return db_override
+    rows = profiles()
+    name = want_profile or "default"
+    for r in rows:
+        if r["name"] == name:
+            return r["db"]
+    print(f"profil inconnu : {name}", file=sys.stderr)
+    print("profils trouvés : " + ", ".join(r["name"] for r in rows), file=sys.stderr)
+    sys.exit(2)
+
+
+def cmd_profiles():
+    rows = profiles()
+    if yaml is None:
+        print(f"{DIM}yaml indisponible dans cet interpréteur : chemins par défaut seulement, "
+              f"les db_path configurés ne sont pas lus.{RESET}")
+    shared = {}
+    for r in rows:
+        shared.setdefault(r["db"], []).append(r["name"])
+    print(f"{BOLD}{'PROFIL':<14} {'PROVIDER':<14} {'FAITS':>6}  BASE{RESET}")
+    for r in rows:
+        if os.path.exists(r["db"]):
+            try:
+                cx = sqlite3.connect(f"file:{r['db']}?mode=ro", uri=True)
+                n = str(cx.execute("SELECT count(*) FROM facts").fetchone()[0])
+                cx.close()
+            except sqlite3.Error:
+                n = "?"
+            size = f"{os.path.getsize(r['db']):,} o"
+        else:
+            n, size = "—", "absente"
+        print(f"{r['name']:<14} {str(r['provider'] or '—'):<14} {n:>6}  {r['db']}  {DIM}{size}{RESET}")
+        if r["inherited"]:
+            print(f"{'':<14} {DIM}db_path hérité de la racine : {r['raw']}{RESET}")
+    collisions = {db: names for db, names in shared.items() if len(names) > 1}
+    for db, names in collisions.items():
+        print(f"\n/!\\ {BOLD}{len(names)} profils partagent la même base{RESET} — "
+              f"{', '.join(names)}\n    {db}")
+        print(f"    {DIM}un db_path en `~` ne dépend pas du profil : le retirer du config.yaml "
+              f"racine rendrait à chaque profil sa propre base ($HERMES_HOME/memory_store.db).{RESET}")
+
+
+if sub == "profiles":
+    cmd_profiles()
+    sys.exit(0)
+
+db = resolve_db()
 if not os.path.exists(db):
     print(f"base absente : {db}", file=sys.stderr)
     print("normal tant qu'aucun fait n'a été stocké — le fichier naît à la première écriture.",
           file=sys.stderr)
+    print("`profiles` montre les bases de tous les profils.", file=sys.stderr)
     sys.exit(2)
 
 # Piège n°2 : mode=ro, et surtout PAS immutable=1.
@@ -108,8 +249,6 @@ except sqlite3.OperationalError as e:
     print(f"ouverture impossible : {e}", file=sys.stderr)
     sys.exit(1)
 c.row_factory = sqlite3.Row
-
-BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
 
 
 def trunc(s, n):
@@ -316,8 +455,19 @@ cmd_dump() {
 
 require_bins
 
+# Les options de cible passent AVANT la sous-commande. Elles sont lues ici et non dans le Python
+# pour que `--db` court-circuite toute la résolution de profil, y compris quand la configuration
+# est illisible.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p|--profile) [ $# -ge 2 ] || die "--profile attend un nom."; PROFILE="$2"; shift 2 ;;
+    --db)         [ $# -ge 2 ] || die "--db attend un chemin.";   DB="$2";      shift 2 ;;
+    *) break ;;
+  esac
+done
+
 case "${1:-}" in
-  list|show|search|entities|stats|schema|sql)
+  list|show|search|entities|stats|schema|sql|profiles)
     sub="$1"; shift
     require_pod
     run_py "$sub" "$@"

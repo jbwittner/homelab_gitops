@@ -583,8 +583,33 @@ kubectl -n hermes delete pod hermes-0      # la gateway relit config.yaml au dé
 **Aucune donnée ne se migre** entre providers : ce qui est dans la mémoire intégrée y reste,
 holographic repart d'une base vide.
 
-En multi-profil, le réglage est **par profil** (`profiles/<nom>/config.yaml`, déjà dans
-l'allow-list).
+**Multi-profil : une base par profil en théorie, une seule en pratique.** Chaque profil a son
+propre `$HERMES_HOME` (`/opt/data/profiles/<nom>`), donc sa propre base — *si* `db_path` n'est pas
+renseigné. Or le `config.yaml` racine en porte un, écrit par Hermes lui-même :
+
+```yaml
+plugins:
+  hermes-memory-store:
+    db_path: ~/./memory_store.db
+```
+
+Le `~` est le HOME du **compte** `hermes` (`/opt/data`), pas le `$HERMES_HOME` du profil. Et un
+profil sans réglage propre **hérite** de cette valeur — vérifié le 2026-09-25 :
+`HERMES_PROFILE=jb hermes config get plugins.hermes-memory-store.db_path` rend la même chaîne, et
+`memory.provider` y rend `holographic` sans que le `config.yaml` du profil ne mentionne ni l'un ni
+l'autre. Les deux profils (`default`, `jb`) écrivent donc **dans le même fichier**.
+
+Ce n'est pas forcément à corriger — une mémoire commune à tous les profils se défend. Mais ce n'est
+pas ce que la structure laisse croire, et le choix doit être explicite :
+
+| Ce qu'on veut | Ce qu'il faut faire |
+| --- | --- |
+| une mémoire commune (état actuel) | ne rien toucher |
+| une base par profil | **retirer** `db_path` du `config.yaml` racine — sans valeur, chaque profil retombe sur son `$HERMES_HOME/memory_store.db` |
+| une base par profil, chemins explicites | poser un `db_path` **dans chaque** `profiles/<nom>/config.yaml` |
+
+`./script/hermes-memory-script.sh profiles` affiche la résolution réelle, profil par profil, et
+signale les profils qui partagent un fichier.
 
 #### Inspecter la base
 
@@ -592,10 +617,16 @@ l'allow-list).
 `list`, `show`, `search` (FTS5), `entities`, `stats`, `schema`, `sql`, `dump`.
 
 ```bash
+./script/hermes-memory-script.sh profiles          # quel profil lit quelle base
 ./script/hermes-memory-script.sh stats
 ./script/hermes-memory-script.sh list 20
 ./script/hermes-memory-script.sh search 'kubernetes OR argocd'
+./script/hermes-memory-script.sh -p jb list        # la base du profil jb
 ```
+
+Sans `--profile`, la cible est le profil `default`. Le script **résout** le chemin comme le plugin
+le résout (valeur propre, sinon héritage de la racine, sinon `$HERMES_HOME/memory_store.db`) au
+lieu de le supposer — c'est ce qui fait apparaître le partage de base décrit plus haut.
 
 > [!IMPORTANT]
 > Ne pas ouvrir la base à la main depuis un `kubectl exec` : l'exec entre en **root**, et un

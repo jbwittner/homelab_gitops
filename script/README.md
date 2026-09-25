@@ -37,8 +37,9 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   >   désiré, donc du Git. C'est la règle GitOps qui s'applique, pas une limitation du script.
   >   Redirigée, sa sortie ne contient **que** le manifeste : le récapitulatif part sur stderr.
 - [`hermes-memory-script.sh`](hermes-memory-script.sh) — inspection de la **base mémoire
-  d'Hermes** (provider `holographic`) : `list`, `show`, `search`, `entities`, `stats`, `schema`,
-  `sql`, `dump`. **Seul script du dossier qui n'écrit nulle part** : ni dans le cluster, ni dans
+  d'Hermes** (provider `holographic`) : `profiles`, `list`, `show`, `search`, `entities`,
+  `stats`, `schema`, `sql`, `dump`. La cible se choisit par `--profile` / `--db` — il y a une
+  base **par profil**, et `profiles` montre laquelle chaque profil lit réellement. **Seul script du dossier qui n'écrit nulle part** : ni dans le cluster, ni dans
   la base — la mémoire de l'agent se modifie par l'agent (`fact_store`, `fact_feedback`), pas
   d'ici. Documentation du composant dans
   [`cluster/app/hermes/README.md`](../cluster/app/hermes/README.md), section Mémoire.
