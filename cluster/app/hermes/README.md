@@ -202,72 +202,10 @@ Deux exclusions supplémentaires vivent dans le script, pas dans l'allow-list, p
   commiter ; leur contenu reste sur le disque, suivi par leur propre dépôt. Les chemins écartés
   sont nommés dans les logs à chaque passe.
 
-Contenu de référence de l'allow-list — deny-all puis autorisations explicites, et un bloc de deny
-dur qu'aucune règle ajoutée plus tard ne contourne :
-
-```gitignore
-# /opt/data is Hermes' runtime home. Ignore everything by default.
-/*
-
-# Repository documentation and collaboration rules
-!/.gitignore
-!/.hermes.md
-
-# Existing durable, top-level documents
-!/*.md
-
-# Durable work products
-!/workspace/
-!/workspace/**
-!/affinage/
-!/affinage/**
-!/affinage-live-nFl9v3/
-!/affinage-live-nFl9v3/**
-
-# Skills (including custom skills). Runtime caches remain ignored by default.
-!/skills/
-!/skills/**
-/skills/.bundled_manifest
-/skills/.curator_ledger.jsonl
-/skills/.curator_state
-/skills/.usage.json
-**/__pycache__/
-*.py[cod]
-
-# Explicitly chosen configuration documents (never credentials)
-!/config.yaml
-
-# Curated durable memory only — not session history or runtime state
-!/memories/
-!/memories/USER.md
-
-# README.md du dépôt : écrit à la main, jamais par Hermes. Le refus ici ne couvre que le cas
-# « fichier non suivi » — README.md étant DÉJÀ suivi par le commit initial, c'est l'exclusion
-# de pathspec dans git-sync.sh qui l'empêche réellement d'être écrasé.
-/README.md
-
-# Never force-add these, even if a future rule changes
-.env
-.secrets/
-auth.json
-sessions/
-logs/
-cache/
-gateway/
-state/
-pending_messages/
-*.db
-*.db-*
-*.db-wal
-*.db-shm
-*.lock
-*.pid
-*.sock
-lazy-packages/
-audio_cache/
-image_cache/
-lost+found/
-```
+L'allow-list elle-même n'est **pas recopiée ici** : elle vit dans le bloc d'init plus bas
+(« Init, une fois par PVC »), en un seul exemplaire. Deux copies dans la même page auraient
+divergé — c'est arrivé le 2026-09-25, une règle ajoutée dans la copie décorative n'a jamais
+atteint le fichier réellement posé dans le PVC.
 
 #### Premier boot sur un PVC neuf : commenter les sondes
 
@@ -411,6 +349,10 @@ cat > /opt/data/.gitignore <<'GITIGNORE'
 !/workspace/**
 !/affinage/
 !/affinage/**
+
+# Scripts écrits à la main : routes webhook, hooks shell, utilitaires de l'agent.
+!/scripts/
+!/scripts/**
 
 # Skills (including custom skills). Runtime caches remain ignored by default.
 !/skills/
