@@ -439,11 +439,37 @@ echo "init OK — $(git -C /opt/data remote get-url origin)"
 EOF
 ```
 
-Puis le premier push, **par le sidecar** : il a déjà `GIT_ASKPASS` câblé, aucun jeton à manipuler.
+Puis **se rattacher à `origin`**, sans quoi le premier push est rejeté. `git init` crée une
+histoire neuve : si `origin/main` porte déjà un commit — ne serait-ce que le `README.md`
+d'initialisation — les deux histoires n'ont aucun ancêtre commun et le push part en
+non-fast-forward. Cette étape tourne dans le conteneur `git-sync`, le seul qui ait le jeton :
+
+```bash
+kubectl -n hermes exec hermes-0 -c git-sync -- sh -c '
+  export GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0
+  G="git -c safe.directory=/opt/data -C /opt/data"
+  $G fetch -q origin main
+  $G reset --mixed -q FETCH_HEAD
+  $G ls-files -d -z | xargs -0 -r $G checkout --
+  echo "HEAD = $($G rev-parse --short HEAD)"
+'
+```
+
+`reset --mixed` déplace `HEAD` sur `origin/main` **sans toucher aux fichiers du PVC**. Le
+`ls-files -d` ne restaure que les fichiers présents dans `origin` et absents du disque ; aucun
+fichier du PVC n'est écrasé. C'est la différence avec `reset --hard`, qui lui écraserait tout ce
+qu'`origin` contient.
+
+Enfin le premier push, **par le sidecar** : il a déjà `GIT_ASKPASS` câblé, aucun jeton à manipuler.
 
 ```bash
 kubectl -n hermes exec hermes-0 -c git-sync -- sh /bootstrap/git-sync.sh --once
 ```
+
+> [!NOTE]
+> Un push rejeté après cette séquence n'est plus un problème d'init : c'est une vraie divergence
+> (écriture directe sur la forge, push manuel depuis le pod). Le sidecar conserve les commits
+> locaux et retente le lendemain — l'arbitrage reste manuel, cf. §Exploitation.
 
 > [!IMPORTANT]
 > Les deux pièges de cette procédure, tous deux vécus le 2026-09-25 :
