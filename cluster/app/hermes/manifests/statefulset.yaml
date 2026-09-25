@@ -65,17 +65,22 @@ spec:
           # large : un premier boot sur PVC neuf repeuple /opt/data et réinstalle lazy-packages.
           # Passé ce délai, un redémarrage vaut mieux qu'un pod NotReady indéfiniment — la gateway
           # peut se figer au démarrage sans jamais sortir (vécu le 2026-09-25).
-          # startupProbe:
-          #   tcpSocket: { port: api }
-          #   periodSeconds: 10
-          #   failureThreshold: 60
-          # livenessProbe:
-          #   tcpSocket: { port: dashboard }
-          #   periodSeconds: 30
-          #   failureThreshold: 3
-          # readinessProbe:
-          #   tcpSocket: { port: api }
-          #   periodSeconds: 15
+          # ⚠️ SUR UN PVC NEUF, COMMENTER CE BLOC LE TEMPS DE L'INIT MANUELLE.
+          # Tant que l'init n'est pas faite, la gateway ne monte pas jusqu'à 8642 : la
+          # startupProbe échoue, kubelet redétruit le conteneur au bout de 10 minutes, en plein
+          # milieu de la manipulation. Procédure complète : README §Versionnement de $HERMES_HOME,
+          # « Premier boot sur un PVC neuf ». Les sondes se remettent une fois 8642 vivant.
+          startupProbe:
+            tcpSocket: { port: api }
+            periodSeconds: 10
+            failureThreshold: 60
+          livenessProbe:
+            tcpSocket: { port: dashboard }
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket: { port: api }
+            periodSeconds: 15
           resources:
             requests:
               cpu: "500m"

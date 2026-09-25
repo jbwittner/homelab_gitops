@@ -245,6 +245,91 @@ image_cache/
 lost+found/
 ```
 
+#### Premier boot sur un PVC neuf : commenter les sondes
+
+À faire **avant** l'init, sinon elle est interrompue en plein milieu.
+
+Sur un volume vierge, la gateway ne monte pas jusqu'à 8642 tant que `config.yaml` n'a pas été
+corrigé à la main (voir l'étape « modèle et fournisseur » plus bas). Or la `startupProbe` est sur
+8642 avec `failureThreshold: 60` : au bout de 10 minutes, kubelet détruit le conteneur — au milieu
+de la manipulation, et en boucle.
+
+1. commenter les trois sondes dans `manifests/statefulset.yaml` (`startupProbe`, `livenessProbe`,
+   `readinessProbe`), commit, push — le pod remonte et reste `Ready` quoi qu'il arrive
+2. faire l'init ci-dessous
+3. vérifier que les deux ports répondent :
+
+   ```bash
+   kubectl -n hermes exec hermes-0 -c hermes -- sh -c \
+     'for p in 8642 9119; do printf "%s -> " $p; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:$p/; done'
+   # attendu : 8642 -> 404   (serveur d'API vivant, route inconnue)
+   #           9119 -> 302   (dashboard vivant, redirection vers la gate d'auth)
+   ```
+
+4. décommenter les sondes, commit, push
+
+> [!WARNING]
+> Sondes commentées, `2/2 Running` ne veut **plus rien dire** : kubelet ne teste plus rien et le pod
+> est déclaré prêt même avec zéro socket en écoute. Pendant cette fenêtre, se fier aux logs, à
+> `gateway_state.json` et aux deux `curl` ci-dessus — pas à `kubectl get pod`. Ne pas oublier
+> l'étape 4.
+
+#### Modèle et fournisseur : le `config.yaml` livré boucle
+
+Le `config.yaml` que l'image écrit sur un PVC vierge contient :
+
+```yaml
+model:
+  default: "anthropic/claude-opus-4.6"
+  provider: "auto"
+  base_url: "https://openrouter.ai/api/v1"
+```
+
+Cette combinaison **fige la gateway au démarrage**, en récursion infinie :
+
+1. `_config_model_provider` — `"auto"` n'est ni `custom` ni une clé du registre ; il y a un
+   `base_url`, donc il demande s'il est digne de confiance
+2. `_config_base_url_trustworthy_for_bare_custom(…, "auto")` — `"auto"` ≠ `custom`, donc il demande
+   si `"auto"` résout vers `custom`
+3. `_resolves_to_custom("auto")` → `resolve_provider("auto")` → **retour à l'étape 1**
+
+Symptôme : le dernier log est `Previous gateway exited cleanly — skipping session suspension`,
+`gateway_state` reste `starting`, 8642 ne bind jamais, et **rien n'apparaît dans les journaux**. Le
+diagnostic passe par `kill -USR2` sur le processus gateway, qui vide la pile Python dans
+`logs/gateway_faulthandler.log` (`faulthandler` est armé sur ce signal par `run_startup.py`).
+
+Aucune variable d'environnement ne corrige ça : `grep` de `HERMES_MODEL`,
+`HERMES_INFERENCE_MODEL`, `HERMES_BASE_URL` et `HERMES_INFERENCE_PROVIDER` dans `gateway/` et
+`hermes_cli/gateway.py` ne donne **aucun résultat** — ces variables ne sont lues que par le cron,
+`oneshot` et la TUI, et `HERMES_INFERENCE_PROVIDER` est de toute façon toujours derrière
+`config_provider or …`. `api_mode` n'a aucune variable du tout. C'est donc `config.yaml`, donc
+manuel.
+
+> [!CAUTION]
+> `provider: "openrouter"` **reproduit le gel** : cette valeur n'est ni un alias (142 testés) ni une
+> clé du registre (79 testées), elle retombe donc exactement sur le chemin de `"auto"`. Valeurs
+> sûres : `"custom"` (testé avant le registre) ou une vraie clé — `openai-codex`, `nous`,
+> `anthropic`, `xai`, `gemini`, `bedrock`…
+
+Configuration en place ici :
+
+```yaml
+model:
+  default: gpt-5.6-terra
+  provider: openai-codex
+  base_url: https://chatgpt.com/backend-api/codex
+  api_mode: codex_responses
+```
+
+`chatgpt.com/backend-api/codex` est d'ailleurs reconnu nativement (`agent/agent_init.py`,
+`hermes_cli/runtime_provider.py`) : `openai-codex` et `codex_responses` en sont déduits même sans
+les écrire. Après modification, relancer la gateway sans redémarrer le pod :
+
+```bash
+kubectl -n hermes exec hermes-0 -c hermes -- \
+  /package/admin/s6/command/s6-svc -r /run/service/gateway-default
+```
+
 #### Init, une fois par PVC
 
 À faire à la main après tout PVC neuf. **Aucune de ces commandes n'est rejouée par le cluster** :
