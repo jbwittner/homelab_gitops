@@ -358,26 +358,98 @@ EOF
 > ⚠️ Ne jamais créer `~/.bash_profile` ni `~/.bash_login` dans `/opt/data/home` : bash s'arrête au
 > premier trouvé et ignorerait `.profile` sans le moindre message.
 
-Puis le dépôt :
+Puis le dépôt, en **un seul bloc** — dépôt, remote, identité, allow-list et propriétés d'un coup :
 
 ```bash
-# 1. Dépôt, remote, identité. Depuis le conteneur hermes (root, safe.directory obligatoire :
-#    /opt/data appartient à l'uid 10000).
-kubectl -n hermes exec -it hermes-0 -c hermes -- sh -c '
-  cd /opt/data
-  git config --global --add safe.directory /opt/data
-  git init -b main
-  git remote add origin https://forgejo.wittner.tech/jbwittner/homelab_hermes.git
-  git config user.name  "hermes_agent"
-  git config user.email "hermes_agent@wittner.tech"
-'
+kubectl -n hermes exec -i hermes-0 -c hermes -- sh -s <<'EOF'
+set -eu
+cd /opt/data
+git config --global --add safe.directory /opt/data
+[ -d .git ] || git init -q -b main
+git remote remove origin 2>/dev/null || true
+git remote add origin https://forgejo.wittner.tech/jbwittner/homelab_hermes.git
+git config user.name  "hermes_agent"
+git config user.email "hermes_agent@wittner.tech"
 
-# 2. Poser le .gitignore (bloc ci-dessus) en /opt/data/.gitignore, puis :
-kubectl -n hermes exec hermes-0 -c hermes -- chown 10000:10000 /opt/data/.gitignore
+cat > /opt/data/.gitignore <<'GITIGNORE'
+# /opt/data is Hermes' runtime home. Ignore everything by default.
+/*
 
-# 3. Premier push : par le sidecar, qui a déjà GIT_ASKPASS câblé — aucun jeton à manipuler.
+# Repository documentation and collaboration rules
+!/.gitignore
+!/README.md
+!/.hermes.md
+
+# Existing durable, top-level documents
+!/*.md
+
+# Durable work products
+!/workspace/
+!/workspace/**
+!/affinage/
+!/affinage/**
+!/affinage-live-nFl9v3/
+!/affinage-live-nFl9v3/**
+
+# Skills (including custom skills). Runtime caches remain ignored by default.
+!/skills/
+!/skills/**
+/skills/.bundled_manifest
+/skills/.curator_ledger.jsonl
+/skills/.curator_state
+/skills/.usage.json
+**/__pycache__/
+*.py[cod]
+
+# Explicitly chosen configuration documents (never credentials)
+!/config.yaml
+
+# Curated durable memory only — not session history or runtime state
+!/memories/
+!/memories/USER.md
+
+# Never force-add these, even if a future rule changes
+.env
+.secrets/
+auth.json
+sessions/
+logs/
+cache/
+gateway/
+state/
+pending_messages/
+*.db
+*.db-*
+*.db-wal
+*.db-shm
+*.lock
+*.pid
+*.sock
+lazy-packages/
+audio_cache/
+image_cache/
+lost+found/
+GITIGNORE
+
+# LOAD-BEARING : sans ce chown, .git appartient à root (l'exec tourne en root) et le sidecar,
+# qui tourne sur l'uid 10000, échoue sur « Unable to create '.git/index.lock': Permission denied ».
+chown -R 10000:10000 /opt/data/.git /opt/data/.gitignore
+chmod 0644 /opt/data/.gitignore
+echo "init OK — $(git -C /opt/data remote get-url origin)"
+EOF
+```
+
+Puis le premier push, **par le sidecar** : il a déjà `GIT_ASKPASS` câblé, aucun jeton à manipuler.
+
+```bash
 kubectl -n hermes exec hermes-0 -c git-sync -- sh /bootstrap/git-sync.sh --once
 ```
+
+> [!IMPORTANT]
+> Les deux pièges de cette procédure, tous deux vécus le 2026-09-25 :
+> le `chown -R` sur `.git` n'est pas cosmétique (sans lui le sidecar ne peut rien écrire), et le
+> `.gitignore` doit exister **avant** la première passe — sinon `git add -A` embarque `/opt/data`
+> en entier, secrets compris, et c'est la barrière dure du sidecar qui rattrape le coup.
 
 Pour **restaurer** un PVC neuf depuis le dépôt (étape 1 puis, à la place de l'étape 3) :
 
