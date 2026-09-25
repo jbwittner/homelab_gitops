@@ -72,6 +72,11 @@ spec:
           # « Premier boot sur un PVC neuf ». Les sondes se remettent une fois 8642 vivant.
           startupProbe:
             tcpSocket: { port: api }
+            # Une minute de silence avant la première sonde : le démarrage passe par s6, le
+            # chown du volume, la synchronisation des skills et l'init de la gateway, et rien
+            # n'écoute 8642 avant. Sans ce délai la première salve d'échecs est garantie.
+            # Budget total avant redémarrage : 60 s + 60 × 10 s = 11 min.
+            initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 60
           livenessProbe:

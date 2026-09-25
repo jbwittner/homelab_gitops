@@ -251,8 +251,8 @@ lost+found/
 
 Sur un volume vierge, la gateway ne monte pas jusqu'à 8642 tant que `config.yaml` n'a pas été
 corrigé à la main (voir l'étape « modèle et fournisseur » plus bas). Or la `startupProbe` est sur
-8642 avec `failureThreshold: 60` : au bout de 10 minutes, kubelet détruit le conteneur — au milieu
-de la manipulation, et en boucle.
+8642 avec `initialDelaySeconds: 60` et `failureThreshold: 60` : au bout de 11 minutes, kubelet
+détruit le conteneur — au milieu de la manipulation, et en boucle.
 
 1. commenter les trois sondes dans `manifests/statefulset.yaml` (`startupProbe`, `livenessProbe`,
    `readinessProbe`), commit, push — le pod remonte et reste `Ready` quoi qu'il arrive
