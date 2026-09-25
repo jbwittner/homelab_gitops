@@ -29,12 +29,10 @@ Les deux ports sont publiés sur le listener **`https-internal`** du `shared-gw`
   (cf. §Câblage des secrets). Sa révision entre dans le hash de bootstrap.
 - `manifests/config/hermes.env` — variables d'environnement **non secrètes** du conteneur
   (`KEY=value`), assemblées en ConfigMap `hermes-vars` et injectées par `envFrom`
-- `manifests/config/profile` — profil shell semé par l'initContainer, également monté par le
-  ConfigMap de bootstrap
 - `manifests/config/git-sync.sh` — boucle du sidecar `git-sync` : une passe de commit + push par
-  jour (cf. §Versionnement de `$HERMES_HOME`)
+  jour (cf. §Versionnement de `$HERMES_HOME`). Seul fichier du ConfigMap de bootstrap.
 - `manifests/statefulset.yaml` — 1 replica, PVC `openebs-lvm-thin` 10 Gi sur `/opt/data`, un
-  initContainer de semis du profil shell et un sidecar `git-sync`
+  sidecar `git-sync`. **Aucun initContainer** : rien n'écrit dans le PVC (cf. §Versionnement).
 - `manifests/service.yaml` — ClusterIP, ports `api` (8642) et `dashboard` (9119)
 - `manifests/hermes-httproute.yaml` — `hermes.lan.wittner.tech` → dashboard,
   `hermes-api.lan.wittner.tech` → API
@@ -248,7 +246,33 @@ lost+found/
 
 #### Init, une fois par PVC
 
-À faire à la main après tout PVC neuf. Aucune de ces commandes n'est rejouée par le cluster.
+À faire à la main après tout PVC neuf. **Aucune de ces commandes n'est rejouée par le cluster** :
+il n'y a plus d'initContainer, le PVC n'est écrit que par Hermes lui-même et par le sidecar.
+
+D'abord le profil shell, qui n'a rien à voir avec git mais se perd au même moment :
+
+```bash
+kubectl -n hermes exec -i hermes-0 -c hermes -- sh -s <<'EOF'
+install -d -o 10000 -g 10000 -m 0755 /opt/data/home
+cat > /opt/data/home/.profile <<'PROFILE'
+export PATH="/opt/hermes/bin:/opt/hermes/.venv/bin:$PATH"
+PROFILE
+chown 10000:10000 /opt/data/home/.profile
+chmod 0644        /opt/data/home/.profile
+EOF
+```
+
+> [!IMPORTANT]
+> Sans ce fichier, l'outil terminal de l'agent est **cassé de façon trompeuse**. Il ouvre un shell
+> de login ; le `/etc/profile` de l'image *remplace* `PATH` par
+> `/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games`, donc `/opt/hermes/bin` disparaît et
+> un `hermes` nu répond `command not found` — l'agent en déduit que le binaire n'est pas installé.
+> Invisible en `kubectl exec`, qui ne source pas `/etc/profile`. `~/.profile` est lu *après*
+> `/etc/profile`, c'est le seul point de reprise sans écraser l'`ENTRYPOINT`.
+> ⚠️ Ne jamais créer `~/.bash_profile` ni `~/.bash_login` dans `/opt/data/home` : bash s'arrête au
+> premier trouvé et ignorerait `.profile` sans le moindre message.
+
+Puis le dépôt :
 
 ```bash
 # 1. Dépôt, remote, identité. Depuis le conteneur hermes (root, safe.directory obligatoire :

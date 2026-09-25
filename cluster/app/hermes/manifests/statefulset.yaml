@@ -37,24 +37,6 @@ spec:
       # root pour chown le volume, puis descend lui-même sur l'uid 10000. Cf. namespace.yaml.
       securityContext:
         fsGroup: 10000
-      initContainers:
-        - name: seed-profile
-          image: busybox:1.38.0
-          command:
-            - sh
-            - -c
-            - |
-              set -eu
-              # HOME des sous-processus lancés par l'outil terminal. Créé seulement s'il manque :
-              # le répertoire existant porte un bit setgid qu'un `install -d` inconditionnel
-              # effacerait.
-              [ -d /opt/data/home ] || install -d -o 10000 -g 10000 -m 0755 /opt/data/home
-              # Rétablit /opt/hermes/bin dans le PATH des shells de login — cf. profile,
-              # qui documente pourquoi /etc/profile l'en retire.
-              install -o 10000 -g 10000 -m 0644 /bootstrap/profile /opt/data/home/.profile
-          volumeMounts:
-            - { name: data, mountPath: /opt/data }
-            - { name: bootstrap, mountPath: /bootstrap, readOnly: true }
       containers:
         - name: hermes
           image: nousresearch/hermes-agent:v2026.9.14
