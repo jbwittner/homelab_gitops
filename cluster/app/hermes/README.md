@@ -558,20 +558,16 @@ pas résolue.
 optionnel. `hermes` nu ne résout pas non plus — `/etc/profile` écrase `PATH` (cf. §Versionnement).
 
 ```bash
-# État courant, et le plugin est-il déjà dans l'image ?
-kubectl -n hermes exec -it hermes-0 -c hermes -- sh -lc \
-  '/opt/hermes/bin/hermes memory status; /opt/hermes/bin/hermes plugins list'
+kubectl -n hermes exec -it hermes-0 -c hermes -- /opt/hermes/bin/hermes memory status
 ```
 
-S'il manque, l'installer — l'installation clone depuis le catalogue amont, ce que la sortie libre
-de cette instance permet :
+> [!NOTE]
+> **Rien à installer** : `holographic` est livré avec l'image et apparaît dans les « Installed
+> plugins » de `hermes memory status`. Les providers mémoire ont leur propre découverte, séparée
+> du catalogue de plugins — ils sont **absents** de `hermes plugins list`, et un
+> `hermes plugins install hermes-memory-store` n'a rien à faire ici.
 
-```bash
-kubectl -n hermes exec -it hermes-0 -c hermes -- \
-  /opt/hermes/bin/hermes plugins install hermes-memory-store --enable
-```
-
-Puis activer le provider et rendre la main à l'uid 10000 :
+Activer le provider, puis rendre la main à l'uid 10000 :
 
 ```bash
 kubectl -n hermes exec -i hermes-0 -c hermes -- sh -s <<'EOF'
