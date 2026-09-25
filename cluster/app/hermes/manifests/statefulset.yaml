@@ -79,12 +79,18 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 60
+          # `initialDelaySeconds` est inerte sur ces deux-là tant qu'une startupProbe existe :
+          # kubelet les suspend entièrement jusqu'à ce qu'elle réussisse. Il est posé quand même,
+          # pour que le délai reste explicite si la startupProbe est un jour commentée — ce que
+          # la procédure de premier boot demande justement de faire (README §Versionnement).
           livenessProbe:
             tcpSocket: { port: dashboard }
+            initialDelaySeconds: 60
             periodSeconds: 30
             failureThreshold: 3
           readinessProbe:
             tcpSocket: { port: api }
+            initialDelaySeconds: 60
             periodSeconds: 15
           resources:
             requests:
