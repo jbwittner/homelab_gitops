@@ -78,10 +78,27 @@ sync_once() {
   # travaille dans ce même répertoire. Le .gitignore ne suffirait pas — il n'a aucun effet sur un
   # fichier déjà suivi, et README.md l'est depuis le commit initial. L'exclusion couvre aussi la
   # suppression : si l'agent efface le fichier, la suppression n'est pas enregistrée.
-  if ! git_ add -A -- . ':(exclude)README.md'; then
+  # `advice.addEmbeddedRepo=false` : sans lui, chaque dépôt imbriqué (cf. juste en dessous) fait
+  # cracher huit lignes de `hint:` à chaque passe. L'avertissement utile, lui, est notre log.
+  if ! git_ -c advice.addEmbeddedRepo=false add -A -- . ':(exclude)README.md'; then
     log "ERREUR: git add a échoué"
     git_ reset -q >/dev/null 2>&1
     return 1
+  fi
+
+  # Dépôts git imbriqués — typiquement un projet cloné dans workspace/. `git add` n'enregistre
+  # PAS leur contenu : il pose un lien de sous-module (mode 160000) sans .gitmodules. Un clone de
+  # homelab_hermes recrée alors un répertoire VIDE, et le SHA du lien change à chaque commit du
+  # dépôt imbriqué — un commit de bruit par jour pour un contenu sauvegardé nulle part. On les
+  # sort de l'index ; leur contenu reste sur le disque et suivi par LEUR dépôt, ce qui est le bon
+  # endroit. Vérifié : `rm --cached` ne touche pas au disque.
+  nested=$(git_ ls-files --stage | awk '$1 == "160000" { sub(/^[^\t]*\t/, ""); print }')
+  if [ -n "$nested" ]; then
+    log "dépôts git imbriqués écartés (suivis par leur propre dépôt) :"
+    printf '%s\n' "$nested" | sed 's/^/[git-sync]   /'
+    printf '%s\n' "$nested" | while IFS= read -r path; do
+      [ -n "$path" ] && git_ rm --cached -q -- "$path" >/dev/null 2>&1
+    done
   fi
 
   staged=$(git_ diff --cached --name-only)

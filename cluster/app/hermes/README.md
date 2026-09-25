@@ -182,6 +182,20 @@ sidecar ajoute une **seconde barrière indépendante** : si l'index contient un 
 `.env*`, `auth.json`, `.secrets/`, `*.key` ou `*.pem`, il refuse la passe entière et le log le dit.
 Raison : le `.gitignore` vit *dans* le dépôt qu'il protège, donc à portée de l'agent.
 
+Deux exclusions supplémentaires vivent dans le script, pas dans l'allow-list, parce que le
+`.gitignore` ne sait pas les exprimer :
+
+- **`README.md`** — présentation du dépôt, écrite à la main. Le `.gitignore` serait sans effet :
+  il n'agit pas sur un fichier déjà suivi, et `README.md` l'est depuis le commit initial. C'est
+  `git add -A -- . ':(exclude)README.md'` qui le protège, y compris contre une suppression.
+- **les dépôts git imbriqués** — un projet cloné dans `workspace/` a son propre `.git`. `git add`
+  n'enregistre alors pas son contenu : il pose un **lien de sous-module** (mode `160000`) sans
+  `.gitmodules`. Un clone de `homelab_hermes` recrée un répertoire **vide**, et le SHA du lien
+  change à chaque commit du dépôt imbriqué — un commit de bruit par jour pour un contenu
+  sauvegardé nulle part. Le script les repère par leur mode dans l'index et les retire avant de
+  commiter ; leur contenu reste sur le disque, suivi par leur propre dépôt. Les chemins écartés
+  sont nommés dans les logs à chaque passe.
+
 Contenu de référence de l'allow-list — deny-all puis autorisations explicites, et un bloc de deny
 dur qu'aucune règle ajoutée plus tard ne contourne :
 
