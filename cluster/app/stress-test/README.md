@@ -179,13 +179,72 @@ sur 9600 s disponibles (73,3 %, soit les 12 hogs à plein régime), 0 échec.
 évoquée avant ce test — n'a donc aucun sens : c'est déjà le réglage en place, et il n'empêche ni
 le turbo à 3,6 GHz ni les 82 °C.
 
+## Résultats — tir n°2, `vert-eranikus`, 2026-09-28 21:09 → 21:20 UTC
+
+Paramètres **identiques** au tir n°1, seul le nœud change. C'est la comparaison qui est le
+résultat.
+
+| | `vert-ysondre` (n°1) | `vert-eranikus` (n°2) | Écart |
+|---|---|---|---|
+| Repos | 58 °C | 60 °C | +2 °C |
+| Pic | 82 °C | **87 °C** | +5 °C |
+| Palier (moy. 8 min) | 77 °C | **82,1 °C** | +5,1 °C |
+| Élévation au-dessus du repos | 19 °C | **22,1 °C** | **+16 %** |
+| Fréquence en palier | 3,25 GHz | **3,43 GHz** | +5,5 % |
+| **Bogo ops** | 11 545 649 | **11 976 148** | **+3,7 %** |
+| Temps utilisateur | 7037,7 s (73,3 %) | 7128,5 s (74,3 %) | +1,3 % |
+| `crit_alarm` | 0 | **0** | — |
+| etcd p99 | 5 ms | 5-13 ms | — |
+
+**La question ouverte est tranchée à moitié, et il faut le dire ainsi.**
+
+- **Ce n'est PAS Prometheus.** Sa consommation (0,156 cœur) représente ~2 % de la charge des
+  12 hogs : elle ne peut pas expliquer 5 °C. L'hypothèse « `eranikus` est chaud parce qu'il porte
+  Prometheus » est éliminée.
+- **Les deux hypothèses restantes ne sont pas départagées par ces chiffres.** `eranikus` fait
+  **3,7 % de travail en plus** à **5,5 % de fréquence en plus** : une partie des 5 °C est donc
+  légitimement payée en watts, la puissance montant plus vite que la fréquence (V²f).
+- **Mais la normalisation penche vers l'évacuation** : +3,7 % de travail pour **+16 %
+  d'élévation thermique** au-dessus du repos. Si c'était uniquement la charge, le rapport serait
+  plus proche de 1. Indicatif, pas concluant — départager pour de bon demanderait de brider les
+  deux nœuds à la même fréquence.
+- **Signature supplémentaire, en faveur de l'évacuation** : `eranikus` DÉRIVE en palier
+  (81 → 83 → 84 → 86 °C à fréquence constante), là où `ysondre` était plat à 77 °C de bout en
+  bout. Une dérive à puissance constante est une accumulation de chaleur, pas une consommation.
+
+**⚠️ LE RÉSULTAT LE PLUS ACTIONNABLE, ET IL N'ÉTAIT PAS CHERCHÉ : LES MACHINES SE CHAUFFENT ENTRE
+ELLES.** Pendant le tir n°2, `vert-itharius` — **inactif**, 6,2 % de CPU au maximum — est passé de
+**52 à 61 °C**, soit **+9 °C sans rien faire**. Le même phénomène est visible au tir n°1 (52 → 58 °C
+pendant que `ysondre` chauffait).
+
+Ce n'est pas l'air de la pièce : pendant le tir n°2, `ysondre` DESCENDAIT (57 → 53 °C) alors
+qu'`itharius` MONTAIT. Une élévation ambiante les aurait fait monter tous les deux. Seul
+`itharius` réagit, donc il est physiquement dans le flux d'air de `vert-eranikus`.
+
+**Action qui en découle**, et c'est la plus rentable de toutes celles évoquées jusqu'ici :
+**espacer les machines**. C'est gratuit, immédiat, et ça vaut plus que n'importe quel réglage
+logiciel — dont le gouverneur `powersave`, qui est déjà en place (cf. tir n°1).
+
+**`MachineSensorNearCritical` a enfin été vue vivante — en `pending`, jamais en `firing`.**
+Déclenchée sur **trois** capteurs d'`eranikus` (`temp1` = Package id 0, `temp14` = Core 12,
+`temp18` = Core 16) à 21:11:49Z, retombée quand la température est repassée sous 85 °C, repartie
+à 21:18:19Z. Le `for: 10m` n'a jamais été satisfait sur une plage continue.
+
+- ✅ **L'expression est validée** : la jointure sur `node_hwmon_temp_crit_celsius` fonctionne, le
+  seuil à 85 % est atteignable sur du matériel réel, les labels sont bons.
+- ❌ **Le `for: 10m` n'est pas validé**, et ce tir montre pourquoi il ne le sera pas facilement :
+  la température oscille autour du seuil au lieu de le franchir franchement. Un `for:` de 10 min
+  exige 10 minutes SANS UN SEUL creux. C'est un bon filtre anti-bruit ; c'est aussi ce qui la
+  rendra silencieuse sur une machine qui frôle la limite sans s'y installer.
+- Décision à prendre consciemment, pas ici : garder `for: 10m` (peu de bruit, détection tardive)
+  ou descendre à `for: 5m` (plus réactif, risque d'alerter sur un pic de compilation).
+
 ## État
 
-**Non déployé** (`.noapp.yaml`), désarmé le 2026-09-28 après le tir n°1. Le Job `Completed` a été
+**Non déployé** (`.noapp.yaml`), désarmé le 2026-09-28 après les tirs n°1 et n°2. Le Job `Completed` a été
 supprimé par le `prune` d'ArgoCD au renommage.
 
-Prochain tir utile : `vert-eranikus`, pour trancher la question laissée ouverte — ses 5-6 °C
-d'écart au repos avec `vert-ysondre` viennent-ils de sa charge (il porte Prometheus) ou de sa
-position physique ? À charge ÉGALE, si l'écart persiste, c'est l'air ; s'il disparaît, c'était la
-charge. ⚠️ Charger `vert-eranikus` ralentit Prometheus, donc l'instrument de mesure : relire le
-§ Danger avant.
+Prochain tir utile : `vert-itharius`, le seul jamais chargé — et surtout **un second tir sur
+`vert-eranikus` APRÈS avoir espacé les machines**. C'est la seule façon de mesurer ce que
+l'espacement rapporte : si le palier descend de 82 vers 77 °C à bogo ops égales, la cause était
+bien l'air et non le silicium.

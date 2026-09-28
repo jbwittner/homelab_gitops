@@ -530,10 +530,15 @@ Ces machines chauffent **à vide** — 3-4 % de CPU, fréquence moyenne 1,1-1,5 
   voisine `node_hwmon_temp_max_celsius` publie déjà **65261,8 °C** sur plusieurs capteurs NVMe de
   ce parc (attribut SMART non renseigné, rendu en brut). Si elle sonne, ne pas relever le plafond
   de 150 °C — il n'est pas le problème.
-- **`MachineSensorNearCritical` N'A TOUJOURS PAS ÉTÉ VUE SONNER, et probablement ne le sera
-  jamais par une charge CPU.** Le test du 2026-09-28 ([stress-test](../stress-test/README.md),
-  12 cœurs sur 16 pendant 10 min sur `vert-ysondre`) a plafonné à **82 °C** — trois degrés sous le
-  seuil de 85 °C, sans jamais passer `pending`. La cause est mesurée : la machine est bridée par
+- **`MachineSensorNearCritical` a été vue `pending`, jamais `firing`** (tirs du 2026-09-28,
+  [stress-test](../stress-test/README.md)). Sur `vert-ysondre` elle n'a pas bougé : plafond à
+  82 °C, trois degrés sous le seuil. Sur `vert-eranikus`, qui monte à 87 °C, elle s'est déclenchée
+  sur **trois capteurs** (Package id 0, Core 12, Core 16) — ✅ l'expression, la jointure sur
+  `node_hwmon_temp_crit_celsius` et les labels sont donc validés sur du matériel réel.
+  ❌ Le `for: 10m` ne l'a jamais été : la température OSCILLE autour du seuil au lieu de le
+  franchir franchement, et 10 minutes sans un seul creux n'ont jamais été réunies. Bon filtre
+  anti-bruit, mais c'est aussi ce qui la rendra muette sur une machine qui frôle la limite sans
+  s'y installer. Descendre à `for: 5m` est une décision à prendre consciemment. La cause est mesurée : la machine est bridée par
   sa limite de PUISSANCE (PL1) avant d'être bridée par sa température. Le package monte à 82 °C
   pendant le burst turbo, puis REDESCEND à 77 °C en palier pendant que la fréquence tombe de 3,60
   à 3,25 GHz, `crit_alarm` restant à 0.
@@ -542,8 +547,8 @@ Ces machines chauffent **à vide** — 3-4 % de CPU, fréquence moyenne 1,1-1,5 
   bien ce qu'on veut d'elle, mais ce n'est pas la justification qui avait été écrite en la créant,
   et la différence compte le jour où elle sonnera : la réponse n'est pas « regarder ce qui
   tourne », c'est « ouvrir la machine ».
-  ⚠️ Son `for: 10m` valait exactement la durée du tir : même en franchissant le seuil, elle
-  n'aurait atteint que `pending`. Un tir destiné à la voir `firing` doit durer PLUS que son `for:`.
+  ⚠️ Son `for: 10m` vaut la durée d'un tir : un test destiné à la voir `firing` doit durer PLUS
+  que son `for:`, et sans creux.
 - **Le test a en revanche validé ce que la règle suppose du cluster** : à 75 % de CPU occupé sur un
   nœud control-plane, etcd p99 est passé de 20 ms à **5 ms** et les 3 nœuds sont restés Ready. Le
   pod de charge est `BestEffort`, donc dernier servi — cf. § Contraintes de
