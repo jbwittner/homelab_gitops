@@ -76,7 +76,7 @@
 #   - la MACHINE qui héberge la forge : disque, mémoire, charge, réseau. ⚠️ Ce n'est plus « le
 #     cluster n'en voit rien » — depuis le 2026-09-11 il le voit, par le composant
 #     `cluster/app/hosts-monitoring` — mais ça ne vit PAS ici : c'est le dashboard
-#     « Machines — système » (`dashboard-machines.yaml`). Le critère est le cycle de vie :
+#     « Machines — system » (`dashboard-machines.yaml`). Le critère est le cycle de vie :
 #     une machine précède le service qu'elle héberge et lui survit, et ce dashboard-ci disparaîtra
 #     avec la forge alors que l'autre restera valable tel quel.
 #     ⚠️ C'est aussi là, et pas ici, que vivent les métriques de SAUVEGARDE de la forge
@@ -127,7 +127,7 @@ data:
           },
           "id": 1,
           "panels": [],
-          "title": "État",
+          "title": "State",
           "type": "row"
         },
         {
@@ -135,7 +135,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Étiquette `version` de `gitea_build_info` — la version réellement servie par le pod, pas le tag du chart. Un écart avec `targetRevision` de l'Application veut dire que le bump de chart n'a pas encore été déployé, ou que le pod n'a pas redémarré.",
+          "description": "The `version` label of `gitea_build_info` — the version actually served by the pod, not the chart tag. A gap with the Application's `targetRevision` means the chart bump has not been deployed yet, or the pod did not restart.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -199,7 +199,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "État du scrape de `https://forgejo-metrics.lan.wittner.tech/metrics`. `Muet` = la cible ne répond plus : conteneur arrêté, machine Docker éteinte, hostname non routé par le reverse proxy 192.168.1.50 (404), ou token de métriques divergent (401). Tout le reste de ce dashboard est alors figé sur la dernière valeur connue, SANS trou visible sur les jauges. L'alerte correspondante est `ForgejoDown` (forgejo-monitoring).",
+          "description": "State of the scrape of `https://forgejo-metrics.lan.wittner.tech/metrics`. `Silent` = the target no longer answers: stopped container, powered-off Docker machine, hostname not routed by the 192.168.1.50 reverse proxy (404), or a diverging metrics token (401). Everything else on this dashboard is then frozen on the last known value, with NO visible gap on the gauges. The matching alert is `ForgejoDown` (forgejo-monitoring).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -211,7 +211,7 @@ data:
                     "0": {
                       "color": "red",
                       "index": 1,
-                      "text": "Muet"
+                      "text": "Silent"
                     },
                     "1": {
                       "color": "green",
@@ -283,7 +283,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Tous les dépôts de l'instance, publics et privés confondus, miroirs et forks compris. La métrique ne distingue pas — `gitea_mirrors` compte séparément les miroirs.",
+          "description": "Every repository of the instance, public and private alike, mirrors and forks included. The metric makes no distinction — `gitea_mirrors` counts the mirrors separately.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -339,7 +339,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Dépôts",
+          "title": "Repositories",
           "type": "stat"
         },
         {
@@ -347,7 +347,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Comptes existants, actifs ou non, y compris le compte admin scellé. Sur cette instance l'inscription est fermée : une hausse non expliquée est un signal.",
+          "description": "Existing accounts, active or not, including the sealed admin account. Registration is closed on this instance: an unexplained rise is a signal.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -403,7 +403,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisateurs",
+          "title": "Users",
           "type": "stat"
         },
         {
@@ -411,7 +411,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`gitea_issues_open` — ⚠️ issues ET pull requests confondues. Le collecteur compte la table `issue` sans filtrer `is_pull`, et une PR y est une ligne comme une autre. Rien ne permet de les séparer côté métriques.",
+          "description": "`gitea_issues_open` — ⚠️ issues AND pull requests together. The collector counts the `issue` table without filtering on `is_pull`, and a PR is just another row in it. Nothing allows separating them on the metrics side.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -467,7 +467,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Ouverts (issues + PR)",
+          "title": "Open (issues + PRs)",
           "type": "stat"
         },
         {
@@ -480,7 +480,7 @@ data:
           },
           "id": 8,
           "panels": [],
-          "title": "Contenu",
+          "title": "Content",
           "type": "row"
         },
         {
@@ -488,7 +488,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Jauges recomptées à CHAQUE scrape par un `SELECT count(*)` sur la base — ce ne sont pas des compteurs cumulés. Une courbe qui descend est donc une suppression réelle, pas une remise à zéro de compteur.",
+          "description": "Gauges recounted on EVERY scrape by a `SELECT count(*)` on the database — these are not cumulative counters. So a curve going down is a real deletion, not a counter reset.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -572,7 +572,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_repositories{job=\"forgejo\"}",
-              "legendFormat": "Dépôts",
+              "legendFormat": "Repositories",
               "range": true,
               "instant": false,
               "refId": "A"
@@ -584,7 +584,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_mirrors{job=\"forgejo\"}",
-              "legendFormat": "Miroirs",
+              "legendFormat": "Mirrors",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -608,7 +608,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_teams{job=\"forgejo\"}",
-              "legendFormat": "Équipes",
+              "legendFormat": "Teams",
               "range": true,
               "instant": false,
               "refId": "D"
@@ -620,7 +620,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_projects{job=\"forgejo\"}",
-              "legendFormat": "Projets",
+              "legendFormat": "Projects",
               "range": true,
               "instant": false,
               "refId": "E"
@@ -638,7 +638,7 @@ data:
               "refId": "F"
             }
           ],
-          "title": "Dépôts, organisations et équipes",
+          "title": "Repositories, organisations and teams",
           "type": "timeseries"
         },
         {
@@ -646,7 +646,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Ces courbes additionnent issues ET pull requests : dans Forgejo une PR est une ligne de la table `issue` (`is_pull = true`) et le collecteur compte la table entière. Deux conséquences avant de lire un chiffre — une PR FUSIONNÉE compte comme « fermée », et un dépôt qui ne travaille qu'en PR fait quand même monter ces courbes. Les séparer demanderait une autre source que `/metrics` (cf. README §Métriques).",
+          "description": "⚠️ These curves add issues AND pull requests: in Forgejo a PR is a row of the `issue` table (`is_pull = true`) and the collector counts the whole table. Two consequences before reading a figure — a MERGED PR counts as \"closed\", and a repository working only through PRs still pushes these curves up. Separating them would need a source other than `/metrics` (see the README, Metrics section).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -729,7 +729,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_issues_open{job=\"forgejo\"}",
-              "legendFormat": "Ouvertes",
+              "legendFormat": "Open",
               "range": true,
               "instant": false,
               "refId": "A"
@@ -741,7 +741,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_issues_closed{job=\"forgejo\"}",
-              "legendFormat": "Fermées",
+              "legendFormat": "Closed",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -765,7 +765,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_milestones{job=\"forgejo\"}",
-              "legendFormat": "Jalons",
+              "legendFormat": "Milestones",
               "range": true,
               "instant": false,
               "refId": "D"
@@ -777,13 +777,13 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_comments{job=\"forgejo\"}",
-              "legendFormat": "Commentaires",
+              "legendFormat": "Comments",
               "range": true,
               "instant": false,
               "refId": "E"
             }
           ],
-          "title": "Issues et pull requests",
+          "title": "Issues and pull requests",
           "type": "timeseries"
         },
         {
@@ -791,7 +791,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Répartition par dépôt — ⚠️ issues ET pull requests, ouvertes comme fermées (la requête amont ne filtre ni `is_pull` ni `is_closed`). ⚠️ Ce panneau dépend de `[metrics] ENABLED_ISSUE_BY_REPOSITORY`, posé dans helm-values.yaml : coupé, la métrique `gitea_issues_by_repository` n'est pas émise du tout et le tableau est vide sans erreur. Le label `repository` porte le nom COMPLET (`propriétaire/dépôt`), et il fait entrer des noms de dépôts privés dans Prometheus — c'est la contrepartie assumée de ce panneau, et la raison pour laquelle `ENABLED_ISSUE_BY_LABEL` reste coupé.",
+          "description": "Split per repository — ⚠️ issues AND pull requests, open and closed alike (the upstream query filters neither `is_pull` nor `is_closed`). ⚠️ This panel depends on `[metrics] ENABLED_ISSUE_BY_REPOSITORY`, set in helm-values.yaml: turned off, the `gitea_issues_by_repository` metric is not emitted at all and the table is empty with no error. The `repository` label carries the FULL name (`owner/repository`), and it brings private repository names into Prometheus — the accepted price of this panel, and the reason `ENABLED_ISSUE_BY_LABEL` stays off.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -819,7 +819,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Issues + PR"
+                  "options": "Issues + PRs"
                 },
                 "properties": [
                   {
@@ -845,7 +845,7 @@ data:
             "footer": {
               "countRows": false,
               "fields": [
-                "Issues + PR"
+                "Issues + PRs"
               ],
               "reducer": [
                 "sum"
@@ -856,7 +856,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Issues + PR"
+                "displayName": "Issues + PRs"
               }
             ]
           },
@@ -876,7 +876,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Issues et PR par dépôt",
+          "title": "Issues and PRs per repository",
           "transformations": [
             {
               "id": "organize",
@@ -893,8 +893,8 @@ data:
                   "service": true
                 },
                 "renameByName": {
-                  "repository": "Dépôt",
-                  "Value": "Issues + PR"
+                  "repository": "Repository",
+                  "Value": "Issues + PRs"
                 }
               }
             }
@@ -906,7 +906,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Étoiles, abonnements (`watches`) et suivis entre comptes. Sur une instance à un seul compte ces courbes restent plates : elles ne deviennent lisibles que si la forge accueille d'autres utilisateurs.",
+          "description": "Stars, watches and follows between accounts. On a single-account instance these curves stay flat: they only become meaningful once the forge hosts other users.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -989,7 +989,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_stars{job=\"forgejo\"}",
-              "legendFormat": "Étoiles",
+              "legendFormat": "Stars",
               "range": true,
               "instant": false,
               "refId": "A"
@@ -1001,7 +1001,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_watches{job=\"forgejo\"}",
-              "legendFormat": "Abonnements",
+              "legendFormat": "Watches",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -1013,7 +1013,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_follows{job=\"forgejo\"}",
-              "legendFormat": "Suivis",
+              "legendFormat": "Follows",
               "range": true,
               "instant": false,
               "refId": "C"
@@ -1025,13 +1025,13 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_attachments{job=\"forgejo\"}",
-              "legendFormat": "Pièces jointes",
+              "legendFormat": "Attachments",
               "range": true,
               "instant": false,
               "refId": "D"
             }
           ],
-          "title": "Attention portée aux dépôts",
+          "title": "Attention paid to the repositories",
           "type": "timeseries"
         },
         {
@@ -1039,7 +1039,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Le panneau à surveiller sur une forge exposée sur Internet. L'inscription est fermée et le SSH est coupé : `Utilisateurs`, `Clés publiques` et `Applications OAuth2` ne doivent bouger que sur une action délibérée. `Sources de connexion` compte les back-ends d'authentification externes (LDAP, OAuth2) — il n'y en a aucun de configuré ici, la valeur attendue est 0.",
+          "description": "⚠️ The panel to watch on a forge exposed to the Internet. Registration is closed and SSH is off: `Users`, `Public keys` and `OAuth2 applications` must only move on a deliberate action. `Login sources` counts the external authentication back-ends (LDAP, OAuth2) — none is configured here, the expected value is 0.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1124,7 +1124,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_users{job=\"forgejo\"}",
-              "legendFormat": "Utilisateurs",
+              "legendFormat": "Users",
               "range": true,
               "instant": false,
               "refId": "A"
@@ -1136,7 +1136,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_publickeys{job=\"forgejo\"}",
-              "legendFormat": "Clés publiques",
+              "legendFormat": "Public keys",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -1148,7 +1148,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_oauths{job=\"forgejo\"}",
-              "legendFormat": "Applications OAuth2",
+              "legendFormat": "OAuth2 applications",
               "range": true,
               "instant": false,
               "refId": "C"
@@ -1160,7 +1160,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_loginsources{job=\"forgejo\"}",
-              "legendFormat": "Sources de connexion",
+              "legendFormat": "Login sources",
               "range": true,
               "instant": false,
               "refId": "D"
@@ -1172,13 +1172,13 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_accesses{job=\"forgejo\"}",
-              "legendFormat": "Droits d'accès explicites",
+              "legendFormat": "Explicit access rights",
               "range": true,
               "instant": false,
               "refId": "E"
             }
           ],
-          "title": "Comptes, clés et méthodes de connexion",
+          "title": "Accounts, keys and login methods",
           "type": "timeseries"
         },
         {
@@ -1191,7 +1191,7 @@ data:
           },
           "id": 14,
           "panels": [],
-          "title": "Automatisation",
+          "title": "Automation",
           "type": "row"
         },
         {
@@ -1199,7 +1199,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`gitea_hooktasks` est la file des livraisons de webhooks : une valeur qui MONTE sans redescendre veut dire que les livraisons échouent ou que la cible ne répond pas. ⚠️ Les livraisons réussies sont purgées par la tâche de nettoyage (`[cron.cleanup_hook_task]`), pas immédiatement : un palier n'est pas forcément une panne. `gitea_updatetasks` est la file de mise à jour des miroirs.",
+          "description": "`gitea_hooktasks` is the webhook delivery queue: a value RISING without coming back down means deliveries are failing or the target does not answer. ⚠️ Successful deliveries are purged by the cleanup job (`[cron.cleanup_hook_task]`), not immediately: a plateau is not necessarily a failure. `gitea_updatetasks` is the mirror update queue.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1283,7 +1283,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_hooktasks{job=\"forgejo\"}",
-              "legendFormat": "Livraisons de webhooks en file",
+              "legendFormat": "Webhook deliveries queued",
               "range": true,
               "instant": false,
               "refId": "A"
@@ -1295,7 +1295,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_updatetasks{job=\"forgejo\"}",
-              "legendFormat": "Tâches de mise à jour",
+              "legendFormat": "Update tasks",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -1307,7 +1307,7 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_webhooks{job=\"forgejo\"}",
-              "legendFormat": "Webhooks configurés",
+              "legendFormat": "Webhooks configured",
               "range": true,
               "instant": false,
               "refId": "C"
@@ -1319,13 +1319,13 @@ data:
               },
               "editorMode": "code",
               "expr": "gitea_mirrors{job=\"forgejo\"}",
-              "legendFormat": "Miroirs",
+              "legendFormat": "Mirrors",
               "range": true,
               "instant": false,
               "refId": "D"
             }
           ],
-          "title": "Webhooks, miroirs et tâches en file",
+          "title": "Webhooks, mirrors and queued tasks",
           "type": "timeseries"
         },
         {
@@ -1338,7 +1338,7 @@ data:
           },
           "id": 60,
           "panels": [],
-          "title": "Base de données",
+          "title": "Database",
           "type": "row"
         },
         {
@@ -1346,7 +1346,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`up` de la cible `forgejo-db`, servie par le `postgres-exporter` de la pile `forgejo/`. ⚠️ Ne dit RIEN de PostgreSQL lui-même — l'exportateur peut répondre alors que la base est morte. C'est le panneau voisin qui tranche.",
+          "description": "`up` of the `forgejo-db` target, served by the `postgres-exporter` of the `forgejo/` stack. ⚠️ Says NOTHING about PostgreSQL itself — the exporter can answer while the database is dead. The neighbouring panel settles that.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1423,7 +1423,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Scrape de la base",
+          "title": "Database scrape",
           "type": "stat"
         },
         {
@@ -1431,7 +1431,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`pg_up` : l'exportateur obtient-il une CONNEXION ? ⚠️ C'est la seule métrique qui distingue « la base est morte » de « l'exportateur est muet ». Les deux se présentaient identiquement avant son ajout. À 0 avec un scrape au vert : conteneur `db` arrêté, mot de passe divergent entre `DATA_SOURCE_PASS` et `POSTGRES_PASSWORD`, ou base qui refuse les connexions. Alerte : `ForgejoDbDown`, 5 min.",
+          "description": "`pg_up`: does the exporter get a CONNECTION? ⚠️ This is the only metric that tells \"the database is dead\" from \"the exporter is silent\". Both looked identical before it was added. At 0 with a green scrape: stopped `db` container, password diverging between `DATA_SOURCE_PASS` and `POSTGRES_PASSWORD`, or a database refusing connections. Alert: `ForgejoDbDown`, 5 min.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1443,7 +1443,7 @@ data:
                   "type": "value",
                   "options": {
                     "0": {
-                      "text": "INJOIGNABLE",
+                      "text": "UNREACHABLE",
                       "color": "red",
                       "index": 1
                     },
@@ -1516,7 +1516,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`pg_database_size_bytes{datname=\"app\"}` — la base `app`, nom hérité de CNPG et conservé à la bascule pour limiter les retouches d'`app.ini`.\n\n⚠️ Ce n'est PAS la taille de la forge : les dépôts Git vivent sur le disque, pas en base. La base ne porte que les métadonnées (issues, comptes, permissions). Pour le disque, voir le dashboard « Machines — système ».",
+          "description": "`pg_database_size_bytes{datname=\"app\"}` — the `app` database, a name inherited from CNPG and kept at the migration to limit `app.ini` edits.\n\n⚠️ This is NOT the size of the forge: Git repositories live on disk, not in the database. The database only carries the metadata (issues, accounts, permissions). For the disk, see the \"Machines — system\" dashboard.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1568,13 +1568,13 @@ data:
               },
               "editorMode": "code",
               "expr": "pg_database_size_bytes{job=\"forgejo-db\",datname=\"app\"}",
-              "legendFormat": "taille",
+              "legendFormat": "size",
               "range": false,
               "instant": true,
               "refId": "A"
             }
           ],
-          "title": "Taille de la base",
+          "title": "Database size",
           "type": "stat"
         },
         {
@@ -1582,7 +1582,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`pg_stat_database_numbackends` rapporté à `pg_settings_max_connections` (100 par défaut).\n\n⚠️ Cette métrique est volontairement préférée à `pg_stat_activity_count`, qui donne la même information mais porte SEPT étiquettes dont `wait_event` — un produit cartésien qui crée des séries neuves à chaque scrape. Elle est d'ailleurs écartée AU SCRAPE par un `metricRelabelings` de la ScrapeConfig.",
+          "description": "`pg_stat_database_numbackends` against `pg_settings_max_connections` (100 by default).\n\n⚠️ This metric is deliberately preferred over `pg_stat_activity_count`, which gives the same information but carries SEVEN labels including `wait_event` — a cartesian product creating new series on every scrape. It is in fact dropped AT SCRAPE TIME by a `metricRelabelings` of the ScrapeConfig.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1643,13 +1643,13 @@ data:
               },
               "editorMode": "code",
               "expr": "pg_stat_database_numbackends{job=\"forgejo-db\",datname=\"app\"} / scalar(pg_settings_max_connections{job=\"forgejo-db\"})",
-              "legendFormat": "connexions",
+              "legendFormat": "connections",
               "range": false,
               "instant": true,
               "refId": "A"
             }
           ],
-          "title": "Connexions",
+          "title": "Connections",
           "type": "stat"
         },
         {
@@ -1657,7 +1657,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "La croissance de la base suit les métadonnées — issues, PR, comptes, permissions — pas le volume Git.\n\nÀ lire avec le panneau « Dépôts, organisations et équipes » plus haut : une base qui grossit alors que le nombre d'objets stagne signale du ballonnement (bloat), que l'autovacuum n'a pas rattrapé.\n\n⚠️ Filtre `datname=\"app\"` : sans lui, `template0`, `template1` et `postgres` apparaissent aussi, avec des tailles constantes qui écrasent l'échelle.",
+          "description": "The database's growth follows the metadata — issues, PRs, accounts, permissions — not the Git volume.\n\nRead it with the \"Repositories, organisations and teams\" panel above: a database growing while the object count stagnates signals bloat that autovacuum has not caught up with.\n\n⚠️ The `datname=\"app\"` filter: without it, `template0`, `template1` and `postgres` show up too, with constant sizes that flatten the scale.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1740,13 +1740,13 @@ data:
               },
               "editorMode": "code",
               "expr": "pg_database_size_bytes{job=\"forgejo-db\",datname=\"app\"}",
-              "legendFormat": "base app",
+              "legendFormat": "app database",
               "range": true,
               "instant": false,
               "refId": "A"
             }
           ],
-          "title": "Taille de la base",
+          "title": "Database size",
           "type": "timeseries"
         },
         {
@@ -1754,7 +1754,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Une forge est un écrivain UNIQUE : ce nombre doit rester bas et plat. Une montée durable signale des connexions qui ne se referment pas — pas une montée en charge.\n\nLa ligne `max_connections` est le plafond dur : l'atteindre fait échouer les nouvelles connexions, et `pg_up` tomberait à 0 alors que PostgreSQL tourne parfaitement.\n\nLa saturation n'est volontairement PAS alertée aujourd'hui ; ce panneau est là pour qu'on puisse le constater à l'œil.",
+          "description": "⚠️ A forge is a SINGLE writer: this number must stay low and flat. A lasting rise signals connections that never close — not a load increase.\n\nThe `max_connections` line is the hard ceiling: reaching it fails new connections, and `pg_up` would drop to 0 while PostgreSQL runs perfectly.\n\nSaturation is deliberately NOT alerted on today; this panel exists so it can be seen by eye.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1836,7 +1836,7 @@ data:
               },
               "editorMode": "code",
               "expr": "pg_stat_database_numbackends{job=\"forgejo-db\",datname=\"app\"}",
-              "legendFormat": "connexions",
+              "legendFormat": "connections",
               "range": true,
               "instant": false,
               "refId": "A"
@@ -1854,7 +1854,7 @@ data:
               "refId": "B"
             }
           ],
-          "title": "Connexions ouvertes",
+          "title": "Open connections",
           "type": "timeseries"
         },
         {
@@ -1862,7 +1862,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ CHANGEMENT DE NATURE PAR RAPPORT AU RESTE DU DASHBOARD. Les métriques `gitea_*` sont des JAUGES recomptées à chaque scrape, sur lesquelles `rate()` n'a aucun sens. Les `pg_stat_database_*` sont de vrais COMPTEURS CUMULÉS : `rate()` est ici la bonne lecture, et lire la valeur brute ne dirait rien.\n\nUn taux de `rollback` non nul et durable mérite un regard : la forge ne devrait pas annuler de transactions en régime normal.",
+          "description": "⚠️ A CHANGE OF NATURE COMPARED WITH THE REST OF THIS DASHBOARD. The `gitea_*` metrics are GAUGES recounted on every scrape, on which `rate()` means nothing. The `pg_stat_database_*` ones are true CUMULATIVE COUNTERS: `rate()` is the right reading here, and reading the raw value would say nothing.\n\nA non-zero, lasting `rollback` rate deserves a look: the forge should not be rolling transactions back in normal operation.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1971,7 +1971,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Le travail réel de la base. `tup_fetched` domine largement : la forge lit bien plus qu'elle n'écrit, et chaque scrape du `/metrics` de Forgejo y contribue lui-même — une trentaine de `SELECT count(*)`.\n\n⚠️ C'est la contrepartie mesurable du `scrapeInterval: 60s` de la ScrapeConfig de la forge. Si cette courbe paraît haute au repos, le premier levier est cet intervalle, pas la forge.",
+          "description": "The database's real work. `tup_fetched` dominates by far: the forge reads far more than it writes, and every scrape of Forgejo's `/metrics` contributes to it — some thirty `SELECT count(*)`.\n\n⚠️ This is the measurable price of the forge ScrapeConfig's `scrapeInterval: 60s`. If this curve looks high at idle, the first lever is that interval, not the forge.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2054,7 +2054,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(pg_stat_database_tup_fetched{job=\"forgejo-db\",datname=\"app\"}[$__rate_interval])",
-              "legendFormat": "lues/s",
+              "legendFormat": "read/s",
               "range": true,
               "instant": false,
               "refId": "A"
@@ -2066,7 +2066,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(pg_stat_database_tup_inserted{job=\"forgejo-db\",datname=\"app\"}[$__rate_interval])",
-              "legendFormat": "insérées/s",
+              "legendFormat": "inserted/s",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -2078,7 +2078,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(pg_stat_database_tup_updated{job=\"forgejo-db\",datname=\"app\"}[$__rate_interval])",
-              "legendFormat": "modifiées/s",
+              "legendFormat": "updated/s",
               "range": true,
               "instant": false,
               "refId": "C"
@@ -2090,13 +2090,13 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(pg_stat_database_tup_deleted{job=\"forgejo-db\",datname=\"app\"}[$__rate_interval])",
-              "legendFormat": "supprimées/s",
+              "legendFormat": "deleted/s",
               "range": true,
               "instant": false,
               "refId": "D"
             }
           ],
-          "title": "Lignes lues et écrites",
+          "title": "Rows read and written",
           "type": "timeseries"
         },
         {
@@ -2104,7 +2104,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Part des blocs servis depuis le cache partagé plutôt que depuis le disque. Sur une base de cette taille, elle doit frôler 100 % : tout tient en mémoire.\n\n⚠️ Une chute durable est un signal de STOCKAGE autant que de base — croiser avec « Saturation disque » du dashboard « Machines — système », qui porte le même `instance` pour permettre exactement ce rapprochement.\n\nLes creux brefs au redémarrage sont normaux : le cache est vide.",
+          "description": "Share of the blocks served from the shared cache rather than from disk. On a database this size it should hover at 100%: everything fits in memory.\n\n⚠️ A lasting drop is a STORAGE signal as much as a database one — cross-read with \"Disk saturation\" on the \"Machines — system\" dashboard, which carries the same `instance` precisely to allow that comparison.\n\nBrief dips after a restart are normal: the cache is empty.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2194,7 +2194,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Taux de succès du cache",
+          "title": "Cache hit ratio",
           "type": "timeseries"
         },
         {
@@ -2202,7 +2202,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Trois signaux qui devraient rester à ZÉRO sur cette base.\n\n⚠️ Un DEADLOCK n'est jamais normal ici : la forge est un écrivain unique. Son apparition désigne, dans l'ordre : DEUX instances Forgejo écrivant sur la même base — le scénario redouté de la bascule —, une migration de schéma interrompue, ou une sauvegarde chevauchant une opération longue. C'est l'alerte `ForgejoDbDeadlocks`, déclenchée dès la première occurrence en 1 h.\n\nLes FICHIERS TEMPORAIRES signalent un `work_mem` trop petit pour une requête : la base trie sur disque. Sans gravité isolément, coûteux si récurrent.",
+          "description": "Three signals that should stay at ZERO on this database.\n\n⚠️ A DEADLOCK is never normal here: the forge is a single writer. Its appearance points, in order, at: TWO Forgejo instances writing to the same database — the feared migration scenario —, an interrupted schema migration, or a backup overlapping a long operation. This is the `ForgejoDbDeadlocks` alert, firing on the first occurrence within 1 h.\n\nTEMPORARY FILES signal a `work_mem` too small for a query: the database sorts on disk. Harmless in isolation, costly when recurring.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2296,7 +2296,7 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(pg_stat_database_conflicts{job=\"forgejo-db\",datname=\"app\"}[$__rate_interval])",
-              "legendFormat": "conflits/s",
+              "legendFormat": "conflicts/s",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -2308,13 +2308,13 @@ data:
               },
               "editorMode": "code",
               "expr": "rate(pg_stat_database_temp_bytes{job=\"forgejo-db\",datname=\"app\"}[$__rate_interval])",
-              "legendFormat": "octets temporaires/s",
+              "legendFormat": "temporary bytes/s",
               "range": true,
               "instant": false,
               "refId": "C"
             }
           ],
-          "title": "Anomalies — deadlocks, conflits, fichiers temporaires",
+          "title": "Anomalies — deadlocks, conflicts, temporary files",
           "type": "timeseries"
         },
         {
@@ -2322,7 +2322,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`pg_locks_count`, ventilé par mode. `AccessShareLock` est le mode d'un simple `SELECT` et domine normalement.\n\n⚠️ L'apparition d'`AccessExclusiveLock` est ce qu'il faut repérer : c'est le verrou d'un `ALTER TABLE`, donc d'une migration de schéma Forgejo — et il bloque TOUT sur la table concernée, y compris les lectures. Un pic à la montée de version est attendu ; en dehors, il ne devrait rien y avoir.",
+          "description": "`pg_locks_count`, split per mode. `AccessShareLock` is the mode of a plain `SELECT` and normally dominates.\n\n⚠️ The appearance of `AccessExclusiveLock` is what to spot: it is the lock of an `ALTER TABLE`, hence of a Forgejo schema migration — and it blocks EVERYTHING on the table concerned, reads included. A spike during a version upgrade is expected; outside of that, there should be nothing.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2410,7 +2410,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Verrous par mode",
+          "title": "Locks per mode",
           "type": "timeseries"
         },
         {
@@ -2423,7 +2423,7 @@ data:
           },
           "id": 80,
           "panels": [],
-          "title": "Sauvegarde — mesurée depuis la machine",
+          "title": "Backup — measured from the host",
           "type": "row"
         },
         {
@@ -2431,7 +2431,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ ÉTAT AU 2026-09-11 : CE PANNEAU EST VIDE, et ce n'est pas une panne. La métrique n'est pas encore publiée — `forgejo-ctl` a été modifié dans le dépôt mais pas encore déployé sur l'hôte. Elle apparaîtra après `sudo forgejo-ctl deploy` PUIS une première sauvegarde. Vérification du canal, qui lui est sain : `node_textfile_scrape_error{job=\"external-node\"}` vaut 0.\n\nÂge de `forgejo_backup_last_success_timestamp_seconds`, déposée par `forgejo-ctl backup` dans le collecteur textfile.\n\n⚠️ « No data » n'est PAS un bug d'affichage : la série est DÉLIBÉRÉMENT absente tant qu'aucune sauvegarde n'a jamais abouti. C'est le seul moyen de distinguer « jamais sauvegardé » de « sauvegardé il y a longtemps » — un zéro se lirait comme une sauvegarde du 1er janvier 1970. `ForgejoBackupNoMetric` couvre ce cas, `ForgejoBackupTooOld` l'autre.\n\nSeuil d'alerte : 30 h, aligné sur `MAX_AGE_HOURS` de forgejo-ctl.",
+          "description": "⚠️ STATE AS OF 2026-09-11: THIS PANEL IS EMPTY, and that is not a failure. The metric is not published yet — `forgejo-ctl` was changed in the repository but not deployed on the host. It will appear after `sudo forgejo-ctl deploy` THEN a first backup. Checking the channel, which is healthy: `node_textfile_scrape_error{job=\"external-node\"}` reads 0.\n\nAge of `forgejo_backup_last_success_timestamp_seconds`, written by `forgejo-ctl backup` into the textfile collector.\n\n⚠️ \"No data\" is NOT a display bug: the series is DELIBERATELY absent until a backup has succeeded at least once. It is the only way to tell \"never backed up\" from \"backed up long ago\" — a zero would read as a backup from 1 January 1970. `ForgejoBackupNoMetric` covers the former case, `ForgejoBackupTooOld` the latter.\n\nAlert threshold: 30 h, aligned on forgejo-ctl's `MAX_AGE_HOURS`.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2453,7 +2453,7 @@ data:
                 ]
               },
               "unit": "s",
-              "noValue": "jamais"
+              "noValue": "never"
             },
             "overrides": []
           },
@@ -2488,13 +2488,13 @@ data:
               },
               "editorMode": "code",
               "expr": "time() - forgejo_backup_last_success_timestamp_seconds{job=\"external-node\"}",
-              "legendFormat": "âge",
+              "legendFormat": "age",
               "range": false,
               "instant": true,
               "refId": "A"
             }
           ],
-          "title": "Dernière sauvegarde réussie",
+          "title": "Last successful backup",
           "type": "stat"
         },
         {
@@ -2502,7 +2502,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ ÉTAT AU 2026-09-11 : CE PANNEAU EST VIDE, et ce n'est pas une panne. La métrique n'est pas encore publiée — `forgejo-ctl` a été modifié dans le dépôt mais pas encore déployé sur l'hôte. Elle apparaîtra après `sudo forgejo-ctl deploy` PUIS une première sauvegarde. Vérification du canal, qui lui est sain : `node_textfile_scrape_error{job=\"external-node\"}` vaut 0.\n\nÂge de `forgejo_backup_last_run_timestamp_seconds` — réussie OU NON. L'écart avec le panneau de gauche est exactement la durée pendant laquelle les sauvegardes échouent : les deux identiques = la dernière a réussi.",
+          "description": "⚠️ STATE AS OF 2026-09-11: THIS PANEL IS EMPTY, and that is not a failure. The metric is not published yet — `forgejo-ctl` was changed in the repository but not deployed on the host. It will appear after `sudo forgejo-ctl deploy` THEN a first backup. Checking the channel, which is healthy: `node_textfile_scrape_error{job=\"external-node\"}` reads 0.\n\nAge of `forgejo_backup_last_run_timestamp_seconds` — successful OR NOT. The gap with the panel on the left is exactly how long backups have been failing: the two equal = the last one succeeded.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2520,7 +2520,7 @@ data:
                 ]
               },
               "unit": "s",
-              "noValue": "jamais"
+              "noValue": "never"
             },
             "overrides": []
           },
@@ -2555,13 +2555,13 @@ data:
               },
               "editorMode": "code",
               "expr": "time() - forgejo_backup_last_run_timestamp_seconds{job=\"external-node\"}",
-              "legendFormat": "âge",
+              "legendFormat": "age",
               "range": false,
               "instant": true,
               "refId": "A"
             }
           ],
-          "title": "Dernière exécution",
+          "title": "Last run",
           "type": "stat"
         },
         {
@@ -2569,7 +2569,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ ÉTAT AU 2026-09-11 : CE PANNEAU EST VIDE, et ce n'est pas une panne. La métrique n'est pas encore publiée — `forgejo-ctl` a été modifié dans le dépôt mais pas encore déployé sur l'hôte. Elle apparaîtra après `sudo forgejo-ctl deploy` PUIS une première sauvegarde. Vérification du canal, qui lui est sain : `node_textfile_scrape_error{job=\"external-node\"}` vaut 0.\n\n`forgejo_backup_last_run_success`. ⚠️ Cette valeur reste à 0 jusqu'à la PROCHAINE sauvegarde : l'alerte ne s'éteint pas parce que le problème est réglé, mais parce qu'une sauvegarde a RÉUSSI. Un échec oublié ne s'efface pas tout seul à minuit.",
+          "description": "⚠️ STATE AS OF 2026-09-11: THIS PANEL IS EMPTY, and that is not a failure. The metric is not published yet — `forgejo-ctl` was changed in the repository but not deployed on the host. It will appear after `sudo forgejo-ctl deploy` THEN a first backup. Checking the channel, which is healthy: `node_textfile_scrape_error{job=\"external-node\"}` reads 0.\n\n`forgejo_backup_last_run_success`. ⚠️ This value stays at 0 until the NEXT backup: the alert does not clear because the problem is fixed, but because a backup SUCCEEDED. A forgotten failure does not wipe itself at midnight.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2581,7 +2581,7 @@ data:
                   "type": "value",
                   "options": {
                     "0": {
-                      "text": "ÉCHEC",
+                      "text": "FAILED",
                       "color": "red",
                       "index": 1
                     },
@@ -2606,7 +2606,7 @@ data:
                   }
                 ]
               },
-              "noValue": "jamais"
+              "noValue": "never"
             },
             "overrides": []
           },
@@ -2641,13 +2641,13 @@ data:
               },
               "editorMode": "code",
               "expr": "forgejo_backup_last_run_success{job=\"external-node\"}",
-              "legendFormat": "résultat",
+              "legendFormat": "outcome",
               "range": false,
               "instant": true,
               "refId": "A"
             }
           ],
-          "title": "Résultat de la dernière exécution",
+          "title": "Outcome of the last run",
           "type": "stat"
         },
         {
@@ -2655,7 +2655,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Ces séries arrivent par le scrape de `hosts-monitoring` (job `external-node`), pas par ceux de `forgejo-monitoring` : `forgejo-ctl backup` les dépose dans le collecteur `textfile` de node-exporter. Elles parlent de la forge, d'où leur place ici — mais cette section se vide si CE scrape-là tombe, alors que le reste du dashboard reste vert.\n\nSomme des deux artefacts produits par la dernière sauvegarde : l'archive des données (`artefact=\"donnees\"`, un `tar` NON compressé de `${DATA_ROOT}`) et le dump de la base (`artefact=\"base\"`, un `pg_dump -Fc -Z0`).\n\n⚠️ AUCUN DES DEUX N'EST COMPRESSÉ, et c'est délibéré : c'est restic qui compresse, en zstd, sur des octets bruts. Compresser en amont empêcherait toute déduplication — un octet changé déplace toutes les frontières de chunks en aval d'un flux compressé. Ce chiffre est donc la taille à CHAUD, bien supérieure à ce qui part réellement vers le bucket.\n\n⚠️ Il ne dit RIEN de la taille du dépôt distant : restic déduplique entre snapshots, donc une sauvegarde de 28 Mio n'ajoute que quelques Mio au bucket.",
+          "description": "⚠️ These series arrive through the `hosts-monitoring` scrape (job `external-node`), not through the `forgejo-monitoring` ones: `forgejo-ctl backup` drops them into node-exporter's `textfile` collector. They speak of the forge, hence their place here — but this section empties out if THAT scrape falls over, while the rest of the dashboard stays green.\n\nSum of the two artefacts produced by the last backup: the data archive (`artefact=\"donnees\"`, an UNcompressed `tar` of `${DATA_ROOT}`) and the database dump (`artefact=\"base\"`, a `pg_dump -Fc -Z0`).\n\n⚠️ NEITHER IS COMPRESSED, and that is deliberate: restic compresses, in zstd, on raw bytes. Compressing upstream would prevent any deduplication — one changed byte shifts every chunk boundary downstream in a compressed stream. So this figure is the HOT size, well above what actually leaves for the bucket.\n\n⚠️ It says NOTHING about the size of the remote repository: restic deduplicates across snapshots, so a 28 MiB backup only adds a few MiB to the bucket.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2673,7 +2673,7 @@ data:
                   }
                 ]
               },
-              "noValue": "jamais"
+              "noValue": "never"
             },
             "overrides": []
           },
@@ -2714,7 +2714,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Taille du dernier jeu",
+          "title": "Size of the last set",
           "type": "stat"
         },
         {
@@ -2722,7 +2722,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Ces séries arrivent par le scrape de `hosts-monitoring` (job `external-node`), pas par ceux de `forgejo-monitoring` : `forgejo-ctl backup` les dépose dans le collecteur `textfile` de node-exporter. Elles parlent de la forge, d'où leur place ici — mais cette section se vide si CE scrape-là tombe, alors que le reste du dashboard reste vert.\n\nDurée totale de `forgejo-ctl backup`, de l'arrêt de la forge à la fin du `prune` restic.\n\n⚠️ CE N'EST PAS LA DURÉE D'INDISPONIBILITÉ. La fenêtre à froid — forge arrêtée — ne couvre que les deux dumps et leur relecture de vérification ; la remise en service a lieu AVANT l'envoi distant, qui est le plus long. L'indisponibilité réelle est de quelques secondes, cette valeur en est le majorant.\n\n⚠️ Le `TimeoutStartSec=30min` de l'unité systemd est un garde-fou, pas une cible : au-delà, systemd envoie un SIGKILL que le trap du script ne peut pas rattraper — c'est l'`ExecStopPost=` qui relève alors la forge. Une durée qui s'approche de cet ordre de grandeur mérite d'être regardée avant qu'elle ne l'atteigne.",
+          "description": "⚠️ These series arrive through the `hosts-monitoring` scrape (job `external-node`), not through the `forgejo-monitoring` ones: `forgejo-ctl backup` drops them into node-exporter's `textfile` collector. They speak of the forge, hence their place here — but this section empties out if THAT scrape falls over, while the rest of the dashboard stays green.\n\nTotal duration of `forgejo-ctl backup`, from stopping the forge to the end of the restic `prune`.\n\n⚠️ THIS IS NOT THE DOWNTIME. The cold window — forge stopped — only covers the two dumps and their verification read-back; service is restored BEFORE the remote upload, which is the longest part. The real downtime is a few seconds, this value is its upper bound.\n\n⚠️ The systemd unit's `TimeoutStartSec=30min` is a guardrail, not a target: beyond it, systemd sends a SIGKILL that the script's trap cannot catch — it is then `ExecStopPost=` that brings the forge back up. A duration approaching that order of magnitude deserves a look before it gets there.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2748,7 +2748,7 @@ data:
                   }
                 ]
               },
-              "noValue": "jamais"
+              "noValue": "never"
             },
             "overrides": []
           },
@@ -2789,7 +2789,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Durée de la sauvegarde",
+          "title": "Backup duration",
           "type": "stat"
         },
         {
@@ -2797,7 +2797,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Ces séries arrivent par le scrape de `hosts-monitoring` (job `external-node`), pas par ceux de `forgejo-monitoring` : `forgejo-ctl backup` les dépose dans le collecteur `textfile` de node-exporter. Elles parlent de la forge, d'où leur place ici — mais cette section se vide si CE scrape-là tombe, alors que le reste du dashboard reste vert.\n\nCe que les jeux conservés SUR L'HÔTE occupent dans `/var/backups/forgejo`. Leur nombre est dans l'encart voisin.\n\n`forgejo-ctl` en garde `KEEP_LOCAL=2` : le distant est la vraie sauvegarde, le local n'est qu'un tampon pour rejouer une restauration sans redescendre du bucket.\n\n⚠️ `restic forget` élague le dépôt DISTANT, jamais le disque — c'est `elaguer_local` qui borne celui-ci. Sans lui, ce répertoire remplirait sa partition ; il a un volume LVM dédié justement pour qu'un débordement reste une panne de sauvegarde et n'emporte pas Docker et PostgreSQL avec lui. Le remplissage de ce volume se lit dans « Machines — système ».",
+          "description": "⚠️ These series arrive through the `hosts-monitoring` scrape (job `external-node`), not through the `forgejo-monitoring` ones: `forgejo-ctl backup` drops them into node-exporter's `textfile` collector. They speak of the forge, hence their place here — but this section empties out if THAT scrape falls over, while the rest of the dashboard stays green.\n\nWhat the sets kept ON THE HOST occupy in `/var/backups/forgejo`. Their number is in the neighbouring tile.\n\n`forgejo-ctl` keeps `KEEP_LOCAL=2` of them: the remote is the real backup, the local one is only a buffer to replay a restore without pulling back from the bucket.\n\n⚠️ `restic forget` prunes the REMOTE repository, never the disk — it is `elaguer_local` that bounds this one. Without it, this directory would fill its partition; it has a dedicated LVM volume precisely so that an overflow stays a backup failure and does not take Docker and PostgreSQL down with it. The fill level of that volume is read on \"Machines — system\".",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2815,7 +2815,7 @@ data:
                   }
                 ]
               },
-              "noValue": "jamais"
+              "noValue": "never"
             },
             "overrides": []
           },
@@ -2856,7 +2856,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Occupation locale",
+          "title": "Local usage",
           "type": "stat"
         },
         {
@@ -2864,7 +2864,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Ces séries arrivent par le scrape de `hosts-monitoring` (job `external-node`), pas par ceux de `forgejo-monitoring` : `forgejo-ctl backup` les dépose dans le collecteur `textfile` de node-exporter. Elles parlent de la forge, d'où leur place ici — mais cette section se vide si CE scrape-là tombe, alors que le reste du dashboard reste vert.\n\nNombre de jeux `dump-*.tar*` présents dans `/var/backups/forgejo`.\n\n`forgejo-ctl` en garde `KEEP_LOCAL=2` : le distant est la vraie sauvegarde, le local n'est qu'un tampon pour rejouer une restauration sans redescendre du bucket. Une valeur qui dépasse 2 durablement signifie que `elaguer_local` ne passe plus.\n\n⚠️ `restic forget` élague le dépôt DISTANT, jamais le disque — ce sont deux élagages distincts, et seul le second protège la partition locale.",
+          "description": "⚠️ These series arrive through the `hosts-monitoring` scrape (job `external-node`), not through the `forgejo-monitoring` ones: `forgejo-ctl backup` drops them into node-exporter's `textfile` collector. They speak of the forge, hence their place here — but this section empties out if THAT scrape falls over, while the rest of the dashboard stays green.\n\nNumber of `dump-*.tar*` sets present in `/var/backups/forgejo`.\n\n`forgejo-ctl` keeps `KEEP_LOCAL=2` of them: the remote is the real backup, the local one is only a buffer to replay a restore without pulling back from the bucket. A value staying above 2 means `elaguer_local` no longer runs.\n\n⚠️ `restic forget` prunes the REMOTE repository, never the disk — these are two distinct prunings, and only the second protects the local partition.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2873,7 +2873,7 @@ data:
               "mappings": [],
               "unit": "none",
               "decimals": 0,
-              "noValue": "jamais",
+              "noValue": "never",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -2927,7 +2927,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Jeux conservés localement",
+          "title": "Sets kept locally",
           "type": "stat"
         },
         {
@@ -2935,7 +2935,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Ces séries arrivent par le scrape de `hosts-monitoring` (job `external-node`), pas par ceux de `forgejo-monitoring` : `forgejo-ctl backup` les dépose dans le collecteur `textfile` de node-exporter. Elles parlent de la forge, d'où leur place ici — mais cette section se vide si CE scrape-là tombe, alors que le reste du dashboard reste vert.\n\n⚠️ TOUTES LES LIGNES SONT DES OCTETS, et c'est ce qui rend cette table lisible : une colonne de valeurs ne peut porter QU'UNE unité. La version précédente y mélangeait octets, secondes et décomptes — Grafana affichait alors des nombres bruts, faute de pouvoir formater. Durée, âge et nombre de jeux sont donc dans les encarts ci-dessus, chacun avec la sienne.\n\n⚠️ UNE SEULE REQUÊTE, pas une par ligne. Sept requêtes séparées produisaient sept colonnes `Value #A`…`Value #G` que la transformation `merge` ne fondait pas — constaté à l'écran. Les métriques sont donc réunies par `or` et étiquetées par `label_replace`, ce qui donne une seule colonne de valeurs.\n\n⚠️ « à chaud » : ni l'archive ni le dump ne sont compressés, délibérément — c'est restic qui compresse, en zstd, sur des octets bruts. Ces tailles sont donc bien supérieures à ce qui part réellement vers le bucket, et ne disent rien de la taille du dépôt distant, que la déduplication entre snapshots rend sans rapport.\n\nUne ligne absente signifie « non relevé », jamais « zéro » : `publier_metriques` omet une mesure qu'il n'a pas pu prendre — par exemple la taille des données si la sauvegarde a échoué avant le `tar`.",
+          "description": "⚠️ These series arrive through the `hosts-monitoring` scrape (job `external-node`), not through the `forgejo-monitoring` ones: `forgejo-ctl backup` drops them into node-exporter's `textfile` collector. They speak of the forge, hence their place here — but this section empties out if THAT scrape falls over, while the rest of the dashboard stays green.\n\n⚠️ EVERY ROW IS IN BYTES, and that is what makes this table readable: a value column can carry ONLY ONE unit. The previous version mixed bytes, seconds and counts — Grafana then showed raw numbers, unable to format them. Duration, age and set count are therefore in the tiles above, each with its own unit.\n\n⚠️ ONE SINGLE QUERY, not one per row. Seven separate queries produced seven `Value #A`…`Value #G` columns that the `merge` transformation did not fold together — observed on screen. The metrics are therefore joined with `or` and labelled with `label_replace`, which gives a single value column.\n\n⚠️ \"hot\": neither the archive nor the dump is compressed, deliberately — restic compresses, in zstd, on raw bytes. These sizes are therefore well above what actually leaves for the bucket, and say nothing about the size of the remote repository, which deduplication across snapshots makes unrelated.\n\nA missing row means \"not measured\", never \"zero\": `publier_metriques` omits a measurement it could not take — for instance the data size when the backup failed before the `tar`.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2963,7 +2963,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Valeur"
+                  "options": "Value"
                 },
                 "properties": [
                   {
@@ -2983,7 +2983,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mesure"
+                  "options": "Measurement"
                 },
                 "properties": [
                   {
@@ -3024,7 +3024,7 @@ data:
               "format": "table",
               "instant": true,
               "range": false,
-              "expr": "label_replace(label_replace(sum(forgejo_backup_artifact_bytes{job=\"external-node\"}), \"mesure\", \"Taille du jeu — à chaud, non compressé\", \"\", \"\"), \"ordre\", \"1\", \"\", \"\")\n  or\nlabel_replace(label_replace(forgejo_backup_artifact_bytes{job=\"external-node\",artefact=\"donnees\"}, \"mesure\", \"    dont archive des données (tar)\", \"\", \"\"), \"ordre\", \"2\", \"\", \"\")\n  or\nlabel_replace(label_replace(forgejo_backup_artifact_bytes{job=\"external-node\",artefact=\"base\"}, \"mesure\", \"    dont dump de la base (pg_dump)\", \"\", \"\"), \"ordre\", \"3\", \"\", \"\")\n  or\nlabel_replace(label_replace(forgejo_backup_local_bytes{job=\"external-node\"}, \"mesure\", \"Occupation locale — tous jeux confondus\", \"\", \"\"), \"ordre\", \"4\", \"\", \"\")",
+              "expr": "label_replace(label_replace(sum(forgejo_backup_artifact_bytes{job=\"external-node\"}), \"mesure\", \"Set size — hot, uncompressed\", \"\", \"\"), \"ordre\", \"1\", \"\", \"\")\n  or\nlabel_replace(label_replace(forgejo_backup_artifact_bytes{job=\"external-node\",artefact=\"donnees\"}, \"mesure\", \"    of which data archive (tar)\", \"\", \"\"), \"ordre\", \"2\", \"\", \"\")\n  or\nlabel_replace(label_replace(forgejo_backup_artifact_bytes{job=\"external-node\",artefact=\"base\"}, \"mesure\", \"    of which database dump (pg_dump)\", \"\", \"\"), \"ordre\", \"3\", \"\", \"\")\n  or\nlabel_replace(label_replace(forgejo_backup_local_bytes{job=\"external-node\"}, \"mesure\", \"Local usage — all sets together\", \"\", \"\"), \"ordre\", \"4\", \"\", \"\")",
               "refId": "A"
             }
           ],
@@ -3053,13 +3053,13 @@ data:
                 },
                 "indexByName": {},
                 "renameByName": {
-                  "mesure": "Mesure",
-                  "Value": "Valeur"
+                  "mesure": "Measurement",
+                  "Value": "Value"
                 }
               }
             }
           ],
-          "title": "Composition du dernier jeu",
+          "title": "Composition of the last set",
           "type": "table"
         },
         {
@@ -3067,7 +3067,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Ces séries arrivent par le scrape de `hosts-monitoring` (job `external-node`) : `forgejo-ctl backup` les dépose dans le collecteur `textfile` de node-exporter.\n\nUne ligne par sauvegarde RÉUSSIE sur la période affichée, la plus récente en haut.\n\n⚠️ CETTE LISTE EST RECONSTRUITE, PAS STOCKÉE. Prometheus ne garde pas de liste : c'est la série `forgejo_backup_last_success_timestamp_seconds` qui change de valeur à chaque sauvegarde, et chacune de ses valeurs DISTINCTES est une sauvegarde. La transformation `groupBy` les regroupe ; la taille associée est celle relevée au même instant.\n\n⚠️ SA PROFONDEUR EST CELLE DE LA RÉTENTION PROMETHEUS ET DU SÉLECTEUR DE TEMPS, pas celle de restic. La rétention réelle des snapshots est `--keep-daily 14 --keep-weekly 8 --keep-monthly 12` ; pour la liste faisant foi, `forgejo-ctl snapshots` sur l'hôte.\n\n⚠️ Sur une plage longue, Grafana élargit le pas d'échantillonnage : deux sauvegardes tombant dans le même pas se confondraient en une ligne. Sans effet en régime quotidien ; visible si on en lance plusieurs dans l'heure, comme le 2026-09-11.\n\nUne sauvegarde en ÉCHEC n'apparaît pas ici — elle ne met pas à jour l'horodatage de succès. C'est l'encart « Résultat de la dernière exécution » qui la montre.",
+          "description": "⚠️ These series arrive through the `hosts-monitoring` scrape (job `external-node`): `forgejo-ctl backup` drops them into node-exporter's `textfile` collector.\n\nOne row per SUCCESSFUL backup over the displayed range, the most recent on top.\n\n⚠️ THIS LIST IS RECONSTRUCTED, NOT STORED. Prometheus keeps no list: it is the `forgejo_backup_last_success_timestamp_seconds` series that changes value on every backup, and each of its DISTINCT values is one backup. The `groupBy` transformation groups them; the size shown is the one measured at the same instant.\n\n⚠️ ITS DEPTH IS THAT OF THE PROMETHEUS RETENTION AND OF THE TIME PICKER, not that of restic. The real snapshot retention is `--keep-daily 14 --keep-weekly 8 --keep-monthly 12`; for the authoritative list, `forgejo-ctl snapshots` on the host.\n\n⚠️ Over a long range, Grafana widens the sampling step: two backups falling in the same step would merge into one row. No effect in daily operation; visible when several are launched within the hour, as on 2026-09-11.\n\nA FAILED backup does not show up here — it does not update the success timestamp. The \"Outcome of the last run\" tile is what shows it.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3095,7 +3095,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Sauvegarde"
+                  "options": "Backup"
                 },
                 "properties": [
                   {
@@ -3111,7 +3111,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Taille du jeu"
+                  "options": "Set size"
                 },
                 "properties": [
                   {
@@ -3151,7 +3151,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Sauvegarde"
+                "displayName": "Backup"
               }
             ]
           },
@@ -3210,13 +3210,13 @@ data:
                 "excludeByName": {},
                 "indexByName": {},
                 "renameByName": {
-                  "Value #A": "Sauvegarde",
-                  "Value #B (lastNotNull)": "Taille du jeu"
+                  "Value #A": "Backup",
+                  "Value #B (lastNotNull)": "Set size"
                 }
               }
             }
           ],
-          "title": "Liste des sauvegardes réussies",
+          "title": "List of successful backups",
           "type": "table"
         },
         {
@@ -3224,7 +3224,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ Ces séries arrivent par le scrape de `hosts-monitoring` (job `external-node`) : `forgejo-ctl backup` les dépose dans le collecteur `textfile` de node-exporter.\n\nLa taille des artefacts dans le temps. Chaque MARCHE est une sauvegarde : la valeur ne change qu'au moment où `publier_metriques` réécrit le fichier `.prom`, et reste plate entre deux.\n\n⚠️ C'est la taille À CHAUD, non compressée — restic compresse et déduplique ensuite, donc la croissance du bucket est bien plus lente que celle de ces courbes.\n\nCe qu'on y lit : l'archive des données suit le volume des dépôts Git, le dump de la base suit les métadonnées (issues, comptes). Une marche brutale sur l'une sans l'autre désigne laquelle des deux a grossi.\n\n⚠️ « Occupation locale » n'est PAS la somme des deux : elle compte les `KEEP_LOCAL=2` jeux conservés sur le disque, donc environ le double d'un jeu — et elle retombe à chaque passage d'`elaguer_local`.",
+          "description": "⚠️ These series arrive through the `hosts-monitoring` scrape (job `external-node`): `forgejo-ctl backup` drops them into node-exporter's `textfile` collector.\n\nThe size of the artefacts over time. Every STEP is one backup: the value only changes when `publier_metriques` rewrites the `.prom` file, and stays flat in between.\n\n⚠️ This is the HOT size, uncompressed — restic compresses and deduplicates afterwards, so the bucket grows far more slowly than these curves.\n\nWhat to read here: the data archive follows the volume of the Git repositories, the database dump follows the metadata (issues, accounts). A sharp step on one without the other says which of the two grew.\n\n⚠️ \"Local usage\" is NOT the sum of the two: it counts the `KEEP_LOCAL=2` sets kept on disk, so roughly twice one set — and it drops back every time `elaguer_local` runs.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3308,7 +3308,7 @@ data:
               },
               "editorMode": "code",
               "expr": "forgejo_backup_artifact_bytes{job=\"external-node\",artefact=\"donnees\"}",
-              "legendFormat": "archive des données",
+              "legendFormat": "data archive",
               "range": true,
               "instant": false,
               "refId": "A"
@@ -3320,7 +3320,7 @@ data:
               },
               "editorMode": "code",
               "expr": "forgejo_backup_artifact_bytes{job=\"external-node\",artefact=\"base\"}",
-              "legendFormat": "dump de la base",
+              "legendFormat": "database dump",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -3332,13 +3332,13 @@ data:
               },
               "editorMode": "code",
               "expr": "forgejo_backup_local_bytes{job=\"external-node\"}",
-              "legendFormat": "occupation locale",
+              "legendFormat": "local usage",
               "range": true,
               "instant": false,
               "refId": "C"
             }
           ],
-          "title": "Évolution de la taille des sauvegardes",
+          "title": "Backup size over time",
           "type": "timeseries"
         },
         {
@@ -3346,7 +3346,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ ÉTAT AU 2026-09-11 : CE PANNEAU EST VIDE, et ce n'est pas une panne. La métrique n'est pas encore publiée — `forgejo-ctl` a été modifié dans le dépôt mais pas encore déployé sur l'hôte. Elle apparaîtra après `sudo forgejo-ctl deploy` PUIS une première sauvegarde. Vérification du canal, qui lui est sain : `node_textfile_scrape_error{job=\"external-node\"}` vaut 0.\n\nLa même chose dans le temps. Le profil attendu est une DENT DE SCIE : l'âge monte pendant 24 h puis retombe à zéro au passage du timer. Une rampe qui ne retombe plus est une chaîne de sauvegarde morte — et elle se voit ici des heures avant que `ForgejoBackupTooOld` ne franchisse ses 30 h.",
+          "description": "⚠️ STATE AS OF 2026-09-11: THIS PANEL IS EMPTY, and that is not a failure. The metric is not published yet — `forgejo-ctl` was changed in the repository but not deployed on the host. It will appear after `sudo forgejo-ctl deploy` THEN a first backup. Checking the channel, which is healthy: `node_textfile_scrape_error{job=\"external-node\"}` reads 0.\n\nThe same thing over time. The expected profile is a SAWTOOTH: the age climbs for 24 h then drops back to zero when the timer runs. A ramp that no longer falls back is a dead backup chain — and it shows here hours before `ForgejoBackupTooOld` crosses its 30 h.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3396,7 +3396,7 @@ data:
               },
               "unit": "s",
               "min": 0,
-              "noValue": "jamais"
+              "noValue": "never"
             },
             "overrides": [
               {
@@ -3461,13 +3461,13 @@ data:
               },
               "editorMode": "code",
               "expr": "time() - forgejo_backup_last_success_timestamp_seconds{job=\"external-node\"}",
-              "legendFormat": "âge du dernier succès",
+              "legendFormat": "age of the last success",
               "range": true,
               "instant": false,
               "refId": "A"
             }
           ],
-          "title": "Âge de la dernière sauvegarde réussie",
+          "title": "Age of the last successful backup",
           "type": "timeseries"
         },
         {
@@ -3488,7 +3488,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`process_cpu_seconds_total` du binaire lui-même, pas du conteneur : les limites, la pression et le throttling cgroup se lisent dans « Ressources — pods ». Les pics correspondent aux opérations Git coûteuses (clone, indexation bleve, fabrication d'archives).",
+          "description": "`process_cpu_seconds_total` of the binary itself, not of the container: limits, pressure and cgroup throttling are read on \"Resources — pods\". The spikes match the expensive Git operations (clone, bleve indexing, archive building).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3577,7 +3577,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU du processus Forgejo",
+          "title": "CPU of the Forgejo process",
           "type": "timeseries"
         },
         {
@@ -3585,7 +3585,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`process_resident_memory_bytes` (RSS vu par l'OS) contre le tas Go. Un écart durable entre les deux vient du cache et des buffers Git, pas d'une fuite. ⚠️ Ce n'est pas la mémoire facturée par le cgroup : un OOMKill se diagnostique dans « Ressources — pods », working set à l'appui.",
+          "description": "`process_resident_memory_bytes` (RSS as the OS sees it) against the Go heap. A lasting gap between the two comes from the cache and Git buffers, not from a leak. ⚠️ This is not the memory billed by the cgroup: an OOMKill is diagnosed on \"Resources — pods\", working set in hand.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3680,7 +3680,7 @@ data:
               },
               "editorMode": "code",
               "expr": "go_memstats_heap_inuse_bytes{job=\"forgejo\"}",
-              "legendFormat": "Tas Go en usage",
+              "legendFormat": "Go heap in use",
               "range": true,
               "instant": false,
               "refId": "B"
@@ -3692,13 +3692,13 @@ data:
               },
               "editorMode": "code",
               "expr": "go_memstats_stack_inuse_bytes{job=\"forgejo\"}",
-              "legendFormat": "Pile Go",
+              "legendFormat": "Go stack",
               "range": true,
               "instant": false,
               "refId": "C"
             }
           ],
-          "title": "Mémoire du processus Forgejo",
+          "title": "Memory of the Forgejo process",
           "type": "timeseries"
         },
         {
@@ -3706,7 +3706,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Temps écoulé depuis le démarrage du processus, tel qu'il se déclare lui-même (`process_start_time_seconds`). ⚠️ La forge n'est plus dans ce cluster : il n'y a plus de compteur de redémarrages de conteneur à mettre en face — kube-state-metrics ne voit pas la machine Docker. Une ancienneté qui retombe à zéro est donc le SEUL signe d'un redémarrage, et elle ne dit pas s'il était voulu.",
+          "description": "Time elapsed since the process started, as it declares itself (`process_start_time_seconds`). ⚠️ The forge is no longer in this cluster: there is no container restart counter to put beside it — kube-state-metrics does not see the Docker machine. So an age falling back to zero is the ONLY sign of a restart, and it does not say whether it was intended.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3789,13 +3789,13 @@ data:
               },
               "editorMode": "code",
               "expr": "time() - process_start_time_seconds{job=\"forgejo\"}",
-              "legendFormat": "Ancienneté du processus",
+              "legendFormat": "Process age",
               "range": true,
               "instant": false,
               "refId": "B"
             }
           ],
-          "title": "Ancienneté du processus Forgejo",
+          "title": "Age of the Forgejo process",
           "type": "timeseries"
         }
       ],
@@ -3829,8 +3829,9 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
+      "timezone": "utc",
       "title": "Forge — forgejo",
+      "description": "The Forgejo forge hosted outside the cluster: instance content, its PostgreSQL database, the backups measured on the host by forgejo-ctl, and the resources of the Forgejo process itself.",
       "uid": "forgejo-forge",
       "version": 1,
       "weekStart": ""

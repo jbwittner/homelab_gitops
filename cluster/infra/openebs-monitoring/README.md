@@ -64,6 +64,6 @@ kube-prometheus-stack.
   que le Service du node-plugin porte bien `openebs.io/component-name: openebs-lvm-node` (le
   sélecteur du ServiceMonitor) — un renommage upstream lors d'un bump du chart casserait le
   scrape sans rien signaler.
-- **Lecture des métriques** : dashboard « Ressources — volumes »
+- **Lecture des métriques** : dashboard « Resources — volumes »
   ([kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)) — remplissage par PVC et
   état du VG.

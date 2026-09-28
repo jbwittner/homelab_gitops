@@ -1,9 +1,9 @@
 # cluster/app/kube-prometheus-stack/manifests/dashboard-cnpg-barman-plugin.yaml
-# Dashboard Grafana « Sauvegardes PostgreSQL — barman-cloud »
+# Dashboard Grafana « PostgreSQL backups — barman-cloud »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack via le label
 # grafana_dashboard: "1".
 #
-# Pendant du dashboard « Sauvegardes — velero » pour l'autre chaîne de sauvegarde du cluster.
+# Pendant du dashboard « Backups — velero » pour l'autre chaîne de sauvegarde du cluster.
 # Les deux ne se recouvrent PAS : les PVC des bases CNPG sont exclus de la copie kopia
 # (cluster/infra/velero/manifests/volume-policies.yaml), donc ce qui est montré ici est la SEULE
 # protection des données PostgreSQL.
@@ -82,7 +82,7 @@ data:
           },
           "id": 100,
           "panels": [],
-          "title": "État de la chaîne",
+          "title": "Chain state",
           "type": "row"
         },
         {
@@ -90,7 +90,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Temps écoulé depuis la dernière sauvegarde de base RÉUSSIE. Rouge au-delà de 36 h, seuil de l'alerte `CNPGBackupTooOld` et de la schedule quotidienne (02:00). ⚠️ La garde `> 0` est load-bearing : la métrique vaut ZÉRO — pas « absente » — tant qu'aucune sauvegarde n'a jamais abouti. Sans elle, cette tuile afficherait « 56 ans » au lieu de « No data ». Un « No data » ici veut donc dire : aucune sauvegarde n'a jamais réussi, ce que couvre l'alerte `CNPGNoBackupYet`.",
+          "description": "Time elapsed since the last SUCCESSFUL base backup. Red beyond 36 h, the threshold of the `CNPGBackupTooOld` alert and of the daily schedule (02:00). ⚠️ The `> 0` guard is load-bearing: the metric reads ZERO — not \"absent\" — as long as no backup has ever succeeded. Without it, this tile would show \"56 years\" instead of \"No data\". So a \"No data\" here means: no backup has ever succeeded, which the `CNPGNoBackupYet` alert covers.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -147,7 +147,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Dernière sauvegarde réussie",
+          "title": "Last successful backup",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -162,7 +162,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Étendue de la fenêtre restaurable : du plus ancien point de reprise encore dans le bucket jusqu'à la dernière sauvegarde. C'est la profondeur réelle du PITR — la seule réponse à « jusqu'où puis-je remonter ». Elle est bornée par la rétention configurée dans l'`ObjectStore` de la base, pas par cette chaîne : si elle cesse de croître alors que les sauvegardes passent, c'est la rétention qui recycle.",
+          "description": "Span of the restorable window: from the oldest recovery point still in the bucket up to the last backup. This is the real PITR depth — the only answer to \"how far back can I go\". It is bounded by the retention configured in the database's `ObjectStore`, not by this chain: if it stops growing while backups keep succeeding, retention is recycling.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -211,7 +211,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Fenêtre de restauration (PITR)",
+          "title": "Restore window (PITR)",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -226,7 +226,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Segments présents dans `pg_wal/archive_status/` en attente d'archivage. LE signal d'une chaîne morte : un archiveur sain les draine en quelques secondes, donc 0 en régime normal ET sur une base au repos. Non nul de façon durable = PITR interrompu, et `pg_wal` qui grossit jusqu'à remplir le PVC — un `pg_wal` plein ARRÊTE PostgreSQL. Alerte `CNPGWalArchivingBacklog` à 30 min.",
+          "description": "Segments sitting in `pg_wal/archive_status/` waiting to be archived. THE signal of a dead chain: a healthy archiver drains them in seconds, so 0 in normal operation AND on an idle database. Lastingly non-zero = PITR interrupted, and `pg_wal` growing until it fills the PVC — a full `pg_wal` STOPS PostgreSQL. `CNPGWalArchivingBacklog` alert at 30 min.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -283,7 +283,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Segments WAL en attente",
+          "title": "WAL segments pending",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -298,7 +298,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Segments dont l'archivage a échoué sur 24 h. Complète la tuile voisine : un échec qui finit par passer au retry laisse le backlog à zéro et ne se voit QUE ici. Alerte `CNPGWalArchivingFailing` dès le premier échec sur une heure.",
+          "description": "Segments whose archiving failed over 24 h. Completes the neighbouring tile: a failure that eventually succeeds on retry leaves the backlog at zero and is visible ONLY here. `CNPGWalArchivingFailing` alert on the first failure within an hour.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -355,7 +355,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Échecs d'archivage (24 h)",
+          "title": "Archiving failures (24 h)",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -370,7 +370,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Âge du dernier ÉCHEC de sauvegarde de base. « No data » est ici la BONNE nouvelle : aucune sauvegarde n'a jamais échoué (la métrique vaut 0, filtrée par `> 0`). Si cette tuile est plus récente que « Dernière sauvegarde réussie », la dernière tentative a échoué — c'est exactement la condition de l'alerte `CNPGLastBackupFailed`.",
+          "description": "Age of the last FAILED base backup. \"No data\" is the GOOD news here: no backup has ever failed (the metric reads 0, filtered out by `> 0`). If this tile is more recent than \"Last successful backup\", the last attempt failed — exactly the condition of the `CNPGLastBackupFailed` alert.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -427,7 +427,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Dernière tentative en échec",
+          "title": "Last failed attempt",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -442,7 +442,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Nombre de bases dont le sidecar barman-cloud sert des métriques. Ces séries N'EXISTENT QUE pour les Clusters dont le `spec.plugins` est câblé : cette tuile compte donc les bases réellement prises en charge, pas celles qu'on croit avoir configurées.",
+          "description": "Number of databases whose barman-cloud sidecar serves metrics. These series EXIST ONLY for Clusters whose `spec.plugins` is wired: this tile therefore counts the databases actually covered, not those believed to be configured.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -495,7 +495,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Bases sauvegardées",
+          "title": "Databases backed up",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -510,7 +510,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Clusters PostgreSQL vivants MOINS clusters ayant une chaîne barman-cloud. Non nul veut dire qu'au moins une base n'est sauvegardée par rien — rappel : les PVC CNPG sont aussi exclus de la copie kopia de velero (`velero/manifests/volume-policies.yaml`). ⚠️ Cette tuile ignore la variable Base à dessein : masquer une base non sauvegardée en la désélectionnant serait exactement le contraire de ce qu'on veut.",
+          "description": "Live PostgreSQL clusters MINUS clusters having a barman-cloud chain. Non-zero means at least one database is backed up by nothing — a reminder: CNPG PVCs are also excluded from velero's kopia copy (`velero/manifests/volume-policies.yaml`). ⚠️ This tile ignores the Database variable on purpose: hiding an unprotected database by deselecting it would be exactly the opposite of what is wanted.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -563,7 +563,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Bases sans chaîne de sauvegarde",
+          "title": "Databases with no backup chain",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -578,7 +578,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Réplicas prêts du Deployment CNPG-I. Ce Deployment ne transporte AUCUNE donnée : il répond à l'opérateur en gRPC sur `barman-cloud:9090`. Le travail réel est fait par le conteneur sidecar injecté dans chaque pod d'instance (rangée « Coût du plugin »). À 0, aucune NOUVELLE sauvegarde ne peut être lancée — l'archivage WAL déjà en place, lui, continue.",
+          "description": "Ready replicas of the CNPG-I Deployment. This Deployment carries NO data: it answers the operator over gRPC on `barman-cloud:9090`. The real work is done by the sidecar container injected into every instance pod (the \"Plugin cost\" row). At 0, no NEW backup can be started — the WAL archiving already in place keeps going.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -631,7 +631,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Plugin barman-cloud disponible",
+          "title": "barman-cloud plugin available",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -646,7 +646,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Une ligne par base sous barman-cloud. « Plus ancien point restaurable » et « Dernière sauvegarde » bornent la fenêtre PITR. Colonne « Dernier échec » vide = aucun échec depuis la création de la chaîne. ⚠️ Les timestamps sont multipliés par 1000 : Prometheus les sert en secondes, Grafana affiche `dateTimeAsIso` en millisecondes — sans la multiplication, toutes les dates tombent en 1970.",
+          "description": "One row per database under barman-cloud. \"Oldest restorable point\" and \"Last backup\" bound the PITR window. An empty \"Last failure\" column = no failure since the chain was created. ⚠️ The timestamps are multiplied by 1000: Prometheus serves them in seconds, Grafana renders `dateTimeAsIso` in milliseconds — without the multiplication every date lands in 1970.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -674,7 +674,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Dernière sauvegarde"
+                  "options": "Last backup"
                 },
                 "properties": [
                   {
@@ -686,7 +686,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Plus ancien point restaurable"
+                  "options": "Oldest restorable point"
                 },
                 "properties": [
                   {
@@ -698,7 +698,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Dernier échec"
+                  "options": "Last failure"
                 },
                 "properties": [
                   {
@@ -723,7 +723,7 @@ data:
             "sortBy": [
               {
                 "desc": false,
-                "displayName": "Base"
+                "displayName": "Database"
               }
             ]
           },
@@ -790,7 +790,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Chaîne de sauvegarde par base",
+          "title": "Backup chain per database",
           "transformations": [
             {
               "id": "joinByField",
@@ -927,13 +927,13 @@ data:
                 },
                 "indexByName": {},
                 "renameByName": {
-                  "cnpg_io_cluster": "Base",
+                  "cnpg_io_cluster": "Database",
                   "namespace": "Namespace",
-                  "Value #A": "Dernière sauvegarde",
-                  "Value #B": "Plus ancien point restaurable",
-                  "Value #C": "Dernier échec",
-                  "Value #D": "WAL en attente",
-                  "Value #E": "Échecs d'archivage (24 h)"
+                  "Value #A": "Last backup",
+                  "Value #B": "Oldest restorable point",
+                  "Value #C": "Last failure",
+                  "Value #D": "WAL pending",
+                  "Value #E": "Archiving failures (24 h)"
                 }
               }
             }
@@ -957,7 +957,7 @@ data:
           },
           "id": 101,
           "panels": [],
-          "title": "Sauvegardes (objets Backup)",
+          "title": "Backups (Backup objects)",
           "type": "row"
         },
         {
@@ -965,7 +965,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Une ligne par CR `Backup`, servie par kube-state-metrics (`customResourceState`, cf. helm-values.yaml) — c'est le seul chemin déclaratif vers la LISTE des sauvegardes : les métriques du sidecar ne donnent que la plus récente. ⚠️ Ce tableau ne montre que ce qui existe encore en tant qu'objet Kubernetes : une sauvegarde dont le `Backup` a été supprimé reste dans le bucket et reste restaurable, mais disparaît d'ici. Inversement, `kubectl -n <ns> get backups.postgresql.cnpg.io` — NOM LONG obligatoire, `backups` seul est ambigu avec velero.",
+          "description": "One row per `Backup` CR, served by kube-state-metrics (`customResourceState`, see helm-values.yaml) — the only declarative path to the LIST of backups: the sidecar metrics only give the most recent one. ⚠️ This table only shows what still exists as a Kubernetes object: a backup whose `Backup` was deleted stays in the bucket and stays restorable, but disappears from here. Conversely, `kubectl -n <ns> get backups.postgresql.cnpg.io` — the LONG NAME is mandatory, `backups` alone is ambiguous with velero.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -993,7 +993,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Début"
+                  "options": "Start"
                 },
                 "properties": [
                   {
@@ -1005,7 +1005,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Fin"
+                  "options": "End"
                 },
                 "properties": [
                   {
@@ -1017,7 +1017,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Durée"
+                  "options": "Duration"
                 },
                 "properties": [
                   {
@@ -1041,17 +1041,17 @@ data:
                           "completed": {
                             "color": "green",
                             "index": 0,
-                            "text": "Terminée"
+                            "text": "Completed"
                           },
                           "running": {
                             "color": "blue",
                             "index": 1,
-                            "text": "En cours"
+                            "text": "Running"
                           },
                           "failed": {
                             "color": "red",
                             "index": 2,
-                            "text": "Échec"
+                            "text": "Failed"
                           }
                         }
                       }
@@ -1081,7 +1081,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Début"
+                "displayName": "Start"
               }
             ]
           },
@@ -1136,7 +1136,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Sauvegardes existantes",
+          "title": "Existing backups",
           "transformations": [
             {
               "id": "joinByField",
@@ -1305,15 +1305,15 @@ data:
                 },
                 "indexByName": {},
                 "renameByName": {
-                  "backup": "Sauvegarde",
-                  "cnpg_cluster": "Base",
+                  "backup": "Backup",
+                  "cnpg_cluster": "Database",
                   "db_namespace": "Namespace",
                   "phase": "Phase",
-                  "method": "Méthode",
-                  "backup_id": "Identifiant barman",
-                  "Value #A": "Début",
-                  "Value #B": "Fin",
-                  "Value #C": "Durée"
+                  "method": "Method",
+                  "backup_id": "barman ID",
+                  "Value #A": "Start",
+                  "Value #B": "End",
+                  "Value #C": "Duration"
                 }
               }
             }
@@ -1332,7 +1332,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Nombre de CRs `Backup` par phase. Une marche vers le haut de `completed` chaque nuit est le rythme attendu ; une marche de `failed` est une nuit ratée. ⚠️ Ce n'est PAS un compteur d'exécutions : les objets supprimés font redescendre la courbe, et CloudNativePG n'applique aucune purge automatique des `Backup` réussis — leur nombre ne fait que croître tant que personne ne les supprime.",
+          "description": "Number of `Backup` CRs per phase. A step up of `completed` every night is the expected rhythm; a step of `failed` is a missed night. ⚠️ This is NOT a run counter: deleted objects bring the curve back down, and CloudNativePG applies no automatic purge of successful `Backup`s — their number only grows until someone deletes them.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1428,7 +1428,7 @@ data:
               "legendFormat": "{{phase}}"
             }
           ],
-          "title": "Objets Backup par phase",
+          "title": "Backup objects per phase",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1443,7 +1443,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "La même mesure que la tuile d'en-tête, mais dans le temps : chaque dent de scie est une sauvegarde qui a abouti. Une rampe qui monte sans redescendre est une schedule morte — et c'est cette forme, pas une valeur ponctuelle, qui distingue une schedule en panne d'une sauvegarde simplement décalée. Le seuil en pointillés est celui de `CNPGBackupTooOld` (36 h).",
+          "description": "The same measure as the header tile, but over time: every sawtooth is a backup that completed. A ramp going up without coming back down is a dead schedule — and it is that shape, not a single value, that tells a broken schedule from a merely delayed backup. The dashed threshold is the one of `CNPGBackupTooOld` (36 h).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1531,7 +1531,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}}"
             }
           ],
-          "title": "Âge de la dernière sauvegarde réussie",
+          "title": "Age of the last successful backup",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1546,7 +1546,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Profondeur du PITR au fil du temps. Elle croît tant que la rétention de l'`ObjectStore` n'a pas commencé à recycler, puis se stabilise à la valeur de cette rétention. Une CHUTE brutale signifie que le plus ancien point restaurable a sauté : rétention raccourcie, ou objets supprimés du bucket.",
+          "description": "PITR depth over time. It grows until the `ObjectStore` retention starts recycling, then settles at that retention value. A sudden DROP means the oldest restorable point is gone: shortened retention, or objects deleted from the bucket.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1626,7 +1626,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}}"
             }
           ],
-          "title": "Fenêtre de restauration dans le temps",
+          "title": "Restore window over time",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1646,7 +1646,7 @@ data:
           },
           "id": 102,
           "panels": [],
-          "title": "Archivage WAL",
+          "title": "WAL archiving",
           "type": "row"
         },
         {
@@ -1654,7 +1654,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "La moitié CONTINUE de la chaîne : chaque segment de 16 Mio part dans le bucket dès qu'il est complet. Zéro archivage pendant des heures n'est pas anormal sur une base au repos — PostgreSQL ne force un changement de segment sur `archive_timeout` que s'il y a eu de l'activité WAL. C'est la courbe d'échecs, pas celle d'archivages, qui porte le signal.",
+          "description": "The CONTINUOUS half of the chain: every 16 MiB segment leaves for the bucket as soon as it is complete. Zero archiving for hours is not abnormal on an idle database — PostgreSQL only forces a segment switch on `archive_timeout` when there has been WAL activity. The signal is carried by the failure curve, not by the archiving one.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1747,7 +1747,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_archived_count{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "A",
               "range": true,
-              "legendFormat": "Archivés — {{cnpg_io_cluster}}"
+              "legendFormat": "Archived — {{cnpg_io_cluster}}"
             },
             {
               "datasource": {
@@ -1758,10 +1758,10 @@ data:
               "expr": "sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_archiver_failed_count{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "B",
               "range": true,
-              "legendFormat": "Échecs — {{cnpg_io_cluster}}"
+              "legendFormat": "Failures — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Segments archivés et échecs",
+          "title": "Segments archived and failures",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1776,7 +1776,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "« En attente » doit revenir à zéro entre deux segments. Une courbe qui MONTE en escalier est une chaîne cassée dont chaque marche est un segment qui ne partira jamais tout seul — et qui restera sur le PVC. Diagnostic : `kubectl -n <ns> logs <pod> -c plugin-barman-cloud`, puis credentials et droits IAM sur le bucket.",
+          "description": "\"Pending\" must come back to zero between two segments. A curve CLIMBING in steps is a broken chain where every step is a segment that will never leave on its own — and that stays on the PVC. Diagnosis: `kubectl -n <ns> logs <pod> -c plugin-barman-cloud`, then credentials and IAM rights on the bucket.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1869,7 +1869,7 @@ data:
               "expr": "cnpg_collector_pg_wal_archive_status{cnpg_io_cluster=~\"$cluster\", value=\"ready\"}",
               "refId": "A",
               "range": true,
-              "legendFormat": "En attente — {{cnpg_io_cluster}}"
+              "legendFormat": "Pending — {{cnpg_io_cluster}}"
             },
             {
               "datasource": {
@@ -1880,10 +1880,10 @@ data:
               "expr": "cnpg_collector_pg_wal_archive_status{cnpg_io_cluster=~\"$cluster\", value=\"done\"}",
               "refId": "B",
               "range": true,
-              "legendFormat": "Archivés, pas encore recyclés — {{cnpg_io_cluster}}"
+              "legendFormat": "Archived, not recycled yet — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "File d'attente d'archivage",
+          "title": "Archiving queue",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1898,7 +1898,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "⚠️ CE PANNEAU N'EST PAS UN INDICATEUR DE FRAÎCHEUR, et c'est le piège central de cette chaîne. PostgreSQL n'archive que s'il y a eu de l'activité WAL : sur une base au repos, « depuis le dernier succès » monte indéfiniment alors que tout va bien — 40 heures relevées sur une instance parfaitement saine. Aucune alerte n'est bâtie dessus ; le signal d'une chaîne morte est la file d'attente, au-dessus. Ce panneau sert à lire le RYTHME d'écriture de la base, et à comparer les deux courbes entre elles : un « dernier échec » plus récent qu'un « dernier succès » est un archivage en train de tomber.",
+          "description": "⚠️ THIS PANEL IS NOT A FRESHNESS INDICATOR, and that is the central trap of this chain. PostgreSQL only archives when there has been WAL activity: on an idle database, \"since the last success\" climbs indefinitely while everything is fine — 40 hours observed on a perfectly healthy instance. No alert is built on it; the signal of a dead chain is the queue above. This panel is for reading the database's write RHYTHM, and for comparing the two curves with each other: a \"last failure\" more recent than a \"last success\" is archiving on its way down.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1991,7 +1991,7 @@ data:
               "expr": "cnpg_pg_stat_archiver_seconds_since_last_archival{cnpg_io_cluster=~\"$cluster\"}",
               "refId": "A",
               "range": true,
-              "legendFormat": "Depuis le dernier succès — {{cnpg_io_cluster}}"
+              "legendFormat": "Since the last success — {{cnpg_io_cluster}}"
             },
             {
               "datasource": {
@@ -2002,10 +2002,10 @@ data:
               "expr": "cnpg_pg_stat_archiver_seconds_since_last_failure{cnpg_io_cluster=~\"$cluster\"}",
               "refId": "B",
               "range": true,
-              "legendFormat": "Depuis le dernier échec — {{cnpg_io_cluster}}"
+              "legendFormat": "Since the last failure — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Temps depuis le dernier archivage",
+          "title": "Time since the last archiving",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2025,7 +2025,7 @@ data:
           },
           "id": 103,
           "panels": [],
-          "title": "Coût du plugin",
+          "title": "Plugin cost",
           "type": "row"
         },
         {
@@ -2033,7 +2033,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Le SIDECAR (`plugin-barman-cloud`, un par pod d'instance) fait le travail réel : upload barman-cloud et archivage WAL. Ses ressources se règlent par `ObjectStore` (`spec.instanceSidecarConfiguration.resources`), PAS dans le helm-values du plugin — qui ne dimensionne que le serveur gRPC. C'est le sidecar qui est OOM-killé quand une sauvegarde échoue sans message clair.",
+          "description": "The SIDECAR (`plugin-barman-cloud`, one per instance pod) does the real work: barman-cloud upload and WAL archiving. Its resources are set per `ObjectStore` (`spec.instanceSidecarConfiguration.resources`), NOT in the plugin's helm-values — which only sizes the gRPC server. The sidecar is the one that gets OOM-killed when a backup fails with no clear message.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2121,10 +2121,10 @@ data:
               "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"cnpg-system\", container=\"barman-cloud\"})",
               "refId": "B",
               "range": true,
-              "legendFormat": "Serveur gRPC — {{pod}}"
+              "legendFormat": "gRPC server — {{pod}}"
             }
           ],
-          "title": "Mémoire des conteneurs barman-cloud",
+          "title": "Memory of the barman-cloud containers",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2139,7 +2139,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Les pics du sidecar sont les compressions de sauvegarde. Le serveur gRPC reste plat : il ne fait que répondre à l'opérateur.",
+          "description": "The sidecar's spikes are the backup compressions. The gRPC server stays flat: it only answers the operator.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2227,10 +2227,10 @@ data:
               "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"cnpg-system\", container=\"barman-cloud\"}[$__rate_interval]))",
               "refId": "B",
               "range": true,
-              "legendFormat": "Serveur gRPC — {{pod}}"
+              "legendFormat": "gRPC server — {{pod}}"
             }
           ],
-          "title": "CPU des conteneurs barman-cloud",
+          "title": "CPU of the barman-cloud containers",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2245,7 +2245,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Un sidecar qui redémarre pendant une sauvegarde la fait échouer sans que la base ne bronche : PostgreSQL continue de servir, seule la chaîne de sauvegarde est touchée. Croiser avec la courbe de mémoire ci-dessus pour distinguer un OOM d'un redéploiement.\n\n⚠️ La première requête porte sur `kube_pod_init_container_status_restarts_total`, PAS sur `kube_pod_container_status_restarts_total`. Le sidecar est injecté comme *native sidecar* — un initContainer en `restartPolicy: Always` — et kube-state-metrics le range donc avec les conteneurs d'init. La requête « évidente » sur `kube_pod_container_*` renvoie une série vide sans le dire, ce qui se lit exactement comme « aucun redémarrage ». Vérifié sur `forgejo-db-1`. cadvisor, lui, ne fait pas cette distinction : les deux panneaux au-dessus n'ont pas besoin de la garde.",
+          "description": "A sidecar restarting during a backup makes it fail without the database flinching: PostgreSQL keeps serving, only the backup chain is hit. Cross-read with the memory curve above to tell an OOM from a redeploy.\n\n⚠️ The first query reads `kube_pod_init_container_status_restarts_total`, NOT `kube_pod_container_status_restarts_total`. The sidecar is injected as a *native sidecar* — an initContainer with `restartPolicy: Always` — so kube-state-metrics files it with the init containers. The \"obvious\" query on `kube_pod_container_*` returns an empty series without saying so, which reads exactly like \"no restart\". Verified on `forgejo-db-1`. cadvisor makes no such distinction: the two panels above do not need the guard.\n\n⚠️ Neither restart counter sees a RECREATED pod: a new pod is a new object whose counter starts back at zero. The third series counts the barman-cloud pods started less than an hour ago, which is what catches a rollout or an eviction.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2322,7 +2322,7 @@ data:
               "expr": "sum by (namespace, pod) (increase(kube_pod_init_container_status_restarts_total{container=\"plugin-barman-cloud\"}[$__rate_interval]))",
               "refId": "A",
               "range": true,
-              "legendFormat": "Sidecar — {{namespace}}/{{pod}}"
+              "legendFormat": "restarts, sidecar — {{namespace}}/{{pod}}"
             },
             {
               "datasource": {
@@ -2333,10 +2333,21 @@ data:
               "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"cnpg-system\", container=\"barman-cloud\"}[$__rate_interval]))",
               "refId": "B",
               "range": true,
-              "legendFormat": "Serveur gRPC — {{pod}}"
+              "legendFormat": "restarts, gRPC server — {{pod}}"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "count(time() - kube_pod_start_time{namespace=\"cnpg-system\"} < 3600) or vector(0)",
+              "legendFormat": "cnpg-system pods started < 1 h ago",
+              "range": true,
+              "refId": "C"
             }
           ],
-          "title": "Redémarrages des conteneurs barman-cloud",
+          "title": "barman-cloud container restarts and pod recreations",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2377,10 +2388,10 @@ data:
               "uid": "${DS_PROMETHEUS}"
             },
             "definition": "label_values(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp, cnpg_io_cluster)",
-            "description": "Bases ayant une chaîne barman-cloud : la liste est construite sur une métrique du SIDECAR, qui n'existe que pour les Clusters dont le `spec.plugins` est câblé. Une base absente de ce menu est une base non sauvegardée — c'est la tuile « Bases sans chaîne de sauvegarde » qui les compte, et elle ignore cette variable exprès.",
+            "description": "Databases having a barman-cloud chain: the list is built on a SIDECAR metric, which only exists for Clusters whose `spec.plugins` is wired. A database missing from this menu is a database with no backup — the \"Databases with no backup chain\" tile counts them, and it ignores this variable on purpose.",
             "hide": 0,
             "includeAll": true,
-            "label": "Base",
+            "label": "Database",
             "multi": true,
             "name": "cluster",
             "options": [],
@@ -2402,8 +2413,9 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
-      "title": "Sauvegardes PostgreSQL — barman-cloud",
+      "timezone": "utc",
+      "title": "PostgreSQL backups — barman-cloud",
+      "description": "The barman-cloud backup chain of the CloudNativePG databases: freshness of the last base backup, PITR window, WAL archiving, the Backup objects that still exist, and the cost of the plugin's sidecar. Read it to answer \"how far back can I restore\".",
       "uid": "cnpg-barman-backups",
       "version": 1,
       "weekStart": ""

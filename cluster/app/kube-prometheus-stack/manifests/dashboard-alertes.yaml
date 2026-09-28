@@ -1,5 +1,5 @@
 # cluster/app/kube-prometheus-stack/manifests/dashboard-alertes.yaml
-# Dashboard Grafana « Alertes — cluster »
+# Dashboard Grafana « Alerts — cluster »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack via le label
 # grafana_dashboard: "1", rangé dans le dossier Wittnerlab par l'annotation grafana_folder.
 #
@@ -77,7 +77,7 @@ data:
           }
         ]
       },
-      "description": "État et historique des alertes Prometheus (CNPG, Forgejo, velero, openebs, règles du chart). Source : séries ALERTS / ALERTS_FOR_STATE.",
+      "description": "State and history of the Prometheus alerts (CNPG, Forgejo, velero, openebs, chart rules). Source: the ALERTS / ALERTS_FOR_STATE series.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
@@ -88,12 +88,12 @@ data:
           "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
           "id": 100,
           "panels": [],
-          "title": "État courant",
+          "title": "Current state",
           "type": "row"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Alertes severity=critical actuellement firing, c'est-à-dire dont le `for:` est écoulé. Ce sont les seules qui partiraient en mail si la notification était activée.",
+          "description": "severity=critical alerts currently firing, i.e. whose `for:` has elapsed. They are the only ones that would be mailed out if notification were enabled.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -126,17 +126,17 @@ data:
               "editorMode": "code",
               "expr": "count(ALERTS{alertstate=\"firing\", severity=\"critical\", alertname=~\"$composant\"}) or vector(0)",
               "instant": true,
-              "legendFormat": "critiques",
+              "legendFormat": "critical",
               "range": false,
               "refId": "A"
             }
           ],
-          "title": "Critiques (firing)",
+          "title": "Critical (firing)",
           "type": "stat"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Alertes severity=warning actuellement firing.",
+          "description": "severity=warning alerts currently firing.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -179,7 +179,7 @@ data:
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Condition vraie, `for:` pas encore écoulé. Ces alertes sont dans le tableau ci-dessous avec l'état `pending` — c'est là qu'on voit une panne AVANT qu'elle ne devienne officielle. Bleu et non jaune : rien à faire à ce stade, l'anti-rebond travaille.",
+          "description": "Condition true, `for:` not elapsed yet. These alerts appear in the table below in the `pending` state — this is where a failure shows up BEFORE it becomes official. Blue rather than yellow: nothing to do at this stage, the debounce is doing its job.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -217,12 +217,12 @@ data:
               "refId": "A"
             }
           ],
-          "title": "En incubation (pending)",
+          "title": "Incubating (pending)",
           "type": "stat"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Watchdog est le deadman switch du chart : une alerte qui sonne EN PERMANENCE, dont la seule information est de s'arrêter. Tant qu'elle est là, la chaîne évaluation → règles → Prometheus fonctionne. Cette tuile au rouge signifie que Prometheus n'évalue plus — aucune autre alerte de ce dashboard n'est alors digne de confiance, y compris les trois tuiles vertes à gauche.",
+          "description": "Watchdog is the chart's deadman switch: an alert that fires PERMANENTLY, whose only information is that it stopped. As long as it is there, the evaluation → rules → Prometheus chain works. A red tile here means Prometheus no longer evaluates — no other alert on this dashboard can then be trusted, including the three green tiles on the left.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -230,7 +230,7 @@ data:
                 {
                   "options": {
                     "0": { "color": "green", "index": 0, "text": "OK" },
-                    "1": { "color": "red", "index": 1, "text": "MUETTE" }
+                    "1": { "color": "red", "index": 1, "text": "SILENT" }
                   },
                   "type": "value"
                 }
@@ -268,12 +268,12 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Chaîne d'alerting",
+          "title": "Alerting chain",
           "type": "stat"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Alertes actives, `firing` en tête puis `pending`. « Depuis » vient de ALERTS_FOR_STATE : c'est l'instant où la condition est devenue vraie, donc AVANT l'écoulement du `for:` — une alerte pending depuis 20 min avec un `for: 3h` est normale. Les colonnes job / namespace / cronjob sont vides pour les règles bâties sur `absent()` qui ne les déclarent pas dans leurs matchers, cf. l'en-tête du fichier. Watchdog est exclu : il a sa tuile.",
+          "description": "Active alerts, `firing` first then `pending`. \"Since\" comes from ALERTS_FOR_STATE: it is the instant the condition became true, so BEFORE the `for:` elapsed — an alert pending for 20 min with a `for: 3h` is normal. The job / namespace / cronjob columns are empty for rules built on `absent()` that do not declare them in their matchers, see the file header. Watchdog is excluded: it has its own tile.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -293,7 +293,7 @@ data:
               {
                 "matcher": { "id": "byName", "options": "Value" },
                 "properties": [
-                  { "id": "displayName", "value": "Depuis" },
+                  { "id": "displayName", "value": "Since" },
                   { "id": "unit", "value": "s" },
                   { "id": "custom.width", "value": 130 }
                 ]
@@ -301,7 +301,7 @@ data:
               {
                 "matcher": { "id": "byName", "options": "alertstate" },
                 "properties": [
-                  { "id": "displayName", "value": "État" },
+                  { "id": "displayName", "value": "State" },
                   { "id": "custom.width", "value": 110 },
                   { "id": "custom.cellOptions", "value": { "type": "color-background" } },
                   {
@@ -321,7 +321,7 @@ data:
               {
                 "matcher": { "id": "byName", "options": "severity" },
                 "properties": [
-                  { "id": "displayName", "value": "Sévérité" },
+                  { "id": "displayName", "value": "Severity" },
                   { "id": "custom.width", "value": 110 },
                   { "id": "custom.cellOptions", "value": { "type": "color-text" } },
                   {
@@ -341,7 +341,7 @@ data:
               {
                 "matcher": { "id": "byName", "options": "alertname" },
                 "properties": [
-                  { "id": "displayName", "value": "Alerte" },
+                  { "id": "displayName", "value": "Alert" },
                   { "id": "custom.width", "value": 280 }
                 ]
               }
@@ -353,7 +353,7 @@ data:
             "cellHeight": "sm",
             "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
             "showHeader": true,
-            "sortBy": [{ "desc": false, "displayName": "État" }]
+            "sortBy": [{ "desc": false, "displayName": "State" }]
           },
           "pluginVersion": "13.1.3",
           "targets": [
@@ -367,7 +367,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Alertes actives (firing + pending)",
+          "title": "Active alerts (firing + pending)",
           "transformations": [
             {
               "id": "organize",
@@ -393,12 +393,12 @@ data:
           "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
           "id": 101,
           "panels": [],
-          "title": "Historique",
+          "title": "History",
           "type": "row"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Une bande par alerte, ROUGE quand elle est firing et BLEUE quand elle est pending — la bande bleue à gauche de la rouge, c'est le `for:` qui s'écoule. `ALERTS` vaut 1 dans les DEUX états, donc rien ne les distinguerait à l'affichage : d'où le `* 2` sur la branche firing, et le codage 1 = pending / 2 = firing lu par les value mappings. Le `max by (alertname)` supprime le label alertstate, sans quoi la même alerte occuperait deux lignes de l'axe Y. La bande n'existe que pendant que l'alerte est active : un trou n'est pas une absence de données, c'est le retour à la normale. Pas de légende à droite : les noms sont déjà sur l'axe Y.",
+          "description": "One band per alert, RED while it is firing and BLUE while it is pending — the blue band to the left of the red one is the `for:` elapsing. `ALERTS` equals 1 in BOTH states, so nothing would tell them apart on screen: hence the `* 2` on the firing branch, and the 1 = pending / 2 = firing encoding read by the value mappings. The `max by (alertname)` drops the alertstate label, without which the same alert would take two rows on the Y axis. The band only exists while the alert is active: a gap is not missing data, it is the return to normal. No legend on the right: the names are already on the Y axis.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -446,12 +446,12 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Quand chaque alerte a sonné",
+          "title": "When each alert fired",
           "type": "state-timeline"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "description": "Nombre d'alertes firing par sévérité, empilé. Watchdog (severity=none) est exclu : toujours à 1, il décalait toute la courbe d'un cran et écrasait l'échelle. Sert à distinguer une panne franche (marche d'escalier) d'une alerte qui bat (dents de scie) — la seconde appelle un ajustement du `for:`, pas une intervention.",
+          "description": "Number of firing alerts per severity, stacked. Watchdog (severity=none) is excluded: always at 1, it shifted the whole curve up one step and flattened the scale. Use it to tell a clean failure (a step) from a flapping alert (a sawtooth) — the latter calls for a `for:` adjustment, not an intervention.",
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "palette-classic" },
@@ -518,14 +518,14 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Alertes firing dans le temps",
+          "title": "Firing alerts over time",
           "type": "timeseries"
         }
       ],
       "preload": false,
       "refresh": "1m",
       "schemaVersion": 39,
-      "tags": ["wittnerlab", "alertes"],
+      "tags": ["wittnerlab", "alerts"],
       "templating": {
         "list": [
           {
@@ -545,10 +545,10 @@ data:
           {
             "allValue": ".*",
             "current": {},
-            "description": "Filtre par PRÉFIXE d'alertname, et non par namespace : les règles bâties sur absent() ne portent que les labels de leurs matchers, donc plusieurs alertes bâties sur absent() (CNPGMetricsAbsent, ForgejoScrapeMissing) n'ont aucun label namespace. Filtrer par namespace en masquerait la moitié sans le dire.",
+            "description": "Filters on the alertname PREFIX, not on the namespace: rules built on absent() only carry the labels of their matchers, so several absent()-based alerts (CNPGMetricsAbsent, ForgejoScrapeMissing) have no namespace label at all. Filtering by namespace would silently hide half of them.",
             "hide": 0,
             "includeAll": true,
-            "label": "Composant",
+            "label": "Component",
             "multi": true,
             "name": "composant",
             "options": [],
@@ -562,10 +562,10 @@ data:
             "current": {},
             "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
             "definition": "label_values(ALERTS, severity)",
-            "description": "Alimenté par les alertes RÉELLEMENT présentes dans Prometheus : une sévérité qui n'a jamais sonné n'apparaît pas dans la liste.",
+            "description": "Fed by the alerts ACTUALLY present in Prometheus: a severity that never fired does not appear in the list.",
             "hide": 0,
             "includeAll": true,
-            "label": "Sévérité",
+            "label": "Severity",
             "multi": true,
             "name": "severity",
             "options": [],
@@ -584,8 +584,8 @@ data:
       },
       "time": { "from": "now-6h", "to": "now" },
       "timepicker": {},
-      "timezone": "browser",
-      "title": "Alertes — cluster",
+      "timezone": "utc",
+      "title": "Alerts — cluster",
       "uid": "cluster-alertes",
       "version": 1,
       "weekStart": ""

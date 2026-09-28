@@ -1,5 +1,5 @@
 # cluster/app/kube-prometheus-stack/manifests/dashboard-ressources-volumes.yaml
-# Dashboard Grafana « Ressources — volumes »
+# Dashboard Grafana « Resources — volumes »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack (label grafana_dashboard: "1").
 #
 # Complète la chaîne « Ressources » (tag commun `ressources`) sur l'axe stockage.
@@ -59,7 +59,7 @@ data:
             "enable": true,
             "hide": false,
             "iconColor": "purple",
-            "name": "Déploiements ArgoCD",
+            "name": "ArgoCD deployments",
             "target": {
               "limit": 100,
               "matchAny": false,
@@ -72,7 +72,7 @@ data:
           }
         ]
       },
-      "description": "Suivi des volumes persistants : remplissage et inodes par PVC, projection avant saturation, thin pool LVM (OpenEBS) et cycle de vie PVC/PV.",
+      "description": "Persistent volume tracking: fill level and inodes per PVC, projection to saturation, LVM thin pool (OpenEBS) and PVC/PV lifecycle.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
@@ -83,11 +83,11 @@ data:
           "includeVars": true,
           "keepTime": true,
           "tags": [
-            "ressources"
+            "resources"
           ],
           "targetBlank": false,
-          "title": "Ressources",
-          "tooltip": "Chaîne cluster → namespaces → workloads → pods",
+          "title": "Resources",
+          "tooltip": "Chain cluster → namespaces → workloads → pods",
           "type": "dashboards",
           "url": ""
         }
@@ -103,7 +103,7 @@ data:
           },
           "id": 1,
           "panels": [],
-          "title": "Vue d'ensemble",
+          "title": "Overview",
           "type": "row"
         },
         {
@@ -304,7 +304,7 @@ data:
           ],
           "title": "Pending",
           "type": "stat",
-          "description": "Un PVC Pending sans pod consommateur est NORMAL ici : la StorageClass `openebs-lvm-thin` est en `WaitForFirstConsumer`. Anormal seulement si un pod l'attend."
+          "description": "A Pending PVC with no consuming pod is NORMAL here: the `openebs-lvm-thin` StorageClass is `WaitForFirstConsumer`. Abnormal only when a pod is waiting for it."
         },
         {
           "datasource": {
@@ -437,9 +437,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Capacité demandée",
+          "title": "Requested capacity",
           "type": "stat",
-          "description": "Somme des `resources.requests.storage` des PVC."
+          "description": "Sum of the PVCs' `resources.requests.storage`."
         },
         {
           "datasource": {
@@ -503,7 +503,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisé",
+          "title": "Used",
           "type": "stat"
         },
         {
@@ -580,7 +580,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Remplissage global",
+          "title": "Overall fill level",
           "type": "stat"
         },
         {
@@ -651,7 +651,7 @@ data:
           ],
           "title": "PV Released / Failed",
           "type": "stat",
-          "description": "PV orphelins : le PVC a disparu mais le volume (et ses données) subsiste. Avec `Retain`, ils s'accumulent et consomment le VG."
+          "description": "Orphan PVs: the PVC is gone but the volume (and its data) remains. With `Retain` they pile up and eat the VG."
         },
         {
           "collapsed": false,
@@ -663,7 +663,7 @@ data:
           },
           "id": 10,
           "panels": [],
-          "title": "Remplissage des PVC",
+          "title": "PVC fill level",
           "type": "row"
         },
         {
@@ -744,7 +744,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Remplissage par PVC",
+          "title": "Fill level per PVC",
           "type": "bargauge"
         },
         {
@@ -825,9 +825,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Inodes utilisés par PVC",
+          "title": "Inodes used per PVC",
           "type": "bargauge",
-          "description": "Saturation possible bien avant l'espace disque si le volume porte beaucoup de petits fichiers."
+          "description": "Can saturate well before the disk space when the volume holds many small files."
         },
         {
           "datasource": {
@@ -920,7 +920,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Espace utilisé par PVC",
+          "title": "Space used per PVC",
           "type": "timeseries"
         },
         {
@@ -1014,7 +1014,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Remplissage par PVC",
+          "title": "Fill level per PVC",
           "type": "timeseries"
         },
         {
@@ -1049,7 +1049,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Capacité"
+                  "options": "Capacity"
                 },
                 "properties": [
                   {
@@ -1065,7 +1065,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Utilisé"
+                  "options": "Used"
                 },
                 "properties": [
                   {
@@ -1081,7 +1081,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Remplissage"
+                  "options": "Fill level"
                 },
                 "properties": [
                   {
@@ -1137,7 +1137,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Libre"
+                  "options": "Free"
                 },
                 "properties": [
                   {
@@ -1209,7 +1209,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Demandé"
+                  "options": "Requested"
                 },
                 "properties": [
                   {
@@ -1245,7 +1245,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Remplissage"
+                "displayName": "Fill level"
               }
             ]
           },
@@ -1330,7 +1330,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Par PVC",
+          "title": "Per PVC",
           "transformations": [
             {
               "id": "joinByField",
@@ -1361,19 +1361,19 @@ data:
                   "Value #F": 6
                 },
                 "renameByName": {
-                  "Value #A": "Capacité",
-                  "Value #B": "Utilisé",
-                  "Value #C": "Remplissage",
-                  "Value #D": "Libre",
+                  "Value #A": "Capacity",
+                  "Value #B": "Used",
+                  "Value #C": "Fill level",
+                  "Value #D": "Free",
                   "Value #E": "Inodes",
-                  "Value #F": "Demandé",
+                  "Value #F": "Requested",
                   "volume": "Volume"
                 }
               }
             }
           ],
           "type": "table",
-          "description": "Clé = `namespace/pvc`. Une ligne sans capacité/utilisé = PVC non monté (pas de statistiques kubelet tant qu'aucun pod ne l'utilise)."
+          "description": "Key = `namespace/pvc`. A row with no capacity/used = an unmounted PVC (no kubelet statistics until a pod uses it)."
         },
         {
           "collapsed": false,
@@ -1465,9 +1465,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Temps avant saturation",
+          "title": "Time to saturation",
           "type": "bargauge",
-          "description": "Espace libre ÷ vitesse de remplissage (pente sur 6 h). Seuls les volumes en croissance apparaissent ; une projection linéaire n'anticipe évidemment pas un pic brutal."
+          "description": "Free space ÷ fill rate (slope over 6 h). Only growing volumes appear; a linear projection obviously does not anticipate a sudden spike."
         },
         {
           "datasource": {
@@ -1559,9 +1559,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Croissance par jour",
+          "title": "Growth per day",
           "type": "timeseries",
-          "description": "Pente sur 6 h ramenée à 24 h. Négatif = le volume se vide."
+          "description": "Slope over 6 h scaled to 24 h. Negative = the volume is emptying."
         },
         {
           "collapsed": false,
@@ -1650,9 +1650,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Thin pool — données",
+          "title": "Thin pool — data",
           "type": "stat",
-          "description": "LE seuil critique du provisionnement fin : un thin pool plein provoque des erreurs d'écriture sur TOUS les volumes qu'il porte, quel que soit leur remplissage individuel. Les PVC peuvent sur-réserver, pas le pool. Il y a un pool par nœud : la tuile montre le PIRE d'entre eux (détail par nœud dans « Thin pool dans le temps »)."
+          "description": "THE critical threshold of thin provisioning: a full thin pool causes write errors on ALL the volumes it carries, whatever their individual fill level. PVCs may overcommit, the pool may not. There is one pool per node: this tile shows the WORST of them (per-node detail in \"Thin pool over time\")."
         },
         {
           "datasource": {
@@ -1728,9 +1728,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Thin pool — métadonnées",
+          "title": "Thin pool — metadata",
           "type": "stat",
-          "description": "Se sature indépendamment des données et casse le pool tout autant. Comme la tuile voisine : pire nœud."
+          "description": "Saturates independently of the data and breaks the pool just as badly. Like the neighbouring tile: worst node."
         },
         {
           "datasource": {
@@ -1806,9 +1806,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "VG — remplissage",
+          "title": "VG — fill level",
           "type": "stat",
-          "description": "Espace du VG réellement alloué, UNE VALEUR PAR NŒUD (le stockage est node-local : les VG ne s'additionnent pas). Détail disques/filesystems : dashboard « Système — nœuds Talos »."
+          "description": "VG space actually allocated, ONE VALUE PER NODE (storage is node-local: VGs do not add up). Disk/filesystem detail: the \"Machines — system\" dashboard."
         },
         {
           "datasource": {
@@ -1872,9 +1872,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "VG — libre",
+          "title": "VG — free",
           "type": "stat",
-          "description": "Marge restante pour provisionner de nouveaux volumes, PAR NŒUD. Ces valeurs ne s'additionnent pas : un pod est provisionné sur le nœud que le scheduler lui a choisi, et seule la marge de CE nœud compte."
+          "description": "Headroom left to provision new volumes, PER NODE. These values do not add up: a pod is provisioned on the node the scheduler picked for it, and only THAT node's headroom counts."
         },
         {
           "datasource": {
@@ -1954,9 +1954,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Remplissage des LV par PVC",
+          "title": "LV fill level per PVC",
           "type": "bargauge",
-          "description": "Vue côté LVM (allocation réelle du volume fin), à comparer au remplissage vu par le filesystem. Jointure sur le nom du LV, qui est celui du PV."
+          "description": "The LVM-side view (actual allocation of the thin volume), to be compared with the fill level seen by the filesystem. Joined on the LV name, which is the PV name."
         },
         {
           "datasource": {
@@ -2044,7 +2044,7 @@ data:
               },
               "editorMode": "code",
               "expr": "lvm_lv_used_percent{segtype=\"thin-pool\"}",
-              "legendFormat": "{{instance}} — données",
+              "legendFormat": "{{instance}} — data",
               "range": true,
               "refId": "A"
             },
@@ -2055,12 +2055,12 @@ data:
               },
               "editorMode": "code",
               "expr": "lvm_lv_mda_used_percent{segtype=\"thin-pool\"}",
-              "legendFormat": "{{instance}} — métadonnées",
+              "legendFormat": "{{instance}} — metadata",
               "range": true,
               "refId": "B"
             }
           ],
-          "title": "Thin pool dans le temps",
+          "title": "Thin pool over time",
           "type": "timeseries"
         },
         {
@@ -2073,7 +2073,7 @@ data:
           },
           "id": 26,
           "panels": [],
-          "title": "Cycle de vie",
+          "title": "Lifecycle",
           "type": "row"
         },
         {
@@ -2167,7 +2167,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "PVC par phase",
+          "title": "PVCs per phase",
           "type": "timeseries"
         },
         {
@@ -2261,7 +2261,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "PV par phase",
+          "title": "PVs per phase",
           "type": "timeseries"
         },
         {
@@ -2326,9 +2326,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "PVC sans pod",
+          "title": "PVCs with no pod",
           "type": "stat",
-          "description": "Nombre de PVC qu'aucun pod ne monte : reliquat d'un composant supprimé, ou volume en attente de son premier consommateur. 0 = aucun orphelin."
+          "description": "Number of PVCs no pod mounts: leftovers of a deleted component, or a volume waiting for its first consumer. 0 = no orphans."
         },
         {
           "datasource": {
@@ -2378,7 +2378,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Capacité demandée"
+                  "options": "Requested capacity"
                 },
                 "properties": [
                   {
@@ -2414,7 +2414,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Capacité demandée"
+                "displayName": "Requested capacity"
               }
             ]
           },
@@ -2447,7 +2447,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Par StorageClass",
+          "title": "Per StorageClass",
           "transformations": [
             {
               "id": "joinByField",
@@ -2475,7 +2475,7 @@ data:
                 },
                 "renameByName": {
                   "Value #A": "PVC",
-                  "Value #B": "Capacité demandée",
+                  "Value #B": "Requested capacity",
                   "storageclass": "Storageclass"
                 }
               }
@@ -2487,10 +2487,10 @@ data:
       "refresh": "30s",
       "schemaVersion": 39,
       "tags": [
-        "ressources",
+        "resources",
         "kubernetes",
         "wittnerlab",
-        "stockage"
+        "storage"
       ],
       "templating": {
         "list": [
@@ -2563,8 +2563,8 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
-      "title": "Ressources — volumes",
+      "timezone": "utc",
+      "title": "Resources — volumes",
       "uid": "ressources-volumes",
       "version": 1,
       "weekStart": ""

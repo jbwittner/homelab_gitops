@@ -1,12 +1,12 @@
 # cluster/app/kube-prometheus-stack/manifests/dashboard-stockage-cluster.yaml
-# Dashboard Grafana « Stockage — cluster »
+# Dashboard Grafana « Storage — cluster »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack via le label
 # grafana_dashboard: "1".
 #
 # ⚠️ CE DASHBOARD EST NÉ D'UN DÉCOUPAGE, le 2026-09-11 : il recueille les sept panneaux de l'ancien
 # « Système — nœuds Talos » qui ne parlaient PAS d'une machine mais du CLUSTER — l'état des nœuds
 # Kubernetes et les VolumeGroups LVM d'OpenEBS. Le reste de ce dashboard est devenu
-# « Machines — système », générique et couvrant aussi les machines hors cluster.
+# « Machines — system », générique et couvrant aussi les machines hors cluster.
 #
 # ⚠️ Le critère du découpage est celui appliqué partout ailleurs ce jour-là : le SUJET, et le CYCLE
 # DE VIE. Une machine précède le service qu'elle héberge ; un VolumeGroup OpenEBS n'existe que
@@ -14,7 +14,7 @@
 # moitié vide dès qu'on y sélectionnait une machine externe, sans la moindre erreur.
 #
 # ⚠️ SES VARIABLES SONT FILTRÉES SUR `job="node-exporter"`, et elles doivent le rester. C'est
-# l'inverse de « Machines — système », où ce filtre a été RETIRÉ. La raison est la même des deux
+# l'inverse de « Machines — system », où ce filtre a été RETIRÉ. La raison est la même des deux
 # côtés : ici les métriques `lvm_*` ne sont produites que par l'exporteur OpenEBS du cluster, donc
 # proposer une machine externe dans le sélecteur afficherait un dashboard entièrement vide.
 #
@@ -55,7 +55,7 @@ data:
             "enable": true,
             "hide": false,
             "iconColor": "purple",
-            "name": "Déploiements ArgoCD",
+            "name": "ArgoCD deployments",
             "target": {
               "limit": 100,
               "matchAny": false,
@@ -83,7 +83,7 @@ data:
           },
           "id": 100,
           "panels": [],
-          "title": "État des nœuds",
+          "title": "Node state",
           "type": "row"
         },
         {
@@ -91,7 +91,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Une ligne par nœud : reste lisible que le cluster en compte 2, 3 ou davantage. « Load / cœur » est le load average 1 min divisé par le nombre de cœurs — 1.00 = exactement saturé. Un tiret signifie que le nœud n'expose pas ce capteur (pas de coretemp, pas de NVMe) ou, pour « NVMe (% seuil) », qu'aucun disque n'annonce de seuil valide — pas qu'il est en panne.",
+          "description": "One row per node: stays readable whether the cluster has 2, 3 or more. \"Load / core\" is the 1 min load average divided by the core count — 1.00 = exactly saturated. A dash means the node does not expose that sensor (no coretemp, no NVMe) or, for \"NVMe (% threshold)\", that no disk reports a valid threshold — not that it is broken.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -138,7 +138,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Nœud"
+                  "options": "Node"
                 },
                 "properties": [
                   {
@@ -156,7 +156,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Load / cœur"
+                  "options": "Load / core"
                 },
                 "properties": [
                   {
@@ -206,7 +206,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Temp. CPU"
+                  "options": "CPU temp."
                 },
                 "properties": [
                   {
@@ -300,7 +300,7 @@ data:
             "sortBy": [
               {
                 "desc": false,
-                "displayName": "Nœud"
+                "displayName": "Node"
               }
             ]
           },
@@ -411,7 +411,7 @@ data:
               "refId": "H"
             }
           ],
-          "title": "État des nœuds",
+          "title": "Node state",
           "transformations": [
             {
               "id": "joinByField",
@@ -448,13 +448,13 @@ data:
                 },
                 "renameByName": {
                   "Value #A": "CPU",
-                  "Value #B": "Mémoire",
+                  "Value #B": "Memory",
                   "Value #C": "/var",
-                  "Value #D": "Load / cœur",
-                  "Value #E": "Temp. CPU",
-                  "Value #F": "NVMe (% seuil)",
+                  "Value #D": "Load / core",
+                  "Value #E": "CPU temp.",
+                  "Value #F": "NVMe (% threshold)",
                   "Value #G": "Pods",
-                  "nodename": "Nœud"
+                  "nodename": "Node"
                 }
               }
             }
@@ -471,7 +471,7 @@ data:
           },
           "id": 101,
           "panels": [],
-          "title": "VolumeGroups LVM — OpenEBS",
+          "title": "LVM VolumeGroups — OpenEBS",
           "type": "row"
         },
         {
@@ -479,7 +479,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Couche LVM (exporter OpenEBS). Les PV LVM n'ont pas de filesystem : ils sont invisibles pour node-exporter, donc absents du panneau voisin.",
+          "description": "LVM layer (OpenEBS exporter). LVM PVs have no filesystem: they are invisible to node-exporter, hence absent from the neighbouring panel.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -552,7 +552,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "VolumeGroups LVM (OpenEBS)",
+          "title": "LVM VolumeGroups (OpenEBS)",
           "type": "bargauge"
         },
         {
@@ -560,7 +560,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Couche LVM (exporter OpenEBS). Les PV LVM n'ont pas de filesystem : invisibles pour node-exporter, quel que soit le disque qui les porte. La pente indique le rythme de provisionnement des PVC.",
+          "description": "LVM layer (OpenEBS exporter). LVM PVs have no filesystem: invisible to node-exporter, whatever disk carries them. The slope shows the pace at which PVCs are provisioned.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -641,7 +641,7 @@ data:
               },
               "editorMode": "code",
               "expr": "lvm_vg_free_size_bytes",
-              "legendFormat": "{{node}} · {{name}} — libre",
+              "legendFormat": "{{node}} · {{name}} — free",
               "range": true,
               "refId": "A"
             },
@@ -652,12 +652,12 @@ data:
               },
               "editorMode": "code",
               "expr": "lvm_vg_total_size_bytes",
-              "legendFormat": "{{node}} · {{name}} — capacité",
+              "legendFormat": "{{node}} · {{name}} — capacity",
               "range": true,
               "refId": "B"
             }
           ],
-          "title": "VolumeGroup LVM — espace libre",
+          "title": "LVM VolumeGroup — free space",
           "type": "timeseries"
         },
         {
@@ -670,7 +670,7 @@ data:
           },
           "id": 102,
           "panels": [],
-          "title": "Capacité et métadonnées",
+          "title": "Capacity and metadata",
           "type": "row"
         },
         {
@@ -735,7 +735,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "VG — capacité (total)",
+          "title": "VG — capacity (total)",
           "type": "stat"
         },
         {
@@ -800,7 +800,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "VG — libre (total)",
+          "title": "VG — free (total)",
           "type": "stat"
         },
         {
@@ -808,7 +808,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Nombre total de logical volumes provisionnés / de physical volumes, tous VolumeGroups confondus.",
+          "description": "Total number of provisioned logical volumes / physical volumes, across all VolumeGroups.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -877,7 +877,7 @@ data:
               "refId": "B"
             }
           ],
-          "title": "Volumes LVM",
+          "title": "LVM volumes",
           "type": "stat"
         },
         {
@@ -885,7 +885,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Remplissage des métadonnées LVM. Sature bien avant l'espace de données uniquement en cas de très nombreux LV/snapshots.",
+          "description": "Fill level of the LVM metadata. It saturates well before the data space only when there are very many LVs/snapshots.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -957,7 +957,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Métadonnées VG",
+          "title": "VG metadata",
           "type": "stat"
         }
       ],
@@ -966,7 +966,7 @@ data:
       "tags": [
         "wittnerlab",
         "cluster",
-        "stockage",
+        "storage",
         "openebs"
       ],
       "templating": {
@@ -994,7 +994,7 @@ data:
             "definition": "label_values(node_uname_info{job=\"node-exporter\"}, instance)",
             "hide": 0,
             "includeAll": true,
-            "label": "Nœud",
+            "label": "Node",
             "multi": true,
             "name": "instance",
             "options": [],
@@ -1008,7 +1008,7 @@ data:
             "skipUrlSync": false,
             "sort": 1,
             "type": "query",
-            "description": "⚠️ FILTRE `job=\"node-exporter\"` OBLIGATOIRE ICI, contrairement à « Machines — système » où il a été RETIRÉ. Les métriques `lvm_*` de ce dashboard ne sont produites que par l'exporteur OpenEBS du cluster : proposer une machine externe dans ce sélecteur afficherait un dashboard entièrement vide, sans erreur."
+            "description": "⚠️ THE `job=\"node-exporter\"` FILTER IS MANDATORY HERE, unlike on \"Machines — system\" where it was REMOVED. The `lvm_*` metrics of this dashboard are produced only by the cluster's OpenEBS exporter: offering an external host in this selector would show an entirely empty dashboard, with no error."
           },
           {
             "current": {},
@@ -1019,7 +1019,7 @@ data:
             "definition": "label_values(node_uname_info{job=\"node-exporter\"}, nodename)",
             "hide": 2,
             "includeAll": true,
-            "label": "Nom",
+            "label": "Name",
             "multi": true,
             "name": "node",
             "options": [],
@@ -1033,7 +1033,7 @@ data:
             "skipUrlSync": false,
             "sort": 1,
             "type": "query",
-            "description": "⚠️ FILTRE `job=\"node-exporter\"` OBLIGATOIRE ICI, contrairement à « Machines — système » où il a été RETIRÉ. Les métriques `lvm_*` de ce dashboard ne sont produites que par l'exporteur OpenEBS du cluster : proposer une machine externe dans ce sélecteur afficherait un dashboard entièrement vide, sans erreur."
+            "description": "⚠️ THE `job=\"node-exporter\"` FILTER IS MANDATORY HERE, unlike on \"Machines — system\" where it was REMOVED. The `lvm_*` metrics of this dashboard are produced only by the cluster's OpenEBS exporter: offering an external host in this selector would show an entirely empty dashboard, with no error."
           }
         ]
       },
@@ -1042,8 +1042,9 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
-      "title": "Stockage — cluster",
+      "timezone": "utc",
+      "title": "Storage — cluster",
+      "description": "Node-level state table plus the LVM layer of the cluster (OpenEBS exporter): VolumeGroup capacity, free space and metadata fill. Read before provisioning a PVC, or when a volume fails to bind.",
       "uid": "stockage-cluster",
       "weekStart": ""
     }

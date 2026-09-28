@@ -1,5 +1,5 @@
 # cluster/app/kube-prometheus-stack/manifests/dashboard-ressources-pods.yaml
-# Dashboard Grafana « Ressources — pods »
+# Dashboard Grafana « Resources — pods »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack (label grafana_dashboard: "1").
 #
 # Niveau 4 de la chaîne : mêmes indicateurs par pod et par conteneur d'un namespace,
@@ -69,7 +69,7 @@ data:
             "enable": true,
             "hide": false,
             "iconColor": "purple",
-            "name": "Déploiements ArgoCD",
+            "name": "ArgoCD deployments",
             "target": {
               "limit": 100,
               "matchAny": false,
@@ -82,7 +82,7 @@ data:
           }
         ]
       },
-      "description": "CPU et mémoire par pod (et par conteneur) d'un namespace : utilisation, requests, limits, throttling, OOMKills et redémarrages.",
+      "description": "CPU and memory per pod (and per container) of one namespace: usage, requests, limits, throttling, OOMKills and restarts.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
@@ -93,11 +93,11 @@ data:
           "includeVars": true,
           "keepTime": true,
           "tags": [
-            "ressources"
+            "resources"
           ],
           "targetBlank": false,
-          "title": "Ressources",
-          "tooltip": "Chaîne cluster → namespaces → workloads → pods",
+          "title": "Resources",
+          "tooltip": "Chain cluster → namespaces → workloads → pods",
           "type": "dashboards",
           "url": ""
         }
@@ -243,7 +243,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation",
+          "title": "Usage",
           "type": "stat"
         },
         {
@@ -442,9 +442,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / requests",
+          "title": "Usage / requests",
           "type": "stat",
-          "description": "Conteneurs déclarant des requests uniquement."
+          "description": "Containers declaring requests only."
         },
         {
           "datasource": {
@@ -516,9 +516,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / limits",
+          "title": "Usage / limits",
           "type": "stat",
-          "description": "Conteneurs déclarant une limite uniquement."
+          "description": "Containers declaring a limit only."
         },
         {
           "datasource": {
@@ -586,9 +586,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Conteneurs sans limite",
+          "title": "Containers without a limit",
           "type": "stat",
-          "description": "Conteneurs qui consomment la ressource sans déclarer de limite. Ils comptent dans le total des requests mais pas dans celui des limits — d'où des totaux où requests > limits, sans anomalie."
+          "description": "Containers consuming the resource without declaring a limit. They count towards the requests total but not the limits one — hence totals where requests > limits, with nothing wrong."
         },
         {
           "datasource": {
@@ -681,7 +681,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU — utilisation par pod",
+          "title": "CPU — usage per pod",
           "type": "timeseries"
         },
         {
@@ -843,7 +843,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Utilisation"
+                  "options": "Usage"
                 },
                 "properties": [
                   {
@@ -885,7 +885,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=\"$namespace\",pod=~\"$pod\"})",
-              "legendFormat": "Utilisation",
+              "legendFormat": "Usage",
               "range": true,
               "refId": "A"
             },
@@ -912,7 +912,7 @@ data:
               "refId": "C"
             }
           ],
-          "title": "CPU — sélection : utilisation, requests, limits",
+          "title": "CPU — selection: usage, requests, limits",
           "type": "timeseries"
         },
         {
@@ -985,7 +985,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU — utilisation / requests par pod",
+          "title": "CPU — usage / requests per pod",
           "type": "bargauge"
         },
         {
@@ -1062,7 +1062,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU — utilisation / limits par pod",
+          "title": "CPU — usage / limits per pod",
           "type": "bargauge"
         },
         {
@@ -1156,7 +1156,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU — détail par conteneur",
+          "title": "CPU — per-container detail",
           "type": "timeseries"
         },
         {
@@ -1169,7 +1169,7 @@ data:
           },
           "id": 14,
           "panels": [],
-          "title": "Mémoire",
+          "title": "Memory",
           "type": "row"
         },
         {
@@ -1299,7 +1299,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation",
+          "title": "Usage",
           "type": "stat"
         },
         {
@@ -1498,9 +1498,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / requests",
+          "title": "Usage / requests",
           "type": "stat",
-          "description": "Conteneurs déclarant des requests uniquement."
+          "description": "Containers declaring requests only."
         },
         {
           "datasource": {
@@ -1572,9 +1572,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / limits",
+          "title": "Usage / limits",
           "type": "stat",
-          "description": "Conteneurs déclarant une limite uniquement."
+          "description": "Containers declaring a limit only."
         },
         {
           "datasource": {
@@ -1642,9 +1642,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Conteneurs sans limite",
+          "title": "Containers without a limit",
           "type": "stat",
-          "description": "Conteneurs qui consomment la ressource sans déclarer de limite. Ils comptent dans le total des requests mais pas dans celui des limits — d'où des totaux où requests > limits, sans anomalie."
+          "description": "Containers consuming the resource without declaring a limit. They count towards the requests total but not the limits one — hence totals where requests > limits, with nothing wrong."
         },
         {
           "datasource": {
@@ -1737,7 +1737,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Mémoire — utilisation par pod",
+          "title": "Memory — usage per pod",
           "type": "timeseries"
         },
         {
@@ -1899,7 +1899,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Utilisation"
+                  "options": "Usage"
                 },
                 "properties": [
                   {
@@ -1941,7 +1941,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum(max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=\"$namespace\",pod=~\"$pod\"}))",
-              "legendFormat": "Utilisation",
+              "legendFormat": "Usage",
               "range": true,
               "refId": "A"
             },
@@ -1968,7 +1968,7 @@ data:
               "refId": "C"
             }
           ],
-          "title": "Mémoire — sélection : utilisation, requests, limits",
+          "title": "Memory — selection: usage, requests, limits",
           "type": "timeseries"
         },
         {
@@ -2041,7 +2041,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Mémoire — utilisation / requests par pod",
+          "title": "Memory — usage / requests per pod",
           "type": "bargauge"
         },
         {
@@ -2118,7 +2118,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Mémoire — utilisation / limits par pod",
+          "title": "Memory — usage / limits per pod",
           "type": "bargauge"
         },
         {
@@ -2212,7 +2212,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Mémoire — détail par conteneur",
+          "title": "Memory — per-container detail",
           "type": "timeseries"
         },
         {
@@ -2225,7 +2225,7 @@ data:
           },
           "id": 27,
           "panels": [],
-          "title": "Pression & incidents",
+          "title": "Pressure & incidents",
           "type": "row"
         },
         {
@@ -2319,9 +2319,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Throttling CPU par pod",
+          "title": "CPU throttling per pod",
           "type": "timeseries",
-          "description": "Part des périodes d'ordonnancement où le conteneur a été bridé par sa limite CPU. > 0 en continu = limite trop basse."
+          "description": "Share of the scheduling periods where the container was throttled by its CPU limit. Continuously > 0 = limit set too low."
         },
         {
           "datasource": {
@@ -2409,13 +2409,25 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=~\"$pod\"}[$__rate_interval]))",
-              "legendFormat": "{{pod}}",
+              "legendFormat": "restarts — {{pod}}",
               "range": true,
               "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "count(time() - kube_pod_start_time{namespace=\"$namespace\",pod=~\"$pod\"} < 3600) or vector(0)",
+              "legendFormat": "pods started < 1 h ago",
+              "range": true,
+              "refId": "B"
             }
           ],
-          "title": "Redémarrages de conteneurs",
-          "type": "timeseries"
+          "title": "Container restarts and pod recreations",
+          "type": "timeseries",
+          "description": "`kube_pod_container_status_restarts_total` only counts restarts INSIDE a pod that keeps existing. A recreated pod (rollout, eviction, node drain) is a new object whose counter starts back at zero, so the restart series stays flat during exactly the event it is meant to catch. The second series counts the pods of the selection started less than an hour ago, which catches that case."
         },
         {
           "datasource": {
@@ -2483,9 +2495,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Derniers arrêts OOMKilled",
+          "title": "Last OOMKilled terminations",
           "type": "stat",
-          "description": "Pods dont le dernier arrêt d'un conteneur est un OOMKill : la limite mémoire a été atteinte. Le marqueur persiste jusqu'au redémarrage suivant."
+          "description": "Pods whose last container termination is an OOMKill: the memory limit was hit. The marker stays until the next restart."
         },
         {
           "datasource": {
@@ -2578,7 +2590,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Conteneurs en attente (waiting)",
+          "title": "Containers waiting",
           "type": "timeseries",
           "description": "CrashLoopBackOff, ImagePullBackOff, CreateContainerConfigError…"
         },
@@ -2592,7 +2604,7 @@ data:
           },
           "id": 32,
           "panels": [],
-          "title": "Synthèse",
+          "title": "Summary",
           "type": "row"
         },
         {
@@ -2627,7 +2639,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "CPU util."
+                  "options": "CPU usage"
                 },
                 "properties": [
                   {
@@ -2659,7 +2671,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "CPU util./req."
+                  "options": "CPU usage/req."
                 },
                 "properties": [
                   {
@@ -2723,7 +2735,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "CPU util./lim."
+                  "options": "CPU usage/lim."
                 },
                 "properties": [
                   {
@@ -2775,7 +2787,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. util."
+                  "options": "Mem. usage"
                 },
                 "properties": [
                   {
@@ -2791,7 +2803,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. req."
+                  "options": "Mem. req."
                 },
                 "properties": [
                   {
@@ -2807,7 +2819,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. util./req."
+                  "options": "Mem. usage/req."
                 },
                 "properties": [
                   {
@@ -2855,7 +2867,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. lim."
+                  "options": "Mem. lim."
                 },
                 "properties": [
                   {
@@ -2871,7 +2883,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. util./lim."
+                  "options": "Mem. usage/lim."
                 },
                 "properties": [
                   {
@@ -2923,7 +2935,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Redémarrages"
+                  "options": "Restarts"
                 },
                 "properties": [
                   {
@@ -2959,7 +2971,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "CPU util."
+                "displayName": "CPU usage"
               }
             ]
           },
@@ -3109,7 +3121,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Par pod",
+          "title": "Per pod",
           "transformations": [
             {
               "id": "joinByField",
@@ -3145,30 +3157,30 @@ data:
                   "Value #K": 11
                 },
                 "renameByName": {
-                  "Value #A": "CPU util.",
+                  "Value #A": "CPU usage",
                   "Value #B": "CPU req.",
-                  "Value #C": "CPU util./req.",
+                  "Value #C": "CPU usage/req.",
                   "Value #D": "CPU lim.",
-                  "Value #E": "CPU util./lim.",
-                  "Value #F": "Mém. util.",
-                  "Value #G": "Mém. req.",
-                  "Value #H": "Mém. util./req.",
-                  "Value #I": "Mém. lim.",
-                  "Value #J": "Mém. util./lim.",
-                  "Value #K": "Redémarrages",
+                  "Value #E": "CPU usage/lim.",
+                  "Value #F": "Mem. usage",
+                  "Value #G": "Mem. req.",
+                  "Value #H": "Mem. usage/req.",
+                  "Value #I": "Mem. lim.",
+                  "Value #J": "Mem. usage/lim.",
+                  "Value #K": "Restarts",
                   "pod": "Pod"
                 }
               }
             }
           ],
           "type": "table",
-          "description": "Les colonnes req. et lim. sont des sommes brutes portant sur des ensembles différents de conteneurs : un conteneur sans limite compte dans req. et pas dans lim., si bien que req. > lim. est courant et normal. Les colonnes de ratio, elles, ne comparent que les conteneurs qui déclarent la ressource."
+          "description": "The req. and lim. columns are raw sums over different sets of containers: a container with no limit counts in req. but not in lim., so req. > lim. is common and normal. The ratio columns, on the other hand, only compare the containers that declare the resource."
         }
       ],
       "refresh": "30s",
       "schemaVersion": 39,
       "tags": [
-        "ressources",
+        "resources",
         "kubernetes",
         "wittnerlab",
         "pod"
@@ -3244,8 +3256,8 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
-      "title": "Ressources — pods",
+      "timezone": "utc",
+      "title": "Resources — pods",
       "uid": "ressources-pods",
       "version": 1,
       "weekStart": ""

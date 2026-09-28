@@ -221,7 +221,7 @@ CNPG de la copie kopia, cf. Contraintes.
   vivant dans le tier `app`, sans relation d'ordre avec `infra`. Même découpage que pour les autres
   composants `*-monitoring`. En revanche `metrics.enabled` reste **vrai** ici : c'est lui qui
   crée le Service scrapé, et le couper viderait le ServiceMonitor du composant frère en silence.
-  Dashboard Grafana : dossier *Wittnerlab*, « Sauvegardes — velero » (le ConfigMap est dans
+  Dashboard Grafana : dossier *Wittnerlab*, « Backups — velero » (le ConfigMap est dans
   [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)).
 - **Renovate ne suit pas l'image du plugin.** La version du chart, dans `velero.app.yaml`, est bien
   prise en charge (manager `argocd`) ; l'image `velero-plugin-for-gcp` épinglée dans

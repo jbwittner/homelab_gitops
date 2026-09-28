@@ -23,8 +23,8 @@
 # sans lui, la jointure est vide sans erreur.
 #
 # Ce que ce dashboard ne montre PAS, à dessein :
-#   - la sauvegarde et l'archivage WAL — dashboard « Sauvegardes PostgreSQL — barman-cloud »
-#   - le remplissage du PVC de la base — dashboard « Ressources — volumes » (la taille logique
+#   - la sauvegarde et l'archivage WAL — dashboard « PostgreSQL backups — barman-cloud »
+#   - le remplissage du PVC de la base — dashboard « Resources — volumes » (la taille logique
 #     affichée ici ne descend jamais après une suppression de lignes, elle ne mesure pas le disque)
 apiVersion: v1
 kind: ConfigMap
@@ -69,7 +69,7 @@ data:
           },
           "id": 100,
           "panels": [],
-          "title": "État",
+          "title": "State",
           "type": "row"
         },
         {
@@ -77,7 +77,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Pods d'instance PostgreSQL dont le collecteur répond sur 9187. Ce n'est PAS le nombre d'instances désirées : une instance dont le pod est mort disparaît de cette tuile sans la faire passer au rouge. Le compte attendu se lit sur la tuile « Instances prêtes », servie par kube-state-metrics à partir du Cluster lui-même.",
+          "description": "PostgreSQL instance pods whose collector answers on 9187. This is NOT the number of desired instances: an instance whose pod is dead disappears from this tile without turning it red. The expected count is read on the \"Ready / desired instances\" tile, served by kube-state-metrics from the Cluster itself.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -130,7 +130,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Instances scrapées",
+          "title": "Instances scraped",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -145,7 +145,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Rapport `status.readyInstances / status.instances` lu sur les CRs `Cluster` par kube-state-metrics. Sous 100 %, une instance est en cours de création, en attente de PVC ou en échec — l'opérateur ne bascule pas le service `-rw` tant qu'aucune n'est prête.",
+          "description": "The `status.readyInstances / status.instances` ratio read on the `Cluster` CRs by kube-state-metrics. Below 100%, an instance is being created, waiting for a PVC or failing — the operator does not switch the `-rw` service over until one is ready.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -202,7 +202,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Instances prêtes / désirées",
+          "title": "Ready / desired instances",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -217,7 +217,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Temps écoulé depuis le dernier démarrage de PostgreSQL sur l'instance la plus ancienne. Une valeur qui retombe à zéro sans changement de version signale un redémarrage subi (OOM, éviction, `failover`), pas une opération planifiée.",
+          "description": "Time elapsed since PostgreSQL last started on the oldest instance. A value dropping back to zero with no version change signals an unplanned restart (OOM, eviction, `failover`), not a planned operation.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -266,7 +266,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Ancienneté du postmaster",
+          "title": "Postmaster age",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -281,7 +281,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Version majeure.mineure servie par le collecteur (`server_version_num` remis en forme). Elle vient de l'IMAGE du pod : elle ne bouge qu'après un redémarrage de l'instance, pas au moment où le champ `imageName` change dans le Cluster.",
+          "description": "The major.minor version served by the collector (`server_version_num` reformatted). It comes from the pod's IMAGE: it only moves after the instance restarts, not when the `imageName` field changes in the Cluster.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -330,7 +330,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Version PostgreSQL",
+          "title": "PostgreSQL version",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -345,7 +345,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "L'opérateur a besoin d'une bascule décidée à la main pour finir ce qu'il a commencé — typiquement une montée de version en `primaryUpdateStrategy: supervised`. Tant que la tuile est à « Oui », l'instance primaire reste sur l'ancienne image.",
+          "description": "The operator needs a hand-decided switchover to finish what it started — typically a version upgrade under `primaryUpdateStrategy: supervised`. While this tile reads \"Yes\", the primary instance stays on the old image.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -358,12 +358,12 @@ data:
                     "0": {
                       "color": "green",
                       "index": 0,
-                      "text": "Non"
+                      "text": "No"
                     },
                     "1": {
                       "color": "red",
                       "index": 1,
-                      "text": "Oui"
+                      "text": "Yes"
                     }
                   }
                 }
@@ -410,7 +410,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Bascule manuelle requise",
+          "title": "Manual switchover required",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -425,7 +425,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Une instance sous fencing est arrêtée volontairement par l'opérateur (annotation `cnpg.io/fencedInstances`) : le pod tourne, PostgreSQL non. C'est l'état dans lequel se trouve une base pendant une restauration manuelle — et un état dans lequel on oublie de ne pas la laisser.",
+          "description": "A fenced instance is deliberately stopped by the operator (the `cnpg.io/fencedInstances` annotation): the pod runs, PostgreSQL does not. This is the state a database sits in during a manual restore — and a state one forgets to take it out of.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -438,12 +438,12 @@ data:
                     "0": {
                       "color": "green",
                       "index": 0,
-                      "text": "Non"
+                      "text": "No"
                     },
                     "1": {
                       "color": "red",
                       "index": 1,
-                      "text": "Oui"
+                      "text": "Yes"
                     }
                   }
                 }
@@ -505,7 +505,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Une ligne par CR `Cluster`, servie par kube-state-metrics — donc lisible même quand PLUS AUCUN pod ne répond, contrairement à tout le reste du dashboard. Les deux dernières colonnes viennent au contraire du collecteur d'instance : elles se vident si la base est arrêtée, alors que la phase reste affichée. `label_replace` réaligne `cnpg_io_cluster` (collecteur) sur `cnpg_cluster` (kube-state-metrics) : les deux sources ne nomment pas la base pareil.",
+          "description": "One row per `Cluster` CR, served by kube-state-metrics — hence readable even when NO pod answers any more, unlike the rest of this dashboard. The last two columns, on the contrary, come from the instance collector: they empty out when the database is stopped, while the phase keeps showing. `label_replace` realigns `cnpg_io_cluster` (collector) onto `cnpg_cluster` (kube-state-metrics): the two sources do not name the database the same way.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -533,7 +533,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Taille totale"
+                  "options": "Total size"
                 },
                 "properties": [
                   {
@@ -558,7 +558,7 @@ data:
             "sortBy": [
               {
                 "desc": false,
-                "displayName": "Base"
+                "displayName": "Database"
               }
             ]
           },
@@ -625,7 +625,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Clusters PostgreSQL",
+          "title": "PostgreSQL clusters",
           "transformations": [
             {
               "id": "joinByField",
@@ -808,14 +808,14 @@ data:
                 },
                 "indexByName": {},
                 "renameByName": {
-                  "cnpg_cluster": "Base",
+                  "cnpg_cluster": "Database",
                   "db_namespace": "Namespace",
                   "phase": "Phase",
-                  "primary": "Primaire",
+                  "primary": "Primary",
                   "Value #B": "Instances",
-                  "Value #C": "Prêtes",
+                  "Value #C": "Ready",
                   "Value #D": "Version",
-                  "Value #E": "Taille totale"
+                  "Value #E": "Total size"
                 }
               }
             }
@@ -839,7 +839,7 @@ data:
           },
           "id": 101,
           "panels": [],
-          "title": "Réplication",
+          "title": "Replication",
           "type": "row"
         },
         {
@@ -847,7 +847,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "0 = primaire (accepte les écritures), 1 = réplique en recovery. Sur un cluster à une seule instance la courbe reste à 0 : elle ne devient intéressante qu'au moment d'une bascule, où l'on voit les deux courbes s'échanger. Deux instances à 0 en même temps est un split-brain.",
+          "description": "0 = primary (accepts writes), 1 = replica in recovery. On a single-instance cluster the curve stays at 0: it only becomes interesting during a switchover, where the two curves swap. Two instances at 0 at the same time is a split-brain.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -929,7 +929,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}} / {{pod}}"
             }
           ],
-          "title": "Rôle des instances",
+          "title": "Instance roles",
           "type": "timeseries",
           "gridPos": {
             "h": 6,
@@ -944,7 +944,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Répliques réellement connectées au primaire, contre le nombre de répliques SYNCHRONES attendues par la configuration. Un homelab à une instance affiche 0 et 0 : c'est normal et ça veut dire qu'il n'y a aucune redondance locale — la seule copie de secours est la sauvegarde barman-cloud (dashboard voisin).",
+          "description": "Replicas actually connected to the primary, against the number of SYNCHRONOUS replicas the configuration expects. A single-instance homelab shows 0 and 0: that is normal and means there is no local redundancy — the only spare copy is the barman-cloud backup (neighbouring dashboard).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1021,7 +1021,7 @@ data:
               "expr": "cnpg_pg_replication_streaming_replicas{cnpg_io_cluster=~\"$cluster\"}",
               "refId": "A",
               "range": true,
-              "legendFormat": "Connectées — {{cnpg_io_cluster}}"
+              "legendFormat": "Connected — {{cnpg_io_cluster}}"
             },
             {
               "datasource": {
@@ -1032,10 +1032,10 @@ data:
               "expr": "cnpg_collector_sync_replicas{cnpg_io_cluster=~\"$cluster\", value=\"expected\"}",
               "refId": "B",
               "range": true,
-              "legendFormat": "Synchrones attendues — {{cnpg_io_cluster}}"
+              "legendFormat": "Synchronous expected — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Répliques en streaming",
+          "title": "Streaming replicas",
           "type": "timeseries",
           "gridPos": {
             "h": 6,
@@ -1050,7 +1050,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Retard mesuré en secondes sur la réplique la plus en retard. Vaut 0 sur un primaire isolé — l'absence de retard n'est donc PAS une preuve que la réplication fonctionne, seule la courbe « Répliques en streaming » le dit.",
+          "description": "Lag measured in seconds on the most lagging replica. Reads 0 on a lone primary — so the absence of lag is NOT proof that replication works, only the \"Streaming replicas\" curve says that.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1130,7 +1130,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}} / {{pod}}"
             }
           ],
-          "title": "Retard de réplication",
+          "title": "Replication lag",
           "type": "timeseries",
           "gridPos": {
             "h": 6,
@@ -1150,7 +1150,7 @@ data:
           },
           "id": 102,
           "panels": [],
-          "title": "Connexions",
+          "title": "Connections",
           "type": "row"
         },
         {
@@ -1158,7 +1158,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Total des backends PostgreSQL, toutes bases et tous états confondus. Inclut le backend du collecteur de métriques lui-même (`cnpg_metrics_exporter`), qui vaut 1 en permanence — une base sans aucun client n'affiche donc pas 0.",
+          "description": "Total PostgreSQL backends, across all databases and all states. Includes the metrics collector's own backend (`cnpg_metrics_exporter`), which is permanently 1 — so a database with no client at all does not read 0.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1207,7 +1207,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Connexions ouvertes",
+          "title": "Open connections",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -1222,7 +1222,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Connexions ouvertes rapportées à `max_connections`. PostgreSQL refuse toute nouvelle connexion à 100 % — y compris celles de l'opérateur, qui ne peut alors plus ni sonder ni basculer l'instance. Au-delà de 80 % de façon durable, la réponse est un pooler (PgBouncer), pas une augmentation de `max_connections` : chaque backend coûte de la mémoire.",
+          "description": "Open connections against `max_connections`. PostgreSQL refuses every new connection at 100% — including the operator's, which can then neither probe nor switch the instance over. Lastingly above 80%, the answer is a pooler (PgBouncer), not a bigger `max_connections`: every backend costs memory.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1279,7 +1279,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Taux d'occupation de max_connections",
+          "title": "max_connections usage ratio",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -1294,7 +1294,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Backends bloqués sur un verrou. Une valeur non nulle qui persiste est une contention applicative (transaction longue qui garde un verrou), pas un problème de dimensionnement.",
+          "description": "Backends blocked on a lock. A non-zero value that persists is application contention (a long transaction holding a lock), not a sizing problem.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1351,7 +1351,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Connexions en attente",
+          "title": "Waiting connections",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -1366,7 +1366,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Âge de la transaction ouverte depuis le plus longtemps. C'est LE signal qui précède les deux pannes classiques : une transaction ouverte empêche l'autovacuum de nettoyer, donc fait grimper l'âge des XID (rangée « Maintenance »), et garde ses verrous, donc fait grimper les connexions en attente.",
+          "description": "Age of the longest-open transaction. THE signal preceding the two classic failures: an open transaction stops autovacuum from cleaning, hence the XID age climbs (the \"Maintenance\" row), and holds its locks, hence the waiting connections climb.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1423,7 +1423,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Transaction la plus longue",
+          "title": "Longest transaction",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -1438,7 +1438,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`idle in transaction` est l'état à surveiller : une connexion qui reste dans cet état tient ses verrous et bloque l'autovacuum sans exécuter la moindre requête. `active` qui monte est une charge, `idle` qui monte est un pool client mal dimensionné.",
+          "description": "`idle in transaction` is the state to watch: a connection staying there holds its locks and blocks autovacuum without running a single query. Rising `active` is load, rising `idle` is a badly sized client pool.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1519,7 +1519,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}} — {{state}}"
             }
           ],
-          "title": "Connexions par état",
+          "title": "Connections per state",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1534,7 +1534,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Qui consomme les connexions. La série `postgres / cnpg_metrics_exporter` est le collecteur lui-même ; `app / app` est l'application propriétaire de la base.",
+          "description": "Who consumes the connections. The `postgres / cnpg_metrics_exporter` series is the collector itself; `app / app` is the application that owns the database.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1614,7 +1614,7 @@ data:
               "legendFormat": "{{datname}} / {{usename}}"
             }
           ],
-          "title": "Connexions par base et utilisateur",
+          "title": "Connections per database and user",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1634,7 +1634,7 @@ data:
           },
           "id": 103,
           "panels": [],
-          "title": "Volumétrie",
+          "title": "Volumetry",
           "type": "row"
         },
         {
@@ -1642,7 +1642,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Taille logique renvoyée par `pg_database_size()`. Elle ne descend PAS quand des lignes sont supprimées — l'espace reste réservé au fichier tant qu'un `VACUUM FULL` n'a pas réécrit la table. Ce n'est donc pas une mesure du remplissage du PVC : celle-là est dans le dashboard « Ressources — volumes ».",
+          "description": "The logical size returned by `pg_database_size()`. It does NOT go down when rows are deleted — the space stays reserved to the file until a `VACUUM FULL` rewrites the table. So it is not a measure of the PVC fill level: that one is on the \"Resources — volumes\" dashboard.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1722,7 +1722,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}} / {{datname}}"
             }
           ],
-          "title": "Taille des bases",
+          "title": "Database sizes",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1737,7 +1737,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Volume occupé par `pg_wal` sur le PVC de la base. En régime normal il oscille autour de `max_wal_size`. Une croissance MONOTONE est le symptôme visible d'un archivage cassé : un segment non archivé n'est jamais recyclé, et un `pg_wal` plein arrête PostgreSQL. La cause se lit dans le dashboard « Sauvegardes PostgreSQL — barman-cloud ».",
+          "description": "Volume `pg_wal` occupies on the database's PVC. In normal operation it oscillates around `max_wal_size`. MONOTONE growth is the visible symptom of broken archiving: an unarchived segment is never recycled, and a full `pg_wal` stops PostgreSQL. The cause is read on the \"PostgreSQL backups — barman-cloud\" dashboard.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1814,10 +1814,10 @@ data:
               "expr": "cnpg_collector_pg_wal{cnpg_io_cluster=~\"$cluster\", value=\"size\"}",
               "refId": "A",
               "range": true,
-              "legendFormat": "Octets — {{cnpg_io_cluster}}"
+              "legendFormat": "Bytes — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "WAL présents sur le volume",
+          "title": "WAL present on the volume",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1832,7 +1832,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Le même volume compté en segments de 16 Mio. « Conservés d'office » est `wal_keep_size`, « Plafond estimé » la borne déduite de `max_wal_size` — les segments présents doivent rester sous cette borne. Les séries `volume_max` / `slots_max` du même métrique valent NaN ici : elles ne sont servies que lorsqu'un volume WAL séparé ou des slots de réplication existent.",
+          "description": "The same volume counted in 16 MiB segments. \"Kept unconditionally\" is `wal_keep_size`, \"Estimated ceiling\" the bound derived from `max_wal_size` — the segments present must stay under it. The `volume_max` / `slots_max` series of the same metric read NaN here: they are only served when a separate WAL volume or replication slots exist.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1909,7 +1909,7 @@ data:
               "expr": "cnpg_collector_pg_wal{cnpg_io_cluster=~\"$cluster\", value=\"count\"}",
               "refId": "A",
               "range": true,
-              "legendFormat": "Présents — {{cnpg_io_cluster}}"
+              "legendFormat": "Present — {{cnpg_io_cluster}}"
             },
             {
               "datasource": {
@@ -1920,7 +1920,7 @@ data:
               "expr": "cnpg_collector_pg_wal{cnpg_io_cluster=~\"$cluster\", value=\"keep\"}",
               "refId": "B",
               "range": true,
-              "legendFormat": "Conservés d'office — {{cnpg_io_cluster}}"
+              "legendFormat": "Kept unconditionally — {{cnpg_io_cluster}}"
             },
             {
               "datasource": {
@@ -1931,10 +1931,10 @@ data:
               "expr": "cnpg_collector_pg_wal{cnpg_io_cluster=~\"$cluster\", value=\"max\"}",
               "refId": "C",
               "range": true,
-              "legendFormat": "Plafond estimé — {{cnpg_io_cluster}}"
+              "legendFormat": "Estimated ceiling — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Segments WAL",
+          "title": "WAL segments",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -1954,7 +1954,7 @@ data:
           },
           "id": 104,
           "panels": [],
-          "title": "Activité",
+          "title": "Activity",
           "type": "row"
         },
         {
@@ -1962,7 +1962,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Un taux de rollback qui suit le taux de commit trahit une application qui échoue silencieusement — les erreurs SQL sont comptées ici avant d'apparaître dans les logs.",
+          "description": "A rollback rate tracking the commit rate betrays an application failing silently — SQL errors are counted here before they show up in the logs.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2069,7 +2069,7 @@ data:
               "legendFormat": "Rollbacks — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Transactions par seconde",
+          "title": "Transactions per second",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2084,7 +2084,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "« Parcourues » très supérieur à « Retournées » signale des balayages séquentiels : une requête lit toute la table pour n'en renvoyer que quelques lignes — index manquant. Le rapport entre les deux vaut plus que leurs valeurs absolues.",
+          "description": "\"Scanned\" far above \"Returned\" signals sequential scans: a query reads the whole table to return a handful of rows — a missing index. The ratio between the two says more than their absolute values.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2161,7 +2161,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_pg_stat_database_tup_returned{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "A",
               "range": true,
-              "legendFormat": "Parcourues"
+              "legendFormat": "Scanned"
             },
             {
               "datasource": {
@@ -2172,7 +2172,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_pg_stat_database_tup_fetched{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "B",
               "range": true,
-              "legendFormat": "Retournées"
+              "legendFormat": "Returned"
             },
             {
               "datasource": {
@@ -2183,7 +2183,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_pg_stat_database_tup_inserted{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "C",
               "range": true,
-              "legendFormat": "Insérées"
+              "legendFormat": "Inserted"
             },
             {
               "datasource": {
@@ -2194,7 +2194,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_pg_stat_database_tup_updated{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "D",
               "range": true,
-              "legendFormat": "Modifiées"
+              "legendFormat": "Updated"
             },
             {
               "datasource": {
@@ -2205,10 +2205,10 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_pg_stat_database_tup_deleted{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "E",
               "range": true,
-              "legendFormat": "Supprimées"
+              "legendFormat": "Deleted"
             }
           ],
-          "title": "Lignes lues et écrites",
+          "title": "Rows read and written",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2223,7 +2223,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Part des blocs servis depuis `shared_buffers` plutôt que depuis le disque. On attend > 99 % sur une base dont l'ensemble actif tient en mémoire. Le `clamp_min` évite la division par zéro d'une base au repos — sans lui la courbe disparaît la nuit. Attention : sur une base minuscule, une chute ponctuelle après redémarrage est seulement le cache qui se remplit.",
+          "description": "Share of the blocks served from `shared_buffers` rather than from disk. Expect > 99% on a database whose working set fits in memory. The `clamp_min` avoids the division by zero of an idle database — without it the curve vanishes at night. Careful: on a tiny database, a one-off drop after a restart is only the cache filling up.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2312,7 +2312,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}}"
             }
           ],
-          "title": "Taux de succès du cache",
+          "title": "Cache hit ratio",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2332,7 +2332,7 @@ data:
           },
           "id": 105,
           "panels": [],
-          "title": "Santé",
+          "title": "Health",
           "type": "row"
         },
         {
@@ -2340,7 +2340,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Un deadlock est TOUJOURS un bug applicatif : PostgreSQL en tue une des deux transactions et l'application reçoit une erreur. Les conflits de recovery ne concernent que les répliques (requête annulée parce que le rejeu du WAL supprimait les lignes qu'elle lisait) et restent à 0 sur un cluster à une instance.",
+          "description": "A deadlock is ALWAYS an application bug: PostgreSQL kills one of the two transactions and the application gets an error. Recovery conflicts only concern replicas (a query cancelled because the WAL replay was deleting the rows it was reading) and stay at 0 on a single-instance cluster.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2444,10 +2444,10 @@ data:
               "expr": "sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_database_conflicts{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "B",
               "range": true,
-              "legendFormat": "Conflits de recovery — {{cnpg_io_cluster}}"
+              "legendFormat": "Recovery conflicts — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Deadlocks et conflits",
+          "title": "Deadlocks and conflicts",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2462,7 +2462,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Octets écrits sur disque par des tris ou des jointures qui ne tenaient pas en mémoire. Un débit non nul en continu se corrige par `work_mem`, pas par du disque plus rapide — et chaque octet ici est une écriture sur le PVC qui n'aurait pas dû exister.",
+          "description": "Bytes written to disk by sorts or joins that did not fit in memory. A continuously non-zero rate is fixed with `work_mem`, not with a faster disk — and every byte here is a write to the PVC that should not have existed.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2539,10 +2539,10 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_pg_stat_database_temp_bytes{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "A",
               "range": true,
-              "legendFormat": "Débit — {{cnpg_io_cluster}}"
+              "legendFormat": "Rate — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Fichiers temporaires",
+          "title": "Temporary files",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2557,7 +2557,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Millisecondes passées à attendre le disque, par seconde écoulée : une valeur de 1000 signifie qu'un backend a passé une seconde entière à attendre par seconde. ⚠️ Ces séries ne sont alimentées que si `track_io_timing` est activé — sinon elles restent plates à zéro, ce qui ressemble à une base parfaitement rapide.",
+          "description": "Milliseconds spent waiting on the disk, per elapsed second: a value of 1000 means a backend spent a whole second waiting per second. ⚠️ These series are only fed when `track_io_timing` is on — otherwise they stay flat at zero, which looks like a perfectly fast database.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2634,7 +2634,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_pg_stat_database_blk_read_time{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "A",
               "range": true,
-              "legendFormat": "Lecture — {{cnpg_io_cluster}}"
+              "legendFormat": "Read — {{cnpg_io_cluster}}"
             },
             {
               "datasource": {
@@ -2645,10 +2645,10 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_pg_stat_database_blk_write_time{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "B",
               "range": true,
-              "legendFormat": "Écriture — {{cnpg_io_cluster}}"
+              "legendFormat": "Write — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Temps d'attente sur les E/S",
+          "title": "I/O wait time",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2676,7 +2676,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Nombre de transactions écoulées depuis le plus vieux XID encore gelé. PostgreSQL s'ARRÊTE à 2 milliards pour ne pas perdre de données ; l'autovacuum est censé maintenir cette courbe en dents de scie sous 200 millions. Une croissance monotone veut dire que l'autovacuum n'arrive pas à finir — presque toujours à cause d'une transaction restée ouverte (tuile « Transaction la plus longue »).",
+          "description": "Transactions elapsed since the oldest XID still frozen. PostgreSQL STOPS at 2 billion so as not to lose data; autovacuum is supposed to keep this curve sawtoothing below 200 million. Monotone growth means autovacuum cannot finish — almost always because of a transaction left open (the \"Longest transaction\" tile).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2775,7 +2775,7 @@ data:
               "legendFormat": "MultiXact — {{datname}}"
             }
           ],
-          "title": "Âge des transactions (wraparound)",
+          "title": "Transaction age (wraparound)",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2790,7 +2790,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Un checkpoint « forcé » est déclenché parce que `max_wal_size` a été atteint avant `checkpoint_timeout` : trop d'écritures pour la fenêtre configurée. S'ils dominent les checkpoints planifiés, augmenter `max_wal_size` — au prix de plus de WAL sur le PVC et d'une reprise après crash plus longue. ⚠️ Métriques `pg_stat_checkpointer`, séparées de `pg_stat_bgwriter` depuis PostgreSQL 17 : sur une instance en 16 ou moins, ce panneau reste vide.",
+          "description": "A \"forced\" checkpoint is triggered because `max_wal_size` was reached before `checkpoint_timeout`: too many writes for the configured window. When they dominate the scheduled checkpoints, raise `max_wal_size` — at the cost of more WAL on the PVC and a longer crash recovery. ⚠️ `pg_stat_checkpointer` metrics, split out of `pg_stat_bgwriter` since PostgreSQL 17: on an instance running 16 or older, this panel stays empty.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2883,7 +2883,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_checkpointer_checkpoints_timed{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "A",
               "range": true,
-              "legendFormat": "Planifiés — {{cnpg_io_cluster}}"
+              "legendFormat": "Scheduled — {{cnpg_io_cluster}}"
             },
             {
               "datasource": {
@@ -2894,10 +2894,10 @@ data:
               "expr": "sum by (cnpg_io_cluster) (increase(cnpg_pg_stat_checkpointer_checkpoints_req{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "B",
               "range": true,
-              "legendFormat": "Forcés — {{cnpg_io_cluster}}"
+              "legendFormat": "Forced — {{cnpg_io_cluster}}"
             }
           ],
-          "title": "Points de reprise (checkpoints)",
+          "title": "Checkpoints",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -2912,7 +2912,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Débit d'écriture dans le journal. C'est ce débit, et non la taille de la base, qui dimensionne le coût de l'archivage barman-cloud : chaque octet ici finit dans le bucket et y reste jusqu'à l'expiration de la rétention.",
+          "description": "Write rate into the journal. It is this rate, not the database size, that sizes the cost of barman-cloud archiving: every byte here ends up in the bucket and stays there until the retention expires.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2992,7 +2992,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}}"
             }
           ],
-          "title": "Volume de WAL généré",
+          "title": "WAL volume generated",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -3007,7 +3007,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Une image pleine page est écrite au premier changement d'un bloc après un checkpoint : des checkpoints trop fréquents en multiplient le nombre et gonflent le WAL. « Buffers WAL pleins » compte les fois où un backend a dû attendre pour écrire son journal — se corrige par `wal_buffers`.",
+          "description": "A full-page image is written on a block's first change after a checkpoint: checkpoints that are too frequent multiply them and inflate the WAL. \"WAL buffers full\" counts the times a backend had to wait to write its journal — fixed with `wal_buffers`.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3084,7 +3084,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_collector_wal_fpi{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "A",
               "range": true,
-              "legendFormat": "Images pleine page / s"
+              "legendFormat": "Full-page images / s"
             },
             {
               "datasource": {
@@ -3095,7 +3095,7 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_collector_wal_records{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "B",
               "range": true,
-              "legendFormat": "Enregistrements / s"
+              "legendFormat": "Records / s"
             },
             {
               "datasource": {
@@ -3106,10 +3106,10 @@ data:
               "expr": "sum by (cnpg_io_cluster) (rate(cnpg_collector_wal_buffers_full{cnpg_io_cluster=~\"$cluster\"}[$__rate_interval]))",
               "refId": "C",
               "range": true,
-              "legendFormat": "Buffers WAL pleins / s"
+              "legendFormat": "WAL buffers full / s"
             }
           ],
-          "title": "Écritures pleine page et buffers WAL",
+          "title": "Full-page writes and WAL buffers",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -3129,7 +3129,7 @@ data:
           },
           "id": 107,
           "panels": [],
-          "title": "Opérateur et collecteur",
+          "title": "Operator and collector",
           "type": "row"
         },
         {
@@ -3137,7 +3137,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Réplicas prêts du Deployment de l'opérateur CloudNativePG. ⚠️ Servi par kube-state-metrics, PAS par l'opérateur : ses propres métriques ne sont pas scrapées (le chart n'active pas `monitoring.podMonitorEnabled`, et le PodMonitor qu'il poserait n'aurait pas le label `release: kube-prometheus-stack` attendu par Prometheus). Opérateur à l'arrêt = plus aucune bascule, plus aucune sauvegarde planifiée, mais les bases déjà démarrées continuent de servir.",
+          "description": "Ready replicas of the CloudNativePG operator Deployment. ⚠️ Served by kube-state-metrics, NOT by the operator: its own metrics are not scraped (the chart does not enable `monitoring.podMonitorEnabled`, and the PodMonitor it would create would not carry the `release: kube-prometheus-stack` label Prometheus expects). A stopped operator = no more switchover, no more scheduled backup, but the databases already started keep serving.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3190,7 +3190,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Opérateur disponible",
+          "title": "Operator available",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -3205,7 +3205,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Redémarrages de conteneurs de l'opérateur et du plugin barman-cloud sur 24 h. Un opérateur qui redémarre en boucle laisse les Clusters figés dans leur dernier état sans qu'aucune alerte de base ne se déclenche.",
+          "description": "LEFT: container restarts of the operator and of the barman-cloud plugin over 24 h. RIGHT: pods of cnpg-system started over the same window. Both are needed: `kube_pod_container_status_restarts_total` only counts restarts inside a pod that keeps existing, so a recreated pod (rollout, eviction) resets the counter to zero and leaves the left figure at 0 while the namespace churns. An operator restarting in a loop leaves the Clusters frozen in their last state without a single database alert firing.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3245,7 +3245,7 @@ data:
               "fields": "",
               "values": false
             },
-            "textMode": "auto"
+            "textMode": "value_and_name"
           },
           "pluginVersion": "10.4.0",
           "targets": [
@@ -3259,10 +3259,24 @@ data:
               "refId": "A",
               "instant": true,
               "range": false,
+              "format": "table",
+              "legendFormat": "restarts"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "count(time() - kube_pod_start_time{namespace=\"cnpg-system\"} < 86400) or vector(0)",
+              "legendFormat": "new pods",
+              "refId": "B",
+              "instant": true,
+              "range": false,
               "format": "table"
             }
           ],
-          "title": "Redémarrages dans cnpg-system (24 h)",
+          "title": "Restarts / new pods in cnpg-system (24 h)",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -3277,7 +3291,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Nombre d'instances dont la DERNIÈRE collecte a échoué. Le collecteur continue de servir les métriques qu'il a pu lire : une erreur ici rend certaines courbes plates sans les faire disparaître.",
+          "description": "Number of instances whose LAST collection failed. The collector keeps serving the metrics it could read: an error here flattens some curves without making them disappear.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3330,7 +3344,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Erreurs de collecte",
+          "title": "Collection errors",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -3345,7 +3359,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Durée de la collecte la plus lente. Le PodMonitor coupe à 10 s (`scrapeTimeout`) : au delà, la cible passe `up == 0` et TOUTES les alertes de sauvegarde deviennent aveugles.",
+          "description": "Duration of the slowest collection. The PodMonitor cuts off at 10 s (`scrapeTimeout`): beyond that the target goes `up == 0` and EVERY backup alert goes blind.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3402,7 +3416,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Durée de collecte",
+          "title": "Collection duration",
           "type": "stat",
           "gridPos": {
             "h": 4,
@@ -3417,7 +3431,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Détail par sonde du collecteur. `Collect.cnpg` regroupe les requêtes personnalisées (tailles de bases, backends, archiver) : c'est celle qui se dégrade quand la base est chargée, et elle est facturée à chaque scrape.",
+          "description": "Per-probe detail of the collector. `Collect.cnpg` groups the custom queries (database sizes, backends, archiver): it is the one that degrades when the database is loaded, and it is paid for on every scrape.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3497,7 +3511,7 @@ data:
               "legendFormat": "{{cnpg_io_cluster}} — {{collector}}"
             }
           ],
-          "title": "Durée de collecte par sonde",
+          "title": "Collection duration per probe",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -3512,7 +3526,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Empreinte de l'opérateur (`manager`) et du serveur gRPC du plugin (`barman-cloud`). Le SIDECAR qui fait le travail réel de sauvegarde ne vit PAS ici mais dans le pod de chaque base : il est suivi dans le dashboard « Sauvegardes PostgreSQL — barman-cloud ».",
+          "description": "Footprint of the operator (`manager`) and of the plugin's gRPC server (`barman-cloud`). The SIDECAR doing the real backup work does NOT live here but in each database's pod: it is tracked on the \"PostgreSQL backups — barman-cloud\" dashboard.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3589,10 +3603,10 @@ data:
               "expr": "sum by (container) (container_memory_working_set_bytes{namespace=\"cnpg-system\", container!=\"\"})",
               "refId": "A",
               "range": true,
-              "legendFormat": "Mémoire — {{container}}"
+              "legendFormat": "Memory — {{container}}"
             }
           ],
-          "title": "Ressources des conteneurs cnpg-system",
+          "title": "Resources of the cnpg-system containers",
           "type": "timeseries",
           "gridPos": {
             "h": 7,
@@ -3633,10 +3647,10 @@ data:
               "uid": "${DS_PROMETHEUS}"
             },
             "definition": "label_values(cnpg_collector_up, cnpg_io_cluster)",
-            "description": "Nom du CR `Cluster`. La liste est construite sur les instances SCRAPÉES : une base dont tous les pods sont morts disparaît de ce menu — c'est le tableau « Clusters PostgreSQL » de la première rangée, servi par kube-state-metrics, qui continue de la montrer.",
+            "description": "Name of the `Cluster` CR. The list is built on the SCRAPED instances: a database whose pods are all dead disappears from this menu — the \"PostgreSQL clusters\" table of the first row, served by kube-state-metrics, keeps showing it.",
             "hide": 0,
             "includeAll": true,
-            "label": "Base",
+            "label": "Database",
             "multi": true,
             "name": "cluster",
             "options": [],
@@ -3658,10 +3672,10 @@ data:
               "uid": "${DS_PROMETHEUS}"
             },
             "definition": "label_values(cnpg_pg_database_size_bytes{cnpg_io_cluster=~\"$cluster\"}, datname)",
-            "description": "Base au sens PostgreSQL, à l'intérieur du cluster : `app` est celle de l'application, `postgres` et `template1` sont celles du système.",
+            "description": "Database in the PostgreSQL sense, inside the cluster: `app` is the application's one, `postgres` and `template1` are the system ones.",
             "hide": 0,
             "includeAll": true,
-            "label": "Base de données",
+            "label": "Database",
             "multi": true,
             "name": "datname",
             "options": [],
@@ -3683,8 +3697,9 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
+      "timezone": "utc",
       "title": "PostgreSQL — cnpg",
+      "description": "Health of the CloudNativePG PostgreSQL clusters: instance roles and readiness, replication, connections, volumetry, WAL, maintenance (wraparound, checkpoints) and the cost of the operator and its collector. Backups live on the \"PostgreSQL backups — barman-cloud\" dashboard.",
       "uid": "cnpg-postgres",
       "version": 1,
       "weekStart": ""

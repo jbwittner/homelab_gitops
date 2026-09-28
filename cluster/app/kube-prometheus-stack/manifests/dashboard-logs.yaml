@@ -59,7 +59,7 @@ data:
             "enable": true,
             "hide": false,
             "iconColor": "purple",
-            "name": "Déploiements ArgoCD",
+            "name": "ArgoCD deployments",
             "target": {
               "limit": 100,
               "matchAny": false,
@@ -72,7 +72,7 @@ data:
           }
         ]
       },
-      "description": "Logs des pods collectés par alloy et stockés dans Loki : débit, erreurs, conteneurs les plus bavards et journal filtrable.",
+      "description": "Pod logs collected by alloy and stored in Loki: throughput, errors, chattiest containers and a filterable log view.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
@@ -88,7 +88,7 @@ data:
           },
           "id": 1,
           "panels": [],
-          "title": "Vue d'ensemble",
+          "title": "Overview",
           "type": "row"
         },
         {
@@ -96,7 +96,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Débit total d'ingestion sur la sélection courante (namespace / pod / conteneur).",
+          "description": "Total ingestion throughput over the current selection (namespace / pod / container).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -154,7 +154,7 @@ data:
               "range": true
             }
           ],
-          "title": "Lignes/s",
+          "title": "Lines/s",
           "type": "stat"
         },
         {
@@ -162,7 +162,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Lignes de niveau error, critical ou fatal. Le niveau vient de `detected_level`, que Loki déduit de CHAQUE ligne à l'ingestion : il lit le champ `level` du JSON (authentik), le `level=` du logfmt (ArgoCD) ou les mots-clés d'une ligne libre. Aucune configuration par application, mais rien n'est garanti non plus : ce que Loki ne sait pas classer atterrit en `unknown`.",
+          "description": "Lines at level error, critical or fatal. The level comes from `detected_level`, which Loki infers from EVERY line at ingestion: it reads the JSON `level` field (authentik), the logfmt `level=` (ArgoCD) or the keywords of a free-form line. No per-application configuration, but no guarantee either: whatever Loki cannot classify lands in `unknown`.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -228,7 +228,7 @@ data:
               "range": true
             }
           ],
-          "title": "Erreurs/s",
+          "title": "Errors/s",
           "type": "stat"
         },
         {
@@ -236,7 +236,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Octets de logs sur la période affichée — sert à dimensionner le PVC de Loki : extrapoler sur la rétention (15 j) donne l'ordre de grandeur du disque nécessaire.",
+          "description": "Log bytes over the displayed range — used to size Loki's PVC: extrapolating over the retention (15 d) gives the order of magnitude of the disk needed.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -295,7 +295,7 @@ data:
               "range": false
             }
           ],
-          "title": "Volume ingéré",
+          "title": "Ingested volume",
           "type": "stat"
         },
         {
@@ -303,7 +303,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Nombre de conteneurs ayant produit au moins une ligne sur la période. Un conteneur attendu qui n'apparaît pas ici est un problème de collecte, pas d'application.",
+          "description": "Number of containers that produced at least one line over the range. An expected container missing here is a collection problem, not an application one.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -362,7 +362,7 @@ data:
               "range": false
             }
           ],
-          "title": "Conteneurs qui écrivent",
+          "title": "Containers writing",
           "type": "stat"
         },
         {
@@ -375,7 +375,7 @@ data:
           },
           "id": 6,
           "panels": [],
-          "title": "Débit",
+          "title": "Throughput",
           "type": "row"
         },
         {
@@ -383,7 +383,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Répartition par niveau détecté par Loki. `unknown` = ligne que Loki n'a pas su classer ; une application dont TOUT le volume tombe en `unknown` est une candidate à des logs structurés (JSON ou logfmt), c'est le seul moyen d'obtenir des niveaux fiables.",
+          "description": "Breakdown by the level Loki detected. `unknown` = a line Loki could not classify; an application whose WHOLE volume falls into `unknown` is a candidate for structured logs (JSON or logfmt), the only way to get reliable levels.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -591,7 +591,7 @@ data:
               "legendFormat": "{{detected_level}}"
             }
           ],
-          "title": "Lignes/s par niveau",
+          "title": "Lines/s per level",
           "type": "timeseries"
         },
         {
@@ -599,7 +599,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Répartition du débit entre namespaces. Un décrochage brutal à zéro sur TOUTES les séries désigne le collecteur (alloy) ou Loki, pas les applications.",
+          "description": "Throughput split across namespaces. A sudden drop to zero on ALL series points at the collector (alloy) or Loki, not at the applications.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -686,7 +686,7 @@ data:
               "legendFormat": "{{namespace}}"
             }
           ],
-          "title": "Lignes/s par namespace",
+          "title": "Lines/s per namespace",
           "type": "timeseries"
         },
         {
@@ -694,7 +694,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Le classement est recalculé à chaque point : une série peut apparaître puis disparaître du graphe sans que le conteneur ait cessé d'écrire. C'est le panneau qui identifie ce qui remplit le disque de Loki.",
+          "description": "The ranking is recomputed at every step: a series can appear then vanish from the graph without the container having stopped writing. This is the panel that identifies what fills Loki's disk.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -781,7 +781,7 @@ data:
               "legendFormat": "{{namespace}}/{{pod}} — {{container}}"
             }
           ],
-          "title": "Lignes/s — 10 conteneurs les plus bavards",
+          "title": "Lines/s — 10 chattiest containers",
           "type": "timeseries"
         },
         {
@@ -789,7 +789,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Niveaux error, critical et fatal, par conteneur. À corréler avec la couche d'annotations « Déploiements ArgoCD » : un palier qui démarre pile sur une annotation désigne la synchronisation comme cause.",
+          "description": "Levels error, critical and fatal, per container. Correlate with the \"ArgoCD deployments\" annotation layer: a step starting exactly on an annotation points at the sync as the cause.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -876,7 +876,7 @@ data:
               "legendFormat": "{{namespace}}/{{pod}} — {{container}}"
             }
           ],
-          "title": "Erreurs/s par conteneur",
+          "title": "Errors/s per container",
           "type": "timeseries"
         },
         {
@@ -889,7 +889,7 @@ data:
           },
           "id": 11,
           "panels": [],
-          "title": "Journal",
+          "title": "Log view",
           "type": "row"
         },
         {
@@ -897,7 +897,7 @@ data:
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "description": "Lignes brutes correspondant à la sélection, au filtre Niveau et au filtre Recherche (expression régulière, insensible à la casse — laisser vide pour tout voir). Le filtre Niveau n'agit QUE sur ce panneau : les graphes du dessus montrent toujours tous les niveaux, sinon la tuile « Erreurs/s » afficherait zéro dès qu'on sélectionne `info`. Cliquer une ligne déplie ses labels et, pour du JSON, ses champs.",
+          "description": "Raw lines matching the selection, the Level filter and the Search filter (regular expression, case-insensitive — leave empty to see everything). The Level filter acts ONLY on this panel: the graphs above always show every level, otherwise the \"Errors/s\" tile would read zero as soon as `info` is selected. Clicking a line expands its labels and, for JSON, its fields.",
           "gridPos": {
             "h": 20,
             "w": 24,
@@ -1017,7 +1017,7 @@ data:
             "definition": "label_values({namespace=~\"$namespace\", pod=~\"$pod\"}, container)",
             "hide": 0,
             "includeAll": true,
-            "label": "Conteneur",
+            "label": "Container",
             "multi": true,
             "name": "container",
             "options": [],
@@ -1044,10 +1044,10 @@ data:
                 "$__all"
               ]
             },
-            "description": "Niveau détecté par Loki. Ne filtre que le panneau Logs.",
+            "description": "Level detected by Loki. Filters the Logs panel only.",
             "hide": 0,
             "includeAll": true,
-            "label": "Niveau",
+            "label": "Level",
             "multi": true,
             "name": "level",
             "options": [],
@@ -1060,9 +1060,9 @@ data:
               "text": "",
               "value": ""
             },
-            "description": "Expression régulière appliquée au contenu des lignes du journal (insensible à la casse). Vide = pas de filtre.",
+            "description": "Regular expression applied to the content of the log lines (case-insensitive). Empty = no filter.",
             "hide": 0,
-            "label": "Recherche",
+            "label": "Search",
             "name": "search",
             "options": [],
             "query": "",
@@ -1076,7 +1076,7 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
+      "timezone": "utc",
       "title": "Logs — applications",
       "uid": "logs-applications",
       "version": 1,

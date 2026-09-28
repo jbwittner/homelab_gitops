@@ -113,6 +113,6 @@ qu'après le stack d'observabilité.
   (partition + pod de bootstrap `Running`), pas le PVC.
 - **Agrandir un volume** : augmenter la taille dans le manifeste/les values du consommateur,
   commit, push (`allowVolumeExpansion: true`, extension à chaud).
-- **Espace disponible** : le dashboard « Ressources — volumes »
+- **Espace disponible** : le dashboard « Resources — volumes »
   ([kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)) donne remplissage par PVC
   et état du VG.

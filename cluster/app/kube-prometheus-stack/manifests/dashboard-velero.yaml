@@ -1,5 +1,5 @@
 # cluster/app/kube-prometheus-stack/manifests/dashboard-velero.yaml
-# Dashboard Grafana « Sauvegardes — velero »
+# Dashboard Grafana « Backups — velero »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack
 # via le label grafana_dashboard: "1".
 #
@@ -58,7 +58,7 @@ data:
           },
           "id": 100,
           "panels": [],
-          "title": "État",
+          "title": "State",
           "type": "row"
         },
         {
@@ -66,7 +66,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Temps écoulé depuis la dernière sauvegarde PLANIFIÉE réussie — les backups manuels sont exclus à dessein (tuile voisine) : un backup lancé à la main ne prouve pas que la schedule tourne, et le compter ici masquerait une schedule morte. Rouge au-delà de 36 h, la schedule étant quotidienne. « No data » n'est pas rassurant — la métrique disparaît au redémarrage du serveur velero et tant qu'aucune sauvegarde planifiée n'a abouti.",
+          "description": "Time elapsed since the last successful SCHEDULED backup — manual backups are excluded on purpose (neighbouring tile): a hand-launched backup does not prove the schedule runs, and counting it here would hide a dead schedule. Red beyond 36 h, the schedule being daily. \"No data\" is not reassuring — the metric disappears when the velero server restarts and until a scheduled backup has succeeded.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -130,7 +130,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Dernière sauvegarde planifiée",
+          "title": "Last scheduled backup",
           "type": "stat"
         },
         {
@@ -138,7 +138,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Temps écoulé depuis le dernier backup lancé À LA MAIN (`schedule=\"manuel\"`, réécrit au scrape par le ServiceMonitor — velero, lui, émet un label vide que Prometheus supprimerait). Aucun seuil : rien n'impose d'en faire, cette tuile n'est pas un indicateur de santé. Elle sert à répondre à « est-ce que ma sauvegarde manuelle est bien passée ? » et à repérer les backups ad hoc — dont le périmètre vaut tout le cluster s'il n'a pas été restreint.",
+          "description": "Time elapsed since the last backup launched BY HAND (`schedule=\"manuel\"`, a label value rewritten at scrape time by the ServiceMonitor of velero-monitoring — velero itself emits an empty label that Prometheus would drop; the value stays spelled in French because the PrometheusRule and the stored samples carry it). No threshold: nothing requires taking one, this tile is not a health indicator. It answers \"did my manual backup go through?\" and spots ad hoc backups — whose scope is the whole cluster unless it was restricted.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -195,7 +195,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Dernier backup manuel",
+          "title": "Last manual backup",
           "type": "stat"
         },
         {
@@ -203,7 +203,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Validation périodique du BackupStorageLocation par velero. Indisponible = bucket injoignable, clé de compte de service invalide ou droits IAM retirés : aucune sauvegarde n'aboutira.",
+          "description": "Periodic validation of the BackupStorageLocation by velero. Unavailable = unreachable bucket, invalid service account key or revoked IAM rights: no backup will succeed.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -215,12 +215,12 @@ data:
                     "0": {
                       "color": "red",
                       "index": 1,
-                      "text": "Indisponible"
+                      "text": "Unavailable"
                     },
                     "1": {
                       "color": "green",
                       "index": 0,
-                      "text": "Disponible"
+                      "text": "Available"
                     }
                   },
                   "type": "value"
@@ -287,7 +287,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Nombre de Backups existants, toutes schedules confondues. Décroît quand le TTL (30 j) expire et que le GC de velero passe.",
+          "description": "Number of existing Backups, across all schedules. It goes down when the TTL (30 d) expires and velero's GC runs.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -347,7 +347,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Sauvegardes conservées",
+          "title": "Backups retained",
           "type": "stat"
         },
         {
@@ -355,7 +355,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Échecs francs sur 24 h. Les échecs PARTIELS ne sont pas comptés ici : voir le graphe « Résultats des sauvegardes ».",
+          "description": "Outright failures over 24 h. PARTIAL failures are not counted here: see the \"Backup outcomes\" graph.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -415,7 +415,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Échecs (24 h)",
+          "title": "Failures (24 h)",
           "type": "stat"
         },
         {
@@ -428,7 +428,7 @@ data:
           },
           "id": 101,
           "panels": [],
-          "title": "Sauvegardes",
+          "title": "Backups",
           "type": "row"
         },
         {
@@ -436,7 +436,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Même lecture que le tableau du dessous, mais agrégée : une ligne par schedule au lieu d'une par sauvegarde. « manuel » regroupe les backups lancés à la main. Les totaux portent sur les sauvegardes ENCORE PRÉSENTES : ils baissent quand le TTL expire. « Données copiées » est la somme des PodVolumeBackup avant déduplication kopia — ce n'est pas l'occupation du bucket.",
+          "description": "Same reading as the table below, but aggregated: one row per schedule instead of one per backup. \"manuel\" groups the hand-launched backups. The totals cover the backups STILL PRESENT: they drop when the TTL expires. \"Data copied\" is the sum of the PodVolumeBackups before kopia deduplication — it is not the bucket usage.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -464,7 +464,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Dernier statut"
+                  "options": "Last status"
                 },
                 "properties": [
                   {
@@ -475,12 +475,12 @@ data:
                           "0": {
                             "color": "red",
                             "index": 1,
-                            "text": "Échec"
+                            "text": "Failed"
                           },
                           "1": {
                             "color": "green",
                             "index": 0,
-                            "text": "Succès"
+                            "text": "Succeeded"
                           }
                         },
                         "type": "value"
@@ -498,7 +498,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Début (dernière)"
+                  "options": "Start (last)"
                 },
                 "properties": [
                   {
@@ -510,7 +510,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Fin (dernière)"
+                  "options": "End (last)"
                 },
                 "properties": [
                   {
@@ -522,7 +522,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Données copiées"
+                  "options": "Data copied"
                 },
                 "properties": [
                   {
@@ -541,7 +541,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Prochaine expiration"
+                  "options": "Next expiry"
                 },
                 "properties": [
                   {
@@ -564,7 +564,7 @@ data:
             "footer": {
               "countRows": false,
               "fields": [
-                "Données copiées"
+                "Data copied"
               ],
               "reducer": [
                 "sum"
@@ -666,7 +666,7 @@ data:
               "refId": "G"
             }
           ],
-          "title": "Par schedule (agrégé)",
+          "title": "Per schedule (aggregated)",
           "transformations": [
             {
               "id": "joinByField",
@@ -795,13 +795,13 @@ data:
                 "indexByName": {},
                 "renameByName": {
                   "schedule": "Schedule",
-                  "Value #A": "Sauvegardes",
-                  "Value #B": "Dernier statut",
-                  "Value #C": "Début (dernière)",
-                  "Value #D": "Fin (dernière)",
-                  "Value #E": "Éléments (total)",
-                  "Value #F": "Données copiées",
-                  "Value #G": "Prochaine expiration"
+                  "Value #A": "Backups",
+                  "Value #B": "Last status",
+                  "Value #C": "Start (last)",
+                  "Value #D": "End (last)",
+                  "Value #E": "Items (total)",
+                  "Value #F": "Data copied",
+                  "Value #G": "Next expiry"
                 }
               }
             }
@@ -813,7 +813,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Inventaire réel des objets Backup, une ligne par sauvegarde — impossible à obtenir depuis les métriques natives de velero, qui sont agrégées par schedule et écrasées à chaque exécution. Source : kube-state-metrics (customResourceState, configuré dans le helm-values de ce composant). « Schedule » vide = sauvegarde lancée à la main. « Données copiées » est la somme des PodVolumeBackup : elle exclut le tarball d'objets et ne mesure PAS l'occupation du bucket, kopia dédupliquant entre sauvegardes.",
+          "description": "The real inventory of the Backup objects, one row per backup — impossible to get from velero's native metrics, which are aggregated per schedule and overwritten on every run. Source: kube-state-metrics (customResourceState, configured in this component's helm-values). An empty \"Schedule\" = a hand-launched backup. \"Data copied\" is the sum of the PodVolumeBackups: it excludes the object tarball and does NOT measure the bucket usage, since kopia deduplicates across backups.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -889,7 +889,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Début"
+                  "options": "Start"
                 },
                 "properties": [
                   {
@@ -901,7 +901,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Fin"
+                  "options": "End"
                 },
                 "properties": [
                   {
@@ -913,7 +913,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Données copiées"
+                  "options": "Data copied"
                 },
                 "properties": [
                   {
@@ -932,7 +932,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Expire le"
+                  "options": "Expires on"
                 },
                 "properties": [
                   {
@@ -955,7 +955,7 @@ data:
             "footer": {
               "countRows": false,
               "fields": [
-                "Données copiées"
+                "Data copied"
               ],
               "reducer": [
                 "sum"
@@ -966,7 +966,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Début"
+                "displayName": "Start"
               }
             ]
           },
@@ -1045,7 +1045,7 @@ data:
               "refId": "F"
             }
           ],
-          "title": "Toutes les sauvegardes (objets Backup)",
+          "title": "All backups (Backup objects)",
           "transformations": [
             {
               "id": "joinByField",
@@ -1160,14 +1160,14 @@ data:
                 },
                 "indexByName": {},
                 "renameByName": {
-                  "backup": "Sauvegarde",
+                  "backup": "Backup",
                   "phase": "Phase",
                   "schedule": "Schedule",
-                  "Value #B": "Début",
-                  "Value #C": "Fin",
-                  "Value #D": "Éléments",
-                  "Value #E": "Données copiées",
-                  "Value #F": "Expire le"
+                  "Value #B": "Start",
+                  "Value #C": "End",
+                  "Value #D": "Items",
+                  "Value #E": "Data copied",
+                  "Value #F": "Expires on"
                 }
               }
             }
@@ -1179,7 +1179,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Compteurs cumulés sur la fenêtre de rafraîchissement. Un échec PARTIEL est une sauvegarde qui existe et se restaure, mais à laquelle il manque des éléments — le plus souvent un volume que node-agent n'a pas pu lire.",
+          "description": "Counters accumulated over the refresh window. A PARTIAL failure is a backup that exists and restores, but is missing items — most often a volume node-agent could not read.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1292,7 +1292,7 @@ data:
               },
               "editorMode": "code",
               "expr": "label_replace(sum by (schedule) (increase(velero_backup_success_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
-              "legendFormat": "Succès — {{schedule}}",
+              "legendFormat": "Succeeded — {{schedule}}",
               "range": true,
               "refId": "A"
             },
@@ -1303,7 +1303,7 @@ data:
               },
               "editorMode": "code",
               "expr": "label_replace(sum by (schedule) (increase(velero_backup_partial_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
-              "legendFormat": "Échec partiel — {{schedule}}",
+              "legendFormat": "Partially failed — {{schedule}}",
               "range": true,
               "refId": "B"
             },
@@ -1314,7 +1314,7 @@ data:
               },
               "editorMode": "code",
               "expr": "label_replace(sum by (schedule) (increase(velero_backup_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
-              "legendFormat": "Échec — {{schedule}}",
+              "legendFormat": "Failed — {{schedule}}",
               "range": true,
               "refId": "C"
             },
@@ -1325,12 +1325,12 @@ data:
               },
               "editorMode": "code",
               "expr": "label_replace(sum by (schedule) (increase(velero_backup_validation_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
-              "legendFormat": "Échec de validation — {{schedule}}",
+              "legendFormat": "Validation failed — {{schedule}}",
               "range": true,
               "refId": "D"
             }
           ],
-          "title": "Résultats des sauvegardes",
+          "title": "Backup outcomes",
           "type": "timeseries"
         },
         {
@@ -1338,7 +1338,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Quantiles calculés sur l'histogramme velero_backup_duration_seconds. Les bornes de l'histogramme s'arrêtent à 4 h : au-delà, le quantile sature.",
+          "description": "Quantiles computed on the velero_backup_duration_seconds histogram. The histogram buckets stop at 4 h: beyond that, the quantile saturates.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1436,7 +1436,7 @@ data:
               "refId": "B"
             }
           ],
-          "title": "Durée des sauvegardes",
+          "title": "Backup duration",
           "type": "timeseries"
         },
         {
@@ -1444,7 +1444,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Taille du tarball d'OBJETS Kubernetes uniquement. Les données des PV ne sont pas comptées ici : elles vont dans le dépôt kopia, dont la taille ne se mesure que côté bucket (`gcloud storage du`).",
+          "description": "Size of the Kubernetes OBJECT tarball only. PV data is not counted here: it goes to the kopia repository, whose size can only be measured on the bucket side (`gcloud storage du`).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1531,7 +1531,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Taille du tarball d'objets",
+          "title": "Object tarball size",
           "type": "timeseries"
         },
         {
@@ -1539,7 +1539,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Nombre d'éléments Kubernetes traités, et parmi eux ceux en erreur. Une chute brutale du nombre d'éléments signale un périmètre (includedNamespaces) qui a changé sans qu'on le veuille.",
+          "description": "Number of Kubernetes items processed, and among them those in error. A sudden drop in the item count signals a scope (includedNamespaces) that changed unintentionally.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1637,7 +1637,7 @@ data:
               },
               "editorMode": "code",
               "expr": "label_replace(velero_backup_items_total{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
-              "legendFormat": "Éléments — {{schedule}}",
+              "legendFormat": "Items — {{schedule}}",
               "range": true,
               "refId": "A"
             },
@@ -1648,12 +1648,12 @@ data:
               },
               "editorMode": "code",
               "expr": "label_replace(velero_backup_items_errors{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
-              "legendFormat": "En erreur — {{schedule}}",
+              "legendFormat": "In error — {{schedule}}",
               "range": true,
               "refId": "B"
             }
           ],
-          "title": "Éléments sauvegardés",
+          "title": "Items backed up",
           "type": "timeseries"
         },
         {
@@ -1666,7 +1666,7 @@ data:
           },
           "id": 102,
           "panels": [],
-          "title": "Données des PV — node-agent / kopia",
+          "title": "PV data — node-agent / kopia",
           "type": "row"
         },
         {
@@ -1674,7 +1674,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "PodVolumeBackup mis en file et traités, par nœud. Un écart durable entre les deux courbes = des copies qui s'accumulent sans être traitées.",
+          "description": "PodVolumeBackups enqueued and processed, per node. A lasting gap between the two curves = copies piling up without being processed.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1756,7 +1756,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (node) (increase(podVolume_pod_volume_backup_enqueue_count[$__rate_interval]))",
-              "legendFormat": "En file — {{node}}",
+              "legendFormat": "Enqueued — {{node}}",
               "range": true,
               "refId": "A"
             },
@@ -1767,12 +1767,12 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (node) (increase(podVolume_pod_volume_backup_dequeue_count[$__rate_interval]))",
-              "legendFormat": "Traités — {{node}}",
+              "legendFormat": "Processed — {{node}}",
               "range": true,
               "refId": "B"
             }
           ],
-          "title": "PodVolumeBackup — file d'attente",
+          "title": "PodVolumeBackup — queue",
           "type": "timeseries"
         },
         {
@@ -1785,7 +1785,7 @@ data:
           },
           "id": 103,
           "panels": [],
-          "title": "Dépôt kopia et restaurations",
+          "title": "kopia repository and restores",
           "type": "row"
         },
         {
@@ -1793,7 +1793,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "La maintenance du dépôt kopia est ce qui LIBÈRE réellement l'espace des sauvegardes expirées. En échec prolongé, le bucket grossit sans qu'aucune sauvegarde n'échoue. Panneau VIDE sur une installation neuve : ces compteurs n'apparaissent qu'après la première maintenance — l'absence de courbe ne vaut pas preuve de bonne santé.",
+          "description": "Maintenance of the kopia repository is what actually FREES the space of expired backups. Failing for long, the bucket grows without a single backup failing. EMPTY panel on a fresh install: these counters only appear after the first maintenance — the absence of a curve is no proof of good health.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1891,7 +1891,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (repository_name) (increase(velero_repo_maintenance_success_total[$__rate_interval]))",
-              "legendFormat": "Succès — {{repository_name}}",
+              "legendFormat": "Succeeded — {{repository_name}}",
               "range": true,
               "refId": "A"
             },
@@ -1902,12 +1902,12 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (repository_name) (increase(velero_repo_maintenance_failure_total[$__rate_interval]))",
-              "legendFormat": "Échec — {{repository_name}}",
+              "legendFormat": "Failed — {{repository_name}}",
               "range": true,
               "refId": "B"
             }
           ],
-          "title": "Maintenance du dépôt kopia",
+          "title": "kopia repository maintenance",
           "type": "timeseries"
         },
         {
@@ -1915,7 +1915,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Restaurations. Panneau plat en temps normal — il ne sert qu'à confirmer, le jour où on restaure, que l'opération est bien passée.",
+          "description": "Restores. A flat panel in normal times — it only serves to confirm, on the day a restore happens, that the operation went through.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2013,7 +2013,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (schedule) (increase(velero_restore_success_total[$__rate_interval]))",
-              "legendFormat": "Succès",
+              "legendFormat": "Succeeded",
               "range": true,
               "refId": "A"
             },
@@ -2024,7 +2024,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (schedule) (increase(velero_restore_partial_failure_total[$__rate_interval]))",
-              "legendFormat": "Partiel",
+              "legendFormat": "Partial",
               "range": true,
               "refId": "B"
             },
@@ -2035,7 +2035,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (schedule) (increase(velero_restore_failed_total[$__rate_interval]))",
-              "legendFormat": "Échec",
+              "legendFormat": "Failed",
               "range": true,
               "refId": "C"
             },
@@ -2046,12 +2046,12 @@ data:
               },
               "editorMode": "code",
               "expr": "sum by (schedule) (increase(velero_restore_validation_failed_total[$__rate_interval]))",
-              "legendFormat": "Échec de validation",
+              "legendFormat": "Validation failed",
               "range": true,
               "refId": "D"
             }
           ],
-          "title": "Restaurations",
+          "title": "Restores",
           "type": "timeseries"
         }
       ],
@@ -2085,7 +2085,7 @@ data:
               "uid": "${DS_PROMETHEUS}"
             },
             "definition": "label_values(velero_backup_last_status, schedule)",
-            "description": "Les backups lancés à la main portent un `schedule` VIDE : ils apparaissent comme une entrée blanche dans cette liste, et sous le nom « manuel » dans les graphes et le tableau (label_replace). Laisser « All » pour tout voir.",
+            "description": "Hand-launched backups carry an EMPTY `schedule`: they show up as a blank entry in this list, and under the name \"manuel\" in the graphs and the table (label_replace). Leave \"All\" to see everything.",
             "hide": 0,
             "includeAll": true,
             "label": "Schedule",
@@ -2110,8 +2110,9 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
-      "title": "Sauvegardes — velero",
+      "timezone": "utc",
+      "title": "Backups — velero",
+      "description": "Cluster backups taken by velero: freshness of the last scheduled backup, bucket availability, per-schedule and per-object inventory, PV data copied by node-agent/kopia, and restores. Read it before trusting that a restore is possible.",
       "uid": "velero-backups",
       "version": 1,
       "weekStart": ""

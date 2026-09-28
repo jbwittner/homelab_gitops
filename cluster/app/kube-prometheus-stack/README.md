@@ -39,7 +39,7 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   `kustomization.yaml`, et le `ClusterSecretStore` qu'il vise n'existe plus** (cf. § SSO)
 - `manifests/grafana-admin.externalsecret.yaml` — même vestige pour le compte admin,
   **non référencé** : remplacé par le `SealedSecret` ci-dessus, les deux visent le même `Secret`
-- `manifests/dashboard-machines.yaml` — dashboard « Machines — système » : vue d'ensemble en
+- `manifests/dashboard-machines.yaml` — dashboard « Machines — system » : vue d'ensemble en
   carrés (CPU, RAM, disque en alerte, température, scrape), charge, stockage, réseau, thermique,
   et quatre lignes de diagnostic repliées. ⚠️ **Il couvre TOUT le parc** — les 3 nœuds Talos
   (`job="node-exporter"`) et les machines hors cluster (`job="external-node"`, composant
@@ -47,7 +47,7 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   de job**, ce qui est son objet même. Il remplace `dashboard-talos-nodes.yaml` et
   `dashboard-machine-forge.yaml`, supprimés le 2026-09-11 ; porte la couche d'annotations
   « Déploiements ArgoCD » (tags `argocd`, `deploy`)
-- `manifests/dashboard-stockage-cluster.yaml` — dashboard « Stockage — cluster » : état des nœuds
+- `manifests/dashboard-stockage-cluster.yaml` — dashboard « Storage — cluster » : état des nœuds
   Kubernetes (kube-state-metrics) et VolumeGroups LVM d'OpenEBS. ⚠️ C'est ce qui a été **retiré**
   du dashboard ci-dessus parce que ça décrit le CLUSTER et non une machine. Ses variables sont
   **filtrées sur `job="node-exporter"`** — l'inverse du précédent, et pour la même raison :
@@ -66,7 +66,7 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - `manifests/dashboard-logs.yaml` — dashboard « Logs — applications » (datasource
   **Loki**) : débit, niveaux, erreurs, conteneurs les plus bavards, journal
   filtrable
-- `manifests/dashboard-velero.yaml` — dashboard « Sauvegardes — velero » : fraîcheur de la
+- `manifests/dashboard-velero.yaml` — dashboard « Backups — velero » : fraîcheur de la
   dernière sauvegarde planifiée, résultats et durées, tableau une ligne par sauvegarde, copie
   kopia des volumes, maintenance du dépôt, restaurations
 - `manifests/dashboard-cnpg.yaml` — dashboard « PostgreSQL — cnpg » : état des `Cluster`,
@@ -97,7 +97,7 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   L'historique est le graphe d'âge, dont chaque dent de scie est une sauvegarde ; la liste réelle
   des snapshots restic se lit avec `forgejo-ctl snapshots` sur l'hôte
 
-- `manifests/dashboard-alertes.yaml` — dashboard « Alertes — cluster » : tuiles critiques /
+- `manifests/dashboard-alertes.yaml` — dashboard « Alerts — cluster » : tuiles critiques /
   warnings / pending / chaîne d'alerting, tableau des alertes **firing et pending** avec leur
   ancienneté, historique par alerte, courbe par sévérité. Variables Composant (CNPG / Forgejo /
   velero / openebs / chart) et Sévérité
@@ -298,6 +298,51 @@ dossier dédié, listé **avant** les dashboards racine du chart. Le câblage es
 inséparables). Tout nouveau dashboard doit porter l'annotation, sinon il retombe à la racine avec
 la trentaine de dashboards du chart.
 
+### Convention d'écriture des dashboards (depuis le 2026-09-28)
+
+Les 14 dashboards maison suivent le skill `grafana-dashboards`. Trois règles, vérifiables par
+`lint_dashboard.py` du skill, qui sort **0 erreur** sur le dossier :
+
+- **Tout le texte affiché est en ANGLAIS** — titre et description du dashboard, titres et
+  descriptions de panneaux, `legendFormat`, textes de value mappings, labels de variables,
+  `displayName` de colonnes. Les commentaires d'en-tête des fichiers et les README restent en
+  français : ils documentent le dépôt, ils ne s'affichent pas dans Grafana.
+  Deux exceptions, et ce sont des **valeurs de labels**, pas du texte de dashboard :
+  `schedule="manuel"` (réécrit au scrape par le ServiceMonitor de `velero-monitoring`, et attendu
+  tel quel par `prometheusrule.yaml`) et le label `disque` des métriques NVMe. Les traduire
+  casserait les règles d'alerte et couperait les séries déjà stockées.
+- **`timezone: "utc"`** partout, et non `browser`. Les horodatages affichés sont donc en UTC,
+  décalés d'1 h ou 2 h par rapport à l'heure locale — c'est voulu : les cron des schedules
+  (velero 03:00, cnpg 02:00) et les logs du cluster sont en UTC, et une lecture en heure locale
+  obligeait à faire la conversion de tête à chaque incident.
+- **`graphTooltip: 1`** (curseur partagé), `editable: true`, un `id` unique par panneau, une seule
+  variable de datasource par dashboard (`DS_PROMETHEUS`, `DS_LOKI` pour les logs), et jamais d'uid
+  de datasource en dur.
+
+Les `uid` (`ressources-*`, `stockage-cluster`, `machines-systeme`, `cluster-alertes`) restent tels
+quels : les renommer casserait toutes les URL déjà collées ailleurs. Les **tags** ont en revanche
+été alignés (`ressources` → `resources`, `stockage` → `storage`, `alertes` → `alerts`), en même
+temps que le `links[].tags` de la chaîne « Resources » qui s'appuie dessus.
+
+### Redémarrages de conteneurs ≠ pods recréés
+
+`kube_pod_container_status_restarts_total` ne compte QUE les redémarrages d'un conteneur **à
+l'intérieur d'un pod qui continue d'exister**. Un pod recréé — rollout, éviction, drain — est un
+nouvel objet dont le compteur repart à zéro : le panneau affiche 0 pendant précisément
+l'événement qu'il est censé attraper. Les cinq panneaux concernés portent donc une seconde série,
+`count(time() - kube_pod_start_time < fenêtre)`, qui compte les pods démarrés dans la fenêtre :
+
+| Dashboard | Panneau |
+|---|---|
+| `Resources — cluster` | `Restarts / new pods (1 h)` |
+| `Resources — pods` | `Container restarts and pod recreations` |
+| `GitOps — ArgoCD` | `Container restarts and pod recreations` |
+| `PostgreSQL — cnpg` | `Restarts / new pods in cnpg-system (24 h)` |
+| `PostgreSQL backups — barman-cloud` | `barman-cloud container restarts and pod recreations` |
+
+Le tableau « Per pod » de `Resources — pods` garde le compteur brut sans seconde série : il liste
+les pods existants, un pod recréé y apparaît comme une ligne neuve.
+
 ### Logs — datasource Loki
 
 La datasource `Loki` est déclarée dans `helm-values.yaml` (`grafana.additionalDataSources`), et
@@ -371,7 +416,7 @@ Le binaire ne valide la config qu'**après** avoir joint l'API : lancé sans clu
 échoue sur la connexion avant d'avoir regardé le fichier. C'est pourquoi la commande ci-dessus
 utilise le vrai kubeconfig — en lecture seule (`list`/`watch`).
 
-### Dashboard « Alertes — cluster »
+### Dashboard « Alerts — cluster »
 
 Vue unique sur les règles de tous les composants —
 [cnpg-monitoring](../cnpg-monitoring/README.md),

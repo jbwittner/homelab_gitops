@@ -1,5 +1,5 @@
 # cluster/app/kube-prometheus-stack/manifests/dashboard-ressources-cluster.yaml
-# Dashboard Grafana « Ressources — cluster »
+# Dashboard Grafana « Resources — cluster »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack (label grafana_dashboard: "1").
 #
 # Niveau 1 de la chaîne : totaux du cluster (utilisation / requests / limits / allocatable)
@@ -67,7 +67,7 @@ data:
             "enable": true,
             "hide": false,
             "iconColor": "purple",
-            "name": "Déploiements ArgoCD",
+            "name": "ArgoCD deployments",
             "target": {
               "limit": 100,
               "matchAny": false,
@@ -80,7 +80,7 @@ data:
           }
         ]
       },
-      "description": "CPU et mémoire à l'échelle du cluster : utilisation, requests, limits et capacité allocatable, plus la répartition par namespace.",
+      "description": "Cluster-wide CPU and memory: usage, requests, limits and allocatable capacity, plus the split per namespace.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
@@ -91,11 +91,11 @@ data:
           "includeVars": true,
           "keepTime": true,
           "tags": [
-            "ressources"
+            "resources"
           ],
           "targetBlank": false,
-          "title": "Ressources",
-          "tooltip": "Chaîne cluster → namespaces → workloads → pods",
+          "title": "Resources",
+          "tooltip": "Chain cluster → namespaces → workloads → pods",
           "type": "dashboards",
           "url": ""
         }
@@ -178,7 +178,7 @@ data:
           ],
           "title": "Allocatable",
           "type": "stat",
-          "description": "Capacité ordonnançable de l'ensemble des nœuds."
+          "description": "Schedulable capacity across all nodes."
         },
         {
           "datasource": {
@@ -242,7 +242,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation",
+          "title": "Usage",
           "type": "stat"
         },
         {
@@ -309,7 +309,7 @@ data:
           ],
           "title": "Requests",
           "type": "stat",
-          "description": "Réservé au scheduler : c'est ce qui limite le placement des pods."
+          "description": "Reserved for the scheduler: this is what caps pod placement."
         },
         {
           "datasource": {
@@ -450,7 +450,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / allocatable",
+          "title": "Usage / allocatable",
           "type": "stat"
         },
         {
@@ -519,9 +519,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Conteneurs sans limite",
+          "title": "Containers without a limit",
           "type": "stat",
-          "description": "Conteneurs qui consomment la ressource sans déclarer de limite. Ils comptent dans le total des requests mais pas dans celui des limits — d'où des totaux où requests > limits, sans anomalie."
+          "description": "Containers consuming the resource without declaring a limit. They count towards the requests total but not the limits one — hence totals where requests > limits, with nothing wrong."
         },
         {
           "datasource": {
@@ -599,7 +599,7 @@ data:
           ],
           "title": "Requests / allocatable",
           "type": "stat",
-          "description": "Taux de réservation. À 100 %, plus aucun pod ne peut être planifié, même si le cluster est inactif."
+          "description": "Reservation ratio. At 100%, no pod can be scheduled any more, even on an idle cluster."
         },
         {
           "datasource": {
@@ -673,7 +673,7 @@ data:
           ],
           "title": "Limits / allocatable",
           "type": "stat",
-          "description": "Surengagement. > 100 % est normal ; c'est le risque pris si tout le monde consomme sa limite en même temps."
+          "description": "Overcommit. > 100% is normal; it is the risk taken should everyone consume their limit at the same time."
         },
         {
           "datasource": {
@@ -743,7 +743,7 @@ data:
           ],
           "title": "Utilisation / requests",
           "type": "stat",
-          "description": "Conteneurs déclarant des requests uniquement. < 100 % = requests surdimensionnées (capacité gelée pour rien)."
+          "description": "Containers declaring requests only. < 100% = oversized requests (capacity frozen for nothing)."
         },
         {
           "datasource": {
@@ -904,7 +904,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Utilisation"
+                  "options": "Usage"
                 },
                 "properties": [
                   {
@@ -949,7 +949,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m)",
-              "legendFormat": "Utilisation",
+              "legendFormat": "Usage",
               "range": true,
               "refId": "A"
             },
@@ -987,7 +987,7 @@ data:
               "refId": "D"
             }
           ],
-          "title": "CPU — utilisation, requests, limits, allocatable",
+          "title": "CPU — usage, requests, limits, allocatable",
           "type": "timeseries"
         },
         {
@@ -1081,7 +1081,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU — utilisation par namespace",
+          "title": "CPU — usage per namespace",
           "type": "timeseries"
         },
         {
@@ -1094,7 +1094,7 @@ data:
           },
           "id": 13,
           "panels": [],
-          "title": "Mémoire",
+          "title": "Memory",
           "type": "row"
         },
         {
@@ -1161,7 +1161,7 @@ data:
           ],
           "title": "Allocatable",
           "type": "stat",
-          "description": "Capacité ordonnançable de l'ensemble des nœuds."
+          "description": "Schedulable capacity across all nodes."
         },
         {
           "datasource": {
@@ -1225,7 +1225,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation",
+          "title": "Usage",
           "type": "stat"
         },
         {
@@ -1292,7 +1292,7 @@ data:
           ],
           "title": "Requests",
           "type": "stat",
-          "description": "Réservé au scheduler : c'est ce qui limite le placement des pods."
+          "description": "Reserved for the scheduler: this is what caps pod placement."
         },
         {
           "datasource": {
@@ -1433,7 +1433,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / allocatable",
+          "title": "Usage / allocatable",
           "type": "stat"
         },
         {
@@ -1502,9 +1502,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Conteneurs sans limite",
+          "title": "Containers without a limit",
           "type": "stat",
-          "description": "Conteneurs qui consomment la ressource sans déclarer de limite. Ils comptent dans le total des requests mais pas dans celui des limits — d'où des totaux où requests > limits, sans anomalie."
+          "description": "Containers consuming the resource without declaring a limit. They count towards the requests total but not the limits one — hence totals where requests > limits, with nothing wrong."
         },
         {
           "datasource": {
@@ -1582,7 +1582,7 @@ data:
           ],
           "title": "Requests / allocatable",
           "type": "stat",
-          "description": "Taux de réservation. À 100 %, plus aucun pod ne peut être planifié, même si le cluster est inactif."
+          "description": "Reservation ratio. At 100%, no pod can be scheduled any more, even on an idle cluster."
         },
         {
           "datasource": {
@@ -1656,7 +1656,7 @@ data:
           ],
           "title": "Limits / allocatable",
           "type": "stat",
-          "description": "Surengagement. > 100 % est normal ; c'est le risque pris si tout le monde consomme sa limite en même temps."
+          "description": "Overcommit. > 100% is normal; it is the risk taken should everyone consume their limit at the same time."
         },
         {
           "datasource": {
@@ -1726,7 +1726,7 @@ data:
           ],
           "title": "Utilisation / requests",
           "type": "stat",
-          "description": "Conteneurs déclarant des requests uniquement. < 100 % = requests surdimensionnées (capacité gelée pour rien)."
+          "description": "Containers declaring requests only. < 100% = oversized requests (capacity frozen for nothing)."
         },
         {
           "datasource": {
@@ -1887,7 +1887,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Utilisation"
+                  "options": "Usage"
                 },
                 "properties": [
                   {
@@ -1932,7 +1932,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum(max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\"}))",
-              "legendFormat": "Utilisation",
+              "legendFormat": "Usage",
               "range": true,
               "refId": "A"
             },
@@ -1970,7 +1970,7 @@ data:
               "refId": "D"
             }
           ],
-          "title": "Mémoire — utilisation, requests, limits, allocatable",
+          "title": "Memory — usage, requests, limits, allocatable",
           "type": "timeseries"
         },
         {
@@ -2064,7 +2064,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Mémoire — utilisation par namespace",
+          "title": "Memory — usage per namespace",
           "type": "timeseries"
         },
         {
@@ -2077,7 +2077,7 @@ data:
           },
           "id": 25,
           "panels": [],
-          "title": "Nœuds & pods",
+          "title": "Nodes & pods",
           "type": "row"
         },
         {
@@ -2142,7 +2142,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Nœuds",
+          "title": "Nodes",
           "type": "stat"
         },
         {
@@ -2207,7 +2207,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Nœuds Ready",
+          "title": "Ready nodes",
           "type": "stat"
         },
         {
@@ -2343,7 +2343,7 @@ data:
           ],
           "title": "Pods Pending",
           "type": "stat",
-          "description": "Bloqué à > 0 = ressources insuffisantes ou contrainte de placement."
+          "description": "Stuck above 0 = not enough resources or a placement constraint."
         },
         {
           "datasource": {
@@ -2463,7 +2463,7 @@ data:
               "values": false
             },
             "showPercentChange": false,
-            "textMode": "auto",
+            "textMode": "value_and_name",
             "wideLayout": true
           },
           "pluginVersion": "10.4.0",
@@ -2475,13 +2475,25 @@ data:
               },
               "editorMode": "code",
               "expr": "sum(increase(kube_pod_container_status_restarts_total[1h])) or vector(0)",
-              "legendFormat": "",
+              "legendFormat": "restarts",
               "range": true,
               "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "count(time() - kube_pod_start_time < 3600) or vector(0)",
+              "legendFormat": "new pods",
+              "range": true,
+              "refId": "B"
             }
           ],
-          "title": "Redémarrages (1 h)",
-          "type": "stat"
+          "title": "Restarts / new pods (1 h)",
+          "type": "stat",
+          "description": "Two figures, because one alone lies. LEFT: container restarts inside pods that already existed (kube_pod_container_status_restarts_total). RIGHT: pods started in the last hour — a recreated pod is a NEW object whose restart counter starts back at zero, so a rollout or an evicted pod leaves the left figure at 0 while the cluster is churning. Reading the restart counter alone reports \"0 restarts\" during exactly the event it is meant to catch."
         },
         {
           "datasource": {
@@ -2574,14 +2586,14 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Pods par phase",
+          "title": "Pods per phase",
           "type": "timeseries"
         }
       ],
       "refresh": "30s",
       "schemaVersion": 39,
       "tags": [
-        "ressources",
+        "resources",
         "kubernetes",
         "wittnerlab",
         "cluster"
@@ -2609,8 +2621,8 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
-      "title": "Ressources — cluster",
+      "timezone": "utc",
+      "title": "Resources — cluster",
       "uid": "ressources-cluster",
       "version": 1,
       "weekStart": ""

@@ -30,7 +30,7 @@ CRDs n'existent pas au bootstrap à froid.
 
 Le **dashboard** Grafana ne vit pas ici mais dans
 [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md)
-(`manifests/dashboard-velero.yaml`, dossier *Wittnerlab*, titre « Sauvegardes — velero ») : le
+(`manifests/dashboard-velero.yaml`, dossier *Wittnerlab*, titre « Backups — velero ») : le
 câblage côté Grafana appartient au composant qui porte Grafana, comme pour argocd.
 
 ## Fichiers
@@ -175,7 +175,7 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
   `ServerSideApply=true`, l'annotation appartient au field manager `kubectl-rollout` et non à
   ArgoCD, qui ne la voit donc pas dans son diff — l'Application reste `Synced`. Ça reste un geste
   impératif, à ne faire que pour cette panne-là.
-- **Ouvrir le dashboard** : Grafana → dossier *Wittnerlab* → « Sauvegardes — velero »
+- **Ouvrir le dashboard** : Grafana → dossier *Wittnerlab* → « Backups — velero »
   (uid `velero-backups`). Il vit dans
   [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md), pas ici — et jamais édité
   depuis l'UI : le ConfigMap versionné est la source.

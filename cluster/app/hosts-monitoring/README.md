@@ -46,7 +46,7 @@ de ce qu'elle porte, dépôts, base et dumps se partageant un seul stockage.
 (`forgejo-backup.rules`) vivent dans `forgejo-monitoring` — elles parlent de la forge, pas de la
 machine.
 
-⚠️ **Le dashboard qui montre ces machines ne les AFFICHE pas pour autant.** « Machines — système » ne
+⚠️ **Le dashboard qui montre ces machines ne les AFFICHE pas pour autant.** « Machines — system » ne
 montre que la santé du *transport* (tuile « Collecteur textfile ») ; la fraîcheur et le résultat
 des sauvegardes s'affichent dans « Forge — forgejo », section Sauvegarde. Le canal appartient à la
 machine, son contenu à la forge — c'est la même frontière que pour les alertes.
@@ -90,9 +90,9 @@ C'est écrit des deux côtés parce que rien ne le vérifie.
   délibéré : reprendre le nom du DaemonSet ferait entrer une machine hors cluster dans les RÈGLES
   et les agrégations des nœuds Talos. Le prix est payé à la main dans `prometheusrule.yaml` — et le
   piège est de croire que ces règles arrivent gratuitement.
-  ⚠️ **Cet argument ne vaut plus pour les DASHBOARDS depuis le 2026-09-11** : « Machines — système »
+  ⚠️ **Cet argument ne vaut plus pour les DASHBOARDS depuis le 2026-09-11** : « Machines — system »
   couvre volontairement les deux jobs, et c'est le job distinct qui permet à
-  « Stockage — cluster » de filtrer les externes. La séparation sert donc toujours, mais dans
+  « Storage — cluster » de filtrer les externes. La séparation sert donc toujours, mais dans
   l'autre sens.
 - **`job` et `instance` sont les seuls points de couplage** entre les ScrapeConfigs et les règles.
   Ils sont posés par `relabeling` ; sans lui, une ScrapeConfig nomme son job

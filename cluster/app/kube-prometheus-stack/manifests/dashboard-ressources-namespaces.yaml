@@ -1,5 +1,5 @@
 # cluster/app/kube-prometheus-stack/manifests/dashboard-ressources-namespaces.yaml
-# Dashboard Grafana « Ressources — namespaces »
+# Dashboard Grafana « Resources — namespaces »
 # Chargé automatiquement par le sidecar de kube-prometheus-stack (label grafana_dashboard: "1").
 #
 # Niveau 2 de la chaîne : mêmes indicateurs déclinés par namespace, avec une table de
@@ -67,7 +67,7 @@ data:
             "enable": true,
             "hide": false,
             "iconColor": "purple",
-            "name": "Déploiements ArgoCD",
+            "name": "ArgoCD deployments",
             "target": {
               "limit": 100,
               "matchAny": false,
@@ -80,7 +80,7 @@ data:
           }
         ]
       },
-      "description": "CPU et mémoire par namespace : utilisation, requests, limits et ratios de consommation.",
+      "description": "CPU and memory per namespace: usage, requests, limits and consumption ratios.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
@@ -91,11 +91,11 @@ data:
           "includeVars": true,
           "keepTime": true,
           "tags": [
-            "ressources"
+            "resources"
           ],
           "targetBlank": false,
-          "title": "Ressources",
-          "tooltip": "Chaîne cluster → namespaces → workloads → pods",
+          "title": "Resources",
+          "tooltip": "Chain cluster → namespaces → workloads → pods",
           "type": "dashboards",
           "url": ""
         }
@@ -241,7 +241,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation",
+          "title": "Usage",
           "type": "stat"
         },
         {
@@ -440,9 +440,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / requests",
+          "title": "Usage / requests",
           "type": "stat",
-          "description": "Conteneurs déclarant des requests uniquement."
+          "description": "Containers declaring requests only."
         },
         {
           "datasource": {
@@ -514,9 +514,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / limits",
+          "title": "Usage / limits",
           "type": "stat",
-          "description": "Conteneurs déclarant une limite uniquement."
+          "description": "Containers declaring a limit only."
         },
         {
           "datasource": {
@@ -584,9 +584,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Conteneurs sans limite",
+          "title": "Containers without a limit",
           "type": "stat",
-          "description": "Conteneurs qui consomment la ressource sans déclarer de limite. Ils comptent dans le total des requests mais pas dans celui des limits — d'où des totaux où requests > limits, sans anomalie."
+          "description": "Containers consuming the resource without declaring a limit. They count towards the requests total but not the limits one — hence totals where requests > limits, with nothing wrong."
         },
         {
           "datasource": {
@@ -679,7 +679,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU — utilisation par namespace",
+          "title": "CPU — usage per namespace",
           "type": "timeseries"
         },
         {
@@ -841,7 +841,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Utilisation"
+                  "options": "Usage"
                 },
                 "properties": [
                   {
@@ -883,7 +883,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum(node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=~\"$namespace\"})",
-              "legendFormat": "Utilisation",
+              "legendFormat": "Usage",
               "range": true,
               "refId": "A"
             },
@@ -910,7 +910,7 @@ data:
               "refId": "C"
             }
           ],
-          "title": "CPU — sélection : utilisation, requests, limits",
+          "title": "CPU — selection: usage, requests, limits",
           "type": "timeseries"
         },
         {
@@ -983,9 +983,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU — utilisation / requests par namespace",
+          "title": "CPU — usage / requests per namespace",
           "type": "bargauge",
-          "description": "Pas de barre = aucune request déclarée sur ce namespace."
+          "description": "No bar = no request declared on this namespace."
         },
         {
           "datasource": {
@@ -1061,9 +1061,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "CPU — utilisation / limits par namespace",
+          "title": "CPU — usage / limits per namespace",
           "type": "bargauge",
-          "description": "Pas de barre = aucune limite déclarée sur ce namespace."
+          "description": "No bar = no limit declared on this namespace."
         },
         {
           "collapsed": false,
@@ -1075,7 +1075,7 @@ data:
           },
           "id": 13,
           "panels": [],
-          "title": "Mémoire",
+          "title": "Memory",
           "type": "row"
         },
         {
@@ -1205,7 +1205,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation",
+          "title": "Usage",
           "type": "stat"
         },
         {
@@ -1404,9 +1404,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / requests",
+          "title": "Usage / requests",
           "type": "stat",
-          "description": "Conteneurs déclarant des requests uniquement."
+          "description": "Containers declaring requests only."
         },
         {
           "datasource": {
@@ -1478,9 +1478,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Utilisation / limits",
+          "title": "Usage / limits",
           "type": "stat",
-          "description": "Conteneurs déclarant une limite uniquement."
+          "description": "Containers declaring a limit only."
         },
         {
           "datasource": {
@@ -1548,9 +1548,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Conteneurs sans limite",
+          "title": "Containers without a limit",
           "type": "stat",
-          "description": "Conteneurs qui consomment la ressource sans déclarer de limite. Ils comptent dans le total des requests mais pas dans celui des limits — d'où des totaux où requests > limits, sans anomalie."
+          "description": "Containers consuming the resource without declaring a limit. They count towards the requests total but not the limits one — hence totals where requests > limits, with nothing wrong."
         },
         {
           "datasource": {
@@ -1643,7 +1643,7 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Mémoire — utilisation par namespace",
+          "title": "Memory — usage per namespace",
           "type": "timeseries"
         },
         {
@@ -1805,7 +1805,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Utilisation"
+                  "options": "Usage"
                 },
                 "properties": [
                   {
@@ -1847,7 +1847,7 @@ data:
               },
               "editorMode": "code",
               "expr": "sum(max by (namespace, pod, container) (node_namespace_pod_container:container_memory_working_set_bytes{container!=\"\",namespace=~\"$namespace\"}))",
-              "legendFormat": "Utilisation",
+              "legendFormat": "Usage",
               "range": true,
               "refId": "A"
             },
@@ -1874,7 +1874,7 @@ data:
               "refId": "C"
             }
           ],
-          "title": "Mémoire — sélection : utilisation, requests, limits",
+          "title": "Memory — selection: usage, requests, limits",
           "type": "timeseries"
         },
         {
@@ -1947,9 +1947,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Mémoire — utilisation / requests par namespace",
+          "title": "Memory — usage / requests per namespace",
           "type": "bargauge",
-          "description": "Pas de barre = aucune request déclarée sur ce namespace."
+          "description": "No bar = no request declared on this namespace."
         },
         {
           "datasource": {
@@ -2025,9 +2025,9 @@ data:
               "refId": "A"
             }
           ],
-          "title": "Mémoire — utilisation / limits par namespace",
+          "title": "Memory — usage / limits per namespace",
           "type": "bargauge",
-          "description": "Pas de barre = aucune limite déclarée sur ce namespace."
+          "description": "No bar = no limit declared on this namespace."
         },
         {
           "collapsed": false,
@@ -2039,7 +2039,7 @@ data:
           },
           "id": 25,
           "panels": [],
-          "title": "Synthèse",
+          "title": "Summary",
           "type": "row"
         },
         {
@@ -2090,7 +2090,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "CPU util."
+                  "options": "CPU usage"
                 },
                 "properties": [
                   {
@@ -2122,7 +2122,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "CPU util./req."
+                  "options": "CPU usage/req."
                 },
                 "properties": [
                   {
@@ -2186,7 +2186,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "CPU util./lim."
+                  "options": "CPU usage/lim."
                 },
                 "properties": [
                   {
@@ -2238,7 +2238,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. util."
+                  "options": "Mem. usage"
                 },
                 "properties": [
                   {
@@ -2254,7 +2254,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. req."
+                  "options": "Mem. req."
                 },
                 "properties": [
                   {
@@ -2270,7 +2270,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. util./req."
+                  "options": "Mem. usage/req."
                 },
                 "properties": [
                   {
@@ -2318,7 +2318,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. lim."
+                  "options": "Mem. lim."
                 },
                 "properties": [
                   {
@@ -2334,7 +2334,7 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Mém. util./lim."
+                  "options": "Mem. usage/lim."
                 },
                 "properties": [
                   {
@@ -2393,7 +2393,7 @@ data:
                     "id": "links",
                     "value": [
                       {
-                        "title": "Workloads de ce namespace",
+                        "title": "Workloads of this namespace",
                         "url": "/d/ressources-workloads/?var-namespace=${__value.raw}&${__url_time_range}"
                       }
                     ]
@@ -2423,7 +2423,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "CPU util."
+                "displayName": "CPU usage"
               }
             ]
           },
@@ -2573,7 +2573,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Par namespace",
+          "title": "Per namespace",
           "transformations": [
             {
               "id": "joinByField",
@@ -2610,29 +2610,29 @@ data:
                 },
                 "renameByName": {
                   "Value #A": "Pods",
-                  "Value #B": "CPU util.",
+                  "Value #B": "CPU usage",
                   "Value #C": "CPU req.",
-                  "Value #D": "CPU util./req.",
+                  "Value #D": "CPU usage/req.",
                   "Value #E": "CPU lim.",
-                  "Value #F": "CPU util./lim.",
-                  "Value #G": "Mém. util.",
-                  "Value #H": "Mém. req.",
-                  "Value #I": "Mém. util./req.",
-                  "Value #J": "Mém. lim.",
-                  "Value #K": "Mém. util./lim.",
+                  "Value #F": "CPU usage/lim.",
+                  "Value #G": "Mem. usage",
+                  "Value #H": "Mem. req.",
+                  "Value #I": "Mem. usage/req.",
+                  "Value #J": "Mem. lim.",
+                  "Value #K": "Mem. usage/lim.",
                   "namespace": "Namespace"
                 }
               }
             }
           ],
           "type": "table",
-          "description": "Les colonnes req. et lim. sont des sommes brutes portant sur des ensembles différents de conteneurs : un conteneur sans limite compte dans req. et pas dans lim., si bien que req. > lim. est courant et normal. Les colonnes de ratio, elles, ne comparent que les conteneurs qui déclarent la ressource."
+          "description": "The req. and lim. columns are raw sums over different sets of containers: a container with no limit counts in req. but not in lim., so req. > lim. is common and normal. The ratio columns, on the other hand, only compare the containers that declare the resource."
         }
       ],
       "refresh": "30s",
       "schemaVersion": 39,
       "tags": [
-        "ressources",
+        "resources",
         "kubernetes",
         "wittnerlab",
         "namespace"
@@ -2684,8 +2684,8 @@ data:
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "browser",
-      "title": "Ressources — namespaces",
+      "timezone": "utc",
+      "title": "Resources — namespaces",
       "uid": "ressources-namespaces",
       "version": 1,
       "weekStart": ""
