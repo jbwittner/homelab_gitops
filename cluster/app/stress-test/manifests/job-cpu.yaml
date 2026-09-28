@@ -8,7 +8,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: stress-cpu-vert-eranikus
+  name: stress-cpu-vert-itharius
 spec:
   # ⚠️ 0 ET PAS 6 (le défaut). Un test de charge qui se relance tout seul après un échec est un
   # test de charge qu'on ne contrôle plus.
@@ -30,26 +30,26 @@ spec:
       # ⚠️ LA LIGNE LA PLUS IMPORTANTE DU FICHIER. Sans elle, le scheduler place le pod n'importe
       # où, et « un seul nœud à la fois » n'est plus garanti.
       #
-      # ⚠️ TIR N°2, SUR `vert-eranikus` — LA MACHINE QUI PORTE PROMETHEUS. Le tir n°1 a visé
-      # `vert-ysondre` précisément pour ne PAS ralentir l'instrument de mesure avant de savoir ce
-      # que la charge fait au cluster. C'est maintenant su : à 75 % de CPU occupé, etcd p99 est
-      # passé de 20 ms à 5 ms, parce que le pod est `BestEffort` donc dernier servi. Prometheus
-      # bénéficie exactement du même arbitrage. Le risque est mesuré, il n'est plus supposé.
+      # ⚠️ TIR N°3, SUR `vert-itharius` — LE SEUL NŒUD JAMAIS CHARGÉ. Il complète le tableau du
+      # parc, et il a une valeur particulière : c'est lui qui a servi de TÉMOIN aux deux premiers
+      # tirs, et c'est lui qui a révélé que les machines se chauffent entre elles (52 → 61 °C
+      # alors qu'il était inactif, pendant le tir n°2). Le charger à son tour dit si ce qu'on a
+      # observé sur lui était sa vraie signature thermique ou seulement l'air de ses voisines.
       #
-      # Ce tir répond à la SEULE question que les métriques au repos ne peuvent pas trancher :
-      # `vert-eranikus` tourne 5-6 °C au-dessus de `vert-ysondre` au repos, et il porte Prometheus.
-      # À charge ÉGALE — mêmes 12 cœurs, mêmes 600 s, aucun paramètre changé — si l'écart persiste
-      # c'est l'air ambiant ou la position dans la pile ; s'il disparaît, c'était la charge.
+      # ⚠️ IL PORTE LE PIC HISTORIQUE DU PARC : 84 °C transitoire sur 7 jours, invisible au pas de
+      # 30 min, relevé avant le premier tir. Ce tir dit si ce pic est reproductible sous charge
+      # soutenue ou s'il restait un accident isolé.
+      #
       # ⚠️ NE RIEN CHANGER D'AUTRE QUE LE NŒUD : un seul paramètre modifié rend la comparaison
-      # avec le tir n°1 inutilisable, et c'est la comparaison qui est le résultat.
+      # avec les tirs n°1 et n°2 inutilisable, et c'est la comparaison qui est le résultat.
       #
       # Les trois nœuds n'ont AUCUN taint (vérifié le 2026-09-28), donc aucune `toleration` n'est
       # nécessaire. Si un taint control-plane apparaissait un jour, ce pod cesserait d'être
       # planifiable — en silence, avec un Job qui reste Pending.
       nodeSelector:
-        kubernetes.io/hostname: vert-eranikus     # ⚠️ porte Prometheus — cf. le bloc ci-dessus
+        kubernetes.io/hostname: vert-itharius     # tir n°3 — cf. le bloc ci-dessus
         # kubernetes.io/hostname: vert-ysondre    # tir n°1, 2026-09-28 : 82 °C pic / 77 °C palier
-        # kubernetes.io/hostname: vert-itharius   # jamais mesuré
+        # kubernetes.io/hostname: vert-eranikus   # tir n°2, 2026-09-28 : 87 °C pic / 82 °C palier
       containers:
         - name: stress
           # ⚠️ AUCUN BLOC `resources`, DONC QoS `BestEffort`, ET C'EST LA PROTECTION PRINCIPALE.
