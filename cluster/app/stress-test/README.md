@@ -128,7 +128,64 @@ renommage `.noapp.yaml` → `.app.yaml`.
    Charge réelle ou position physique dans la pile ? Charger successivement les deux, à charge
    égale, tranche la question que les métriques au repos ne peuvent pas trancher.
 
+## Résultats — tir n°1, `vert-ysondre`, 2026-09-28 20:56 → 21:06 UTC
+
+12 cœurs sur 16, 600 s. `stress-ng` 0.18.08 : 11 545 649 bogo ops, 7037 s de temps utilisateur
+sur 9600 s disponibles (73,3 %, soit les 12 hogs à plein régime), 0 échec.
+
+| Mesure | Au repos | Sous charge | Limite |
+|---|---|---|---|
+| Package CPU `vert-ysondre` | 58 °C | **82 °C** au pic, **77 °C** en palier | Tjmax 100 °C |
+| Fréquence moyenne | 1,39 GHz | 3,60 GHz au pic, **3,25 GHz** en palier | turbo 4,8 GHz |
+| `crit_alarm` | 0 | **0** sur toute la durée | 1 = throttling |
+| NVMe (capteur le plus chaud) | 58 °C | 59,9 °C | crit 79-87 °C |
+| etcd p99 (vu par l'apiserver) | 20 ms | **5 ms** | — |
+| Nœuds Ready | 3/3 | **3/3** | — |
+| `vert-eranikus` / `vert-itharius` | 58 / 54 °C | 60 / 58 °C | — |
+
+**Ce que ça établit :**
+
+1. **Le plafond est fixé par la puissance, pas par la dissipation.** La température monte à 82 °C
+   pendant le burst, puis REDESCEND à 77 °C alors que la charge continue de monter — et la
+   fréquence tombe de 3,60 à 3,25 GHz au même moment. C'est le PL1 qui reprend la main après la
+   fenêtre de turbo. `crit_alarm` est resté à 0 : le CPU se bride sur le watt bien avant d'avoir
+   chaud. Le refroidissement de ces boîtiers n'est pas le facteur limitant.
+2. **18 °C de marge au pire moment.** Un homelab à 60 °C au repos n'a aucun problème thermique.
+3. **La protection BestEffort fonctionne, et mieux qu'espéré.** À 75 % de CPU occupé, etcd p99 est
+   passé à 5 ms — soit QUATRE FOIS MIEUX que les 20 ms au repos. Aucun nœud n'a vacillé. Le pari
+   « pas de requests = poids minimal en cgroup v2 » est vérifié.
+4. **Les deux autres nœuds n'ont rien senti** : +2 et +4 °C, imputables à l'air ambiant du local,
+   pas à la charge.
+
+**⚠️ CE QUE CE TIR N'A PAS ÉTABLI — et c'est le résultat le plus utile :**
+
+- **`MachineSensorNearCritical` n'a PAS été exercée. Ni `firing`, ni même `pending`.** Son seuil
+  est à 85 % de Tjmax, soit 85 °C ; le pic a été de 82 °C. **Trois degrés manquants.** La règle
+  reste non vérifiée.
+- Et elle est probablement **invérifiable par ce moyen** : si le PL1 plafonne la machine à 77 °C en
+  régime établi, aucune charge CPU ne la fera franchir 85 °C. Ce qui confirme, par l'expérience et
+  non par le raisonnement, que cette règle ne détecte PAS une charge lourde mais un
+  **refroidissement dégradé** — ventilateur mort, pâte sèche, aération obstruée. C'est ce qu'on
+  veut d'elle, mais ce n'est pas la justification qui avait été écrite en la créant.
+- Pour l'exercer vraiment il faudrait dégrader le refroidissement physiquement, ou baisser
+  temporairement le seuil de la règle. Les deux sont des choix à faire consciemment, pas des
+  effets de bord d'un test de charge.
+- Le `for: 10m` de la règle et le `--timeout 600s` du Job sont **exactement égaux** : même en
+  franchissant le seuil, l'alerte n'aurait atteint que `pending`. Un tir destiné à la voir `firing`
+  doit durer plus longtemps que son `for:` — `--timeout 1200s` avec `activeDeadlineSeconds: 1500`.
+
+**⚠️ DÉCOUVERTE ANNEXE, qui corrige une idée reçue :** `stress-ng` signale que les 16 CPU sont
+**déjà en gouverneur `powersave`**. Passer les nœuds en `powersave` pour les refroidir — piste
+évoquée avant ce test — n'a donc aucun sens : c'est déjà le réglage en place, et il n'empêche ni
+le turbo à 3,6 GHz ni les 82 °C.
+
 ## État
 
-**Non déployé** (`.noapp.yaml`), et c'est l'état normal. Aucun test n'a encore été exécuté au
-2026-09-28 — les chiffres de ce README sont des mesures AU REPOS, pas des résultats de charge.
+**Non déployé** (`.noapp.yaml`), désarmé le 2026-09-28 après le tir n°1. Le Job `Completed` a été
+supprimé par le `prune` d'ArgoCD au renommage.
+
+Prochain tir utile : `vert-eranikus`, pour trancher la question laissée ouverte — ses 5-6 °C
+d'écart au repos avec `vert-ysondre` viennent-ils de sa charge (il porte Prometheus) ou de sa
+position physique ? À charge ÉGALE, si l'écart persiste, c'est l'air ; s'il disparaît, c'était la
+charge. ⚠️ Charger `vert-eranikus` ralentit Prometheus, donc l'instrument de mesure : relire le
+§ Danger avant.

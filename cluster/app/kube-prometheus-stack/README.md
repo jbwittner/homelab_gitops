@@ -530,11 +530,24 @@ Ces machines chauffent **à vide** — 3-4 % de CPU, fréquence moyenne 1,1-1,5 
   voisine `node_hwmon_temp_max_celsius` publie déjà **65261,8 °C** sur plusieurs capteurs NVMe de
   ce parc (attribut SMART non renseigné, rendu en brut). Si elle sonne, ne pas relever le plafond
   de 150 °C — il n'est pas le problème.
-- **Aucune de ces trois règles n'a encore été vue sonner**, et c'est une limite à garder en tête :
-  une règle jamais déclenchée n'est pas une règle vérifiée. Le composant
-  [stress-test](../stress-test/README.md) (`.noapp.yaml`) existe pour l'exercer — il charge un
-  nœud jusqu'à franchir les 85 % du seuil constructeur. ⚠️ Lire son § Danger avant de l'armer :
-  les trois nœuds sont control-plane sans taint et le quorum etcd est de 2 sur 3.
+- **`MachineSensorNearCritical` N'A TOUJOURS PAS ÉTÉ VUE SONNER, et probablement ne le sera
+  jamais par une charge CPU.** Le test du 2026-09-28 ([stress-test](../stress-test/README.md),
+  12 cœurs sur 16 pendant 10 min sur `vert-ysondre`) a plafonné à **82 °C** — trois degrés sous le
+  seuil de 85 °C, sans jamais passer `pending`. La cause est mesurée : la machine est bridée par
+  sa limite de PUISSANCE (PL1) avant d'être bridée par sa température. Le package monte à 82 °C
+  pendant le burst turbo, puis REDESCEND à 77 °C en palier pendant que la fréquence tombe de 3,60
+  à 3,25 GHz, `crit_alarm` restant à 0.
+  ⚠️ CONSÉQUENCE SUR LA LECTURE DE CETTE RÈGLE : elle ne détecte pas « une charge lourde », elle
+  détecte un **refroidissement dégradé** — ventilateur mort, pâte sèche, aération obstruée. C'est
+  bien ce qu'on veut d'elle, mais ce n'est pas la justification qui avait été écrite en la créant,
+  et la différence compte le jour où elle sonnera : la réponse n'est pas « regarder ce qui
+  tourne », c'est « ouvrir la machine ».
+  ⚠️ Son `for: 10m` valait exactement la durée du tir : même en franchissant le seuil, elle
+  n'aurait atteint que `pending`. Un tir destiné à la voir `firing` doit durer PLUS que son `for:`.
+- **Le test a en revanche validé ce que la règle suppose du cluster** : à 75 % de CPU occupé sur un
+  nœud control-plane, etcd p99 est passé de 20 ms à **5 ms** et les 3 nœuds sont restés Ready. Le
+  pod de charge est `BestEffort`, donc dernier servi — cf. § Contraintes de
+  [stress-test](../stress-test/README.md).
 - **La tuile « Hottest sensor » du dashboard « Machines — system » porte deux valeurs** depuis le
   2026-09-28, et l'écart entre les deux est son objet :
   - `{{instance}}` — capteur le plus chaud **maintenant**, requête `range` (c'est elle qui dessine
