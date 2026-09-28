@@ -293,10 +293,10 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 6,
-            "w": 6,
-            "x": 12,
-            "y": 1
+            "h": 4,
+            "w": 5,
+            "x": 0,
+            "y": 7
           },
           "id": 82,
           "options": {
@@ -337,7 +337,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "The hottest sensor of the machine, all of them considered.\n\n⚠️ THE THRESHOLDS ARE CHOSEN, NOT DECLARED BY THE HARDWARE. Verified on 2026-09-11: this machine exposes neither `node_hwmon_temp_crit_celsius` nor `node_hwmon_temp_max_celsius` — the driver publishes no limit. So 70 °C / 85 °C are common-sense values for a desktop AMD, to be adjusted if the machine normally runs hotter.\n\n⚠️ `Tctl` IS A CONTROL VALUE, NOT NECESSARILY THE DIE TEMPERATURE. It is what the `k10temp` driver gives the fan regulator; depending on the AMD model it carries an offset (`Tdie` would be the raw value, absent here). Compare it with a BIOS reading before concluding anything about an overrun.\n\n⚠️ No ALERT is built on it today, deliberately: setting a critical threshold on hardware whose declared limit is unknown would produce either noise or false safety. This tile is a warning light for the eye; the per-sensor detail is in \"Temperatures\".",
+          "description": "The hottest sensor of the machine, all of them considered — TWO readings per node.\n\n· `{{instance}}` — the hottest sensor RIGHT NOW (last scraped point). The sparkline behind it follows the dashboard range.\n· `{{instance}} · 5 min` — the same sensor averaged over a FIXED 5-minute window, queried instant. It does NOT follow the dashboard range, by design: it is the steady reading to trust when the instantaneous one jumps.\n\n⚠️ \"HOTTEST\" MEANS ACROSS SENSORS, NOT OVER TIME. `max by (instance)` picks the warmest of the machine's sensors at each instant; it is not a peak reached earlier. The tile used to be called \"Max temperature\", which read as a record and alarmed for nothing. Actual peaks over a window are in \"Temperatures\" below, and in the alert.\n\n⚠️ WHY TWO VALUES (added 2026-09-28). A single instantaneous figure makes a transient look like a state: `vert-itharius` touched 84 °C for about a second over 7 days, invisible at a 30-minute step. The 5-minute average is what tells apart a spike from a drift.\n\n⚠️ REFERENCE REGIME, measured 2026-09-28: CPU package 52-59 °C, 7-day mean 54.6-57 °C, Tjmax 100 °C, `node_hwmon_temp_crit_alarm_celsius` = 0 everywhere — no throttling. These mini-PCs run warm AT IDLE (3-4 % CPU, 1.1-1.5 GHz average against a 4.8 GHz turbo): small heatsink, not heavy load. Around 60 °C is the NORMAL regime here, not a warning.\n\n⚠️ THE 70 °C / 85 °C THRESHOLDS ARE COSMETIC AND CHOSEN — a single pair of numbers cannot fit a CPU (crit 100 °C) and an NVMe (crit 79-87 °C) at once. The authoritative threshold is the `MachineSensorNearCritical` alert (`manifests/prometheusrule.yaml`), which reads each sensor's own `node_hwmon_temp_crit_celsius` and fires at 85 % of it. Colour here, decision there.\n\n⚠️ `vert-emeriss` IS THE EXCEPTION: its 2 AMD sensors publish no limit at all, so no alert covers it, and its `Tctl` is a CONTROL value for the fan regulator — it may carry an offset over the real die temperature. Compare against a BIOS reading before concluding. Per-sensor detail: \"Temperatures\".",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -369,8 +369,8 @@ data:
           },
           "gridPos": {
             "h": 6,
-            "w": 6,
-            "x": 18,
+            "w": 12,
+            "x": 12,
             "y": 1
           },
           "id": 83,
@@ -386,7 +386,7 @@ data:
               "fields": "",
               "values": false
             },
-            "textMode": "auto",
+            "textMode": "value_and_name",
             "wideLayout": true
           },
           "pluginVersion": "10.4.0",
@@ -402,9 +402,21 @@ data:
               "range": true,
               "instant": false,
               "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance) (avg_over_time(node_hwmon_temp_celsius{instance=~\"$instance\"}[5m]))",
+              "legendFormat": "{{instance}} · 5 min",
+              "range": false,
+              "instant": true,
+              "refId": "B"
             }
           ],
-          "title": "Max temperature",
+          "title": "Hottest sensor",
           "type": "stat"
         },
         {
@@ -454,8 +466,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 6,
-            "x": 0,
+            "w": 5,
+            "x": 5,
             "y": 7
           },
           "id": 84,
@@ -519,8 +531,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 6,
-            "x": 6,
+            "w": 5,
+            "x": 10,
             "y": 7
           },
           "id": 85,
@@ -585,8 +597,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 6,
-            "x": 12,
+            "w": 5,
+            "x": 15,
             "y": 7
           },
           "id": 86,
@@ -670,8 +682,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 6,
-            "x": 18,
+            "w": 4,
+            "x": 20,
             "y": 7
           },
           "id": 87,

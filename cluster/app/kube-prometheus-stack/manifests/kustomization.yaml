@@ -67,3 +67,9 @@ resources:
   # scellé (cible en 401).
   - dashboard-forgejo.yaml
   - servicemonitors-argocd.yaml
+  # Alertes thermiques du parc, ajoutées le 2026-09-28. Elles sont ICI et non dans
+  # `hosts-monitoring` parce qu'elles ne sont pas filtrées par job : c'est le pendant en règles du
+  # `dashboard-machines.yaml` ci-dessus, qui couvre lui aussi tout le parc. ⚠️ Le chart ne fournit
+  # AUCUNE règle de température — ses ~40 `node-exporter.rules` n'en parlent pas — donc retirer ce
+  # fichier ne dégrade pas la surveillance thermique : il la supprime.
+  - prometheusrule.yaml

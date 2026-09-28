@@ -41,7 +41,9 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   **non référencé** : remplacé par le `SealedSecret` ci-dessus, les deux visent le même `Secret`
 - `manifests/dashboard-machines.yaml` — dashboard « Machines — system » : vue d'ensemble en
   carrés (CPU, RAM, disque en alerte, température, scrape), charge, stockage, réseau, thermique,
-  et quatre lignes de diagnostic repliées. ⚠️ **Il couvre TOUT le parc** — les 3 nœuds Talos
+  et quatre lignes de diagnostic repliées. ⚠️ La tuile de température s'appelle **« Hottest
+  sensor »** depuis le 2026-09-28 (ex-« Max temperature », qui se lisait « record atteint ») et
+  porte **deux** valeurs par machine — instantanée et moyenne 5 min. Cf. § Alertes thermiques. ⚠️ **Il couvre TOUT le parc** — les 3 nœuds Talos
   (`job="node-exporter"`) et les machines hors cluster (`job="external-node"`, composant
   [hosts-monitoring](../hosts-monitoring/README.md)) — et ses variables n'ont donc **aucun filtre
   de job**, ce qui est son objet même. Il remplace `dashboard-talos-nodes.yaml` et
@@ -112,6 +114,12 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   **non référencé** : remplacé par le `SealedSecret` ci-dessus, les deux visent le même `Secret`.
   Jamais activé
 - `manifests/servicemonitors-argocd.yaml` — scrape des 5 composants ArgoCD
+- `manifests/prometheusrule.yaml` — **alertes thermiques du parc** (`machine-thermal.rules`, depuis
+  le 2026-09-28) : `MachineSensorNearCritical`, `MachineSensorMetricsMissing`,
+  `MachineSensorThresholdImplausible`. ⚠️ **Le chart ne fournit AUCUNE règle de température** — ses
+  ~40 `node-exporter.rules` n'en parlent pas — donc retirer ce fichier ne dégrade pas la
+  surveillance thermique, il la supprime. Comme `dashboard-machines.yaml`, la règle principale n'a
+  **aucun filtre de job** : c'est son pendant en alertes. Cf. § Alertes thermiques
 - `manifests/kustomization.yaml` — assemblage
 
 ## Contraintes
@@ -135,6 +143,10 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
 - Les trois morceaux du SSO (`envValueFrom`, `auth.generic_oauth`, la ligne
   `grafana-oidc.externalsecret.yaml` du `kustomization.yaml`) se décommentent **ensemble** :
   un provider OIDC sans `client_secret` fait démarrer Grafana en erreur.
+- Le seuil des alertes thermiques n'est **pas une constante mais une série**
+  (`node_hwmon_temp_crit_celsius`, lue au matériel). Un capteur qui ne la publie pas sort
+  silencieusement de la règle ; un capteur qui la publie aberrante rend la règle muette. Les deux
+  cas sont documentés au § Alertes thermiques et gardés par `MachineSensorThresholdImplausible`.
 - `defaultRules.disabled` est indexé par **nom de règle** : un renommage amont la réactive
   silencieusement, sans erreur Helm ni écart de sync ArgoCD. Revérifier ce bloc à chaque bump du
   chart — cf. [la règle `KubeClientCertificateExpiration`](#règle-kubeclientcertificateexpiration-désactivée-depuis-le-2026-09-15).
@@ -462,6 +474,82 @@ seul moment où on l'ouvre.
   tout disparaît à 15 j (rétention). Ce dashboard n'est pas un journal d'incidents.
 - **Il n'y a toujours aucune notification** : sans receiver Alertmanager, une alerte n'existe que
   si quelqu'un ouvre cette page.
+
+### Alertes thermiques (depuis le 2026-09-28)
+
+`manifests/prometheusrule.yaml`. Écrites parce qu'un package CPU à ~60 °C a été trouvé « un peu
+élevé » — il ne l'est pas, et la mesure qui le montre vaut d'être gardée.
+
+**Ce qui est normal sur ce parc** (mesuré le 2026-09-28, 7 j de recul) :
+
+| Nœud | Package CPU | Moy. 7 j | p95 7 j | Max 7 j | Tjmax |
+|---|---|---|---|---|---|
+| `vert-eranikus` | 59 °C | 57,0 | 59 | 64 | 100 |
+| `vert-ysondre` | 54 °C | 55,3 | 58 | 65 | 100 |
+| `vert-itharius` | 52 °C | 54,6 | 60 | 84 | 100 |
+
+NVMe : composite 35-49 °C, « Sensor 1 » 53-58 °C (max 7 j 64,9 °C), seuils constructeur 79-87 °C.
+`node_hwmon_temp_crit_alarm_celsius` = 0 partout, sur toute la fenêtre : **aucun throttling**.
+Ces machines chauffent **à vide** — 3-4 % de CPU, fréquence moyenne 1,1-1,5 GHz pour un turbo à
+4,8 GHz — parce que le dissipateur est petit, pas parce qu'elles travaillent. Le pic à 84 °C de
+`vert-itharius` est transitoire : invisible au pas de 30 min, donc de l'ordre de la seconde.
+
+- **Le seuil n'est pas écrit en dur**, et c'est le choix central. `85 °C` ne veut rien dire hors
+  contexte : le CPU annonce Tjmax = 100 °C, les NVMe 79-87 °C selon le modèle. Une constante serait
+  soit muette sur les NVMe, soit bavarde sur le CPU. La règle lit le seuil que le matériel publie
+  et alerte à **85 % de celui-ci** — 85 °C côté CPU, ~72 °C côté NVMe. Changer de machines ne
+  demandera aucune retouche.
+- **Le prix de ce choix : les capteurs sans `crit` sortent SILENCIEUSEMENT de la jointure**
+  (16 séries sur 55 le 2026-09-28). Non couverts, et il faut le savoir :
+  - **`vert-emeriss` en entier** (job `external-node`) — ses 2 capteurs AMD ne publient aucun
+    seuil, donc cette machine n'a **aucune surveillance thermique**. Elle tourne à 36 °C, ce qui
+    rend le trou peu urgent ; il reste réel et il ne se verra pas. Le fermer demanderait un seuil
+    en dur pour ce job, ce qui a été écarté ici, pas oublié.
+  - les `thermal_thermal_zone0` (acpitz), figés à 27,8 °C : ils ne mesurent rien d'utile.
+  - les capteurs NVMe autres que `temp1` (« Composite ») — donc « Sensor 1 », le **plus chaud**.
+    Le Composite est celui sur lequel le disque throttle, donc celui qui compte ; le point chaud,
+    lui, n'est pas surveillé.
+- **`severity: warning` sur les trois règles**, et l'écart avec `hosts-monitoring` (qui met
+  `critical` sur ses `absent`) est voulu : à 85 % du seuil constructeur il ne se passe encore rien,
+  le matériel se protège seul en abaissant sa fréquence. Ce qu'on perd sans le savoir est de la
+  **performance**, pas de la donnée. C'est une alerte de dérive — ventilateur encrassé, pâte morte,
+  flux d'air obstrué — pas de panne, et un réveil nocturne pour ça serait mal payé.
+- **`MachineSensorMetricsMissing` est filtrée sur `job="node-exporter"`** alors que la règle
+  principale ne l'est pas. `absent()` ne rend quelque chose que si la série est absente
+  **entièrement** : sans ce matcher, la disparition des 3 nœuds Talos resterait muette tant que
+  `vert-emeriss` publierait encore un capteur. Le versant `external-node` est couvert par
+  `ExternalNodeScrapeMissing` ([hosts-monitoring](../hosts-monitoring/README.md)), qui tombe sur
+  `up` et voit plus large. ⚠️ Ce n'est pas un doublon de `TargetDown` : elle attrape le cas où le
+  scrape **réussit** mais ne porte plus de température (collecteur `hwmon` désactivé, module noyau
+  absent après une montée de Talos). Le target est vert, la thermique est morte, rien d'autre ne
+  le dit.
+- **`MachineSensorThresholdImplausible` garde le SEUIL lui-même**, parce qu'ici le seuil est une
+  série et qu'une série peut mentir. Un `crit` aberrant ne produit aucune erreur : il rend la
+  comparaison inatteignable et `MachineSensorNearCritical` se tait **pour toujours** sur ce
+  capteur, exactement comme si tout allait bien. ⚠️ Ce n'est pas une hypothèse : la métrique
+  voisine `node_hwmon_temp_max_celsius` publie déjà **65261,8 °C** sur plusieurs capteurs NVMe de
+  ce parc (attribut SMART non renseigné, rendu en brut). Si elle sonne, ne pas relever le plafond
+  de 150 °C — il n'est pas le problème.
+- **La tuile « Hottest sensor » du dashboard « Machines — system » porte deux valeurs** depuis le
+  2026-09-28, et l'écart entre les deux est son objet :
+  - `{{instance}}` — capteur le plus chaud **maintenant**, requête `range` (c'est elle qui dessine
+    le sparkline, donc elle suit la fenêtre du dashboard) ;
+  - `{{instance}} · 5 min` — le même capteur moyenné sur `[5m]`, requête **`instant`**. Le choix de
+    l'`instant` n'est pas cosmétique : en `range`, sur une fenêtre de 30 j, Grafana étire le pas à
+    ~10 min et le dernier point évalué peut être en retard d'autant. `instant` garantit un
+    « 5 dernières minutes » qui veut dire 5 dernières minutes, **quelle que soit la range** —
+    ce qui était la demande.
+  - ⚠️ Elle s'appelait **« Max temperature »**, et ce nom mentait : `max by (instance)` prend le
+    maximum **entre les capteurs** à chaque instant, jamais un maximum dans le temps. Lu comme un
+    record, il transformait un régime normal à 59 °C en alarme. C'est l'origine de tout ce § — la
+    tuile n'a jamais rien eu d'anormal à montrer.
+  - ⚠️ Ses seuils 70/85 °C restent **cosmétiques et choisis** : une paire de nombres ne peut pas
+    convenir à la fois à un CPU (crit 100 °C) et à un NVMe (crit 79-87 °C). La couleur est ici, la
+    décision est dans `MachineSensorNearCritical`.
+- **Le filtre « Component » du dashboard « Alerts — cluster » ne connaît pas ces règles** : ses
+  options s'arrêtent à `CNPG.*`, `Forgejo.*`, `Velero.*`, `OpenEBS.*`, `Kube.*`. Elles n'apparaissent
+  donc que sous « All » — exactement comme les `External*` de `hosts-monitoring`, et par le même
+  oubli. Rien ne se perd, mais le filtre ment par omission.
 
 ### Notification mail des alertes critiques (ACTIF depuis le 2026-09-09)
 
