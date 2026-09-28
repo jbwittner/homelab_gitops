@@ -535,10 +535,14 @@ Ces machines chauffent **à vide** — 3-4 % de CPU, fréquence moyenne 1,1-1,5 
   82 °C, trois degrés sous le seuil. Sur `vert-eranikus`, qui monte à 87 °C, elle s'est déclenchée
   sur **trois capteurs** (Package id 0, Core 12, Core 16) — ✅ l'expression, la jointure sur
   `node_hwmon_temp_crit_celsius` et les labels sont donc validés sur du matériel réel.
-  ❌ Le `for: 10m` ne l'a jamais été : la température OSCILLE autour du seuil au lieu de le
-  franchir franchement, et 10 minutes sans un seul creux n'ont jamais été réunies. Bon filtre
-  anti-bruit, mais c'est aussi ce qui la rendra muette sur une machine qui frôle la limite sans
-  s'y installer. Descendre à `for: 5m` est une décision à prendre consciemment. La cause est mesurée : la machine est bridée par
+  Sur `vert-itharius`, qui monte à 92 °C, elle s'est déclenchée sur **8 capteurs** en continu.
+  ❌ Le `for: 10m` n'a jamais été satisfait, et le tir n°3 en donne la raison — arithmétique et
+  non thermique : il aurait été atteint à 21:34:40Z, le Job s'est arrêté à 21:33:40Z. **Le
+  `--timeout 600s` du test et le `for: 10m` de la règle sont exactement égaux, donc l'alerte ne
+  peut STRUCTURELLEMENT jamais sonner dans cette configuration**, quelle que soit la température.
+  Un tir destiné à la voir `firing` doit durer plus que le `for:`, marge de démarrage comprise.
+  Descendre la règle à `for: 5m` est une décision séparée, à prendre pour ses propres raisons
+  (réactivité contre bruit) et non pour compenser ce défaut de protocole. La cause est mesurée : la machine est bridée par
   sa limite de PUISSANCE (PL1) avant d'être bridée par sa température. Le package monte à 82 °C
   pendant le burst turbo, puis REDESCEND à 77 °C en palier pendant que la fréquence tombe de 3,60
   à 3,25 GHz, `crit_alarm` restant à 0.

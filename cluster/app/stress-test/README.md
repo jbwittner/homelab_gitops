@@ -239,12 +239,80 @@ Déclenchée sur **trois** capteurs d'`eranikus` (`temp1` = Package id 0, `temp1
 - Décision à prendre consciemment, pas ici : garder `for: 10m` (peu de bruit, détection tardive)
   ou descendre à `for: 5m` (plus réactif, risque d'alerter sur un pic de compilation).
 
+## Résultats — tir n°3, `vert-itharius`, 2026-09-28 21:23 → 21:33 UTC
+
+**C'est le tir qui tranche tout, parce qu'il fournit le témoin que les deux premiers n'avaient
+pas : `vert-itharius` et `vert-ysondre` ont fait le MÊME travail à la MÊME fréquence.**
+
+| | `vert-ysondre` (n°1) | `vert-eranikus` (n°2) | `vert-itharius` (n°3) |
+|---|---|---|---|
+| Repos | 58 °C | 60 °C | 52 °C (55 au départ du tir) |
+| Pic | 82 °C | 87 °C | **92 °C** |
+| Palier (moy. 8 min) | 77 °C | 82,1 °C | **88,75 °C** |
+| Fréquence moyenne en palier | **3,25 GHz** | 3,43 GHz | **3,25 GHz** |
+| **Bogo ops** | **11 545 649** | 11 976 148 | **11 575 506** |
+| Temps utilisateur | 73,3 % | 74,3 % | 74,6 % |
+| `crit_alarm` | 0 | 0 | **0** |
+
+### La comparaison contrôlée
+
+`vert-ysondre` et `vert-itharius` ont produit **11 545 649** et **11 575 506** bogo ops — un écart
+de **0,26 %**, c'est-à-dire rien — à une fréquence moyenne de palier **identique, 3,25 GHz**.
+Même travail, même horloge, donc **même puissance dissipée**.
+
+Et pourtant : **77 °C contre 88,75 °C. Presque 12 degrés d'écart pour un travail identique.**
+
+L'explication par la charge est morte. L'explication par la fréquence est morte. Il ne reste que
+l'évacuation : **`vert-itharius` a un problème de refroidissement**, et c'est maintenant une
+mesure, plus une hypothèse.
+
+⚠️ **Signature confirmant le diagnostic : il est le plus FROID au repos (52 °C, contre 58 et 60)
+et le plus CHAUD en charge.** C'est exactement le comportement d'un dissipateur qui sature — il
+suffit tant que la puissance est faible, il décroche dès qu'elle monte. Un encrassement ou une
+pâte thermique morte produit précisément cette courbe.
+
+⚠️ **Second signe, visible nulle part ailleurs** : sa fréquence n'a jamais trouvé d'équilibre
+(3,46 → 3,15 → 3,07 → 3,35 → 3,29 GHz) et sa température a oscillé entre 88 et 92 °C sur tout le
+palier. Les deux autres machines se sont stabilisées en quelques minutes et n'ont plus bougé.
+Une boucle de régulation qui oscille est une boucle à bout de course.
+
+### Ce que ça réévalue sur `vert-eranikus`
+
+Son cas reste ambigu et le tir n°3 ne le lève pas : +3,7 % de bogo ops à +5,5 % de fréquence pour
++5 °C. Ce surcroît de chaleur est plausiblement payé en watts. **Rien ne prouve qu'`eranikus` ait
+un défaut** — contrairement à `itharius`, où la preuve est faite.
+
+### Action
+
+1. **`vert-itharius` d'abord** : dépoussiérer ventilateur et ailettes, vérifier que rien
+   n'obstrue l'aspiration, et refaire la pâte thermique si la machine a plus de deux ou trois ans.
+   C'est là que le gain est certain.
+2. **Espacer les machines** (cf. tir n°2 : `itharius` inactif prenait +9 °C pendant qu'`eranikus`
+   chauffait). Gratuit.
+3. **Re-tirer sur `vert-itharius` après intervention.** À bogo ops égales, la baisse du palier
+   mesure exactement ce que l'intervention a rapporté. C'est le seul moyen de savoir si ça a servi.
+
+### L'alerte, troisième observation
+
+`MachineSensorNearCritical` est passée `pending` sur **8 capteurs** d'`itharius` (package + 7
+cœurs), en continu de 21:24:40Z à la fin du tir. Jamais `firing`.
+
+⚠️ **Et la raison est arithmétique, pas thermique** : le `for: 10m` aurait été satisfait à
+**21:34:40Z**, le Job s'est terminé à **21:33:40Z**. **Une minute manquante.** Le
+`--timeout 600s` du Job et le `for: 10m` de la règle sont exactement égaux : dans cette
+configuration l'alerte ne peut structurellement JAMAIS sonner, quelle que soit la température.
+
+Tout tir destiné à voir l'alerte `firing` doit durer **plus** que le `for:` de la règle, marge de
+démarrage comprise — `--timeout 900s` avec `activeDeadlineSeconds: 1200`. C'est le défaut de
+conception de ce composant, révélé par trois tirs et non par sa relecture.
+
 ## État
 
-**Non déployé** (`.noapp.yaml`), désarmé le 2026-09-28 après les tirs n°1 et n°2. Le Job `Completed` a été
+**Non déployé** (`.noapp.yaml`), désarmé le 2026-09-28 après les trois tirs. Le parc est
+entièrement caractérisé sous charge ; aucun nœud n'a throttlé, aucun n'a quitté `Ready`, etcd est
+resté entre 5 et 19 ms sur les trois tirs — meilleur que ses 20 ms au repos. Le Job `Completed` a été
 supprimé par le `prune` d'ArgoCD au renommage.
 
-Prochain tir utile : `vert-itharius`, le seul jamais chargé — et surtout **un second tir sur
-`vert-eranikus` APRÈS avoir espacé les machines**. C'est la seule façon de mesurer ce que
-l'espacement rapporte : si le palier descend de 82 vers 77 °C à bogo ops égales, la cause était
-bien l'air et non le silicium.
+Prochain tir utile : **`vert-itharius`, APRÈS dépoussiérage et pâte thermique**. À bogo ops
+égales, la baisse du palier depuis 88,75 °C mesure exactement ce que l'intervention a rapporté.
+⚠️ Corriger d'abord `--timeout` à 900s, sinon l'alerte ne pourra toujours pas sonner.
