@@ -1,0 +1,80 @@
+# Charge CPU d'un SEUL nœud, pour mesurer son plafond thermique.
+#
+# ⚠️ LE NOM DU JOB PORTE LE NOM DU NŒUD, et ce n'est pas décoratif : un `spec` de Job est
+# IMMUABLE. Changer de nœud ou de paramètres dans un Job existant fait échouer la synchronisation
+# ArgoCD sans rien dire d'utile. En nommant le Job d'après sa cible, changer de nœud devient un
+# objet DIFFÉRENT : l'ancien est supprimé par `prune`, le nouveau est créé. Renommer le nœud sans
+# renommer le Job est l'erreur à ne pas faire.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: stress-cpu-vert-ysondre
+spec:
+  # ⚠️ 0 ET PAS 6 (le défaut). Un test de charge qui se relance tout seul après un échec est un
+  # test de charge qu'on ne contrôle plus.
+  backoffLimit: 0
+  # Garde-fou temporel INDÉPENDANT du `--timeout` de stress-ng : si le binaire part en vrille ou
+  # si l'accès au cluster est perdu pendant le test, le Job se tue seul à 15 min. Les deux
+  # existent parce qu'ils protègent contre des pannes différentes.
+  activeDeadlineSeconds: 900
+  # ⚠️ PAS DE `ttlSecondsAfterFinished`, ET C'EST LOAD-BEARING. Le TTL supprimerait le Job terminé ;
+  # `selfHeal: true` le recréerait aussitôt ; il se relancerait. Boucle de stress infinie, sans
+  # erreur nulle part. Le Job terminé DOIT rester en place — c'est lui qui prouve à ArgoCD que
+  # l'état désiré est atteint.
+  template:
+    metadata:
+      labels:
+        app: stress-cpu
+    spec:
+      restartPolicy: Never
+      # ⚠️ LA LIGNE LA PLUS IMPORTANTE DU FICHIER. Sans elle, le scheduler place le pod n'importe
+      # où, et « un seul nœud à la fois » n'est plus garanti.
+      #
+      # `vert-ysondre` en premier, délibérément : Prometheus tourne sur `vert-eranikus` et doit
+      # rester rapide PENDANT le test — c'est lui qui enregistre la mesure. Grafana est ici, mais
+      # sa lenteur n'est que cosmétique : les données continuent d'être collectées ailleurs.
+      # Charger `vert-eranikus` en premier reviendrait à ralentir l'instrument de mesure.
+      #
+      # Les trois nœuds n'ont AUCUN taint (vérifié le 2026-09-28), donc aucune `toleration` n'est
+      # nécessaire. Si un taint control-plane apparaissait un jour, ce pod cesserait d'être
+      # planifiable — en silence, avec un Job qui reste Pending.
+      nodeSelector:
+        kubernetes.io/hostname: vert-ysondre
+        # kubernetes.io/hostname: vert-itharius
+        # kubernetes.io/hostname: vert-eranikus   # ⚠️ porte Prometheus — en dernier, jamais en premier
+      containers:
+        - name: stress
+          # ⚠️ AUCUN BLOC `resources`, DONC QoS `BestEffort`, ET C'EST LA PROTECTION PRINCIPALE.
+          # Contre-intuitif : c'est l'ABSENCE de requests qui protège. BestEffort reçoit le poids
+          # CPU minimal dans cgroup v2 ; etcd, l'apiserver et le kubelet, qui sont Guaranteed ou
+          # Burstable, gagnent l'arbitrage dès qu'ils ont besoin du processeur. Ajouter des
+          # requests ici mettrait le stress à égalité avec le control-plane. NE PAS EN METTRE.
+          #
+          # ⚠️ L'IMAGE N'EMBARQUE PAS stress-ng : elle l'installe au démarrage. Raison : l'image
+          # officielle (ghcr.io/colinianking/stress-ng) ne publie que des tags de commit SHA, donc
+          # Renovate ne peut pas la suivre, et la seule image en semver (alexeiled/stress-ng) est
+          # figée à 0.12.05 depuis 2021. Alpine community fournit 0.18.08, à jour, et `alpine` est
+          # suivi par Renovate (manager `kubernetes`, cf. renovate.json).
+          # PRIX À CONNAÎTRE : le pod a besoin d'un accès réseau sortant vers les miroirs Alpine au
+          # démarrage. Miroir injoignable = Job en échec, pas de test — visible, pas silencieux.
+          image: alpine:3.22
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              apk add --no-cache stress-ng
+              # --cpu 12 sur 16 : quatre cœurs restent libres pour etcd, l'apiserver, le kubelet
+              # et cilium. `--cpu 0` (tous les cœurs) est le réglage qui fait basculer le nœud en
+              # NotReady — ne pas l'utiliser sur un control-plane.
+              #
+              # --cpu-method par défaut : il fait tourner tous les types d'opérations, ce qui
+              # ressemble à une charge réelle. Pour chercher le PLAFOND thermique absolu,
+              # `--cpu-method matrixprod` sollicite le FPU et chauffe davantage — à n'essayer
+              # qu'une fois le comportement du nœud connu sous charge ordinaire.
+              exec stress-ng --cpu 12 --timeout 600s --metrics-brief --times
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault

@@ -98,6 +98,12 @@ pour tout ce qui est dans `archive/`.
 | [hosts-monitoring](cluster/app/hosts-monitoring/README.md) | 2 | les **machines** hors cluster (disque, mémoire, collecteur textfile) — 6 alertes |
 
 *Non déployés :*
+- [stress-test](cluster/app/stress-test/README.md) (`.noapp.yaml`, **2026-09-28**) — instrument de
+  mesure, pas un service : charge volontairement **un** nœud pour trouver son plafond thermique et
+  vérifier que `MachineSensorNearCritical` sonne pour de vrai. ⚠️ Les trois nœuds sont
+  control-plane **sans taint** et le quorum etcd est de 2 sur 3 : charger deux nœuds à la fois met
+  le cluster en **lecture seule**. Son état normal est `.noapp.yaml`, et le renommage est le seul
+  interrupteur — un test de charge doit être un commit, pas une commande.
 - [cnpg-barman-plugin](cluster/app/cnpg-barman-plugin/README.md) (`.noapp.yaml`, **2026-09-11**) —
   entièrement orphelin : zéro `Cluster` CNPG et zéro `ObjectStore` depuis le départ de la forge.
   ⚠️ Les trois règles `CNPG*Backup*` de [cnpg-monitoring](cluster/app/cnpg-monitoring/README.md)

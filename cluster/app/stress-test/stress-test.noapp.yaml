@@ -1,0 +1,48 @@
+# Test de charge THERMIQUE du parc — outil de mesure, pas un service.
+#
+# ⚠️ CE COMPOSANT EST DANGEREUX PAR NATURE, et le `.noapp.yaml` est son état normal. Les trois
+# nœuds sont control-plane ET sans aucun taint : ils portent etcd, l'apiserver et les charges.
+# Saturer les cœurs d'un nœud, c'est affamer le membre etcd qui tourne dessus. Sur un quorum de 3,
+# en perdre un est absorbable, en perdre deux met le cluster en LECTURE SEULE — plus aucune
+# écriture d'API, ArgoCD bloqué, récupération par Talos. D'où la règle absolue de ce composant :
+# UN SEUL NŒUD À LA FOIS, ce que le `nodeSelector` du Job matérialise.
+#
+# ⚠️ IL N'EXISTE PAS DE MÉTRIQUE DU SERVEUR ETCD dans ce cluster (`kubeEtcd.enabled: false` dans
+# kube-prometheus-stack, avec scheduler, controller-manager et kube-proxy). Pendant le test, etcd
+# ne se voit QUE depuis l'apiserver. Suffisant pour un test thermique ; ça ne l'est pas pour un
+# test de charge du control-plane, qui chargerait précisément ce qu'on ne peut pas observer.
+#
+# ⚠️ RENOMMER EN `.app.yaml` LANCE LE TEST au prochain cycle ArgoCD. Renommer en `.noapp.yaml`
+# supprime le Job (`prune: true`) et arrête tout. C'est le SEUL interrupteur, et c'est voulu :
+# un test de charge qui se déclenche doit être un commit, pas une commande.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: stress-test
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: stress-test
+    app.kubernetes.io/part-of: homelab-gitops
+    # `test` comme `test-nginx` : ce n'est ni de l'infrastructure ni une application, c'est un
+    # instrument. Le label le rend visible dans `kubectl -n argocd get app -L`.
+    app.kubernetes.io/component: test
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/stress-test/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: stress-test
+  syncPolicy:
+    automated:
+      # ⚠️ `selfHeal: true` A UNE CONSÉQUENCE PARTICULIÈRE ICI : supprimer le Job à la main le fait
+      # RECRÉER, donc relancer le test. C'est un piège si on croit l'arrêter ainsi — et c'est
+      # aussi le seul moyen de rejouer le test sans renommer le fichier. Cf. README § Opérations.
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

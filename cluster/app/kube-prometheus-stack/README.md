@@ -530,6 +530,11 @@ Ces machines chauffent **à vide** — 3-4 % de CPU, fréquence moyenne 1,1-1,5 
   voisine `node_hwmon_temp_max_celsius` publie déjà **65261,8 °C** sur plusieurs capteurs NVMe de
   ce parc (attribut SMART non renseigné, rendu en brut). Si elle sonne, ne pas relever le plafond
   de 150 °C — il n'est pas le problème.
+- **Aucune de ces trois règles n'a encore été vue sonner**, et c'est une limite à garder en tête :
+  une règle jamais déclenchée n'est pas une règle vérifiée. Le composant
+  [stress-test](../stress-test/README.md) (`.noapp.yaml`) existe pour l'exercer — il charge un
+  nœud jusqu'à franchir les 85 % du seuil constructeur. ⚠️ Lire son § Danger avant de l'armer :
+  les trois nœuds sont control-plane sans taint et le quorum etcd est de 2 sur 3.
 - **La tuile « Hottest sensor » du dashboard « Machines — system » porte deux valeurs** depuis le
   2026-09-28, et l'écart entre les deux est son objet :
   - `{{instance}}` — capteur le plus chaud **maintenant**, requête `range` (c'est elle qui dessine
