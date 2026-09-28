@@ -65,7 +65,7 @@ spec:
           # suivi par Renovate (manager `kubernetes`, cf. renovate.json).
           # PRIX À CONNAÎTRE : le pod a besoin d'un accès réseau sortant vers les miroirs Alpine au
           # démarrage. Miroir injoignable = Job en échec, pas de test — visible, pas silencieux.
-          image: alpine:3.22
+          image: alpine:3.24
           command: ["/bin/sh", "-c"]
           args:
             - |
