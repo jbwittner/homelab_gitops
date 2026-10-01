@@ -188,6 +188,10 @@ embarquerait le `.env`, le `state.db`, les `sessions/`, `cache/` et `logs/` de c
 règles de refus dur, elles, ne sont **pas ancrées** : elles mordent à toute profondeur, profils
 compris.
 
+De `cron/` (racine et profils), seul `jobs.json` part — la définition des jobs. `output/` (un
+rapport par exécution), `executions.db`, `ticker_*`, `usage_audit.jsonl` et les verrous sont du
+runtime et restent sur le PVC.
+
 Deux exclusions supplémentaires vivent dans le script, pas dans l'allow-list, parce que le
 `.gitignore` ne sait pas les exprimer :
 
@@ -354,6 +358,12 @@ cat > /opt/data/.gitignore <<'GITIGNORE'
 !/scripts/
 !/scripts/**
 
+# Définitions des jobs cron. Le reste de cron/ est runtime : executions.db, notepad.db,
+# output/ (un rapport par exécution), ticker_*, usage_audit.jsonl, verrous.
+!/cron/
+/cron/*
+!/cron/jobs.json
+
 # Skills (including custom skills). Runtime caches remain ignored by default.
 !/skills/
 !/skills/**
@@ -386,6 +396,9 @@ cat > /opt/data/.gitignore <<'GITIGNORE'
 !/profiles/*/scripts/**
 !/profiles/*/skins/
 !/profiles/*/skins/**
+!/profiles/*/cron/
+/profiles/*/cron/*
+!/profiles/*/cron/jobs.json
 
 # README.md du dépôt : écrit à la main, jamais par Hermes. Le refus ici ne couvre que le cas
 # « fichier non suivi » — README.md étant DÉJÀ suivi par le commit initial, c'est l'exclusion
