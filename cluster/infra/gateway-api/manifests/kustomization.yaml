@@ -12,6 +12,6 @@ kind: Kustomization
 # deux dans le même commit si besoin. Des CRDs plus récentes que ce que Cilium sait lire se
 # traduisent par des Gateway/HTTPRoute jamais réconciliées, sans erreur explicite.
 resources:
-  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.2/standard-install.yaml
+  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.3/standard-install.yaml
   - namespace.yaml
   - gateway.yaml
