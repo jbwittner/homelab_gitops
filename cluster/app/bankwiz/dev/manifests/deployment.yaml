@@ -31,7 +31,7 @@ spec:
           # applicatif, épinglé au digest. Le tag mobile `develop` n'est volontairement pas
           # utilisé : ArgoCD ne voit pas qu'il bouge, le mettre à jour demanderait un
           # `rollout restart` à la main. Monter de version = un commit ici.
-          image: forgejo.wittner.tech/jbwittner/bankwiz-server:develop-sha-ea706bf@sha256:532291f7f23434acce1f2c63783bca035282ef0f9eb651671161f9f45c1086bd
+          image: forgejo.wittner.tech/jbwittner/bankwiz-server:develop-sha-f188fa5@sha256:2b2a5b87d57c0991e32954774054c222467a4b496f69f86761d28a69950361c5
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
