@@ -1,0 +1,12 @@
+# Configuration Spring Boot de l'environnement dev, montée en /app/config/application.yaml.
+# Spring lit `./config/` (répertoire de travail /app) APRÈS le application.yaml du jar : chaque clé
+# posée ici écrase celle de l'image, les autres gardent leur valeur par défaut.
+# Modifier ce fichier change le hash du ConfigMap, donc le pod template : redémarrage automatique.
+spring:
+  profiles:
+    active: "dev"
+server:
+  # Le TLS est terminé au Gateway et le pod reçoit du HTTP clair : sans ça, Spring génère des URL
+  # en `http://` (serveur déclaré par Swagger UI, redirections), bloquées par le navigateur en
+  # contenu mixte. Envoy pose X-Forwarded-Proto/Host.
+  forward-headers-strategy: "framework"

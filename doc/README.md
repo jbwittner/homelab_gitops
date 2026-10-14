@@ -28,7 +28,7 @@ ces pages iraient dans le README du composant concerné.
   commit correctif, GC Forgejo, et la clé sealed-secrets devenue point de fuite rétroactif.
 - [`conventions.md`](conventions.md) — la forme d'un composant : arbre `cluster/`, suffixes
   `.app.yaml` / `.noapp.yaml`, archétypes, sync-waves, règle README.
-- [`reseau.md`](reseau.md) — le `shared-gw`, ses deux listeners, ce qui est exposé, le DNS — et le
+- [`reseau.md`](reseau.md) — le `shared-gw`, ses trois listeners, ce qui est exposé, le DNS — et le
   **reverse proxy `192.168.1.50`**, sans lequel un `HTTPRoute` sain répond 404.
 
 ### Procédures

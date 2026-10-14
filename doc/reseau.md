@@ -17,7 +17,7 @@ Exposer un service = un `HTTPRoute` qui s'y attache.
   cluster joignable par IP nue : c'est une copie d'exercice de la forge, avec ses vrais comptes,
   et lui donner un nom serait le premier pas vers sa déclaration au proxy. Elle ne répond que
   VM allumée, c'est-à-dire pendant un exercice.
-- **TLS terminé au Gateway** : secrets `wildcard-public-tls` et `wildcard-lan-tls` (ns `gateway`),
+- **TLS terminé au Gateway** : secrets `wildcard-public-tls`, `wildcard-lan-tls` et `wildcard-dev-lan-tls` (ns `gateway`),
   émis par cert-manager (Let's Encrypt DNS-01 Cloudflare,
   [`certificates.yaml`](../cluster/infra/cert-manager/manifests/certificates.yaml)) et référencés en
   `Terminate` par les listeners. Les backends sont joints en **HTTP clair**.
@@ -32,15 +32,20 @@ Exposer un service = un `HTTPRoute` qui s'y attache.
 
 ## Listeners (HTTPS :443)
 
-Les **deux** listeners de `shared-gw`, tous deux en `allowedRoutes.namespaces.from: All` :
+Les **trois** listeners de `shared-gw`, tous en `allowedRoutes.namespaces.from: All` :
 
 | `sectionName` | Hostname | Secret TLS | Usage |
 |---|---|---|---|
 | `https-public` | `*.wittner.tech` | `wildcard-public-tls` | services exposés publiquement |
 | `https-internal` | `*.lan.wittner.tech` | `wildcard-lan-tls` | services internes (LAN uniquement) |
+| `https-dev` | `*.dev.lan.wittner.tech` | `wildcard-dev-lan-tls` | environnements de dev (LAN uniquement) |
 
-⚠️ Un wildcard ne couvre qu'**un** niveau. La règle vaut pour le certificat, le listener **et**
+⚠️ Un wildcard ne couvre qu'**un** niveau. La règle vaut pour le certificat **et**
 l'enregistrement DNS : `grafana.lan.wittner.tech` est couvert, `a.b.lan.wittner.tech` ne l'est pas.
+**Pas pour le listener**, et c'est le piège : un hostname de listener Gateway API `*.lan.wittner.tech`
+matche aussi `a.b.lan.wittner.tech` — la route attachée à `https-internal` serait `Accepted`, puis
+servie avec un certificat qui ne couvre pas le nom. D'où le listener `https-dev` et son propre
+wildcard pour `*.dev.lan.wittner.tech` ; au SNI, le hostname le plus spécifique l'emporte.
 
 ## Exposé aujourd'hui
 
@@ -51,6 +56,7 @@ l'enregistrement DNS : `grafana.lan.wittner.tech` est couvert, `a.b.lan.wittner.
 | `alertmanager.lan.wittner.tech` | `https-internal` | [kube-prometheus-stack](../cluster/app/kube-prometheus-stack/README.md) |
 | `hermes.lan.wittner.tech` | `https-internal` | [hermes](../cluster/app/hermes/README.md) — dashboard (9119) |
 | `hermes-api.lan.wittner.tech` | `https-internal` | [hermes](../cluster/app/hermes/README.md) — API (8642) |
+| `bankwiz-api.dev.lan.wittner.tech` | `https-dev` | [bankwiz](../cluster/app/bankwiz/README.md) — API, environnement `dev` |
 
 ⚠️ **`argocd.lan.wittner.tech` n'est pas qu'une UI** : `/api/webhook` y reçoit le webhook « push »
 de la forge, qui déclenche la sync immédiate au lieu du polling de 3 min
@@ -152,7 +158,7 @@ Modèle de référence :
 
 ```bash
 kubectl -n gateway get gateway shared-gw     # PROGRAMMED=True, adresse 192.168.1.80
-kubectl -n gateway get certificate           # les 2 wildcards READY=True
+kubectl -n gateway get certificate           # les 3 wildcards READY=True
 kubectl get httproute -A                     # Accepted / ResolvedRefs
 ```
 

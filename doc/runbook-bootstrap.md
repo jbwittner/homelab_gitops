@@ -265,7 +265,7 @@ nouvelles (`gcloud iam service-accounts keys create`) et resceller.
         → les quatre *-monitoring (2)
         (infra et app sont deux app-of-apps SŒURS : aucune wave de l'un n'ordonne l'autre)
 5. Exposition : Gateway programmée + restart one-shot de cilium-operator + DNS + reverse proxy
-6. TLS Let's Encrypt (DNS-01) sur les deux wildcards
+6. TLS Let's Encrypt (DNS-01) sur les trois wildcards
 7. Stockage : namespace privileged → DaemonSet VG → StorageClass
 8. Scellement des secrets applicatifs (première construction uniquement)
 ```

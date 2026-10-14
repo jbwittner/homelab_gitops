@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  # Un dossier par environnement sous `bankwiz/` : le nom de l'Application est `bankwiz-<env>`,
+  # pas le nom du dossier (`dev`) — toutes les Applications cohabitent dans le ns `argocd` du hub,
+  # et un `dev` nu entrerait en collision avec le premier autre projet à avoir un environnement dev.
+  name: bankwiz-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: bankwiz-dev
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: api
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: cluster/app/bankwiz/dev/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: bankwiz-dev
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

@@ -1,0 +1,29 @@
+# Listener `https-dev` (*.dev.lan.wittner.tech), pas `https-internal` : le wildcard TLS
+# `*.lan.wittner.tech` ne couvre qu'UN niveau, et `bankwiz-api.dev.lan.wittner.tech` en a deux.
+# Attaché à `https-internal`, la route serait acceptée (un hostname de listener Gateway API matche
+# plusieurs labels) mais servie avec un certificat qui ne couvre pas le nom.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: bankwiz-api
+  namespace: bankwiz-dev
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: shared-gw
+      namespace: gateway
+      sectionName: https-dev
+  hostnames:
+    - bankwiz-api.dev.lan.wittner.tech
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: bankwiz-api
+          port: 8080
+          weight: 1

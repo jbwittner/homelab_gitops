@@ -69,7 +69,7 @@ pour tout ce qui est dans `archive/`.
 |---|---|---|
 | [gateway-api](cluster/infra/gateway-api/README.md) | -10 | CRDs Gateway API et le `Gateway` partagé `shared-gw` |
 | [sealed-secrets](cluster/infra/sealed-secrets/README.md) | -8 | déchiffrement des secrets — **seul canal actif** |
-| [cert-manager](cluster/infra/cert-manager/README.md) | -5 | TLS Let's Encrypt par DNS-01 Cloudflare, les deux wildcards |
+| [cert-manager](cluster/infra/cert-manager/README.md) | -5 | TLS Let's Encrypt par DNS-01 Cloudflare, les trois wildcards |
 | [argocd](cluster/infra/argocd/README.md) | -1 | le moteur GitOps, self-managed |
 | [cilium](cluster/infra/cilium/README.md) | 0 | CNI, LB-IPAM et L2, implémentation Gateway API |
 | [openebs](cluster/infra/openebs/README.md) | 0 | stockage local LVM, `openebs-lvm-thin` |
@@ -89,6 +89,7 @@ pour tout ce qui est dans `archive/`.
 | [cnpg](cluster/app/cnpg/README.md) | 0 | opérateur PostgreSQL — aucune base déclarée actuellement |
 | [kube-prometheus-stack](cluster/app/kube-prometheus-stack/README.md) | 0 | Prometheus, Alertmanager, Grafana et ses dashboards |
 | [hermes](cluster/app/hermes/README.md) | 0 | agent LLM en mode gateway |
+| [bankwiz](cluster/app/bankwiz/README.md) | 0 | API bankwiz, environnement `dev` (branche `develop`) |
 | [donetick](cluster/app/donetick/README.md) | 0 | gestionnaire de tâches et de corvées personnel, SQLite sur PVC — ⚠️ **inerte** tant que son `SealedSecret` `donetick-env` n'est pas scellé |
 | [renovate](cluster/app/renovate/README.md) | 0 | mises à jour de dépendances |
 | [forgejo-runner](cluster/app/forgejo-runner/README.md) | 0 | Forgejo Actions — ⚠️ **inerte** tant que son `SealedSecret` d'enregistrement n'est pas scellé |

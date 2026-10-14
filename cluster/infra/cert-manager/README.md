@@ -17,7 +17,7 @@ consomme (cf. [doc/reseau.md](../../../doc/reseau.md)).
 - `manifests/clusterissuer-prod.yaml` / `manifests/clusterissuer-staging.yaml` — les deux
   `ClusterIssuer` ACME, solver `dns01.cloudflare` → `apiTokenSecretRef` sur le Secret scellé
 - `manifests/certificates.yaml` — les `Certificate` wildcard (`*.wittner.tech`,
-  `*.lan.wittner.tech`), **ns `gateway`**
+  `*.lan.wittner.tech`, `*.dev.lan.wittner.tech`), **ns `gateway`**
 - `manifests/cloudflare-api-token.sealed.yaml` — `SealedSecret` `cloudflare-api-token`
   (ns `cert-manager`, clé `api-token`), déchiffré en cluster par
   [sealed-secrets](../sealed-secrets/README.md)
