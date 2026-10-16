@@ -31,8 +31,7 @@ collecteur des instances PostgreSQL, et sept alertes sur l'état de la chaîne b
   [velero-monitoring](../../infra/velero-monitoring/README.md). Les métriques, elles, sont servies
   **sans condition** par le collecteur — il n'y a rien à activer côté `Cluster`.
 - **`namespaceSelector: {any: true}`, et non une liste.** Les pods scrapés vivent dans les
-  namespaces des applications consommatrices (aucune aujourd'hui ; `authentik` est le candidat
-  connu), jamais dans
+  namespaces des applications consommatrices (`bankwiz-dev` aujourd'hui), jamais dans
   `cnpg-system`. Une liste explicite serait à maintenir à chaque base ajoutée, et son oubli
   produirait une base non surveillée, silencieusement.
 - **`podTargetLabels: [cnpg.io/cluster]` est load-bearing.** C'est ce qui donne le label de série
@@ -43,7 +42,12 @@ collecteur des instances PostgreSQL, et sept alertes sur l'état de la chaîne b
 ### Trois pièges de métriques
 
 > [!IMPORTANT]
-> **Plus aucune base dans ce cluster depuis le 2026-09-11** (`forgejo-db` est partie avec la
+> **Depuis le 2026-10-16, une base non sauvegardée : `bankwiz-db`** (ns `bankwiz-dev`).
+> `CNPGMetricsAbsent` est réactivée avec elle ; `CNPGBackupChainAbsent` et les trois règles barman
+> restent commentées tant qu'aucune base n'est sous sauvegarde. Si `bankwiz-db` disparaît sans
+> remplaçante, recommenter `CNPGMetricsAbsent` dans le même commit.
+>
+> **Aucune base dans ce cluster du 2026-09-11 au 2026-10-16** (`forgejo-db` est partie avec la
 > forge — [archive/forgejo](../../../archive/forgejo/README.md)). Les règles fondées sur une
 > VALEUR n'ont plus de série à évaluer et sont muettes, ce qui est correct. Les **deux règles en
 > `absent(...)`** — `CNPGBackupChainAbsent` et `CNPGMetricsAbsent` — sonneraient en permanence :
@@ -87,7 +91,7 @@ alerte qui hurle en permanence, soit une alerte muette.
 | `CNPGLastBackupFailed` | warning | La tentative la plus récente a échoué : se déclenche dès la première nuit ratée |
 | `CNPGNoBackupYet` | warning | Le plugin est câblé sur une base mais aucune sauvegarde n'a jamais réussi. Comble l'angle mort de la garde `> 0` de `CNPGBackupTooOld` |
 | ~~`CNPGBackupChainAbsent`~~ | critical | ⚠️ **commentée** (plus aucune base) — les métriques du plugin ont disparu pour une base attendue : `spec.plugins` retiré, sidecar mort. Elle n'est plus sauvegardée par **rien** — son PVC est aussi hors kopia |
-| ~~`CNPGMetricsAbsent`~~ | critical | ⚠️ **commentée** (plus aucune base) — plus aucune instance scrapée : les six autres sont aveugles d'un coup |
+| `CNPGMetricsAbsent` | critical | Plus aucune instance scrapée : les six autres sont aveugles d'un coup. Réactivée le 2026-10-16 avec `bankwiz-db` |
 
 > [!WARNING]
 > **`CNPGBackupChainAbsent` est la seule règle à nommer les bases en dur**

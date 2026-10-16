@@ -6,8 +6,9 @@
 #     évaluer : elles sont muettes, ce qui est correct — elles se remettront à parler d'elles-mêmes
 #     au premier `Cluster` créé ici ;
 #   - les DEUX règles en `absent(...)` (`CNPGBackupChainAbsent`, `CNPGMetricsAbsent`) sonneraient,
-#     elles, en permanence : elles sont COMMENTÉES en bas de fichier, avec la consigne de les
-#     remettre au premier `Cluster` remis sous sauvegarde.
+#     elles, en permanence : elles ont été COMMENTÉES en bas de fichier.
+# Depuis le 2026-10-16, `bankwiz-db` (ns bankwiz-dev, NON sauvegardée) existe : `CNPGMetricsAbsent`
+# est réactivée, `CNPGBackupChainAbsent` et les règles barman restent commentées.
 # Les trois pièges documentés ci-dessous restent valables tels quels : ils ont coûté assez cher
 # pour ne pas être réappris.
 #
@@ -192,25 +193,24 @@ spec:
         #     summary: "cnpg : plus aucune chaîne de sauvegarde sur forgejo-db"
         #     description: "Les métriques du plugin barman-cloud ont disparu pour cette base : `spec.plugins` a été retiré du Cluster, le sidecar ne démarre plus, ou la base n'existe plus. Elle n'est sauvegardée par RIEN — son PVC est aussi exclu de la copie kopia de velero."
 
-        # --- DÉSACTIVÉE LE 2026-09-11, POUR LA MÊME RAISON : PLUS AUCUNE BASE ------------------
+        # --- RÉACTIVÉE LE 2026-10-16 AVEC `bankwiz-db` (ns bankwiz-dev) -------------------------
         #
-        # Elle dit « plus aucune instance CNPG n'est scrapée » — ce qui est exact et permanent
-        # depuis le départ de la forge : l'opérateur tourne, il n'administre rien. Laissée active,
-        # elle sonnerait sans fin, et une alerte qui sonne toujours n'est plus lue.
+        # Commentée du 2026-09-11 au 2026-10-16 faute de toute base : elle aurait sonné sans fin.
+        # Remise avec le premier `Cluster` recréé, comme prévu. ⚠️ `bankwiz-db` n'est PAS sauvegardée
+        # (base de dev jetable) : cette règle surveille le SCRAPE, pas la sauvegarde — c'est pourquoi
+        # `CNPGBackupChainAbsent`, elle, reste commentée. ⚠️ Si `bankwiz-db` redevient la dernière
+        # base et disparaît, la règle se remet à sonner pour toujours : la recommenter dans le même
+        # commit.
         #
-        # ⚠️ ELLE SE REMET DANS LE MÊME COMMIT QUE LE PREMIER `Cluster` CRÉÉ ICI (authentik est le
-        # candidat connu). Tant qu'elle est commentée, la disparition du PodMonitor ou de son label
-        # `release: kube-prometheus-stack` ne serait signalée par rien.
-        #
-        # Formulation d'origine, à reprendre telle quelle : `absent(...)` sur une métrique servie
+        # Formulation d'origine : `absent(...)` sur une métrique servie
         # inconditionnellement plutôt qu'un `up{job=...}` — le label `job` d'un PodMonitor dépend
         # de la façon dont prometheus-operator le dérive, et une règle qui vise un `job` inexistant
         # ne se déclenche jamais tout en paraissant correcte.
-        # - alert: CNPGMetricsAbsent
-        #   expr: absent(cnpg_collector_pg_wal_archive_status)
-        #   for: 1h
-        #   labels:
-        #     severity: critical
-        #   annotations:
-        #     summary: "cnpg : plus aucune instance PostgreSQL n'est scrapée"
-        #     description: "Aucune métrique d'instance CNPG depuis 1 h : toutes les alertes de sauvegarde sont aveugles. Causes usuelles : PodMonitor `cnpg-instances` supprimé ou privé de son label `release: kube-prometheus-stack`, ou plus aucun pod d'instance en vie."
+        - alert: CNPGMetricsAbsent
+          expr: absent(cnpg_collector_pg_wal_archive_status)
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "cnpg : plus aucune instance PostgreSQL n'est scrapée"
+            description: "Aucune métrique d'instance CNPG depuis 1 h : toutes les alertes de sauvegarde sont aveugles. Causes usuelles : PodMonitor `cnpg-instances` supprimé ou privé de son label `release: kube-prometheus-stack`, ou plus aucun pod d'instance en vie."

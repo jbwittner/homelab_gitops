@@ -7,9 +7,9 @@ Opérateur **CloudNativePG** : gestion déclarative de clusters PostgreSQL (CRD
 déclarées par les applications consommatrices.
 
 > [!IMPORTANT]
-> Aucune base CNPG n'est actuellement déclarée dans le cluster. Les alertes CNPG de sauvegarde
-> restent commentées : les réactiver exige d'abord le plugin barman-cloud, un `ObjectStore` et une
-> `ScheduledBackup` pour la prochaine base.
+> Une seule base CNPG déclarée : [`bankwiz-db`](../bankwiz/README.md) (ns `bankwiz-dev`), base de
+> dev **non sauvegardée**. Les alertes CNPG de sauvegarde restent commentées : les réactiver exige
+> d'abord le plugin barman-cloud, un `ObjectStore` et une `ScheduledBackup`.
 
 Anciens consommateurs archivés : [`forgejo`](../../../archive/forgejo/README.md),
 [`authentik`](../../../archive/authentik/README.md) et [`test-nginx`](../../../archive/test-nginx/README.md).

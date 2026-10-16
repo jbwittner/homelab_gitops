@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: bankwiz-dev
 resources:
   - namespace.yaml
+  - bankwiz-db.yaml
   - deployment.yaml
   - service.yaml
   - bankwiz-api-httproute.yaml

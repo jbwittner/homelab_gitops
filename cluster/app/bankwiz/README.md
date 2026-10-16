@@ -9,7 +9,10 @@ hexagonal). Un sous-dossier par environnement, chacun une `Application` autonome
 ## Fichiers
 
 - `dev/bankwiz-dev.app.yaml` — l'`Application` (kustomize seul, archétype (c)), ns `bankwiz-dev`.
-- `dev/manifests/deployment.yaml` — une réplique, image épinglée par tag fixe + digest.
+- `dev/manifests/deployment.yaml` — une réplique, image épinglée par tag fixe + digest ;
+  identifiants de base injectés depuis le secret `bankwiz-db-app`.
+- `dev/manifests/bankwiz-db.yaml` — `Cluster` CNPG `bankwiz-db` : PostgreSQL 18, une instance,
+  2Gi, base et rôle `bankwiz`. **Non sauvegardée.**
 - `dev/manifests/application.yaml` — configuration Spring de l'environnement (profil actif
   compris), ConfigMap par `configMapGenerator` monté en `/app/config/` : écrase le
   `application.yaml` du jar clé par clé, et toute modification redémarre le pod (hash du nom).
@@ -39,7 +42,18 @@ hexagonal). Un sous-dossier par environnement, chacun une `Application` autonome
 - **Tag fixe `develop-sha-<sha>`, jamais `develop`.** Le tag mobile ne fait rien bouger côté
   ArgoCD : il faudrait un `rollout restart` à la main à chaque push. Monter de version = un commit.
 - **Une seule réplique** : le mot de passe du compte `user` est généré au démarrage, différent par
-  pod. Aucun état : la persistance est en mémoire (`spi-memory`), perdue à chaque redémarrage.
+  pod.
+- **Base CNPG câblée avant l'application.** L'image `develop` actuelle tourne encore sur
+  `spi-memory` (données perdues à chaque redémarrage) : sans JDBC dans le classpath,
+  `spring.datasource.url` (`application.yaml`) et `SPRING_DATASOURCE_USERNAME/PASSWORD` sont
+  ignorés. Ils prennent effet tels quels dès qu'une image avec `spi-postgres` (branche
+  `feat/postgresql` du dépôt applicatif) est déployée — rien à toucher ici.
+- **`bankwiz-db` n'est sauvegardée par rien** : pas de chaîne barman, et son PVC est exclu de
+  kopia par la règle cluster-wide de [velero](../../infra/velero/README.md). Choix assumé pour une
+  base de dev : Flyway recrée le schéma, le profil `dev` rejoue les comptes d'exemple. Nœud perdu
+  ou `Cluster` supprimé = base perdue.
+- **`imageName` épinglé à la main** (`18.6-standard-trixie`) : Renovate ne lit pas ce champ, et le
+  laisser au défaut de l'opérateur exposerait à une montée de majeure lors d'un upgrade de CNPG.
 - Les sondes visent `/public/ping` : l'application n'a pas d'actuator, c'est le seul endpoint
   ouvert sans authentification.
 
@@ -59,6 +73,7 @@ docker buildx imagetools inspect forgejo.wittner.tech/jbwittner/bankwiz-server:d
 
 ```bash
 kubectl -n bankwiz-dev get deploy,pod,svc,httproute
+kubectl -n bankwiz-dev get clusters.postgresql.cnpg.io bankwiz-db   # STATUS=Cluster in healthy state
 kubectl -n gateway get certificate wildcard-dev-lan-tls        # READY=True
 kubectl -n bankwiz-dev logs deploy/bankwiz-api | grep -i 'generated security password'
 curl -s https://bankwiz-api.dev.lan.wittner.tech/public/ping

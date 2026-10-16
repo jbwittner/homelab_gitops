@@ -1,0 +1,55 @@
+# Base PostgreSQL de l'environnement dev, portée par l'opérateur CNPG (composant `cnpg`, qui doit
+# tourner AVANT : sans la CRD `Cluster`, cet objet échoue en `no matches for kind`).
+#
+# L'opérateur en dérive lui-même, sans rien à déclarer ici :
+#   - le service `bankwiz-db-rw` (référencé par `spring.datasource.url` dans application.yaml),
+#   - le secret `bankwiz-db-app` (référencé par `secretKeyRef` dans deployment.yaml), qui contient
+#     les identifiants du rôle `bankwiz` propriétaire de la base `bankwiz`.
+# Ce secret n'est ni scellé ni figé dans Git : il vit et meurt avec la base.
+#
+# ⚠️ AUCUNE SAUVEGARDE, et c'est voulu : base de dev, contenu jetable (Flyway recrée le schéma et
+# le profil `dev` rejoue les comptes d'exemple de `db/dev` au démarrage). Le PVC est en plus exclu
+# de la copie kopia de velero par la règle cluster-wide sur `app.kubernetes.io/managed-by:
+# cloudnative-pg` (cluster/infra/velero/manifests/volume-policies.yaml). Perdre le nœud ou
+# supprimer ce `Cluster` = base perdue. Mettre une base sous sauvegarde : les quatre gestes de
+# cnpg-barman-plugin/README.md §Opérations.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: bankwiz-db
+  namespace: bankwiz-dev
+spec:
+  # Mono-instance : dev, et l'API ne tourne qu'en une réplique.
+  instances: 1
+
+  # ⚠️ Épinglé explicitement, et pas laissé au défaut de l'opérateur : sans `imageName`, une montée
+  # de l'opérateur dont l'image par défaut change de MAJEURE déclencherait une montée de majeure
+  # de la base. 18 = la version contre laquelle l'application est testée (Testcontainers,
+  # compose.yaml du dépôt applicatif). Variante `standard` et non `system` : `system` embarque le
+  # barman-cloud in-tree, retiré de CNPG au profit du plugin.
+  # Renovate ne voit pas ce champ (son manager kubernetes ne lit que `image:`) : monter = à la main.
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-trixie
+
+  bootstrap:
+    initdb:
+      # Nommés comme en local (compose.yaml) plutôt que `app`/`app`, défaut de CNPG.
+      database: bankwiz
+      owner: bankwiz
+
+  storage:
+    # Thin-provisionné (`openebs-lvm-thin`, SC par défaut) et extensible : 2Gi ne réserve rien.
+    size: 2Gi
+
+  # Le collecteur sert ses métriques sans condition sur le port 9187 ; c'est le PodMonitor écrit à
+  # la main dans cnpg-monitoring qui les scrape. `enablePodMonitor` reste à false : le PodMonitor
+  # généré n'aurait pas le label `release: kube-prometheus-stack` et ne serait jamais lu.
+  monitoring:
+    enablePodMonitor: false
+
+  # Pas d'affinité avec l'API, contrairement à l'ancienne `forgejo-db` : l'API n'a aucun volume,
+  # elle peut atterrir n'importe où sans multiplier les domaines de panne. Seule la base est
+  # collée à son nœud (PV node-local).
+  # Anti-affinité coupée : avec une seule instance elle n'a aucun pair à écarter. ⚠️ À remettre à
+  # `true` si `instances` passe à 2 ou plus.
+  affinity:
+    enablePodAntiAffinity: false

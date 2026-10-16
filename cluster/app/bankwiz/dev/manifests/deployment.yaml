@@ -1,4 +1,6 @@
-# Sans état : la persistance est l'adaptateur `spi-memory` (données en dur), rien à monter.
+# Sans état côté pod : rien à monter. La persistance est la base CNPG `bankwiz-db`
+# (bankwiz-db.yaml) dès que l'image embarque l'adaptateur `spi-postgres` ; d'ici là, `spi-memory`
+# (données en dur) et les identifiants injectés ci-dessous sont ignorés.
 # Une seule réplique quand même : Spring Security génère le mot de passe du compte `user` au
 # démarrage, différent à chaque pod — à deux répliques, l'authentification Basic réussirait une
 # requête sur deux.
@@ -42,6 +44,20 @@ spec:
             runAsGroup: 1001
             capabilities:
               drop: ["ALL"]
+          # Identifiants seulement : l'URL est dans application.yaml. Secret généré par CNPG, jamais
+          # scellé. Pas `optional` : sans base, le pod reste en CreateContainerConfigError plutôt que
+          # de démarrer sans persistance.
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: bankwiz-db-app
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bankwiz-db-app
+                  key: password
           ports:
             - name: http
               containerPort: 8080
