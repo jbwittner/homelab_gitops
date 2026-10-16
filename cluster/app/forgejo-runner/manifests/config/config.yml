@@ -51,10 +51,15 @@ runner:
     # désigne la netns DU POD vue depuis l'intérieur de dind : c'est là que sont publiés les
     # ports des conteneurs, et c'est là qu'écoute aussi le proxy de cache du runner.
     TESTCONTAINERS_HOST_OVERRIDE: pod.docker.internal
-    # Ryuk (le ramasse-miettes de testcontainers) monte `/var/run/docker.sock`. Ce socket existe
-    # bien À L'INTÉRIEUR de dind, donc Ryuk fonctionne et n'a pas à être désactivé. Le laisser
-    # actif est ce qui empêche les conteneurs de test de s'accumuler entre deux passages du
-    # sidecar `prune`.
+    # Ryuk (le ramasse-miettes de testcontainers) est un conteneur lancé PAR dind, qui monte le
+    # socket du démon. Testcontainers lui monte par défaut le chemin qu'il voit DANS LE JOB,
+    # `/var/run/docker.sock` — mais ce chemin est résolu côté démon, dans le système de fichiers
+    # de dind, où le socket vit en `/run/docker-sock/docker.sock` (cf. statefulset, args de
+    # dind). Sans cet override, Ryuk démarre sans socket, ne journalise jamais « Started » et
+    # chaque test Testcontainers part en timeout au bout de 60 s, sans aucun log de Ryuk.
+    TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /run/docker-sock/docker.sock
+    # Ryuk reste actif : c'est lui qui empêche les conteneurs de test de s'accumuler entre deux
+    # passages du sidecar `prune`. Cette valeur l'emporte sur l'`env:` des workflows.
     TESTCONTAINERS_RYUK_DISABLED: "false"
 
   # La forge coupe elle-même à 3 h. 1 h ici est une borne plus basse et VOLONTAIRE : un build de

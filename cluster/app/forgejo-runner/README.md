@@ -81,7 +81,11 @@ déduit l'adresse des ports publiés depuis `DOCKER_HOST` ; face à un socket Un
 `localhost`, qui est faux ici. Sans l'override, chaque test part en timeout sur un conteneur
 pourtant démarré — indiscernable d'un service lent à s'initialiser.
 
-Ryuk fonctionne sans réglage : `/var/run/docker.sock` est bien présent dans le job container.
+⚠️ **Ryuk demande `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`.** Ryuk est lancé par dind et monte le
+socket du démon ; Testcontainers lui passe le chemin vu dans le job (`/var/run/docker.sock`), mais
+ce chemin est résolu dans le système de fichiers de dind, où le socket est en
+`/run/docker-sock/docker.sock`. Sans l'override, Ryuk n'a pas de socket, ne journalise jamais
+« Started », et chaque test part en timeout au bout de 60 s — sans le moindre log de Ryuk.
 
 ## Contraintes
 
