@@ -54,8 +54,11 @@ hexagonal). Un sous-dossier par environnement, chacun une `Application` autonome
   ou `Cluster` supprimé = base perdue.
 - **`imageName` épinglé à la main** (`18.6-standard-trixie`) : Renovate ne lit pas ce champ, et le
   laisser au défaut de l'opérateur exposerait à une montée de majeure lors d'un upgrade de CNPG.
-- Les sondes visent `/public/ping` : l'application n'a pas d'actuator, c'est le seul endpoint
-  ouvert sans authentification.
+- **Actuator n'est pas exposé** : `management.server.port: 8081` (`application.yaml`) le sort du
+  port applicatif, et le Service ne publie que 8080 — `/actuator/*` n'existe pas derrière
+  l'HTTPRoute. Les sondes visent le port `management` du pod directement : groupes Kubernetes
+  `/actuator/health/liveness` et `/readiness`, qui ignorent volontairement la base (une base
+  indisponible ne tue ni ne retire le pod).
 
 ## Opérations
 
@@ -77,6 +80,8 @@ kubectl -n bankwiz-dev get clusters.postgresql.cnpg.io bankwiz-db   # STATUS=Clu
 kubectl -n gateway get certificate wildcard-dev-lan-tls        # READY=True
 kubectl -n bankwiz-dev logs deploy/bankwiz-api | grep -i 'generated security password'
 curl -s https://bankwiz-api.dev.lan.wittner.tech/public/ping
+curl -s -o /dev/null -w '%{http_code}\n' https://bankwiz-api.dev.lan.wittner.tech/actuator/health   # 404 : non exposé
+kubectl -n bankwiz-dev port-forward deploy/bankwiz-api 8081   # puis curl localhost:8081/actuator/info
 ```
 
 Le mot de passe du compte `user` change à **chaque** redémarrage du pod : le relire dans les logs.

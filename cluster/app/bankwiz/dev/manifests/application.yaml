@@ -17,3 +17,8 @@ server:
   # en `http://` (serveur déclaré par Swagger UI, redirections), bloquées par le navigateur en
   # contenu mixte. Envoy pose X-Forwarded-Proto/Host.
   forward-headers-strategy: "framework"
+management:
+  server:
+    # Actuator sorti du port applicatif : le Service n'expose que 8080, donc rien sous `/actuator`
+    # n'est joignable par l'HTTPRoute. Les sondes visent ce port directement (deployment.yaml).
+    port: 8081

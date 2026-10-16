@@ -62,24 +62,33 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
-          # Pas d'actuator dans l'application : `/public/ping` est le seul endpoint ouvert sans
-          # authentification (cf. SecurityConfiguration du dépôt applicatif).
+            # Actuator, sur son propre port (`management.server.port`, application.yaml). Volontairement
+            # absent de service.yaml : ni le Service ni donc l'HTTPRoute n'y mènent, seul le kubelet
+            # (sondes) et ce qui vise l'IP du pod l'atteignent.
+            - name: management
+              containerPort: 8081
+              protocol: TCP
+          # Groupes de santé Kubernetes d'actuator, ouverts sans authentification (cf.
+          # SecurityConfiguration du dépôt applicatif). Ils ne reflètent que l'état interne de
+          # l'application, pas la base : une base indisponible ne doit ni tuer le pod (liveness)
+          # ni le sortir du Service (readiness) — redémarrer n'y changerait rien.
+          # La startup vise la liveness, comme le recommande la doc Spring Boot.
           startupProbe:
             httpGet:
-              path: /public/ping
-              port: http
+              path: /actuator/health/liveness
+              port: management
             periodSeconds: 5
             failureThreshold: 24
           livenessProbe:
             httpGet:
-              path: /public/ping
-              port: http
+              path: /actuator/health/liveness
+              port: management
             periodSeconds: 30
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /public/ping
-              port: http
+              path: /actuator/health/readiness
+              port: management
             periodSeconds: 10
             failureThreshold: 3
           # L'image fixe -XX:MaxRAMPercentage=75 : le tas prend 75 % de la limite mémoire.
