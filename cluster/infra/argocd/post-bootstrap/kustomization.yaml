@@ -28,23 +28,17 @@ resources:
 #   - argocd-notifications.sealed.yaml
   # --- DÉSACTIVÉ : authentik non déployé. ---
 #   - argocd-oidc.sealed.yaml
-  # `repo-homelab-gitops.sealed.yaml` : credential SSH (deploy key read-only) avec lequel
-  # `argocd-repo-server` clone CE dépôt, privé depuis le passage en visibilité restreinte.
+  # `repo-homelab-gitops-github.sealed.yaml` : credential GitHub App (Contents read-only, installée
+  # sur ce seul dépôt) avec lequel `argocd-repo-server` clone https://github.com/jbwittner/homelab_gitops.git.
   # ⚠️ Il ne suffit PAS à l'amorçage : à ce moment-là ni la CRD `SealedSecret` n'existe, ni le
   # dépôt n'est lisible. Le Secret est posé à la main avant `kubectl apply -f cluster/root.yaml`
   # (cf. README §Accès au dépôt privé), et ce SealedSecret ne fait que le REPRENDRE en gestion —
   # ce que permet l'annotation `sealedsecrets.bitnami.com/managed` qu'il porte.
-  - repo-homelab-gitops.sealed.yaml
-  # `repo-homelab-gitops-github.sealed.yaml` : credential GitHub App vers
-  # `https://github.com/jbwittner/homelab_gitops.git`, posé AVANT la réécriture des `repoURL`
-  # (bascule Forgejo → GitHub) pour qu'Argo l'ait déjà quand les sources changent.
-  # ⚠️ Commenté tant que le fichier scellé n'existe pas : un `resources:` pointant un fichier
-  # manquant casse le build entier, donc l'Application `argocd`. Décommenter dans le commit qui
-  # ajoute le `.sealed.yaml` (cf. `repo-homelab-gitops-github.secret.example.yaml`).
   - repo-homelab-gitops-github.sealed.yaml
   # `argocd-webhook.sealed.yaml` : clé `webhook.github.secret` AJOUTÉE à `argocd-secret` (mode
-  # `patch`, cf. `../manifests/argocd-secret.yaml`). HMAC partagé avec le webhook « push » de la
-  # forge, qui déclenche un refresh immédiat au lieu d'attendre le polling de 3 min.
+  # `patch`, cf. `../manifests/argocd-secret.yaml`). Plus AUCUN webhook ne l'utilise depuis la
+  # bascule sur GitHub (qui ne joint pas le LAN) — gardée parce que `/api/webhook` reste joignable
+  # sans session depuis le LAN, et que sans clé ArgoCD accepterait n'importe quelle livraison.
   # ⚠️ Ici et non dans `manifests/` pour la raison habituelle : la CRD `SealedSecret` (wave -8)
   # n'existe pas à l'amorçage. L'ANNOTATION qui autorise ce patch, elle, est bien dans
   # `manifests/` — c'est un simple Secret, et elle doit être posée sur l'objet existant.

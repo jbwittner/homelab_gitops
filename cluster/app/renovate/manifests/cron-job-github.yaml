@@ -41,6 +41,7 @@ spec:
               # `renovate-forgejo`, en autodiscover, qui le prend en charge — sans rien à
               # déclarer, le dépôt étant visible par son compte bot.
               args:
+                - jbwittner/homelab_gitops
                 - jbwittner/homelab_terraform
               env:
                 - name: LOG_LEVEL
