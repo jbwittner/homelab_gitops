@@ -19,7 +19,7 @@ resources:
 # d'ici ni d'ailleurs : il vit dans /opt/data et, pour la part durable seulement, dans le dépôt
 # homelab_hermes, que rien ne rejoue automatiquement (cf. README §Versionnement).
 # Le suffixe de hash réécrit la référence dans le StatefulSet et déclenche un rollout lors d'une
-# modification du bootstrap ou d'un rescelle­ment de hermes-env.
+# modification du bootstrap ou d'un rescellement de hermes-env.
 configMapGenerator:
   - name: hermes-bootstrap
     files:
