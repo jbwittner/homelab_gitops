@@ -19,7 +19,7 @@ spec:
         releaseName: cnpg
         valueFiles:
           - $values/cluster/app/cnpg/helm-values.yaml
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
   destination:

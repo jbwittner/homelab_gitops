@@ -37,7 +37,7 @@ spec:
   # la wave 2 suffit à l'ordonner, contrairement aux composants `*-monitoring` de `cluster/infra/`
   # qui, eux, dépendent cross-tier.
   source:
-    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
     path: cluster/app/cnpg-monitoring/manifests
   destination:

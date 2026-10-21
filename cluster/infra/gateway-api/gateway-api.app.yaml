@@ -14,7 +14,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
     path: cluster/infra/gateway-api/manifests
   destination:

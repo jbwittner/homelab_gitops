@@ -19,11 +19,11 @@ spec:
         releaseName: kube-prometheus-stack
         valueFiles:
           - $values/cluster/app/kube-prometheus-stack/helm-values.yaml
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
     # Ressources annexes : namespace, SealedSecret du compte admin Grafana, HTTPRoute.
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/app/kube-prometheus-stack/manifests
   destination:

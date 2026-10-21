@@ -35,11 +35,11 @@ spec:
         releaseName: forgejo
         valueFiles:
           - $values/cluster/app/forgejo/helm-values.yaml
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
     # Ressources annexes : namespace, Cluster CNPG, SealedSecret admin, HTTPRoute.
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/app/forgejo/manifests
   destination:

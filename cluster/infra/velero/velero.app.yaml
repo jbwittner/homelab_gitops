@@ -35,10 +35,10 @@ spec:
         releaseName: velero
         valueFiles:
           - $values/cluster/infra/velero/helm-values.yaml
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       path: cluster/infra/velero/manifests
   destination:
