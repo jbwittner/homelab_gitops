@@ -65,8 +65,12 @@ avoir 7 jours révolus avant qu'une branche ou une PR soit créée. ⚠️ Ce fi
 dépôt** : avec un jeton d'installation, Renovate liste `/installation/repositories`, soit
 exactement les dépôts cochés dans l'installation de l'App (GitHub → Settings → Applications →
 Installed GitHub Apps → l'App → Configure → *Only select repositories*). Ajouter ou retirer un
-dépôt = le cocher ou le décocher là, **sans commit ici**. Au 2026-10-21 : `homelab_gitops`,
-`homelab_terraform`.
+dépôt = le cocher ou le décocher là, **sans commit ici**. La liste n'est volontairement pas
+recopiée ici : elle dériverait. Elle se lit dans GitHub, ou en tête de chaque run :
+
+```bash
+kubectl -n renovate logs job/<job> | grep -A8 'Autodiscovered repositories'
+```
 
 Pourquoi là et pas dans une liste `args` avec une App installée partout : l'installation est
 aussi le périmètre des **droits**. Installée sur « All repositories », l'App aurait l'écriture sur
