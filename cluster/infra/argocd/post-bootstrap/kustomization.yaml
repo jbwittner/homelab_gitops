@@ -35,6 +35,13 @@ resources:
   # (cf. README §Accès au dépôt privé), et ce SealedSecret ne fait que le REPRENDRE en gestion —
   # ce que permet l'annotation `sealedsecrets.bitnami.com/managed` qu'il porte.
   - repo-homelab-gitops.sealed.yaml
+  # `repo-homelab-gitops-github.sealed.yaml` : credential GitHub App vers
+  # `https://github.com/jbwittner/homelab_gitops.git`, posé AVANT la réécriture des `repoURL`
+  # (bascule Forgejo → GitHub) pour qu'Argo l'ait déjà quand les sources changent.
+  # ⚠️ Commenté tant que le fichier scellé n'existe pas : un `resources:` pointant un fichier
+  # manquant casse le build entier, donc l'Application `argocd`. Décommenter dans le commit qui
+  # ajoute le `.sealed.yaml` (cf. `repo-homelab-gitops-github.secret.example.yaml`).
+  - repo-homelab-gitops-github.sealed.yaml
   # `argocd-webhook.sealed.yaml` : clé `webhook.github.secret` AJOUTÉE à `argocd-secret` (mode
   # `patch`, cf. `../manifests/argocd-secret.yaml`). HMAC partagé avec le webhook « push » de la
   # forge, qui déclenche un refresh immédiat au lieu d'attendre le polling de 3 min.
