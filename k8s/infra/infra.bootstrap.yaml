@@ -28,9 +28,6 @@ spec:
   syncPolicy:
     automated:
       selfHeal: true
-      # ⚠️ TEMPORAIRE (2026-10-22) — renommage k8s/ → k8s/. Un glob vu vide pendant la bascule
-      # supprimerait les Applications, et leur finalizer les ressources (PVC compris). Remis à
-      # `true` une fois `root` réappliqué sur `k8s/` et tout revenu Synced/Healthy.
-      prune: false
+      prune: true
     syncOptions:
       - ServerSideApply=true
