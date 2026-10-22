@@ -21,8 +21,8 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 
 # 3. Credential du dépôt — ⚠️ LE DÉPÔT EST PRIVÉ, ce geste n'est pas optionnel et doit précéder
 #    l'étape 6 : sans lui `root.yaml` échoue dès son premier fetch, et rien ne se déploie.
-#    Procédure complète (création du jeton Forgejo, scellement) : §Accès au dépôt privé.
-kubectl apply -f cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml \
+#    Procédure complète (GitHub App, scellement) : §Accès au dépôt privé.
+kubectl apply -f cluster/infra/argocd/post-bootstrap/repo-homelab-gitops-github.secret.yaml \
   --server-side --force-conflicts
 
 # 4. Mot de passe admin initial (à changer ensuite, cf. §Compte admin local)
@@ -56,11 +56,11 @@ kubectl apply -f cluster/root.yaml
   triggers, souscriptions globales (cf. §Notifications)
 - `post-bootstrap/argocd-httproute.yaml` — UI via `shared-gw` (cf.
   [doc/reseau.md](../../../doc/reseau.md))
-- `post-bootstrap/repo-homelab-gitops.sealed.yaml` — `SealedSecret` `repo-homelab-gitops`, le
-  jeton Forgejo avec lequel `argocd-repo-server` clone **ce dépôt**, privé (cf. §Accès au dépôt
-  privé). ⚠️ Il ne suffit pas à l'amorçage : le Secret est d'abord posé à la main (étape 3 du
+- `post-bootstrap/repo-homelab-gitops-github.sealed.yaml` — `SealedSecret`
+  `repo-homelab-gitops-github`, le credential GitHub App avec lequel `argocd-repo-server` clone
+  **ce dépôt**, privé (cf. §Accès au dépôt privé). ⚠️ Il ne suffit pas à l'amorçage : le Secret est d'abord posé à la main (étape 3 du
   TL;DR), ce SealedSecret ne fait que le **reprendre en gestion**
-- `post-bootstrap/repo-homelab-gitops.secret.example.yaml` — template de scellement, versionné et
+- `post-bootstrap/repo-homelab-gitops-github.secret.example.yaml` — template de scellement, versionné et
   sans valeur, porteur de la procédure. Jamais dans `kustomization.yaml`
 - `manifests/argocd-notifications-secret.yaml` — patch qui pose
   `sealedsecrets.bitnami.com/managed: "true"` sur le Secret livré **vide** par l'upstream, sans
@@ -68,10 +68,10 @@ kubectl apply -f cluster/root.yaml
 - `manifests/argocd-secret.yaml` — patch qui pose `sealedsecrets.bitnami.com/patch: "true"` sur
   `argocd-secret`. ⚠️ **`patch` et non `managed`**, et l'écart est load-bearing : `managed`
   remplacerait l'objet entier, donc `server.secretkey` et le hash admin qu'Argo y écrit lui-même
-  (cf. §Webhook Forgejo et l'encadré §Pourquoi le patch survit à la sync)
+  (cf. §Webhook et l'encadré §Pourquoi le patch survit à la sync)
 - `post-bootstrap/argocd-webhook.sealed.yaml` — `SealedSecret` **`argocd-secret`**, clé
-  `webhook.github.secret` : le HMAC partagé avec le webhook « push » de la forge
-  (cf. §Webhook Forgejo)
+  `webhook.github.secret` : le HMAC qui ferme `/api/webhook` aux livraisons non signées, aucun
+  webhook n'étant branché (cf. §Webhook)
 - `post-bootstrap/argocd-webhook.secret.example.yaml` — template de scellement, versionné et sans
   valeur, porteur de la procédure. Jamais dans `kustomization.yaml`
 - `post-bootstrap/argocd-oidc.sealed.yaml` — `SealedSecret` `argocd-oidc`, clé `client-secret`
@@ -98,11 +98,11 @@ kubectl apply -f cluster/root.yaml
 >
 > | Objet | CRD posée par | Wave |
 > |---|---|---|
-> | `SealedSecret` (`repo-homelab-gitops`) | [sealed-secrets](../sealed-secrets/README.md) | `-8` |
+> | `SealedSecret` (`repo-homelab-gitops-github`) | [sealed-secrets](../sealed-secrets/README.md) | `-8` |
 > | `SealedSecret` (`argocd-secret`, webhook) | [sealed-secrets](../sealed-secrets/README.md) | `-8` |
 > | `HTTPRoute` (UI) | [gateway-api](../gateway-api/README.md) | `-10` |
 >
-> ⚠️ Seuls `repo-homelab-gitops.sealed.yaml` et `argocd-webhook.sealed.yaml` sont effectivement
+> ⚠️ Seuls `repo-homelab-gitops-github.sealed.yaml` et `argocd-webhook.sealed.yaml` sont effectivement
 > dans le `kustomization.yaml` ; ceux d'OIDC et des notifications sont présents dans le dossier
 > mais **commentés**.
 >
@@ -122,100 +122,71 @@ kubectl apply -f cluster/root.yaml
 
 ## Accès au dépôt privé
 
-La source du GitOps est la forge auto-hébergée **`https://forgejo.wittner.tech`**, et
-`jbwittner/homelab_gitops` y est **privé**. Les **29** `repoURL` de `cluster/` (plus 6 sous
-`archive/`, inertes) sont en `https://forgejo.wittner.tech/jbwittner/homelab_gitops.git` et
-`argocd-repo-server` s'authentifie avec un **jeton d'accès personnel Forgejo en lecture seule**
-(`read:repository`), porté par le Secret `repo-homelab-gitops`
-(`argocd.argoproj.io/secret-type: repository`, ns `argocd`).
-
-> [!NOTE]
-> **Ce n'est plus SSH, et plus GitHub.** Avant la bascule, les `repoURL` pointaient
-> `git@github.com:jbwittner/homelab_gitops.git` et le credential était une **deploy key SSH
-> `ed25519`**. Forgejo tourne en **full HTTPS, SSH désactivé** (`DISABLE_SSH: true`) : il n'y a
-> plus de clé, plus de `ssh-keygen`, plus de `argocd-deploy-key` à la racine du dépôt.
-> GitHub subsiste en **miroir sortant, lecture seule** (cf. `README.md` racine) — c'est une copie
-> hors site, pas une source. La deploy key `argocd-bleu-kalecgos` côté GitHub **n'a plus d'usage :
-> la révoquer.**
+La source du GitOps est **`https://github.com/jbwittner/homelab_gitops.git`**, dépôt **privé**.
+Toutes les `repoURL` du dépôt qui le visent portent cette chaîne exacte, et
+`argocd-repo-server` s'authentifie sous l'identité d'une **GitHub App** installée sur ce seul
+dépôt, permission `Contents: Read-only`. Le credential est le Secret `repo-homelab-gitops-github`
+(`argocd.argoproj.io/secret-type: repository`, ns `argocd`) : App ID, Installation ID et clé
+privée. ArgoCD en tire lui-même des jetons d'installation d'une heure — rien n'expire à la main.
 
 > [!WARNING]
-> **C'est le point de défaillance unique du moteur GitOps.** Si ce Secret disparaît ou si le jeton
-> est révoqué côté Forgejo, **toutes** les Applications tombent en `ComparisonError` d'un coup —
-> `argocd` compris, puisqu'il est self-managed. Autrement dit : l'outil avec lequel on
+> **C'est le point de défaillance unique du moteur GitOps.** Si ce Secret disparaît, si l'App est
+> désinstallée ou sa clé révoquée, **toutes** les Applications tombent en `ComparisonError` d'un
+> coup — `argocd` compris, puisqu'il est self-managed. Autrement dit : l'outil avec lequel on
 > diagnostiquerait est aussi la victime. Symptôme côté logs :
 > `kubectl -n argocd logs deploy/argocd-repo-server`, en `authentication required` ou HTTP 401.
 >
-> ⚠️ Un jeton valide mais **sans droit de lecture sur le dépôt** ne rend pas 403 mais **404** :
-> Forgejo masque l'existence des dépôts privés. Le symptôme ressemble à une faute de frappe dans
-> l'URL, pas à un problème de droits.
+> ⚠️ Une installation qui **ne couvre pas le dépôt** ne rend pas 403 mais **404** : GitHub masque
+> l'existence des dépôts privés. Le symptôme ressemble à une faute de frappe dans l'URL, pas à un
+> problème de droits.
 
-**La forge n'est plus dans ce cluster, et c'est la condition du montage.** Forgejo tourne en Docker
-sur une machine dédiée (cf. [`doc/forgejo-docker-bascule-et-sauvegarde.md`](../../../doc/forgejo-docker-bascule-et-sauvegarde.md)).
-Tant qu'elle était un composant `cluster/app/`, faire d'elle la source du GitOps aurait créé une
-dépendance circulaire : ArgoCD lisant un dépôt servi par un composant qu'ArgoCD déploie, et un
-cluster à froid sans aucune source. Sortir la forge du cluster n'était pas une préférence
-d'hébergement, c'était le prérequis.
-
-**Chemin réseau.** `argocd-repo-server` sort du cluster pour joindre `forgejo.wittner.tech` : DNS
-public → edge Cloudflare → tunnel → reverse proxy `192.168.1.50` → la machine de la forge.
-Conséquence à connaître : **Cloudflare est une dépendance dure de la synchro GitOps**. Une panne
-côté tunnel ne casse rien de ce qui tourne (les objets restent en place), mais gèle toute
+**Chemin réseau.** `argocd-repo-server` sort du cluster vers `github.com` en HTTPS. Conséquence à
+connaître : **GitHub est une dépendance dure de la synchro GitOps**. Une panne ou une coupure
+Internet ne casse rien de ce qui tourne (les objets restent en place), mais gèle toute
 réconciliation et fait passer les Applications en `ComparisonError`.
 
-**TLS : rien à faire.** Le certificat servi est le wildcard Let's Encrypt `*.wittner.tech` — une CA
-publique, déjà dans le magasin du conteneur `argocd-repo-server`. Pas de `tls-client-cert`, pas de
-CA à injecter, et **`argocd-ssh-known-hosts-cm` ne joue plus aucun rôle** ici (il reste livré par
-l'install upstream, simplement inutilisé pour ce dépôt).
+**TLS : rien à faire.** Le certificat de `github.com` est signé par une CA publique, déjà dans le
+magasin du conteneur `argocd-repo-server`. Pas de `tls-client-cert`, pas de CA à injecter, et
+**`argocd-ssh-known-hosts-cm` ne joue aucun rôle** ici : une GitHub App ne s'authentifie qu'en
+HTTPS (le ConfigMap reste livré par l'install upstream, simplement inutilisé pour ce dépôt).
 
 **Pourquoi un geste manuel dans le bootstrap.** Le credential doit exister **avant le premier fetch
 d'ArgoCD** : à cet instant ni la CRD `SealedSecret` (posée en wave `-8`) n'existe, ni le dépôt
 n'est lisible. Un `SealedSecret` ne peut donc pas servir à ce moment-là. On casse l'œuf-poule avec
 l'annotation `sealedsecrets.bitnami.com/managed: "true"` posée sur le Secret manuel : le contrôleur
 sealed-secrets accepte alors d'écrire dans un objet qu'il n'a pas créé, et
-`post-bootstrap/repo-homelab-gitops.sealed.yaml` le **reprend en gestion** dès la wave `-1`. Après
-quoi la rotation repasse entièrement par Git. Même mécanique que
+`post-bootstrap/repo-homelab-gitops-github.sealed.yaml` le **reprend en gestion** dès la wave `-1`.
+Après quoi la rotation repasse entièrement par Git. Même mécanique que
 `manifests/argocd-notifications-secret.yaml` (cf. §Notifications).
 
 ⚠️ `--server-side` sur ce `kubectl apply` n'est pas cosmétique : en client-side, kubectl recopie
-l'objet entier — donc le **jeton en clair** — dans l'annotation
+l'objet entier — donc la **clé privée en clair** — dans l'annotation
 `kubectl.kubernetes.io/last-applied-configuration`, que le scellement ne nettoie jamais. Réparation
 si le geste a déjà été fait sans le drapeau :
 
 ```bash
-kubectl -n argocd annotate secret repo-homelab-gitops \
+kubectl -n argocd annotate secret repo-homelab-gitops-github \
   kubectl.kubernetes.io/last-applied-configuration-
 ```
 
 ### Génération / rotation
 
-Procédure complète en commentaires dans
-`post-bootstrap/repo-homelab-gitops.secret.example.yaml`. En résumé :
+Procédure complète — création de l'App, clé privée, installation, production du clair,
+scellement, rotation — en commentaires dans
+`post-bootstrap/repo-homelab-gitops-github.secret.example.yaml`. Ce qui s'y joue d'irréversible :
 
-```bash
-# 1. Créer le jeton DANS Forgejo, sur un compte BOT (pas le compte humain) :
-#      Paramètres → Applications → Générer un nouveau jeton
-#      Nom     : argocd-bleu-kalecgos
-#      Portées : read:repository — et RIEN d'autre. ArgoCD ne fait que lire.
-#    ⚠️ Le compte bot doit avoir accès au dépôt, sinon 404 (pas 403).
-#    ⚠️ Le jeton n'est affiché QU'UNE FOIS. Pas de relecture ensuite.
-#    ⚠️ En rotation : créer le NOUVEAU jeton avant de révoquer l'ancien, sinon fenêtre
-#    d'indisponibilité pendant laquelle plus rien ne synchronise.
+- **Permissions de l'App : `Contents: Read-only`, et rien d'autre.** Un droit en écriture ferait
+  de ce credential le seul du dispositif capable de réécrire l'état désiré du cluster.
+- **Installation sur `homelab_gitops` seul**, jamais « All repositories » : ce serait donner au
+  cluster la lecture de tous les dépôts privés du compte.
+- **En rotation, la nouvelle clé d'abord** : générer, resceller, attendre que le Secret soit à jour
+  dans le cluster, **puis** supprimer l'ancienne côté GitHub. Dans l'autre ordre, fenêtre pendant
+  laquelle plus rien ne synchronise.
 
-# 2. Template → clair (gitignoré par *.secret.yaml) → cluster → scellé
-cp cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.example.yaml \
-   cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml
-# y remplacer les deux `REMPLACER` (username = compte bot, password = jeton), puis :
-kubectl apply -f cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml \
-  --server-side --force-conflicts
-kubeseal --controller-name sealed-secrets --controller-namespace sealed-secrets --format yaml \
-  < cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml \
-  > cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.sealed.yaml
-rm cluster/infra/argocd/post-bootstrap/repo-homelab-gitops.secret.yaml
-```
-
-⚠️ Le `SealedSecret` est chiffré pour le couple (`repo-homelab-gitops`, `argocd`) : le renommer ou
-le déplacer de namespace le rend indéchiffrable. ⚠️ Vérifier le **contenu** du `.sealed.yaml`, pas
-son existence — un fichier scellé vide ne fait pas échouer `kustomize build`, il ne rend rien.
+⚠️ Le `SealedSecret` est chiffré pour le couple (`repo-homelab-gitops-github`, `argocd`) : le
+renommer ou le déplacer de namespace le rend indéchiffrable. ⚠️ Vérifier le **contenu** du
+`.sealed.yaml`, pas son existence — un fichier scellé vide ne fait pas échouer `kustomize build`,
+il ne rend rien.
 
 ⚠️ Le champ `url` du Secret doit être **strictement** la chaîne des `repoURL`, suffixe `.git`
 compris : ArgoCD apparie credential et source par égalité d'URL normalisée. Un décalage ne produit
@@ -231,11 +202,11 @@ aucune erreur de configuration, juste un clone anonyme — qui rendra 404, le d�
 > kubectl apply -f cluster/root.yaml --server-side --force-conflicts
 > ```
 >
-> **C'est le piège numéro un de la bascule GitHub → Forgejo**, et il s'est déjà produit au passage
-> en dépôt privé : les `repoURL` étaient à jour dans Git, les Applications enfants avaient été
-> mises à jour par `root`… et `root` lui-même clonait encore l'ancienne URL. Tout était
-> `Synced`/`Healthy`, parce que l'ancienne source répondait toujours. Contrôle qui l'attrape —
-> **une seule ligne attendue, en `https://forgejo.wittner.tech/`** :
+> **C'est le piège numéro un d'un changement de source**, et il s'est déjà produit : les
+> `repoURL` étaient à jour dans Git, les Applications enfants avaient été mises à jour par
+> `root`… et `root` lui-même clonait encore l'ancienne URL. Tout était `Synced`/`Healthy`, parce
+> que l'ancienne source répondait toujours. Contrôle qui l'attrape — **une seule ligne attendue,
+> en `https://github.com/`** :
 >
 > ```bash
 > kubectl -n argocd get applications -o jsonpath='{range .items[*]}{.spec.source.repoURL}{"\n"}{range .spec.sources[*]}{.repoURL}{"\n"}{end}{end}' \
@@ -249,44 +220,29 @@ aucune erreur de configuration, juste un clone anonyme — qui rendra 404, le d�
 >
 > ```bash
 > kubectl -n argocd exec deploy/argocd-repo-server -- \
->   git ls-remote https://forgejo.wittner.tech/jbwittner/homelab_gitops.git   # ✗ INUTILE
+>   git ls-remote https://github.com/jbwittner/homelab_gitops.git   # ✗ INUTILE
 > ```
 >
 > Cette commande échoue **toujours** — en `authentication required` ou 404 —, y compris quand tout
 > est correct. ArgoCD n'écrit jamais le credential sur le disque du conteneur : il le matérialise à
 > la volée, par clone. Un `git` lancé à la main dans le pod n'hérite de rien et teste le vide.
 > C'est un faux négatif, pas un symptôme — et il coûte du temps parce qu'il ressemble exactement à
-> un jeton invalide.
+> un credential invalide.
 
-**1. Le jeton est-il accepté par Forgejo ?** Depuis le poste, avec les valeurs sorties du Secret.
-Le `credential.helper` inline évite de mettre le jeton dans l'URL — donc dans l'historique du shell
-et dans les logs du serveur :
+**1. La portée de l'App est-elle bien en lecture seule, sur un seul dépôt ?** Un credential trop
+large passe tous les tests ci-dessous sans que rien ne le signale. Le contrôle se fait dans l'UI
+GitHub, pas depuis le cluster : page de l'App → *Permissions & events* (seul `Contents:
+Read-only`, plus le `Metadata` imposé), et `github.com/settings/installations/<ID>` (seul
+`homelab_gitops` sélectionné).
 
-```bash
-U=$(kubectl -n argocd get secret repo-homelab-gitops -o jsonpath='{.data.username}' | base64 -d)
-T=$(kubectl -n argocd get secret repo-homelab-gitops -o jsonpath='{.data.password}' | base64 -d)
-git -c credential.helper= \
-    -c credential.helper='!f(){ echo "username=$U"; echo "password=$T"; }; f' \
-    ls-remote https://forgejo.wittner.tech/jbwittner/homelab_gitops.git HEAD
-unset U T
-```
-
-Attendu : le SHA de `HEAD`. Le premier `-c credential.helper=` (vide) est load-bearing — sans lui,
-le trousseau du poste (`osxkeychain` sur macOS) répond avant l'helper inline et le test réussit
-**sans avoir rien prouvé** sur le jeton du cluster.
-
-**2. La portée du jeton est-elle bien en lecture seule ?** Un jeton trop large passe le test 1 sans
-que rien ne le signale. Le contrôle se fait dans l'UI Forgejo (compte bot → Paramètres →
-Applications), pas depuis le cluster : seule `read:repository` doit être cochée.
-
-**3. ArgoCD, lui, voit-il le credential ?** C'est la seule vérification qui exerce le vrai chemin :
+**2. ArgoCD, lui, voit-il le credential ?** C'est la seule vérification qui exerce le vrai chemin :
 
 ```bash
 argocd repo list            # CONNECTION STATUS = Successful
 # ou UI : Settings → Repositories
 ```
 
-**4. Bout en bout** — aucune Application en `ComparisonError` :
+**3. Bout en bout** — aucune Application en `ComparisonError` :
 
 ```bash
 kubectl -n argocd annotate app root argocd.argoproj.io/refresh=hard --overwrite
@@ -294,99 +250,48 @@ kubectl -n argocd get applications
 kubectl -n argocd logs deploy/argocd-repo-server --tail=50 | grep -i 'auth\|fatal\|401\|404'
 ```
 
-**5. Le `SealedSecret` a bien repris l'objet posé à la main** (sinon la rotation par Git est un
+**4. Le `SealedSecret` a bien repris l'objet posé à la main** (sinon la rotation par Git est un
 leurre : le Secret reste celui du bootstrap) :
 
 ```bash
-kubectl -n argocd get secret repo-homelab-gitops -o jsonpath='{.metadata.ownerReferences}'
+kubectl -n argocd get secret repo-homelab-gitops-github -o jsonpath='{.metadata.ownerReferences}'
 ```
 
 
-## Webhook Forgejo — sync immédiate sur push
+## Webhook — aucun, la sync se fait au polling
 
-Sans webhook, ArgoCD ne découvre un commit qu'à son **polling**, toutes les **3 min** par
-Application (`timeout.reconciliation`, défaut amont non surchargé ici). Le webhook « push » de la
-forge appelle `/api/webhook` sur `argocd-server`, qui invalide immédiatement le cache du dépôt et
-rafraîchit **toutes les Applications dont le `repoURL` et le `targetRevision` correspondent au
-payload** — c'est-à-dire ici la totalité du parc, les 32 `repoURL` pointant le même dépôt sur
-`main`. Celles en `automated` enchaînent la sync dans la foulée.
+ArgoCD découvre un commit à son **polling**, toutes les **3 min** par Application
+(`timeout.reconciliation`, défaut amont non surchargé ici). **Aucun webhook ne l'accélère** :
+GitHub ne joint pas le LAN, et `argocd.lan.wittner.tech` n'est servi qu'au reverse proxy
+`192.168.1.50`. L'App GitHub a d'ailleurs son webhook désactivé (cf.
+`post-bootstrap/repo-homelab-gitops-github.secret.example.yaml`, étape 1).
 
 > [!IMPORTANT]
-> **Le webhook est une accélération, jamais un mécanisme de correction.** Le polling reste le
-> filet : une livraison perdue (forge arrêtée, proxy en panne, secret désaligné) coûte **3 min de
-> retard**, pas une désynchronisation. Corollaire à tenir : ce n'est pas une raison d'allonger
-> `timeout.reconciliation`, qui est la seule chose qui rattrape une livraison manquée.
+> **Le polling est le mécanisme, pas un filet.** Allonger `timeout.reconciliation` retarde
+> d'autant chaque déploiement, et il n'y a rien derrière pour rattraper. Un commit poussé se voit
+> au plus 3 min plus tard ; pour l'avoir tout de suite :
+> `kubectl -n argocd annotate app <nom> argocd.argoproj.io/refresh=normal --overwrite`.
 
-### Le chemin
+### Pourquoi `webhook.github.secret` reste posé
 
-Forge (Docker, **hors cluster**) → `https://argocd.lan.wittner.tech/api/webhook` → reverse proxy
-`192.168.1.50` → `shared-gw` → `argocd-server`.
+`/api/webhook` **n'est pas protégé par une session ArgoCD** : c'est un endpoint anonyme, par
+conception, et il reste joignable depuis le LAN par l'`HTTPRoute` de l'UI
+(`post-bootstrap/argocd-httproute.yaml`, `PathPrefix: /`). Ce qui l'authentifie est un HMAC — et
+**sans clé configurée, ArgoCD accepte toute livraison non signée** : n'importe qui sur le LAN
+pourrait déclencher en boucle des refresh de tout le parc, donc des clones sur
+`argocd-repo-server`. La clé `webhook.github.secret`, posée par
+`post-bootstrap/argocd-webhook.sealed.yaml`, ferme cette porte sans que personne ne la connaisse.
 
-**Aucun objet réseau n'est ajouté** : c'est l'`HTTPRoute` de l'UI (`post-bootstrap/argocd-httproute.yaml`,
-`PathPrefix: /`), et le hostname est déjà déclaré au proxy puisque l'UI répond. Si l'UI s'ouvre
-depuis le LAN, le chemin du webhook est le même — cf. [doc/reseau.md](../../../doc/reseau.md).
+⚠️ Le nom compte : ArgoCD ne connaît que `webhook.github.secret`, `webhook.gitlab.secret`,
+`webhook.gogs.secret`, `webhook.bitbucket.uuid`, `webhook.bitbucketserver.secret`,
+`webhook.azuredevops.username`/`.password`. Toute autre clé est **ignorée en silence** — et
+l'endpoint redevient ouvert sans que rien ne le dise.
 
-⚠️ `/api/webhook` **n'est pas protégé par une session ArgoCD** : c'est un endpoint anonyme, par
-conception. Ce qui l'authentifie est le HMAC ci-dessous — et sans clé configurée, ArgoCD accepte
-**toute** livraison non signée.
-
-### Pourquoi la clé s'appelle `webhook.github.secret`
-
-ArgoCD n'a **pas** de parseur Forgejo. Ses clés connues sont `webhook.github.secret`,
-`webhook.gitlab.secret`, `webhook.gogs.secret`, `webhook.bitbucket.uuid`,
-`webhook.bitbucketserver.secret`, `webhook.azuredevops.username`/`.password` — et rien d'autre.
-Une clé `webhook.gitea.secret` serait **ignorée en silence**, et le webhook fonctionnerait quand
-même : non signé.
-
-Ça marche parce que Forgejo ajoute à **chaque** livraison, quel que soit le type de webhook
-choisi, les en-têtes de compatibilité GitHub (`X-GitHub-Event`, `X-Hub-Signature-256`) à côté des
-siens (`X-Forgejo-*`, `X-Gitea-*`, `X-Gogs-*`). Le handler d'ArgoCD teste `X-GitHub-Event` avant
-`X-Gogs-Event` : la livraison part donc dans le parseur GitHub, dont le payload de push Forgejo
-a le format.
-
-### Ce qu'il faut côté forge — deux gestes, hors de ce dépôt
-
-Comme le miroir GitHub et le reverse proxy, ces réglages ne sont vérifiables par aucun manifeste
-d'ici. Ils vivent dans `homelab_emeriss`.
-
-**1. Autoriser la destination** — `forgejo/compose.yaml` :
-
-```yaml
-FORGEJO__webhook__ALLOWED_HOST_LIST: external,argocd.lan.wittner.tech
-```
-
-puis `docker compose up -d forgejo` sur l'hôte.
-
-> [!CAUTION]
-> ⚠️ **`external` SEUL refuse la livraison**, et c'est le mode d'échec principal de ce montage :
-> `argocd.lan.wittner.tech` résout en `192.168.1.x`, que le mot-clé `external` exclut par
-> définition. Symptôme : échec instantané dans l'onglet « Livraisons » du webhook, **sans aucune
-> requête sortante** — rien n'arrive côté cluster, et les logs d'`argocd-server` sont muets.
->
-> ⚠️ **Ajouter le HOSTNAME exact, jamais `private` ni une plage.** Forgejo compare la liste au
-> nom d'hôte *et* à l'IP résolue : un nom suffit. Ce réglage est le **dernier filet applicatif
-> anti-SSRF** depuis que la bascule hors cluster a emporté la `CiliumNetworkPolicy` qui le
-> doublait ; y ouvrir `private`, c'est autoriser n'importe quel webhook du dépôt à viser
-> n'importe quoi sur le LAN.
-
-**2. Créer le webhook** — dépôt `jbwittner/homelab_gitops` → Paramètres → Webhooks → **Forgejo** :
-
-| Champ | Valeur |
-|---|---|
-| URL cible | `https://argocd.lan.wittner.tech/api/webhook` |
-| Méthode HTTP | `POST` |
-| Type de contenu | `application/json` |
-| Secret | la valeur scellée dans `post-bootstrap/argocd-webhook.sealed.yaml` |
-| Déclencheurs | **Évènements push uniquement** |
-| Filtre de branche | `main` |
-| Actif | oui |
-
-⚠️ **Le filtre de branche n'est pas cosmétique** : sans lui, le push d'une branche de travail ou
-d'une branche Renovate déclenche un refresh de **32 Applications** qui sont toutes sur `main` —
-du bruit et de la charge sur `argocd-repo-server`, pour zéro changement d'état désiré.
-
-⚠️ Le type `Forgejo` (défaut) convient ; `Gitea` aussi. Ne PAS choisir `GitHub` : le champ
-« secret » y est remplacé par une autre mécanique et le payload change de forme.
+> [!NOTE]
+> Rebrancher un webhook GitHub demanderait d'exposer `/api/webhook` hors du LAN — et seulement ce
+> chemin, pas l'UI. Côté GitHub, la livraison est signée en `X-Hub-Signature-256` avec la valeur
+> de `webhook.github.secret`, que le webhook du dépôt (Settings → Webhooks, `application/json`,
+> événement *push*) devrait alors porter. Rien de cela n'est en place.
 
 ### Vérifier
 
@@ -400,28 +305,16 @@ kubectl -n argocd get secret argocd-secret -o go-template='{{range $k,$v := .dat
 # 2. Le SealedSecret n'a PAS pris la propriété de l'objet (mode `patch`) : doit être VIDE.
 kubectl -n argocd get secret argocd-secret -o jsonpath='{.metadata.ownerReferences}' ; echo
 
-# 3. Une livraison de test ; puis, côté cluster :
-kubectl -n argocd logs deploy/argocd-server --tail=100 | grep -i 'webhook\|Refreshing app'
+# 3. Une livraison NON signée doit être refusée — attendu : un 4xx. Un 200 voudrait dire que la
+#    clé n'est pas lue (nom de clé, ou patch non appliqué) et que l'endpoint est ouvert.
+curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'X-GitHub-Event: push' \
+  -H 'Content-Type: application/json' -d '{}' https://argocd.lan.wittner.tech/api/webhook
 ```
-
-Côté forge, le bouton **« Tester la livraison »** envoie un vrai payload de push : la réponse
-attendue est **200**, et le champ `reconciledAt` des Applications doit bouger dans la seconde.
-
-| Réponse de la livraison | Où chercher |
-|---|---|
-| Aucune requête, échec immédiat | `ALLOWED_HOST_LIST` côté forge (geste 1) |
-| `401` | le secret diffère entre Forgejo et `webhook.github.secret` |
-| `404` | `argocd.lan.wittner.tech` absent du reverse proxy `192.168.1.50` |
-| `200` mais rien ne bouge | `repoURL` du payload ≠ celui des Applications (suffixe `.git`, casse), ou branche poussée ≠ `targetRevision` |
-
-⚠️ `200` **n'est pas une preuve de sync** : ArgoCD répond 200 même quand aucune Application ne
-correspond au dépôt du payload. C'est `reconciledAt` qui tranche, pas le code HTTP.
 
 ### Rotation
 
-Refaire les étapes 1-2 de `post-bootstrap/argocd-webhook.secret.example.yaml`, committer le
-`.sealed.yaml`, puis remplacer la valeur dans le webhook Forgejo. Pendant l'intervalle les
-livraisons sont rejetées en `401` — le seul effet est le retour au polling de 3 min.
+Refaire les étapes 1-2 de `post-bootstrap/argocd-webhook.secret.example.yaml` et committer le
+`.sealed.yaml`. Aucun émetteur ne porte la valeur : rien d'autre à mettre à jour.
 
 
 ## Contraintes — self-management
@@ -587,7 +480,7 @@ donc pas, et le mot de passe survit aux syncs comme aux redémarrages.
 > dans le cluster et n'a pas vocation à être en Git.
 >
 > ⚠️ **Il y a pourtant un `SealedSecret` nommé `argocd-secret` dans ce dossier**
-> (`post-bootstrap/argocd-webhook.sealed.yaml`, cf. §Webhook Forgejo) — et ce n'est pas une
+> (`post-bootstrap/argocd-webhook.sealed.yaml`, cf. §Webhook) — et ce n'est pas une
 > entorse : il porte `sealedsecrets.bitnami.com/patch: "true"`, pas `managed`. En mode `patch` le
 > contrôleur **ajoute** les clés qu'il porte et ne supprime ni les autres clés, ni les labels, ni
 > les annotations, et **ne prend pas la propriété** de l'objet. C'est le seul mode acceptable

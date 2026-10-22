@@ -24,8 +24,7 @@ resources:
   # ⚠️ Un fichier scellé VIDE (0 octet) ne fait PAS échouer le build : kustomize l'accepte et ne
   # rend rien. Vérifier le CONTENU, pas l'existence — ce dépôt est déjà tombé dans ce piège.
   #
-  # Tant qu'elle est commentée, la machine n'est pas surveillée — ET les trois alertes de
-  # sauvegarde de `forgejo-monitoring` sont aveugles, puisqu'elles transitent par ce scrape.
+  # Tant qu'elle est commentée, la machine n'est pas surveillée.
   #
   # Décommenter DANS LE MÊME COMMIT que la production du fichier scellé
   # (cf. `node-exporters.secret.example.yaml`).

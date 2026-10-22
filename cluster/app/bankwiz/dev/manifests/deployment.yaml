@@ -22,8 +22,8 @@ spec:
         app.kubernetes.io/name: bankwiz-api
     spec:
       automountServiceAccountToken: false
-      # Pas d'imagePullSecrets : les paquets de la forge sont publics, le pull est anonyme
-      # (cf. cluster/app/bankwiz/README.md §Contraintes).
+      # Pas d'imagePullSecrets : le pull est anonyme (cf. cluster/app/bankwiz/README.md
+      # §Contraintes).
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -33,6 +33,10 @@ spec:
           # applicatif, épinglé au digest. Le tag mobile `develop` n'est volontairement pas
           # utilisé : ArgoCD ne voit pas qu'il bouge, le mettre à jour demanderait un
           # `rollout restart` à la main. Monter de version = un commit ici.
+          # ⚠️ REGISTRE DE L'ANCIENNE FORGE (forgejo.wittner.tech) : plus aucun build n'y publie et
+          # rien ne garantit plus le pull. Le pod tient tant que l'image est en cache sur son
+          # nœud ; un reschedule vers un nœud qui ne l'a pas finit en ImagePullBackOff. À migrer
+          # vers ghcr.io quand la CI de bankwiz_server passera sur GitHub Actions.
           image: forgejo.wittner.tech/jbwittner/bankwiz-server:develop-sha-08cb048@sha256:98476e70fbbc1a77584e6cfbde628167802af871571786a60ebe3ec6907960b3
           imagePullPolicy: IfNotPresent
           securityContext:

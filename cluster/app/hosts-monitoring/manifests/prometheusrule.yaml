@@ -1,6 +1,6 @@
 # Alertes des machines HORS CLUSTER.
 #
-# ⚠️ PRINCIPE DIRECTEUR, hérité de `forgejo-monitoring` et de l'incident du 2026-09-09 : une
+# ⚠️ PRINCIPE DIRECTEUR, hérité de l'incident du 2026-09-09 : une
 # expression qui compare une série ABSENTE ne se déclenche JAMAIS. **Série absente ≠ série à
 # zéro.** Chaque valeur surveillée ici est donc doublée d'un `absent(...)`, exactement comme
 # `VeleroBackupTooOld` / `VeleroNoBackupMetric`. Les deux se déplacent ensemble ; en garder une
@@ -20,9 +20,8 @@ spec:
     - name: external-node.rules
     # ═══════════════════════════════════════════════════════════════════════════════════════════
     # Les machines HORS CLUSTER, une seule aujourd'hui : `vert-emeriss`
-    # (`scrapeconfig-vert-emeriss.yaml`). Ces règles n'existaient pas avant le 2026-09-11 : le
-    # DaemonSet node-exporter du cluster couvrait cette charge tant qu'elle y tournait, et la
-    # bascule vers Docker a emporté cette source sans la remplacer.
+    # (`scrapeconfig-vert-emeriss.yaml`). Le DaemonSet node-exporter du cluster ne mesure que
+    # les nœuds Talos : une machine hors cluster n'est surveillée que si elle est déclarée ici.
     #
     # ⚠️ AUCUNE RÈGLE ICI NE NOMME UNE MACHINE. Elles sélectionnent `job="external-node"` et se
     # ventilent par `instance` : ajouter une machine au composant est un fichier de ScrapeConfig
@@ -40,8 +39,8 @@ spec:
         # node-exporter arrêté, reverse proxy qui ne route plus le hostname, certificat expiré, ou
         # mot de passe de scrape divergent (401).
         #
-        # ⚠️ 10 min, comme `ForgejoDown` : un redémarrage de l'hôte ou une montée de version de
-        # l'exportateur ne doit pas devenir une alerte critique.
+        # ⚠️ 10 min : un redémarrage de l'hôte ou une montée de version de l'exportateur ne doit
+        # pas devenir une alerte critique.
         - alert: ExternalNodeDown
           expr: up{job="external-node"} == 0
           for: 10m
@@ -49,11 +48,10 @@ spec:
             severity: critical
           annotations:
             summary: "{{ $labels.instance }} : la machine ne répond plus"
-            description: "Le scrape du node-exporter de {{ $labels.instance }} échoue depuis 10 min. ⚠️ CETTE CIBLE TRANSPORTE AUSSI LES MÉTRIQUES DE SAUVEGARDE DE LA FORGE (`forgejo_backup_*`, déposées dans le collecteur textfile) : les trois alertes de `forgejo-backup.rules`, dans le composant forgejo-monitoring, sont aveugles tant que cet état dure. Diagnostic dans l'ordre : le message d'erreur exact de la cible dans Prometheus (/targets), puis le service que porte la machine — s'il répond, c'est la supervision qui est morte, pas la machine. Un 401 n'est pas une panne : c'est le mot de passe de scrape qui a divergé (cf. node-exporters.secret.example.yaml)."
+            description: "Le scrape du node-exporter de {{ $labels.instance }} échoue depuis 10 min. Diagnostic dans l'ordre : le message d'erreur exact de la cible dans Prometheus (/targets), puis les services que porte la machine — s'ils répondent, c'est la supervision qui est morte, pas la machine. Un 401 n'est pas une panne : c'est le mot de passe de scrape qui a divergé (cf. node-exporters.secret.example.yaml)."
 
         # Complément INDISPENSABLE de la précédente : `== 0` ne peut rien dire d'une série qui
-        # n'existe plus. Même raisonnement que `ForgejoScrapeMissing` ci-dessus, et même couple
-        # valeur + `absent(...)` — en garder une seule rouvre le trou.
+        # n'existe plus. Couple valeur + `absent(...)` — en garder une seule rouvre le trou.
         - alert: ExternalNodeScrapeMissing
           expr: absent(up{job="external-node"})
           for: 15m
@@ -61,12 +59,12 @@ spec:
             severity: critical
           annotations:
             summary: "plus aucune machine hors cluster n'est surveillée"
-            description: "Plus aucune série `up{job=\"external-node\"}` depuis 15 min : ce n'est pas une panne de machine, c'est la SURVEILLANCE qui a disparu — et avec elle celle des sauvegardes de la forge, qui transitent par ce scrape. Vérifier `kubectl -n monitoring get scrapeconfig -l release=kube-prometheus-stack` (le label manquant fait ignorer l'objet SANS erreur), puis `kubectl -n argocd get app hosts-monitoring`. Tant que cette alerte sonne, l'absence d'ExternalNodeDown et de ForgejoBackupTooOld ne prouve RIEN."
+            description: "Plus aucune série `up{job=\"external-node\"}` depuis 15 min : ce n'est pas une panne de machine, c'est la SURVEILLANCE qui a disparu. Vérifier `kubectl -n monitoring get scrapeconfig -l release=kube-prometheus-stack` (le label manquant fait ignorer l'objet SANS erreur), puis `kubectl -n argocd get app hosts-monitoring`. Tant que cette alerte sonne, l'absence d'ExternalNodeDown ne prouve RIEN."
 
         # --- cAdvisor : la question « QUI consomme » ------------------------------------------
         # ⚠️ `warning` et non `critical`, contrairement aux deux règles ci-dessus, et l'écart est
-        # voulu : perdre cette cible ne fait perdre aucune surveillance de PANNE. Le disque, la
-        # mémoire et la fraîcheur des sauvegardes continuent d'être vus par `external-node`. Ce
+        # voulu : perdre cette cible ne fait perdre aucune surveillance de PANNE. Le disque et la
+        # mémoire continuent d'être vus par `external-node`. Ce
         # qu'on perd, c'est l'ATTRIBUTION — « la machine manquait de RAM » sans pouvoir dire quel
         # conteneur la tenait. Un réveil nocturne pour ça serait mal payé.
         #
@@ -87,13 +85,13 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $labels.instance }} : plus de métriques par conteneur"
-            description: "Le scrape de cAdvisor sur {{ $labels.instance }} échoue depuis 30 min. La surveillance de la MACHINE n'est pas touchée — disque, mémoire et sauvegardes passent par `external-node`. Ce qui est perdu est l'attribution par conteneur. Diagnostic : `docker compose -f cadvisor/compose.yaml logs cadvisor` sur l'hôte (un 502 côté nginx veut dire que cAdvisor ne répond pas, nginx allant bien — il résout à chaque requête). Un 401 pendant qu'`external-node` va bien n'est PAS une panne : c'est `/etc/cadvisor/htpasswd` qui a manqué la rotation, ou le `nginx -s reload` qui a été oublié."
+            description: "Le scrape de cAdvisor sur {{ $labels.instance }} échoue depuis 30 min. La surveillance de la MACHINE n'est pas touchée — disque et mémoire passent par `external-node`. Ce qui est perdu est l'attribution par conteneur. Diagnostic : `docker compose -f cadvisor/compose.yaml logs cadvisor` sur l'hôte (un 502 côté nginx veut dire que cAdvisor ne répond pas, nginx allant bien — il résout à chaque requête). Un 401 pendant qu'`external-node` va bien n'est PAS une panne : c'est `/etc/cadvisor/htpasswd` qui a manqué la rotation, ou le `nginx -s reload` qui a été oublié."
 
-        # ⚠️ LE MODE DE PANNE LE PLUS PROBABLE DE CETTE FORGE, et celui qui n'était couvert par
-        # rien entre le 2026-09-11 et ce composant. Dépôts (`/srv`), base (`/srv`) et dumps
-        # (`/var/backups/forgejo`) se partagent le stockage d'une seule machine : un disque plein
-        # arrête la forge ET la sauvegarde, donc supprime en même temps le service et le moyen de
-        # le reconstruire.
+        # ⚠️ LE MODE DE PANNE LE PLUS PROBABLE D'UNE MACHINE DOCKER, et celui que rien d'autre ne
+        # couvre. Données des piles (`/srv`), images et couches Docker se partagent le
+        # stockage d'une seule machine : un disque plein arrête toutes les piles à la fois, et
+        # souvent sans message clair — une base qui refuse d'écrire, un conteneur qui ne
+        # redémarre plus.
         #
         # ⚠️ `fstype` N'EST PAS FILTRÉ ICI : il l'est AU SCRAPE, par les deux
         # `--collector.filesystem.*-exclude` de la pile node-exporter. Filtrer aux deux endroits
@@ -105,15 +103,15 @@ spec:
             severity: critical
           annotations:
             summary: "{{ $labels.instance }} : {{ $labels.mountpoint }} à moins de 10 % libres"
-            description: "Il reste moins de 10 % sur {{ $labels.mountpoint }} de {{ $labels.instance }} ({{ $value | humanizePercentage }} libres). ⚠️ Sur `vert-emeriss`, dépôts, base et dumps partagent le stockage : un disque plein arrête la forge ET sa sauvegarde, donc supprime en même temps le service et le moyen de le reconstruire. `/var/backups/forgejo` a un volume dédié et s'élague avec `forgejo-ctl` (KEEP_LOCAL=2) ; `/srv` s'agrandit en ligne par `lvextend -r` s'il reste des extents au VG."
+            description: "Il reste moins de 10 % sur {{ $labels.mountpoint }} de {{ $labels.instance }} ({{ $value | humanizePercentage }} libres). ⚠️ Toutes les piles de la machine partagent ce stockage : un disque plein les arrête toutes à la fois. `docker image prune -a` libère les images inutilisées ; `/srv` s'agrandit en ligne par `lvextend -r` s'il reste des extents au VG."
 
         # Le complément TEMPOREL du seuil ci-dessus, et il attrape ce qu'un seuil ne peut pas : un
         # remplissage lent et régulier. À 12 % libres et une pente constante, `ExternalNodeDiskAlmostFull`
         # se tait — et se réveillera un dimanche. Quatre jours de préavis, c'est le temps de
         # décider d'un `lvextend` plutôt que de le subir.
         #
-        # ⚠️ `predict_linear` sur 6 h de fenêtre : trop court, il s'affole sur le pic d'une
-        # sauvegarde ; trop long, il lisse la fuite qu'on cherche. La `for: 1h` filtre le reste.
+        # ⚠️ `predict_linear` sur 6 h de fenêtre : trop court, il s'affole sur un pic ponctuel
+        # (pull d'images, fichiers temporaires) ; trop long, il lisse la fuite qu'on cherche. La `for: 1h` filtre le reste.
         # ⚠️ Le second terme est LOAD-BEARING : sans lui, un système de fichiers à 2 % libres et
         # stable ne déclenche pas (pente nulle, prédiction plate) alors qu'il est déjà critique —
         # et un système à 95 % libres qui décroît vite déclencherait pour rien.
@@ -132,10 +130,10 @@ spec:
         # Mémoire réellement disponible, pas « libre » : `MemAvailable` tient compte du cache
         # récupérable, `MemFree` ne le fait pas et affolerait en permanence sur une machine saine.
         #
-        # ⚠️ 20 min de `for`, et pas moins : `vert-emeriss` a un plancher de 2 Go et l'indexeur de
-        # dépôts de Forgejo (`REPO_INDEXER_ENABLED`) fait un pic mémoire à la réindexation. Le
-        # `for` laisse passer ce pic ; un OOM, lui, tue le conteneur et se voit par `ForgejoDown`,
-        # dans l'AUTRE composant — d'où l'intérêt de celle-ci, qui nomme la cause.
+        # ⚠️ 20 min de `for`, et pas moins : `vert-emeriss` a un plancher de 2 Go, et une
+        # application qui réindexe ou compacte fait des pics mémoire légitimes. Le `for` laisse
+        # passer ces pics ; un OOM, lui, tue un conteneur et se voit par l'alerte du service
+        # concerné, qui n'en nomme pas la cause — d'où l'intérêt de celle-ci, qui la nomme.
         - alert: ExternalNodeMemoryPressure
           expr: node_memory_MemAvailable_bytes{job="external-node"} / node_memory_MemTotal_bytes{job="external-node"} < 0.10
           for: 20m
@@ -143,23 +141,5 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $labels.instance }} : moins de 10 % de mémoire disponible"
-            description: "Moins de 10 % de `MemAvailable` depuis 20 min sur {{ $labels.instance }}. Le swap y est un filet pour les pics, pas un étage de stockage : une pression durable finit en OOM-kill — qui se verra par une alerte de service (ForgejoDown) sans en nommer la cause. C'est cette alerte-ci qui la nomme."
+            description: "Moins de 10 % de `MemAvailable` depuis 20 min sur {{ $labels.instance }}. Le swap y est un filet pour les pics, pas un étage de stockage : une pression durable finit en OOM-kill — qui se verra par une alerte de service sans en nommer la cause. C'est cette alerte-ci qui la nomme."
 
-        # ⚠️ RÈGLE MÉTA : elle ne surveille pas la machine, elle surveille le CANAL par lequel
-        # arrivent les métriques de sauvegarde. node-exporter qui rencontre un `.prom` illisible
-        # ou mal formé n'abandonne PAS ce fichier — il abandonne TOUT le collecteur textfile.
-        # Vérifié en conditions réelles le 2026-09-11 : un fichier tronqué fait disparaître
-        # l'intégralité des séries `forgejo_backup_*` et lever ce compteur à 1.
-        #
-        # Sans cette règle, la panne se présenterait comme `ForgejoBackupNoMetric` — c'est-à-dire
-        # comme « aucune sauvegarde n'a jamais abouti », ce qui est faux et envoie diagnostiquer au
-        # mauvais endroit. Causes usuelles : mode 0600 au lieu de 0644 (le conteneur tourne en
-        # `nobody`), ou une écriture non atomique surprise en plein scrape.
-        - alert: ExternalNodeTextfileCollectorFailing
-          expr: node_textfile_scrape_error{job="external-node"} == 1
-          for: 30m
-          labels:
-            severity: warning
-          annotations:
-            summary: "{{ $labels.instance }} : le collecteur textfile est en erreur"
-            description: "node-exporter ne parvient pas à lire un fichier de `/var/lib/node_exporter/textfile` sur {{ $labels.instance }} et abandonne de ce fait TOUT le collecteur. Aujourd'hui un seul producteur en dépend : `forgejo_backup_*`, qui n'arrive donc plus. ⚠️ Ne pas lire ForgejoBackupNoMetric comme « aucune sauvegarde » tant que celle-ci sonne — la sauvegarde tourne peut-être très bien. Sur l'hôte : `sudo forgejo-ctl status`, section « Métrique publiée à node-exporter » — elle nomme le fichier et son mode (0644 attendu)."

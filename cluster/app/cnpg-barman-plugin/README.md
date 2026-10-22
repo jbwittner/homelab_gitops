@@ -6,7 +6,7 @@
 > `.noapp.yaml` : il ne matche plus le glob du tier-2, l'`Application` a donc été *prunée* et son
 > finalizer `resources-finalizer.argocd.argoproj.io` a emporté les ressources gérées.
 >
-> **Pourquoi :** il n'a plus rien à sauvegarder. `forgejo-db` était le seul `Cluster` CNPG, et il a quitté le cluster avec la forge. Le plugin restait déployé pour une base qui n'existe plus.
+> **Pourquoi :** il n'a plus rien à sauvegarder. Le seul `Cluster` CNPG sauvegardé a quitté le cluster avec son application ce jour-là. Le plugin restait déployé pour une base qui n'existait plus.
 >
 > **Ce qui restait au moment du retrait**, vérifié : **zéro `Cluster` CNPG et zéro `ObjectStore`** — le plugin était entièrement orphelin. ⚠️ Le bucket barman-cloud n'est PAS supprimé par ce retrait.
 >
@@ -28,11 +28,9 @@ release, deux `targetRevision` suivis séparément par Renovate → deux Applica
 > Une base n'est prise en charge que si son `Cluster` porte explicitement `spec.plugins` — même
 > logique de **liste blanche** que la schedule [velero](../../infra/velero/README.md).
 >
-> ⚠️ **Aujourd'hui : AUCUNE base.** `forgejo-db` était la seule ; elle a quitté le cluster avec la
-> forge le 2026-09-11 ([archive/forgejo](../../../archive/forgejo/README.md)). Le plugin et sa CRD
-> restent en place pour la prochaine base. Tous les exemples `forgejo-db` de cette page décrivent
-> donc un état **passé** — ils restent le modèle exact du câblage à refaire, en quatre gestes
-> (§Opérations).
+> ⚠️ **Aujourd'hui : AUCUNE base sauvegardée.** La seule a quitté le cluster le 2026-09-11 ;
+> `bankwiz-db` (dev) n'est pas sauvegardée. Les exemples de cette page utilisent `<ns>` et
+> `<base>` : ils décrivent le câblage à refaire, en quatre gestes (§Opérations).
 
 ## Fichiers
 
@@ -64,9 +62,9 @@ kube-state-metrics.
     répare seule (`selfHeal`).
 - **Wave `-1`, et elle est load-bearing.** Ce composant apporte la CRD
   `objectstores.barmancloud.cnpg.io`, consommée par le `manifests/` de l'application qui possède
-  une base (wave 0) — hier [forgejo](../../../archive/forgejo/README.md), aucune aujourd'hui. Les deux vivant dans le **même** app-of-apps
-  (`cluster/app/app.bootstrap.yaml`), la wave suffit à les ordonner — contrairement à la dépendance
-  `forgejo → cnpg`, qui n'est que documentée.
+  une base sauvegardée (wave 0) — aucune aujourd'hui. Les deux vivant dans le **même** app-of-apps
+  (`cluster/app/app.bootstrap.yaml`), la wave suffit à les ordonner — contrairement à la
+  dépendance `<application> → cnpg`, qui n'est que documentée.
 - **`crds.create` reste à `true`.** ArgoCD rend le chart avec `--include-crds` : la CRD fait partie
   de l'ensemble désiré et est réconciliée à chaque sync. La couper en pensant « elle est déjà là »
   la ferait **sortir** de l'ensemble désiré, et `prune: true` la supprimerait — emportant tous les
@@ -80,14 +78,13 @@ kube-state-metrics.
 
 ## Où vit la configuration d'une sauvegarde
 
-Rien ici. Trois objets, dans le `manifests/` de l'application qui possède la base. Exemple
-historique (`forgejo`, archivé — les fichiers sont dans `archive/forgejo/manifests/`) :
+Rien ici. Trois objets, dans le `manifests/` de l'application qui possède la base :
 
 | Objet | Fichier | Rôle |
 | --- | --- | --- |
-| `ObjectStore` | `forgejo-db-objectstore.yaml` | bucket, credentials, rétention |
-| `Cluster.spec.plugins` | `forgejo-db.yaml` | **met la base sous archivage WAL continu** |
-| `ScheduledBackup` | `forgejo-db-scheduledbackup.yaml` | sauvegardes de base quotidiennes |
+| `ObjectStore` | `<base>-objectstore.yaml` | bucket, credentials, rétention |
+| `Cluster.spec.plugins` | `<base>.yaml` | **met la base sous archivage WAL continu** |
+| `ScheduledBackup` | `<base>-scheduledbackup.yaml` | sauvegardes de base quotidiennes |
 
 Les trois sont indissociables : un `ObjectStore` sans `spec.plugins` est inerte et ne le dit pas ;
 un `spec.plugins` sans `ScheduledBackup` archive des WAL que rien ne complète.
@@ -132,7 +129,7 @@ script/cnpg-barman-plugin-script.sh show <backup>   # LSN, WAL, durée, destinat
 >   nécessaires à la plus ancienne sauvegarde de base encore vivante. Purger une base au milieu
 >   du catalogue casserait la fenêtre PITR de toutes celles qui la suivent. La rétention purge
 >   par le bas, dans l'ordre — c'est la seule opération sûre, et le seul levier : il vit dans
->   `forgejo-db-objectstore.yaml`, en GitOps.
+>   `<base>-objectstore.yaml`, en GitOps.
 > - **`restore` n'applique rien, il imprime un manifeste.** Une restauration CNPG est un `Cluster`
 >   neuf en `bootstrap.recovery` : un **état désiré**, donc du Git. Le script le dérive du
 >   `Cluster` source — en ne gardant que ce qu'ArgoCD a réellement déclaré (lu dans
@@ -149,10 +146,10 @@ script/cnpg-barman-plugin-script.sh show <backup>   # LSN, WAL, durée, destinat
 
 - **Lire l'état des sauvegardes** — ⚠️ **pas** sur le `Cluster`. `status.firstRecoverabilityPoint`
   et `status.lastSuccessfulBackup` sont des champs de l'ancien support in-tree et valent `null`
-  avec le plugin (vérifié le 2026-09-08 sur `forgejo-db` : deux `Backup` en phase `completed`, les
-  deux champs à `null`). La fenêtre de récupération réelle vit sur l'`ObjectStore` :
+  avec le plugin (vérifié le 2026-09-08 sur une base réelle : deux `Backup` en phase `completed`,
+  les deux champs à `null`). La fenêtre de récupération réelle vit sur l'`ObjectStore` :
   ```bash
-  kubectl -n forgejo get objectstore forgejo-db-store -o jsonpath='{.status.serverRecoveryWindow}' | jq
+  kubectl -n <ns> get objectstore <base>-store -o jsonpath='{.status.serverRecoveryWindow}' | jq
   ```
   ⚠️ Les phases des `Backup` sont en **minuscules** (`completed`, `failed`, `running`,
   `walArchivingFailing`), contrairement à velero — un `grep Completed` ne trouve rien.
@@ -171,16 +168,16 @@ script/cnpg-barman-plugin-script.sh show <backup>   # LSN, WAL, durée, destinat
   # ⚠️ Le sidecar est un INIT-CONTAINER (sidecar natif Kubernetes, `restartPolicy: Always`), pas un
   # conteneur ordinaire. `.spec.containers` ne renvoie que `postgres` et donne l'impression qu'il
   # manque.
-  kubectl -n forgejo get pod forgejo-db-1 \
+  kubectl -n <ns> get pod <base>-1 \
     -o jsonpath='{range .spec.initContainers[*]}{.name}{"\n"}{end}'
-  kubectl -n forgejo get cluster forgejo-db -o jsonpath='{.status.pluginStatus}' | jq
+  kubectl -n <ns> get cluster <base> -o jsonpath='{.status.pluginStatus}' | jq
   ```
   `pluginStatus` doit lister `barman-cloud.cloudnative-pg.io` avec la capability
   `TYPE_INSTANCE_SIDECAR_INJECTION`.
 
 - **Mettre une nouvelle base sous sauvegarde** — quatre gestes, dans cet ordre :
-  1. bucket + compte de service côté repo **Terraform** (cf. §Contraintes de
-     [forgejo](../../../archive/forgejo/README.md) pour le contrat) ;
+  1. bucket + compte de service côté repo **Terraform** — le compte n'a de droits que sur ce
+     bucket ;
   2. `ObjectStore` + SealedSecret du credential dans le `manifests/` de l'application ;
   3. `spec.plugins` sur le `Cluster` — ⚠️ **recrée le pod d'instance, avec ~200 s de coupure
      SQL** : 180 s d'arrêt smart (`smartShutdownTimeout`, consommé en entier parce qu'un pool de

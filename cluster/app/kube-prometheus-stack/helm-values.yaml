@@ -165,26 +165,22 @@ alertmanager:
       # puis silencieusement jetés — l'échec n'apparaît que dans les logs du relais, pas ici.
       #
       # VALIDÉ le 2026-09-09 par un envoi réel (README § Éprouvé) : le domaine `wittner.tech` est
-      # authentifié chez Brevo (DKIM de domaine), pas seulement `forgejo@wittner.tech` comme
-      # expéditeur unique — cette adresse-ci n'existe donc nulle part ailleurs et part quand même.
+      # authentifié chez Brevo (DKIM de domaine), pas seulement une adresse d'expéditeur unique —
+      # cette adresse-ci n'existe donc nulle part ailleurs et part quand même.
       #
       # ⚠️ À REVÉRIFIER par un envoi réel à chaque changement de cette valeur OU de relais : une
       # adresse non validée ne produit PAS d'erreur. Le relais accepte le mail et le jette, et le
       # seul endroit où ça se voit est le journal d'envoi de Brevo — ni les logs d'Alertmanager,
-      # ni son UI. Repli connu et sans risque : `forgejo@wittner.tech`, qui envoie déjà.
+      # ni son UI.
       smtp_from: 'alertmanager@wittner.tech'
       # Login SMTP du relais (PAS l'adresse mail du compte chez Brevo : un identifiant dédié).
       # En clair, faute de `smtp_auth_username_file` côté Alertmanager — la valeur de référence
       # reste celle du `SealedSecret` `alertmanager-smtp`, dont la clé `username` porte le même
       # login pour que la paire ne se dissocie jamais.
       #
-      # ⚠️ MÊME credential Brevo que le mailer de Forgejo. Un seul relais, une seule clé — la
-      # tourner chez Brevo casse les DEUX.
-      #
-      # ⚠️ Depuis la sortie de la forge du cluster (archive/forgejo), le second consommateur n'est
-      # plus un fichier de ce dépôt mais le `[mailer]` de l'`app.ini` de la machine Docker : une
-      # rotation demande donc un resceller ICI **et** une édition LÀ-BAS, dans deux systèmes
-      # différents. Rien ne signale l'oubli du second — la forge cesse simplement d'envoyer.
+      # ⚠️ Alertmanager est le seul consommateur connu de ce credential Brevo. Le partager avec
+      # un autre service lierait leurs rotations : tourner la clé chez Brevo casserait les deux,
+      # et rien ne signalerait l'oubli du second — il cesserait simplement d'envoyer.
       #
       # ⚠️ PUBLIC ET ASSUMÉ. Le dépôt est en lecture anonyme : ce login l'est aussi. Il reste en
       # clair parce qu'Alertmanager n'offre pas de `smtp_auth_username_file`, et que sortir toute

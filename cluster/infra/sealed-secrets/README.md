@@ -35,7 +35,7 @@ bootstrap à froid : un dépôt injoignable bloque désormais le contrôleur, do
 > C'est aussi le **point de reprise unique de tout le homelab** : sans elle, le `SealedSecret`
 > `velero-gcs` reste chiffré, velero ne lit pas son bucket, et **aucune** restauration n'est
 > possible — y compris celle des `Secret` matérialisés dont dépend le reste. Cf.
-> [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md) §4.
+> [runbook](../../../doc/runbook-bootstrap.md).
 
 > [!CAUTION]
 > **La rotation de la clé est COUPÉE (`keyrenewperiod: "0"`), et c'est ce qui rend la sauvegarde
@@ -55,8 +55,7 @@ bootstrap à froid : un dépôt injoignable bloque désormais le contrôleur, do
 >
 > État au 2026-09-09 : une seule clé, `sealed-secrets-key7t2db`, créée le 2026-08-29 avec le
 > cluster ; les `SealedSecret` du dépôt sont tous scellés avec elle — **11 fichiers, 13 documents**
-> (un fichier peut en porter plusieurs, cf. `archive/forgejo/manifests/forgejo-admin.sealed.yaml`,
-> qui en portait trois du temps où la forge était déployée ici). La première rotation
+> (un fichier peut en porter plusieurs). La première rotation
 > serait tombée vers le **2026-09-28** — ce réglage la supprime avant qu'elle n'ait lieu.
 >
 > Le compte se relit sans le tenir à jour à la main :

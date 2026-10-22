@@ -45,78 +45,41 @@ Le cluster n'existe pour ArgoCD que par son **Secret de cluster** (`cluster-bleu
 ⚠️ `argocd cluster add` fait le même travail **impérativement** : le Secret n'existe alors que dans
 le cluster et disparaît au premier rebuild. Interdit.
 
-## Dépôt public
+## Dépôt privé, écrit comme public
 
-Ce dépôt est **public** : le dépôt Forgejo est en lecture anonyme, servi par le tunnel Cloudflare.
-Tout ce qui y entre est lisible de tous, et **définitivement** — un fichier retiré plus tard survit
-dans les clones et les caches.
-
-Le **miroir push vers `github.com/jbwittner/homelab_gitops`** reste **privé**. Il part à chaque
-commit, sans action manuelle, et une réécriture d'historique ici s'y propage aussi : il ne demande
-donc aucun geste propre. Il n'est pas non plus une sauvegarde indépendante — il reflète ce dépôt,
-y compris ses réécritures.
-
-La publication ne change rien à deux choses : les `SealedSecret` restent sûrs (chiffrés pour la clé
-du contrôleur, qui n'est pas ici), et les `.secret.example.yaml` aussi (ils ne portent que
-`REMPLACER`).
-
-⚠️ **Corriger une fuite demande de RÉÉCRIRE l'historique, jamais de commiter par-dessus.**
-`git commit --amend` ou un squash, puis `git push --force origin main`. Un commit correctif laisse
-la valeur lisible dans le diff du commit fautif — c'est-à-dire publiée.
-
-⚠️ **Et le force-push ne suffit pas côté serveur.** Forgejo garde les objets injoignables jusqu'au
-GC : sur un dépôt public, l'ancien commit reste servi par SHA à qui connaît l'URL
-(`/commit/<sha>`). Après toute réécriture, lancer le GC du dépôt — Site Administration →
-Maintenance, ou sur le dépôt bare de la machine Docker :
-
-```bash
-git -C /data/git/repositories/jbwittner/homelab_gitops.git reflog expire --expire-unreachable=now --all
-git -C /data/git/repositories/jbwittner/homelab_gitops.git gc --prune=now
-```
-
-puis **vérifier** que l'ancien SHA est mort, au lieu de le supposer :
-
-```bash
-curl -so /dev/null -w '%{http_code}\n' https://forgejo.wittner.tech/jbwittner/homelab_gitops/commit/<sha>
-# attendu : 404
-```
-
-⚠️ **La clé privée sealed-secrets change de nature.** Elle était déjà l'état non reconstructible
-n°1 (cf. §Secrets). Elle devient le point unique qui, s'il fuit, déchiffre **rétroactivement** tous
-les blobs publiés — y compris ceux qu'une rotation ultérieure remplacerait ici, puisque les anciens
-survivent dans les clones. Une fuite de cette clé ne se solde donc plus par « resceller », mais par
-**tourner tous les credentials à la source** : Cloudflare, GCS, Brevo, Discord, Renovate, Grafana.
-
-⚠️ **Publié en clair, et assumé.** La topologie LAN (`192.168.1.0/24`, pool `.80-.89`, proxy
-`.50`), les hostnames, les noms de buckets et le projet GCP `homelab-499008`, le login SMTP Brevo
-d'Alertmanager (`helm-values.yaml` de kube-prometheus-stack, qui dit pourquoi il y reste). Aucun
-n'est un credential ; tous réduisent le coût de reconnaissance d'un attaquant. La protection est
-ailleurs — ACL des buckets, mots de passe scellés, et aucune route publique vers le cluster
-(cf. [`reseau.md`](reseau.md)).
-
-⚠️ **La forge publique est AUSSI la source du GitOps.** Le clone anonyme met du trafic non
-authentifié sur le composant dont dépend toute capacité à déployer. Deux conséquences qui ne se
-règlent pas dans ce dépôt : l'inscription reste fermée (`[service] DISABLE_REGISTRATION = true`
-dans l'`app.ini` de la machine Docker), et le tunnel Cloudflare porte la limitation de débit — le
-clone est l'endpoint le plus coûteux de Forgejo.
-
-Avant chaque commit, la question n'est plus « est-ce que ça marche » mais **« est-ce que n'importe
+Ce dépôt est **privé**, sur GitHub (`github.com/jbwittner/homelab_gitops`). Il a pourtant été
+**lisible anonymement jusqu'au 2026-10-21**, et ce qui y est entré pendant cette période survit
+dans les clones et les caches qu'on ne maîtrise pas. La règle reste donc celle d'un dépôt public :
+avant chaque commit, la question n'est pas « est-ce que ça marche » mais **« est-ce que n'importe
 qui peut le lire »**. Trois formes admises, et rien d'autre : `SealedSecret`,
 `.secret.example.yaml` vide, et les deux coquilles de Secret listées en §Secrets.
 
-### Bascule : les gestes hors dépôt
+Les `SealedSecret` restent sûrs (chiffrés pour la clé du contrôleur, qui n'est pas ici), et les
+`.secret.example.yaml` aussi (ils ne portent que `REMPLACER`).
 
-⚠️ **Le passage en public est le DERNIER geste.** Les règles ci-dessus valent dès maintenant ; la
-bascule elle-même suit cet ordre, et chaque étape se vérifie avant la suivante.
+⚠️ **Corriger une fuite demande de RÉÉCRIRE l'historique, jamais de commiter par-dessus.**
+`git commit --amend` ou un squash, puis `git push --force origin main`. Un commit correctif laisse
+la valeur lisible dans le diff du commit fautif.
 
-1. Masquage du login Brevo d'archive et réécriture du commit → force-push.
-2. GC du dépôt Forgejo, puis 404 confirmé sur l'ancien SHA (commandes ci-dessus).
-3. ACL des buckets : aucun binding `allUsers` / `allAuthenticatedUsers` sur
-   `homelab-velero-backups-157294d1`, `homelab-cnpg-backups-8b8ff253`,
-   `homelab-openbao-snapshots-6d84c670`. Leur suffixe aléatoire cesse d'être une protection le
-   jour où le dépôt est lisible.
-4. `app.ini` et tunnel Cloudflare : inscription fermée, limitation de débit.
-5. Dépôt Forgejo en public.
+⚠️ **Et le force-push ne suffit pas côté serveur.** GitHub garde les objets injoignables : l'ancien
+commit reste servi par SHA (`/commit/<sha>`) à qui a accès au dépôt, et dans les PR qui le
+référencent. La purge passe par le support GitHub. Une valeur poussée est donc à **tourner à la
+source**, pas seulement à retirer de l'historique.
+
+⚠️ **La clé privée sealed-secrets est un point de fuite rétroactif.** Elle était déjà l'état non
+reconstructible n°1 (cf. §Secrets). Elle est aussi le point unique qui, s'il fuit, déchiffre
+**tous** les blobs jamais committés — y compris ceux qu'une rotation ultérieure a remplacés ici,
+puisque les anciens survivent dans les clones. Une fuite de cette clé ne se solde donc pas par
+« resceller », mais par **tourner tous les credentials à la source** : Cloudflare, GCS, Brevo,
+Discord, Renovate, Grafana, GitHub App d'ArgoCD.
+
+⚠️ **Écrit en clair, et assumé.** La topologie LAN (`192.168.1.0/24`, pool `.80-.89`, proxy
+`.50`), les hostnames, les noms de buckets et le projet GCP `homelab-499008`, le login SMTP Brevo
+d'Alertmanager (`helm-values.yaml` de kube-prometheus-stack, qui dit pourquoi il y reste). Aucun
+n'est un credential ; tous réduisent le coût de reconnaissance d'un attaquant. La protection est
+ailleurs — ACL des buckets (aucun binding `allUsers` / `allAuthenticatedUsers` : leur suffixe
+aléatoire n'est pas une protection), mots de passe scellés, et aucune route publique vers le
+cluster (cf. [`reseau.md`](reseau.md)).
 
 ## Secrets
 
@@ -151,46 +114,21 @@ l'Application. Et un fichier scellé **vide** (0 octet) ne fait PAS échouer le 
 l'accepte et ne rend rien. Vérifier le contenu, pas l'existence — ce dépôt est déjà tombé dans ce
 piège.
 
-Neuf fichiers, neuf documents `SealedSecret` : `cloudflare-api-token`, `velero-gcs`,
-`repo-homelab-gitops`, `argocd-oidc`, `argocd-notifications-secret`, `grafana-admin`,
-`alertmanager-smtp`, `hermes-env`, `renovate-github`.
+Douze fichiers sous `cluster/`, douze documents `SealedSecret` : `cloudflare-api-token`,
+`velero-gcs`, `repo-homelab-gitops-github`, `argocd-oidc`, `argocd-notifications-secret`,
+`argocd-secret` (clé du webhook, fichier `argocd-webhook.sealed.yaml`), `grafana-admin`, `alertmanager-smtp`, `hermes-env`, `renovate-github`,
+`donetick-env`, `node-exporters`. (Le treizième, sous `archive/`, n'est appliqué par personne.)
 
-⚠️ **Quatre ont disparu de cette liste le 2026-09-11** — `forgejo-admin` (3 documents),
-`forgejo-secrets`, `forgejo-smtp` et `forgejo-db-gcs` : la forge a quitté le cluster
-([archive/forgejo](../archive/forgejo/README.md)) et ses secrets vivent désormais dans l'`app.ini`
-de sa machine Docker. Les fichiers scellés restent dans `archive/`, **inertes** — ils ne sont plus
-appliqués par personne, et ne seraient de toute façon déchiffrables que dans le namespace
-`forgejo`, qui n'existe plus.
+`node-exporters` ([hosts-monitoring](../cluster/app/hosts-monitoring/README.md), ns `monitoring`)
+porte le `basicAuth` des `node-exporter` des machines hors cluster. ⚠️ **Il appartient à la
+supervision des machines, pas à celle d'un service qu'elles hébergent** : la supervision d'une
+machine survit au service qu'elle héberge, donc retirer un service du parc doit pouvoir supprimer
+ses Secrets sans toucher à celui-ci. Un futur Secret de scrape applicatif sur la même machine reste
+un objet distinct, même s'il porte la même valeur.
 
-Trois autres sont **attendus**, tous dans le ns `monitoring` et tous pour des cibles hors cluster :
-
-| Secret | Composant | Cible |
-|---|---|---|
-| `forgejo-metrics` | [forgejo-monitoring](../cluster/app/forgejo-monitoring/README.md) | token `Bearer` du `/metrics` de la forge |
-| `forgejo-db-metrics` | [forgejo-monitoring](../cluster/app/forgejo-monitoring/README.md) | `basicAuth` du `postgres-exporter` |
-| `node-exporters` | [hosts-monitoring](../cluster/app/hosts-monitoring/README.md) | `basicAuth` des `node-exporter` des machines hors cluster |
-
-⚠️ **Les deux derniers ne sont pas fusionnés, alors que leurs exportateurs tournent sur LA MÊME
-MACHINE.** Ce n'est pas une isolation cryptographique — ce serait illusoire, même hôte, même
-`docker inspect` — c'est une **indépendance de cycle de vie** : la supervision d'une machine survit
-au service qu'elle héberge, donc retirer la forge du parc doit pouvoir supprimer ses Secrets sans
-toucher à l'autre. Un secret partagé aurait réintroduit exactement le couplage que la séparation
-des deux composants sert à défaire.
-
-⚠️ **Leur porter la même valeur ne casse rien**, et c'est ce qui est fait aujourd'hui : deux Secrets
-distincts restent deux objets qu'on crée, tourne et supprime séparément. Le seul coût est qu'une
-fuite de l'un expose l'autre — ce qui était déjà vrai, les deux exportateurs partageant l'hôte, le
-démon Docker et le groupe `docker`. Les diverger reste possible à tout moment, sans toucher au
-reste.
-
-⚠️ Leurs lignes sont **commentées** dans les `kustomization.yaml` tant qu'ils ne sont pas produits.
-Conséquence non intuitive : tant que `node-exporters` manque, ce sont les trois alertes de
-sauvegarde de **forgejo-monitoring** qui sont aveugles — elles transitent par le scrape de
-hosts-monitoring (collecteur `textfile` de node-exporter).
-
-⚠️ Les deux `basicAuth` ne se **récupèrent pas** depuis la machine s'ils sont perdus : côté hôte,
-ils n'existent que sous forme de hachage bcrypt. Il faut en tirer un neuf et refaire les deux copies
-(le Secret ici, le `web-config.yml` là-bas).
+⚠️ Un `basicAuth` ne se **récupère pas** depuis la machine s'il est perdu : côté hôte, il n'existe
+que sous forme de hachage bcrypt. Il faut en tirer un neuf et refaire les deux copies (le Secret
+ici, le fichier d'authentification là-bas).
 
 > [!NOTE]
 > **Exceptions admises à « pas de `kind: Secret` dans Git » — un Secret dont le manifeste ne porte
@@ -210,20 +148,20 @@ ils n'existent que sous forme de hachage bcrypt. Il faut en tirer un neuf et ref
 > [!CAUTION]
 > **Deux états non reconstructibles depuis Git.**
 >
-> 1. **La clé privée du contrôleur sealed-secrets.** Sans elle, les neuf `SealedSecret` du repo
->    sont des fichiers morts — donc l'accès au dépôt, les credentials GCS des deux chaînes de
->    sauvegarde, le compte admin de la forge. Backup hors cluster et hors Git,
+> 1. **La clé privée du contrôleur sealed-secrets.** Sans elle, les `SealedSecret` du repo sont des
+>    fichiers morts — donc l'accès au dépôt et le credential GCS de la sauvegarde. Backup hors
+>    cluster et hors Git,
 >    `sealed-secrets-key.yaml`. ⚠️ La rotation automatique de la clé est **coupée**
 >    (`keyrenewperiod: "0"`) : une seule clé à sauvegarder, mais aucune marge si elle est perdue.
-> 2. **Les clés de compte de service GCP** des buckets velero et barman-cloud. Elles ne se sortent
+> 2. **Les clés de compte de service GCP** des buckets de sauvegarde. Elles ne se sortent
 >    pas d'un état Terraform sans l'y stocker en clair ; elles sont scellées ici, donc protégées
 >    par (1) — mais une clé sealed-secrets perdue oblige à en **réémettre** de nouvelles côté GCP,
 >    pas à les récupérer.
 >
 > Corollaire, et c'est le point de défaillance unique du plan de reprise : **sur un cluster
 > reconstruit à neuf, restaurer la clé sealed-secrets vient AVANT toute tentative de restauration
-> velero ou barman** — sans elle, `velero-gcs` et `forgejo-db-gcs` sont indéchiffrables et plus
-> rien ne se restaure. Cf. [`forgejo-pra.md`](forgejo-pra.md) §4.
+> velero ou barman** — sans elle, `velero-gcs` est indéchiffrable et plus rien ne se restaure.
+> Cf. [`runbook-bootstrap.md`](runbook-bootstrap.md) §Prérequis credentials.
 
 ## Commandes de la documentation
 

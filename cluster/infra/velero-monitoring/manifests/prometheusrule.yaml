@@ -68,8 +68,8 @@ spec:
         # --- RÉTABLIES LE 2026-09-23, avec la remise en service de velero ------------------
         #
         # Elles avaient été commentées le 2026-09-11 non pas parce qu'elles avaient tort, mais
-        # parce qu'il n'y avait plus rien à sauvegarder : la forge était le seul périmètre de la
-        # schedule `daily`, et celle-ci était `disabled: true`. Laissées actives, elles auraient
+        # parce qu'il n'y avait plus rien à sauvegarder : le seul namespace de la schedule `daily`
+        # avait quitté le cluster, et celle-ci était `disabled: true`. Laissées actives, elles auraient
         # sonné en permanence — et c'est justement l'alerte qu'on ne veut pas apprendre à ignorer.
         # La schedule tourne de nouveau (périmètre `hermes`), la condition de leur retrait est donc
         # levée.

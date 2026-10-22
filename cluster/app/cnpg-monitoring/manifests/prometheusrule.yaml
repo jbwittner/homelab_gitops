@@ -1,7 +1,7 @@
 # Alertes de sauvegarde des bases CloudNativePG.
 #
-# ⚠️ CE CLUSTER N'A PLUS AUCUNE BASE DEPUIS LE 2026-09-11. `forgejo-db` était la seule ; la forge
-# a quitté le cluster (archive/forgejo), base comprise. Conséquences, toutes assumées :
+# ⚠️ CE CLUSTER N'A EU AUCUNE BASE DU 2026-09-11 AU 2026-10-16 : la seule qu'il portait a quitté
+# le cluster avec son application. Conséquences, toutes assumées :
 #   - les règles fondées sur une VALEUR (backlog WAL, échecs, fraîcheur) n'ont plus de série à
 #     évaluer : elles sont muettes, ce qui est correct — elles se remettront à parler d'elles-mêmes
 #     au premier `Cluster` créé ici ;
@@ -17,8 +17,8 @@
 # périmètre de copie kopia (`cluster/infra/velero/manifests/volume-policies.yaml`) : sans elles,
 # la base n'a plus qu'une seule chaîne de sauvegarde ET plus aucun moyen de voir qu'elle est morte.
 #
-# ⚠️ TROIS PIÈGES DE MÉTRIQUES, tous relevés sur l'instance `forgejo-db-1` en 1.30.0, du temps
-# où elle existait. Les trois
+# ⚠️ TROIS PIÈGES DE MÉTRIQUES, tous relevés sur une instance réelle en 1.30.0, du temps où une
+# base était sauvegardée ici. Les trois
 # produisent, si on les ignore, soit une alerte qui hurle en permanence, soit une alerte muette.
 #
 #   1. `cnpg_pg_stat_archiver_seconds_since_last_archival` N'EST PAS un indicateur de fraîcheur.
@@ -164,11 +164,12 @@ spec:
         #     summary: "cnpg : aucune sauvegarde de base n'a jamais abouti ({{ $labels.cnpg_io_cluster }})"
         #     description: "Le plugin barman-cloud est câblé sur cette base mais aucune sauvegarde n'a jamais réussi depuis 24 h. Tant que c'est le cas, CNPGBackupTooOld est aveugle — sa garde `> 0` l'empêche de se déclencher. Causes usuelles : `destinationPath` laissé à REMPLACER, ligne du SealedSecret restée commentée dans le kustomization, ou droits IAM insuffisants sur le bucket."
 
-        # --- DÉSACTIVÉE LE 2026-09-11 : IL N'Y A PLUS AUCUNE BASE DANS CE CLUSTER ---------------
+        # --- DÉSACTIVÉE LE 2026-09-11 : AUCUNE BASE N'EST SOUS SAUVEGARDE DANS CE CLUSTER -------
         #
-        # `forgejo-db` était la seule, et la forge a quitté le cluster
-        # (archive/forgejo) — base comprise. Une règle `absent(...{cnpg_io_cluster="forgejo-db"})`
-        # sonnerait donc pour toujours, en disant vrai et en n'apprenant rien.
+        # La seule base sauvegardée a quitté le cluster ce jour-là. Une règle
+        # `absent(...{cnpg_io_cluster="<base>"})` sur une base absente sonnerait pour toujours, en
+        # disant vrai et en n'apprenant rien. `bankwiz-db` n'y entre pas : elle n'est pas
+        # sauvegardée.
         #
         # ⚠️ ELLE SE REMET AU PREMIER `Cluster` REMIS SOUS SAUVEGARDE, avec SON nom — c'est le
         # quatrième geste de la procédure (cf. cnpg-barman-plugin/README.md §Opérations). Rien ne
@@ -185,12 +186,12 @@ spec:
         # # quatrième geste de la procédure (cf. cnpg-barman-plugin/README.md §Opérations), et rien
         # # ne signale son oubli.
         # - alert: CNPGBackupChainAbsent
-        #   expr: absent(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cnpg_io_cluster="forgejo-db"})
+        #   expr: absent(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{cnpg_io_cluster="<base>"})
         #   for: 1h
         #   labels:
         #     severity: critical
         #   annotations:
-        #     summary: "cnpg : plus aucune chaîne de sauvegarde sur forgejo-db"
+        #     summary: "cnpg : plus aucune chaîne de sauvegarde sur <base>"
         #     description: "Les métriques du plugin barman-cloud ont disparu pour cette base : `spec.plugins` a été retiré du Cluster, le sidecar ne démarre plus, ou la base n'existe plus. Elle n'est sauvegardée par RIEN — son PVC est aussi exclu de la copie kopia de velero."
 
         # --- RÉACTIVÉE LE 2026-10-16 AVEC `bankwiz-db` (ns bankwiz-dev) -------------------------

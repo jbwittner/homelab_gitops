@@ -1,17 +1,25 @@
 # kubevirt
 
+> [!IMPORTANT]
+> **ARCHIVÉ le 2026-10-22.** Fichier `kubevirt.noapp.yaml` : non déployé depuis le 2026-09-25
+> (commit `291f61e`).
+>
+> Il n'a plus aucun consommateur : la seule VM qu'il faisait tourner a été retirée du dépôt. Le
+> `path:` de l'Application pointe toujours `cluster/infra/kubevirt/manifests`, qui n'existe plus —
+> les manifestes sont à côté de ce fichier. ⚠️ Pour le remettre en service : le ramener sous
+> `cluster/infra/` (la wave 1 n'ordonne CDI après `openebs` qu'**à l'intérieur** de l'app-of-apps
+> `infra`), corriger `path:`, puis renommer en `.app.yaml`.
+
 ## Rôle
 
 Hyperviseur du cluster : KubeVirt fait tourner des machines virtuelles comme des pods, CDI importe
-leurs images disque dans des PVC. **Un seul consommateur aujourd'hui** —
-[forgejo-pra](../../app/forgejo-pra/README.md), la VM d'exercice du plan de reprise de la forge.
-Ce composant n'existe que pour elle.
+leurs images disque dans des PVC.
 
 ## Fichiers
 
-- `kubevirt.app.yaml` — Application (archétype (c) : kustomize seul), **wave 1**. Même wave que
-  [velero](../velero/README.md) et pour la même raison : CDI a besoin d'une StorageClass, donc
-  d'[openebs](../openebs/README.md) qui est en wave 0 du même app-of-apps.
+- `kubevirt.noapp.yaml` — Application (archétype (c) : kustomize seul), **wave 1**. Même wave que
+  [velero](../../cluster/infra/velero/README.md) et pour la même raison : CDI a besoin d'une StorageClass, donc
+  d'[openebs](../../cluster/infra/openebs/README.md) qui est en wave 0 du même app-of-apps.
 - `manifests/kustomization.yaml` — les **quatre** installs upstream épinglés par URL (opérateur +
   CR, pour KubeVirt et pour CDI), et les deux `patches` qui les configurent. Ces URLs sont la
   source unique des deux versions.

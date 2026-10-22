@@ -47,7 +47,7 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   (`job="node-exporter"`) et les machines hors cluster (`job="external-node"`, composant
   [hosts-monitoring](../hosts-monitoring/README.md)) — et ses variables n'ont donc **aucun filtre
   de job**, ce qui est son objet même. Il remplace `dashboard-talos-nodes.yaml` et
-  `dashboard-machine-forge.yaml`, supprimés le 2026-09-11 ; porte la couche d'annotations
+  l'ancien dashboard par machine, supprimés le 2026-09-11 ; porte la couche d'annotations
   « Déploiements ArgoCD » (tags `argocd`, `deploy`)
 - `manifests/dashboard-stockage-cluster.yaml` — dashboard « Storage — cluster » : état des nœuds
   Kubernetes (kube-state-metrics) et VolumeGroups LVM d'OpenEBS. ⚠️ C'est ce qui a été **retiré**
@@ -78,31 +78,10 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   barman-cloud » : fraîcheur et fenêtre PITR, tableau une ligne par base et une ligne par CR
   `Backup`, archivage WAL, coût du sidecar. Pendant du dashboard velero pour la chaîne de
   sauvegarde des bases — les deux ne se recouvrent pas
-- `manifests/dashboard-forgejo.yaml` — dashboard « Forge — forgejo » : version servie, dépôts /
-  organisations / équipes, issues (tableau par dépôt), comptes et clés, files de webhooks et de
-  miroirs, CPU / mémoire / ancienneté du processus. ⚠️ **La forge n'est plus dans ce cluster**
-  ([archive/forgejo](../../../archive/forgejo/README.md)) : sa source est le `/metrics` externe
-  `https://forgejo-metrics.lan.wittner.tech/metrics`, **scrapé avec authentification** par la
-  `ScrapeConfig` de [forgejo-monitoring](../forgejo-monitoring/README.md) — pas ici. Les panneaux
-  de PVC et de redémarrages ont disparu avec la bascule : kubelet et kube-state-metrics ne voient
-  pas une machine Docker. Préfixe des métriques : `gitea_`, pas `forgejo_`.
-  ⚠️ Depuis le 2026-09-11 il a une **seconde source**, `job="forgejo-db"` (section « Base de
-  données » : `pg_up`, taille, connexions, transactions, cache, deadlocks, verrous). Les deux jobs
-  ne se lisent PAS pareil — les `gitea_*` sont des jauges recomptées à chaque scrape, les
-  `pg_stat_database_*` de vrais compteurs cumulés : `rate()` est absurde sur les premières et
-  obligatoire sur les secondes. Il a aussi une section **Sauvegarde** qui lit `forgejo_backup_*`
-  sur le job `external-node` — donc sur un scrape posé par [hosts-monitoring](../hosts-monitoring/README.md),
-  pas par forgejo-monitoring : fraîcheur, résultat, **taille des deux artefacts, durée, occupation
-  locale**, plus une table de détail. ⚠️ Cette section se vide si le scrape de `hosts-monitoring`
-  tombe, alors que le reste du dashboard reste vert. ⚠️ La table n'est **pas un historique** :
-  Prometheus ne peut pas en donner un sans une série par snapshot, donc une cardinalité sans fin.
-  L'historique est le graphe d'âge, dont chaque dent de scie est une sauvegarde ; la liste réelle
-  des snapshots restic se lit avec `forgejo-ctl snapshots` sur l'hôte
-
 - `manifests/dashboard-alertes.yaml` — dashboard « Alerts — cluster » : tuiles critiques /
   warnings / pending / chaîne d'alerting, tableau des alertes **firing et pending** avec leur
-  ancienneté, historique par alerte, courbe par sévérité. Variables Composant (CNPG / Forgejo /
-  velero / openebs / chart) et Sévérité
+  ancienneté, historique par alerte, courbe par sévérité. Variables Composant (CNPG / machines
+  externes / velero / openebs / chart) et Sévérité
 - `manifests/alertmanager-smtp.sealed.yaml` — `SealedSecret` `alertmanager-smtp`, clés
   `username` / `password` du relais SMTP. Monté en volume par `alertmanagerSpec.secrets` :
   Alertmanager lit le mot de passe dans un **fichier**, jamais depuis sa config
@@ -135,7 +114,8 @@ Ce composant porte aussi tout le **câblage Grafana des composants tiers** : dat
   [openebs-monitoring](../../infra/openebs-monitoring/README.md),
   [velero-monitoring](../../infra/velero-monitoring/README.md),
   [cnpg-monitoring](../cnpg-monitoring/README.md) et
-  [forgejo-monitoring](../forgejo-monitoring/README.md).
+  [hosts-monitoring](../hosts-monitoring/README.md) (ses `ScrapeConfig`, sélecteur
+  `scrapeConfigSelectorNilUsesHelmValues`).
 - Grafana est en `deploymentStrategy: Recreate` : son PVC est RWO node-local, un rollout en
   rolling update produirait un double-mount.
 - Ne pas mettre `disable_login_form: true` : le formulaire local est aujourd'hui le seul moyen
@@ -432,7 +412,7 @@ utilise le vrai kubeconfig — en lecture seule (`list`/`watch`).
 
 Vue unique sur les règles de tous les composants —
 [cnpg-monitoring](../cnpg-monitoring/README.md),
-[forgejo-monitoring](../forgejo-monitoring/README.md),
+[hosts-monitoring](../hosts-monitoring/README.md),
 [velero-monitoring](../../infra/velero-monitoring/README.md),
 [openebs-monitoring](../../infra/openebs-monitoring/README.md) et celles du chart. Il ne lit
 **aucune** métrique d'application : uniquement `ALERTS` et `ALERTS_FOR_STATE`, synthétisées par
@@ -463,7 +443,7 @@ seul moment où on l'ouvre.
   autre tuile de la page n'est alors digne de confiance, y compris les vertes.
 - **Le filtre Composant porte sur `alertname`, jamais sur `namespace`**, et ce n'est pas un
   raccourci : une règle bâtie sur `absent(...)` ne peut porter que les labels écrits dans ses
-  matchers. `CNPGMetricsAbsent` et `ForgejoScrapeMissing` sortent ainsi **sans** label
+  matchers. `CNPGMetricsAbsent` et `ExternalNodeScrapeMissing` sortent ainsi **sans** label
   `namespace`. Un filtre par namespace en masquerait une partie sans rien signaler.
 - **`ALERTS_FOR_STATE` n'a pas le label `alertstate`**, `ALERTS` l'a : d'où le
   `and ignoring(alertstate)` du tableau. Une jointure `on(alertname)` mélangerait deux instances
@@ -574,9 +554,8 @@ Ces machines chauffent **à vide** — 3-4 % de CPU, fréquence moyenne 1,1-1,5 
     convenir à la fois à un CPU (crit 100 °C) et à un NVMe (crit 79-87 °C). La couleur est ici, la
     décision est dans `MachineSensorNearCritical`.
 - **Le filtre « Component » du dashboard « Alerts — cluster » ne connaît pas ces règles** : ses
-  options s'arrêtent à `CNPG.*`, `Forgejo.*`, `Velero.*`, `OpenEBS.*`, `Kube.*`. Elles n'apparaissent
-  donc que sous « All » — exactement comme les `External*` de `hosts-monitoring`, et par le même
-  oubli. Rien ne se perd, mais le filtre ment par omission.
+  options s'arrêtent à `CNPG.*`, `External.*`, `Velero.*`, `OpenEBS.*`, `Kube.*`. Elles
+  n'apparaissent donc que sous « All ». Rien ne se perd, mais le filtre ment par omission.
 
 ### Notification mail des alertes critiques (ACTIF depuis le 2026-09-09)
 
@@ -602,12 +581,9 @@ tombe** — et cette panne-là serait précisément **l'alerte qui ne part pas**
 le compte admin Grafana (§ Compte admin Grafana), en plus fort : Alertmanager est l'outil qui doit
 parler quand le reste se tait.
 
-**Le credential est celui du mailer de Forgejo** (relais Brevo) : un seul relais, une seule clé.
-⚠️ La tourner chez Brevo casse les **deux**. Depuis que la forge a quitté le cluster
-([archive/forgejo](../../../archive/forgejo/README.md)), le second consommateur n'est plus un
-fichier de ce dépôt mais le `[mailer]` de l'`app.ini` de sa machine Docker : une rotation demande
-un resceller **ici** et une édition **là-bas**, et rien ne signale l'oubli du second — la forge
-cesse simplement d'envoyer.
+**Alertmanager est le seul consommateur connu du credential** (relais Brevo). ⚠️ Le partager
+avec un autre service lierait leurs rotations : tourner la clé chez Brevo casserait les deux, et
+rien ne signalerait l'oubli du second — il cesserait simplement d'envoyer.
 
 #### Ce qui part réellement en mail
 
@@ -629,8 +605,8 @@ critique, et c'est la persistance qui mérite un mail.
 Chaque warning a son critical en aval : un archivage WAL qui échoue finit en backlog, une
 sauvegarde qui rate finit en sauvegarde trop vieille. Rien d'important n'est muet — **sauf ce que
 personne ne mesure**, à savoir la copie kopia étalée d'un PVC, qui produit une sauvegarde verte
-(cf. [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md), écrit du temps où la forge était
-sauvegardée ici). ⚠️ Le point a de nouveau un objet depuis le **2026-09-23** : une schedule quotidienne tourne sur
+— un PVC écrit pendant sa copie est restauré dans un état qu'il n'a jamais eu, sans que rien ne
+le signale. ⚠️ Le point a de nouveau un objet depuis le **2026-09-23** : une schedule quotidienne tourne sur
 le namespace `hermes` — cf. [velero](../../infra/velero/README.md). C'est précisément le cas que
 le hook `hermes backup` doit couvrir, et il n'est pas encore posé : la copie kopia d'un `state.db`
 vivant est cohérente-CRASH.
@@ -642,7 +618,7 @@ chargée ». Les deux points qui ne se vérifiaient pas depuis le dépôt sont d
 
 | Point | Résultat |
 | --- | --- |
-| `smtp_from: alertmanager@wittner.tech` | **validé** — le domaine `wittner.tech` est bien authentifié chez Brevo, pas seulement `forgejo@`. Aucun repli nécessaire |
+| `smtp_from: alertmanager@wittner.tech` | **validé** — le domaine `wittner.tech` est bien authentifié chez Brevo, pas seulement une adresse d'expéditeur unique. Aucun repli nécessaire |
 | Envoi réel | mail `[FIRING]` reçu, puis `[RESOLVED]` à l'expiration — `send_resolved` prouvé aussi |
 
 **La méthode retenue n'est pas celle qui était prévue.** Le reroutage temporaire du `Watchdog`

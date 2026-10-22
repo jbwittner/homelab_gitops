@@ -60,7 +60,7 @@ spec:
           # Sur l'API (8642) et PAS sur le dashboard : le dashboard bind bien avant la fin du
           # démarrage de la gateway. Tant qu'une startupProbe court, readiness et liveness sont
           # suspendues — c'est ce qui évite les `Unhealthy` en rafale pendant tout le boot, et le
-          # pod passe 2/2 pile quand l'API répond.
+          # pod passe 1/1 pile quand l'API répond.
           # 60 × 10 s = 10 min avant que kubelet ne redémarre le conteneur. Marge volontairement
           # large : un premier boot sur PVC neuf repeuple /opt/data et réinstalle lazy-packages.
           # Passé ce délai, un redémarrage vaut mieux qu'un pod NotReady indéfiniment — la gateway
@@ -68,8 +68,8 @@ spec:
           # ⚠️ SUR UN PVC NEUF, COMMENTER CE BLOC LE TEMPS DE L'INIT MANUELLE.
           # Tant que l'init n'est pas faite, la gateway ne monte pas jusqu'à 8642 : la
           # startupProbe échoue, kubelet redétruit le conteneur au bout de 10 minutes, en plein
-          # milieu de la manipulation. Procédure complète : README §Versionnement de $HERMES_HOME,
-          # « Premier boot sur un PVC neuf ». Les sondes se remettent une fois 8642 vivant.
+          # milieu de la manipulation. Procédure complète : README §`$HERMES_HOME` : ni versionné,
+          # ni semé, « Premier boot sur un PVC neuf ». Les sondes se remettent une fois 8642 vivant.
           startupProbe:
             tcpSocket: { port: api }
             # Une minute de silence avant la première sonde : le démarrage passe par s6, le
@@ -82,7 +82,7 @@ spec:
           # `initialDelaySeconds` est inerte sur ces deux-là tant qu'une startupProbe existe :
           # kubelet les suspend entièrement jusqu'à ce qu'elle réussisse. Il est posé quand même,
           # pour que le délai reste explicite si la startupProbe est un jour commentée — ce que
-          # la procédure de premier boot demande justement de faire (README §Versionnement).
+          # la procédure de premier boot demande justement de faire (README, « Premier boot »).
           livenessProbe:
             tcpSocket: { port: dashboard }
             initialDelaySeconds: 60
@@ -101,53 +101,13 @@ spec:
               memory: 4Gi
           volumeMounts:
             - { name: data, mountPath: /opt/data }
-        # Une passe de commit + push par jour vers homelab_hermes. Sidecar et non `CronJob` : le
-        # PVC est RWO et déjà monté par ce pod — un Job devrait atterrir sur le même nœud pour
-        # monter le volume, ce que rien ne garantit.
-        # ⚠️ Le script ne sort JAMAIS en erreur : le pod n'est `Ready` que si tous ses conteneurs
-        # le sont, et un sidecar en CrashLoopBackOff masquerait la santé réelle de la gateway.
-        - name: git-sync
-          image: alpine/git:v2.54.0
-          # Écrase l'ENTRYPOINT `git` de l'image. Le script vient du ConfigMap de bootstrap.
-          command: ["sh", "/bootstrap/git-sync.sh"]
-          env:
-            - name: FORGEJO_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: hermes-env
-                  key: FORGEJO_TOKEN
-            # Racine en lecture seule : git a besoin d'un HOME inscriptible, ce sera l'emptyDir.
-            - name: HOME
-              value: /tmp
-          securityContext:
-            runAsUser: 10000
-            runAsGroup: 10000
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
-            # Le sidecar est le seul conteneur du pod qui tient le niveau `restricted` — les
-            # autres ne le peuvent pas (cf. namespace.yaml). Aucune raison de le relâcher ici.
-            seccompProfile:
-              type: RuntimeDefault
-          resources:
-            requests:
-              cpu: "10m"
-              memory: 64Mi
-            limits:
-              cpu: "200m"
-              memory: 256Mi
-          volumeMounts:
-            - { name: data, mountPath: /opt/data }
-            - { name: bootstrap, mountPath: /bootstrap, readOnly: true }
-            - { name: git-tmp, mountPath: /tmp }
       volumes:
-        # /tmp inscriptible (askpass, objets temporaires de git) alors que la racine du conteneur
-        # git-sync est en lecture seule. Les emptyDir sont exclus de Velero par la ConfigMap
-        # `velero-volume-policies` — rien à ajouter côté sauvegarde.
-        - name: git-tmp
-          emptyDir: {}
+        # ⚠️ Déclaré et monté NULLE PART, et c'est voulu : ce volume n'existe que pour que le nom
+        # haché du ConfigMap `hermes-bootstrap` figure dans le pod template. Le ConfigMap porte
+        # `hermes-env.sealed.yaml` ; un rescellement change son hash, donc ce nom, donc le
+        # template — c'est le SEUL déclencheur de rollout sur un changement de secret (un
+        # `envFrom` dont le Secret change ne redémarre rien). Le retirer = des secrets rescellés
+        # qui n'atteignent le pod qu'au prochain redémarrage fortuit.
         - name: bootstrap
           configMap:
             name: hermes-bootstrap

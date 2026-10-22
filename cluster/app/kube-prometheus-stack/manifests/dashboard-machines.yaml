@@ -14,8 +14,7 @@
 #   job="node-exporter"  -> les 3 nœuds Talos, DaemonSet de kube-prometheus-stack
 #   job="external-node"  -> les machines hors cluster, composant `cluster/app/hosts-monitoring`
 # Vérifié le 2026-09-11 : les cinq familles de métriques utilisées ici (`node_uname_info`,
-# `node_boot_time_seconds`, `node_hwmon_*`, `node_textfile_scrape_error`,
-# `node_scrape_collector_*`) existent sur les QUATRE machines. Aucun panneau n'est vide sur une
+# `node_boot_time_seconds`, `node_hwmon_*`, `node_scrape_collector_*`) existent sur les QUATRE machines. Aucun panneau n'est vide sur une
 # partie du parc.
 #
 # ⚠️ PIÈGE HISTORIQUE, À NE PAS REFAIRE : ce dashboard a porté pendant quelques heures un filtre
@@ -27,11 +26,11 @@
 # ⚠️ CE QU'IL NE MONTRE PAS, à dessein :
 #   - les VolumeGroups LVM / OpenEBS et l'état des nœuds Kubernetes : ils décrivent le CLUSTER, pas
 #     une machine, et vivent dans `dashboard-stockage-cluster.yaml` ;
-#   - la fraîcheur des SAUVEGARDES de la forge. Les séries `forgejo_backup_*` arrivent pourtant par
-#     le scrape d'une machine (collecteur textfile de node-exporter) — mais elles parlent de la
-#     forge, pas de la machine, et s'affichent dans « Forge — forgejo ». Ce qui reste ici est la
-#     santé du CANAL : la tuile « Collecteur textfile » et la ligne « Diagnostic — santé de la
-#     supervision ». Le canal appartient à la machine, son contenu au service.
+#   - l'état des SERVICES que portent ces machines. Même si leurs métriques arrivaient un jour par
+#     le scrape d'une machine (collecteur textfile de node-exporter), elles parleraient du service,
+#     pas de la machine, et auraient leur propre dashboard. Ce qui resterait ici est la santé du
+#     CANAL — la ligne « Diagnostic — santé de la supervision ». Le canal appartient à la machine,
+#     son contenu au service.
 #
 # ⚠️ Les seuils de température sont CHOISIS, pas déclarés par le matériel : `vert-emeriss` n'expose
 # ni `node_hwmon_temp_crit_celsius` ni `_max_celsius` (les séries de ce nom viennent des nœuds
@@ -108,7 +107,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Share of CPU time spent ANYWHERE but `idle`, averaged over all cores. `1 - avg(rate(idle))` rather than the sum of the other modes: same value, but it stays correct if a mode appears or disappears from one kernel version to the next.\n\n⚠️ ON THIS MACHINE THIS FIGURE ALONE MISLEADS: Git is IOPS-bound. A sluggish forge can show a low CPU with a high `iowait` and a saturated disk. Read it next to \"Load (1 min)\" and \"Disk saturation\" further down — if the load goes above 1 while this square is green, the bottleneck is the disk, not the compute.\n\nNo alert is built on it, deliberately: a CPU spike on a forge is a clone or a reindexing, not an incident.",
+          "description": "Share of CPU time spent ANYWHERE but `idle`, averaged over all cores. `1 - avg(rate(idle))` rather than the sum of the other modes: same value, but it stays correct if a mode appears or disappears from one kernel version to the next.\n\n⚠️ THIS FIGURE ALONE MISLEADS: storage-bound workloads (databases, Git, image pulls) can be sluggish with a low CPU, a high `iowait` and a saturated disk. Read it next to \"Load (1 min)\" and \"Disk saturation\" further down — if the load goes above 1 while this square is green, the bottleneck is the disk, not the compute.\n\nNo alert is built on it, deliberately: a CPU spike is usually a build, a compaction or a reindexing, not an incident.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -184,7 +183,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`1 - MemAvailable/MemTotal`. ⚠️ `MemAvailable` AND NOT `MemFree`: the latter ignores the reclaimable cache and would show 90% on a perfectly healthy machine — the classic misreading on Linux.\n\nThe red of this square is aligned on the threshold of the `ExternalNodeMemoryPressure` alert (less than 10% available for 20 min).\n\n⚠️ A brief trip to red after the Forgejo container restarts is EXPECTED: `REPO_INDEXER_ENABLED` reindexes every repository on first start, and that is this machine's memory peak. Lasting, on the other hand, it ends in an OOM-kill — which will show as `ForgejoDown`, without naming the cause.\n\nThe host carries 15 GiB (the \"Minimum hardware\" section of the Forgejo README only asks for 2): this square must stay very low. The detail — total, used, available, cache — is in the \"Memory\" panel.",
+          "description": "`1 - MemAvailable/MemTotal`. ⚠️ `MemAvailable` AND NOT `MemFree`: the latter ignores the reclaimable cache and would show 90% on a perfectly healthy machine — the classic misreading on Linux.\n\nThe red of this square is aligned on the threshold of the `ExternalNodeMemoryPressure` alert (less than 10% available for 20 min).\n\n⚠️ A brief trip to red when an application starts or reindexes is EXPECTED. Lasting, on the other hand, it ends in an OOM-kill — which will show as the service's own alert, without naming the cause.\n\nThe host carries 15 GiB for a handful of stacks: this square must stay very low. The detail — total, used, available, cache — is in the \"Memory\" panel.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -424,7 +423,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "`up` of the `external-node` target. ⚠️ At 0, THIS WHOLE dashboard freezes on the last known value with no visible gap in the curves — and the forge's three backup alerts go blind, they travel through that same target.",
+          "description": "`up` of the `external-node` target. ⚠️ At 0, THIS WHOLE dashboard freezes on the last known value with no visible gap in the curves.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -597,7 +596,7 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 5,
+            "w": 9,
             "x": 15,
             "y": 7
           },
@@ -633,91 +632,6 @@ data:
             }
           ],
           "title": "Uptime",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "description": "`node_textfile_scrape_error`. ⚠️ At 1, node-exporter does not drop the offending file alone: it drops the WHOLE textfile collector — verified on 2026-09-11 on image v1.12.1. The `forgejo_backup_*` metrics then disappear, and `ForgejoBackupNoMetric` starts lying (\"no backup\" instead of \"channel cut\"). Usual causes: a `.prom` in mode 0600 instead of 0644, or a non-atomic write caught mid-scrape.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds",
-                "fixedColor": "text"
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "OK",
-                      "color": "green",
-                      "index": 0
-                    },
-                    "1": {
-                      "text": "ERROR",
-                      "color": "red",
-                      "index": 1
-                    }
-                  }
-                }
-              ],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 4,
-            "x": 20,
-            "y": 7
-          },
-          "id": 87,
-          "options": {
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "pluginVersion": "10.4.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "node_textfile_scrape_error{instance=~\"$instance\"}",
-              "legendFormat": "error",
-              "range": false,
-              "instant": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Textfile collector",
           "type": "stat"
         },
         {
@@ -1060,7 +974,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "This is the fill level to watch.\n\n⚠️ `/var` DOES NOT MEAN THE SAME THING ON EVERY MACHINE, now that this dashboard covers the whole fleet: on a Talos node it is the EPHEMERAL partition (container images, logs, node state); on `vert-emeriss` (Debian) it is `/var/lib/docker` — and `/var/backups/forgejo` is a DEDICATED volume there, precisely so that an overflowing backup does not take Docker down with it. Comparing the two by eye makes no sense; what is read is the SLOPE of each.",
+          "description": "This is the fill level to watch.\n\n⚠️ `/var` DOES NOT MEAN THE SAME THING ON EVERY MACHINE, now that this dashboard covers the whole fleet: on a Talos node it is the EPHEMERAL partition (container images, logs, node state); on `vert-emeriss` (Debian) it holds `/var/lib/docker` — images, layers and container logs of every stack. Comparing the two by eye makes no sense; what is read is the SLOPE of each.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2447,7 +2361,7 @@ data:
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "description": "Filesystem layer (node-exporter).\n\n⚠️ `/var` DOES NOT MEAN THE SAME THING ON EVERY MACHINE, now that this dashboard covers the whole fleet: on a Talos node it is the EPHEMERAL partition (container images, logs, node state); on `vert-emeriss` (Debian) it is `/var/lib/docker` — and `/var/backups/forgejo` is a DEDICATED volume there, precisely so that an overflowing backup does not take Docker down with it. Comparing the two by eye makes no sense; what is read is the SLOPE of each.",
+              "description": "Filesystem layer (node-exporter).\n\n⚠️ `/var` DOES NOT MEAN THE SAME THING ON EVERY MACHINE, now that this dashboard covers the whole fleet: on a Talos node it is the EPHEMERAL partition (container images, logs, node state); on `vert-emeriss` (Debian) it holds `/var/lib/docker` — images, layers and container logs of every stack. Comparing the two by eye makes no sense; what is read is the SLOPE of each.",
               "fieldConfig": {
                 "defaults": {
                   "color": {

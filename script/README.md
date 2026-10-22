@@ -56,49 +56,6 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   > Même raison pour `dump`, qui passe par `Connection.backup()` et non par un `cp` du `.db`.
   > Sa sortie contient la mémoire de l'agent en clair : elle n'a rien à faire dans un dépôt.
 
-> [!CAUTION]
-> **Les deux scripts `forgejo-pra-*` ne fonctionnent plus.** Ils lisent la production de la forge
-> **dans ce cluster** — namespace `forgejo`, PVC `forgejo-data`, `Cluster` CNPG `forgejo-db`, les
-> deux chaînes de sauvegarde — et plus rien de tout cela n'existe depuis le 2026-09-11 : la forge
-> tourne en Docker sur une machine dédiée ([`archive/forgejo`](../archive/forgejo/README.md)). Ils
-> échouent donc dès leur `check` / `up`, faute d'objets à lire. Ils sont **conservés** parce que
-> l'exercice qu'ils outillent a été joué dix fois et que son journal
-> ([`doc/forgejo-pra-exercice.md`](../doc/forgejo-pra-exercice.md)) reste la référence de ce
-> qu'une restauration doit vérifier. Le régime de sauvegarde actuel de la forge, lui, est au §B de
-> [`doc/forgejo-docker-bascule-et-sauvegarde.md`](../doc/forgejo-docker-bascule-et-sauvegarde.md)
-> et **n'a pas d'outillage dans ce dépôt**.
-
-- [`forgejo-pra-prepare-script.sh`](forgejo-pra-prepare-script.sh) — **préparation** de l'épreuve
-  du PRA de forgejo : `check` (état, ne crée rien) et `run`. Rend les deux chaînes **alignables**
-  en créant une copie velero du PVC **puis** une sauvegarde de base CNPG — dans cet ordre, le
-  `pg_backup_stop` de la seconde forçant le basculement de WAL qui couvre l'instant de la
-  première. Inversé, il ne prépare rien et ne le dit pas.
-
-  > [!WARNING]
-  > **`run` crée deux sauvegardes RÉELLES de la production**, qui comptent dans la rétention de
-  > 30 jours des deux buckets. Ce n'est pas une simulation. `check`, lui, ne crée rien.
-  > Variables : `TIMEOUT`, `YES`.
-- [`forgejo-pra-script.sh`](forgejo-pra-script.sh) — **épreuve du PRA de forgejo** : `up`,
-  `verify`, `status`, `down`, `drill`. Restaure les deux chaînes (PVC par velero, base par
-  `bootstrap.recovery`) dans une préprod jetable `forgejo-preprod`, l'expose sur
-  `forgejo-preprod.lan.wittner.tech`, la vérifie, la détruit. Documentation complète dans
-  [`doc/forgejo-pra-exercice.md`](../doc/forgejo-pra-exercice.md).
-
-  > [!CAUTION]
-  > **C'est le seul script qui crée un PÉRIMÈTRE, et non de simples événements.** Les trois autres
-  > écrivent aussi dans le cluster — un `Backup`, un `Restore`, un `DeleteBackupRequest` — mais ce
-  > sont des objets éphémères ; celui-ci pose un namespace, des PVC et un `Cluster`. Trois bornes
-  > le tiennent, et elles sont la condition de son existence :
-  > - il n'écrit que dans `forgejo-preprod`, un namespace qu'ArgoCD ne gère pas. ⚠️ Le nom est
-  >   **surchargeable** par `PREPROD_NAMESPACE` : la borne tient tant qu'on ne la déplace pas
-  >   soi-même. `down` est en revanche gardé par le label `homelab.wittner.tech/drill` ;
-  > - il ne touche à **rien** dans `forgejo` — la production est lue, jamais modifiée ;
-  > - `down` fait partie de la procédure, pas des options : la préprod immobilise **110 Gi** de
-  >   groupe de volumes, la StorageClass étant en `thinProvision: "no"`.
-  >
-  > **Variables d'environnement** : `PREPROD_NAMESPACE`, `PREPROD_HOST`, `GATEWAY_IP`, `PROXY_IP`,
-  > `TARGET_TIME`, `TIMEOUT`, `YES`.
-
 ## Contraintes
 
 - **Un script n'est pas une violation de la règle GitOps** — l'état désiré vit dans Git et ArgoCD

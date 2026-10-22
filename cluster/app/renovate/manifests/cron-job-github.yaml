@@ -1,5 +1,6 @@
-# Bot Renovate de la forge **GitHub** (github.com) — le seul bot du composant depuis que
-# `homelab_gitops` a quitté Forgejo pour GitHub (le bot Forgejo a été supprimé avec lui).
+# Bot Renovate de **GitHub** (github.com) — le seul bot du composant. `platform` est un réglage
+# GLOBAL de Renovate : un second hébergeur de dépôts demanderait un second CronJob, pas un
+# second bloc dans celui-ci.
 #
 # Il s'authentifie comme **GitHub App**, pas comme utilisateur : le jeton d'installation (1 h) est
 # produit à chaque run par `config.mjs`, à partir de la clé privée du Secret `renovate-github`.

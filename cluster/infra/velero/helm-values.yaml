@@ -107,27 +107,17 @@ metrics:
 # même release, sans dépendre de l'ordre de kind d'ArgoCD.
 schedules:
   daily:
-    # ⚠️ DÉSACTIVÉE le 2026-09-11, et ce n'est pas un réglage timide : son périmètre était le
-    # namespace `forgejo`, et LUI SEUL. La forge a quitté le cluster (archive/forgejo), le
-    # namespace n'existe plus — une schedule qui vise un namespace absent ne produit pas une
+    # ⚠️ ACTIVE depuis le 2026-09-23, sur `hermes` (cf. `includedNamespaces` plus bas). Elle a été
+    # désactivée du 2026-09-11 au 2026-09-23 : le seul namespace qu'elle couvrait avait quitté le
+    # cluster. Leçon à garder — une schedule qui vise un namespace absent ne produit pas une
     # erreur, elle produit des backups VIDES qui réussissent. C'est pire que rien : les alertes de
     # fraîcheur (`VeleroBackupTooOld`, `VeleroNoBackupMetric`) resteraient vertes en ne
-    # sauvegardant rien.
+    # sauvegardant rien. Retirer un namespace de la liste blanche impose donc de se demander s'il
+    # en reste un.
     #
     # `disabled: true` fait que le chart NE REND PAS l'objet `Schedule` : ArgoCD le prune, il n'y
     # a plus de cron. Le reste du composant (contrôleur, node-agent, BSL, dépôt kopia) reste
     # debout et prêt — les backups existants restent restaurables jusqu'à expiration de leur TTL.
-    #
-    # ⚠️ CE QUI EST SAUVEGARDÉ AUJOURD'HUI DANS CE CLUSTER : RIEN.
-    #
-    # Des deux gestes qu'exigeait la réactivation, le second est FAIT depuis le 2026-09-23 :
-    # `includedNamespaces` ci-dessous porte `hermes`. Ce flag reste néanmoins à `true`, et le
-    # blocage a changé de nature — ce n'est plus un périmètre manquant mais une DESTINATION
-    # manquante : le bucket GCS a été supprimé (il ne survivait pas au retrait, contrairement à ce
-    # qu'affirmait le README jusqu'à cette date). Repasser ce flag à `false` sans avoir reposé
-    # bucket et compte de service côté Terraform donne une `BackupStorageLocation` `Unavailable`,
-    # `VeleroBackupStorageLocationUnavailable` qui sonne et `kopia-maintain` en échec — l'état
-    # exact pour lequel le composant a été retiré. L'ordre des gestes est dans le README.
     disabled: false
     # ⚠️ CET HORAIRE EST EN **UTC**, et il ne peut pas être autre chose. Ni `Schedule` (velero) ni
     # `ScheduledBackup` (CNPG) n'exposent de champ `timezone` — seul un `CronJob` Kubernetes en a un
@@ -141,8 +131,8 @@ schedules:
     #   1. un cron UTC fixe ne peut viser une heure locale qu'à UNE saison — il faudrait 00:00 UTC
     #      l'été et 01:00 UTC l'hiver, donc on se tromperait six mois par an ;
     #   2. le décalage créerait une COLLISION : `renovate-github` tourne à 02:00 Europe/Paris, soit
-    #      01:00 UTC en hiver. Y placer la sauvegarde de base ferait écrire le bot dans la forge
-    #      pendant la copie.
+    #      01:00 UTC en hiver. Y placer la sauvegarde ferait tourner le bot pendant la copie, et
+    #      ses écritures dans un namespace sauvegardé produiraient une copie incohérente.
     # En l'état l'ordre base → PVC tient aux DEUX saisons : 2 h de marge l'été, 1 h l'hiver.
     schedule: "0 3 * * *"
     # ⚠️ NE PAS déclarer `skipImmediately` ici. C'est un ordre à usage unique, pas un état désiré :
@@ -167,12 +157,8 @@ schedules:
       # Contrepartie assumée — un composant ajouté au cluster n'est PAS couvert tant que son
       # namespace n'est pas ajouté à cette liste, et rien ne le signale.
       #
-      # PÉRIMÈTRE ACTUEL : `hermes`, et lui seul (2026-09-23). Le namespace précédent était
-      # `forgejo` — le PVC `forgejo-data` (100Gi : dépôts Git, LFS, registre de paquets, et
-      # l'`app.ini` qui porte les quatre secrets cryptographiques de la forge) était LA donnée sans
-      # alternative native du cluster. Elle est partie avec la forge (archive/forgejo) ; sa
-      # sauvegarde se joue maintenant sur la machine Docker, au §B de
-      # doc/forgejo-docker-bascule-et-sauvegarde.md, hors de portée de velero.
+      # PÉRIMÈTRE ACTUEL : `hermes`, et lui seul (2026-09-23). Le namespace précédent a quitté le
+      # cluster le 2026-09-11 ; sa sauvegarde se joue hors de portée de velero.
       #
       # POURQUOI `hermes` EN PREMIER. C'est le cas qui revalide la chaîne au moindre coût : petit
       # PVC (10Gi), un seul volume de données, et AUCUNE base CNPG — le piège de volume-policies
@@ -216,7 +202,8 @@ schedules:
       #
       # Reste hors de portée de tout ce qui précède : une lifecycle rule GCS posée par erreur, qui
       # purgerait un bucket sans qu'aucune métrique du cluster ne le voie. Seule une restauration
-      # d'épreuve périodique y répond, et elle est manuelle (cf. doc/forgejo-pra-exercice.md).
+      # d'épreuve périodique y répond, et elle est manuelle (`script/velero-script.sh
+      # restore`, README §Opérations).
       includedNamespaces:
         - hermes
       snapshotVolumes: false   # cohérent avec snapshotsEnabled: false — les données passent par kopia

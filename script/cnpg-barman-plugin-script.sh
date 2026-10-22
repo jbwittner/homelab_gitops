@@ -8,7 +8,7 @@
 #   1. `cluster.status.firstRecoverabilityPoint` et `cluster.status.lastSuccessfulBackup` valent
 #      `null` AVEC LE PLUGIN. Ce sont des champs de l'ancien support in-tree
 #      (`spec.backup.barmanObjectStore`), que plus rien ne renseigne depuis CloudNativePG 1.26.
-#      Vérifié le 2026-09-08 sur `forgejo-db` : deux `Backup` en phase `completed`, et les deux
+#      Vérifié le 2026-09-08 sur une base réelle : deux `Backup` en phase `completed`, et les deux
 #      champs à `null`. La fenêtre de récupération RÉELLE vit ailleurs, sur l'ObjectStore :
 #      `.status.serverRecoveryWindow["<serverName>"]`. C'est elle que le script affiche partout.
 #   2. Les phases CNPG sont en MINUSCULES (`completed`, `failed`, `running`, `walArchivingFailing`)
@@ -351,7 +351,7 @@ cmd_list() {
           (if $p == null then "-" else rel($win.lastSuccessfulBackupTime) end),
           # `firstRecoverabilityPoint` REPORTÉ TEL QUEL, et surtout pas relabellisé en « plus
           # ancienne sauvegarde » : les deux ne coïncident pas. Observé le 2026-09-08 sur
-          # `forgejo-db` — le champ valait déjà 15:02:11 (sauvegarde `7ghnl`) alors que `5gcxx`
+          # une base réelle — le champ valait déjà 15:02:11 (sauvegarde `7ghnl`) alors que `5gcxx`
           # (14:59:51) existait et était `completed`. Ce champ borne la fenêtre de rejeu, pas
           # le catalogue. Le comptage des sauvegardes se lit sur le tableau du dessous.
           (if $p == null then "-" else rel($win.firstRecoverabilityPoint) end) ]
@@ -806,7 +806,7 @@ cmd_restore() {
   #
   # Ce qui a été DÉCLARÉ se lit dans `.metadata.managedFields` : ArgoCD applique en Server-Side
   # Apply, donc son entrée `operation: "Apply"` liste exactement les champs du manifeste Git.
-  # `prune` retaille le `.spec` sur cet arbre. Sur `forgejo-db` (2026-09-08) : 5 clés retenues
+  # `prune` retaille le `.spec` sur cet arbre. Sur une base réelle (2026-09-08) : 5 clés retenues
   # (`affinity`, `instances`, `monitoring`, `plugins`, `storage`) sur les ~30 servies par l'API.
   #
   # Repli explicite si aucune entrée Apply n'existe (objet créé à la main, hors ArgoCD) : le spec

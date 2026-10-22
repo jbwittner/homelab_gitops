@@ -4,31 +4,16 @@ L'intégralité d'un homelab Kubernetes, déclarée en Git et appliquée par Arg
 Talos, `bleu-kalecgos`, et une règle qui prime sur les autres : **aucune donnée ne rentre dans le
 cluster hors GitOps** — cf. [`doc/regles-gitops.md`](doc/regles-gitops.md).
 
-Le dépôt de référence est la forge auto-hébergée
-(`https://forgejo.wittner.tech/jbwittner/homelab_gitops`), **miroitée sur un dépôt GitHub privé**.
-C'est aussi la source que lit ArgoCD : les 32 `repoURL` de `cluster/` y pointent, et
-`argocd-repo-server` s'y authentifie avec un jeton `read:repository` (cf.
-[`cluster/infra/argocd/README.md`](cluster/infra/argocd/README.md) §Accès au dépôt privé).
-Un **webhook « push »** de la forge appelle `/api/webhook` sur `argocd-server` : la sync part au
-commit au lieu d'attendre le polling de 3 min — accélération seulement, le polling reste le filet
-(cf. [`cluster/infra/argocd/README.md`](cluster/infra/argocd/README.md) §Webhook Forgejo).
+Le dépôt de référence est **GitHub**, en dépôt **privé** :
+`https://github.com/jbwittner/homelab_gitops`. C'est la source que lit ArgoCD : toutes les
+`repoURL` de `cluster/` y pointent, et `argocd-repo-server` s'y authentifie sous l'identité d'une
+**GitHub App** en lecture seule (cf. [`cluster/infra/argocd/README.md`](cluster/infra/argocd/README.md)
+§Accès au dépôt privé). Les mises à jour de dépendances sont proposées par le bot Renovate du cluster, authentifié lui aussi
+en GitHub App (cf. [`cluster/app/renovate/README.md`](cluster/app/renovate/README.md)).
 
-**La forge tourne hors du cluster**, en Docker sur une machine dédiée, et ce n'est pas un choix
-d'hébergement : tant qu'elle était un composant `cluster/app/`, en faire la source du GitOps aurait
-donné une dépendance circulaire — ArgoCD lisant un dépôt servi par un composant qu'ArgoCD déploie,
-et un cluster à froid sans plus aucune source. Cf.
-[`doc/forgejo-docker-bascule-et-sauvegarde.md`](doc/forgejo-docker-bascule-et-sauvegarde.md).
-
-Le miroir GitHub reste la copie hors site qui survit à la perte de la machine de la forge — c'est
-depuis lui qu'on repart alors, au prix d'une réécriture des `repoURL`
-(cf. [`doc/runbook-bootstrap.md`](doc/runbook-bootstrap.md) §Source de vérité).
-
-Le miroir est en **lecture seule** : on pousse sur la forge, jamais sur GitHub. Si un jour une
-divergence apparaît, la forge fait foi. Renovate le sait : le bot GitHub ne scanne plus
-`homelab_gitops` : c'est au bot Forgejo de s'en charger — ⚠️ **il n'est pas encore déployé**, sa
-ligne attend son `SealedSecret` (cf.
-[`cluster/app/renovate/README.md`](cluster/app/renovate/README.md)). D'ici là, **rien** ne propose
-de mise à jour de dépendances sur ce dépôt.
+⚠️ **GitHub est un prérequis du GitOps au même titre que le kubeconfig.** Une panne côté GitHub, ou
+la désinstallation de l'App, ne casse rien de ce qui tourne mais gèle toute réconciliation : les
+Applications passent en `ComparisonError`, `argocd` compris.
 
 ## Par où commencer
 
@@ -38,8 +23,7 @@ de mise à jour de dépendances sur ce dépôt.
 | ajouter ou modifier un composant | [`doc/conventions.md`](doc/conventions.md) |
 | exposer un service, ou comprendre un 404 | [`doc/reseau.md`](doc/reseau.md) |
 | reconstruire le cluster à froid | [`doc/runbook-bootstrap.md`](doc/runbook-bootstrap.md) |
-| restaurer la forge après un sinistre | [`doc/forgejo-docker-bascule-et-sauvegarde.md`](doc/forgejo-docker-bascule-et-sauvegarde.md) §B (la forge est hors du cluster ; [`doc/forgejo-pra.md`](doc/forgejo-pra.md) décrit l'ancien montage) |
-| lancer un outil (sauvegarde, restauration, exercice) | [`script/README.md`](script/README.md) |
+| lancer un outil (sauvegarde, restauration, inspection) | [`script/README.md`](script/README.md) |
 
 ## L'arbre
 
@@ -73,7 +57,6 @@ pour tout ce qui est dans `archive/`.
 | [argocd](cluster/infra/argocd/README.md) | -1 | le moteur GitOps, self-managed |
 | [cilium](cluster/infra/cilium/README.md) | 0 | CNI, LB-IPAM et L2, implémentation Gateway API |
 | [openebs](cluster/infra/openebs/README.md) | 0 | stockage local LVM, `openebs-lvm-thin` |
-| [kubevirt](cluster/infra/kubevirt/README.md) | 1 | hyperviseur (KubeVirt + CDI) — **un seul consommateur**, `forgejo-pra` |
 | [velero](cluster/infra/velero/README.md) | 1 | sauvegarde vers GCS — schedule quotidienne, périmètre `hermes` |
 | [openebs-monitoring](cluster/infra/openebs-monitoring/README.md) | 2 | alertes de remplissage des volumes |
 | [velero-monitoring](cluster/infra/velero-monitoring/README.md) | 2 | 8 alertes sur la chaîne de sauvegarde, dont les 2 de fraîcheur rétablies le 2026-09-23 |
@@ -92,11 +75,8 @@ pour tout ce qui est dans `archive/`.
 | [bankwiz](cluster/app/bankwiz/README.md) | 0 | API bankwiz, environnement `dev` (branche `develop`) |
 | [donetick](cluster/app/donetick/README.md) | 0 | gestionnaire de tâches et de corvées personnel, SQLite sur PVC — ⚠️ **inerte** tant que son `SealedSecret` `donetick-env` n'est pas scellé |
 | [renovate](cluster/app/renovate/README.md) | 0 | mises à jour de dépendances |
-| [forgejo-runner](cluster/app/forgejo-runner/README.md) | 0 | Forgejo Actions — ⚠️ **inerte** tant que son `SealedSecret` d'enregistrement n'est pas scellé |
-| [forgejo-pra](cluster/app/forgejo-pra/README.md) | 0 | VM d'**exercice** du PRA de la forge — éteinte par défaut, jamais un standby |
 | [cnpg-monitoring](cluster/app/cnpg-monitoring/README.md) | 2 | archivage WAL — ⚠️ les 3 règles de **sauvegarde** sont commentées (plus de plugin barman) |
-| [forgejo-monitoring](cluster/app/forgejo-monitoring/README.md) | 2 | la forge et sa base, scrapées **hors du cluster** — 9 alertes |
-| [hosts-monitoring](cluster/app/hosts-monitoring/README.md) | 2 | les **machines** hors cluster (disque, mémoire, collecteur textfile) — 6 alertes |
+| [hosts-monitoring](cluster/app/hosts-monitoring/README.md) | 2 | les **machines** hors cluster (disque, mémoire, conteneurs) |
 
 *Non déployés :*
 - [stress-test](cluster/app/stress-test/README.md) (`.noapp.yaml`, **2026-09-28**) — instrument de
@@ -106,19 +86,15 @@ pour tout ce qui est dans `archive/`.
   le cluster en **lecture seule**. Son état normal est `.noapp.yaml`, et le renommage est le seul
   interrupteur — un test de charge doit être un commit, pas une commande.
 - [cnpg-barman-plugin](cluster/app/cnpg-barman-plugin/README.md) (`.noapp.yaml`, **2026-09-11**) —
-  entièrement orphelin : zéro `Cluster` CNPG et zéro `ObjectStore` depuis le départ de la forge.
+  entièrement orphelin : zéro `Cluster` CNPG et zéro `ObjectStore` depuis le 2026-09-11.
   ⚠️ Les trois règles `CNPG*Backup*` de [cnpg-monitoring](cluster/app/cnpg-monitoring/README.md)
   sont commentées en conséquence — laissées actives elles seraient **vertes en permanence**, ce qui
   laisserait croire que les sauvegardes PostgreSQL sont surveillées alors qu'il n'y en a plus.
-- [forgejo](archive/forgejo/README.md) (`.noapp.yaml`, archivé le 2026-09-11) — la
-forge a quitté le cluster pour une machine Docker dédiée. Ce qu'il en reste ici est
-`forgejo-monitoring`, qui scrape depuis l'extérieur son `/metrics` et sa **base**.
 
-La **machine** qui la porte, elle, est surveillée par un composant distinct,
-[hosts-monitoring](cluster/app/hosts-monitoring/README.md) — séparé volontairement : une machine
-précède le service qu'elle héberge et lui survit, la mettre avec la forge ferait disparaître sa
-supervision au `prune` du jour où on retire la forge. Les deux volets datent du 2026-09-11, la
-bascule ayant supprimé sans les remplacer le node-exporter du cluster et les métriques CNPG.
+Les **machines** hors cluster sont surveillées par un composant distinct,
+[hosts-monitoring](cluster/app/hosts-monitoring/README.md) — séparé volontairement de toute
+supervision applicative : une machine précède le service qu'elle héberge et lui survit, la ranger
+avec lui ferait disparaître sa supervision au `prune` du jour où on retire le service.
 
 ⚠️ Les waves n'ordonnent **qu'à l'intérieur d'un même app-of-apps** : `infra` et `app` sont deux
 Applications sœurs, synchronisées en parallèle.
@@ -127,36 +103,29 @@ Applications sœurs, synchronisées en parallèle.
 
 Deux choses, et elles se cumulent :
 
-1. **La clé privée du contrôleur sealed-secrets.** Sans elle, les neuf `SealedSecret` du dépôt sont
+1. **La clé privée du contrôleur sealed-secrets.** Sans elle, les douze `SealedSecret` de `cluster/` sont
    des fichiers morts — accès au dépôt compris, donc ArgoCD lui-même. La rotation automatique est
    coupée : une seule clé, à sauvegarder hors ligne.
 2. **La clé de compte de service GCP** du bucket de sauvegarde velero. Scellée ici, donc protégée
-   par (1) — mais une clé perdue oblige à en réémettre une, pas à la récupérer. (Celle du bucket
-   CNPG est partie avec la forge : `archive/forgejo`.)
+   par (1) — mais une clé perdue oblige à en réémettre une, pas à la récupérer.
 
 En reprise, **la clé sealed-secrets se restaure avant toute tentative de restauration velero ou
 barman** : sans elle, aucune sauvegarde n'est lisible.
 
 ## Sauvegardes
 
-⚠️ **CE CLUSTER NE SAUVEGARDE PLUS RIEN depuis le 2026-09-11**, et c'est un état voulu, pas une
-panne. Les deux chaînes n'avaient qu'un seul objet — la forge — et elle est partie :
-
 | Quoi | Par | État |
 |---|---|---|
-| namespace `forgejo` (PVC applicatif) | velero + kopia | **schedule désactivée** ; `includedNamespaces` vide. Les backups existants restent restaurables jusqu'à expiration de leur TTL (30 j) |
-| base `forgejo-db` (base + WAL continu) | cnpg-barman-plugin | **plus aucune base dans le cluster** ; le plugin et la CRD `ObjectStore` restent en place pour la prochaine |
+| namespace `hermes` (PVC `/opt/data`) | velero + kopia | schedule `daily`, 03:00 UTC, TTL 30 j — **seul périmètre** depuis le 2026-09-23 |
+| bases PostgreSQL | cnpg-barman-plugin | **aucune base dans le cluster** depuis le 2026-09-11 ; plugin en `.noapp.yaml` |
 
-La sauvegarde de la forge se joue désormais **sur sa machine Docker** : §B de
-[`doc/forgejo-docker-bascule-et-sauvegarde.md`](doc/forgejo-docker-bascule-et-sauvegarde.md).
-⚠️ Corollaire à ne pas perdre de vue : les alertes qui signalaient une chaîne morte
-(`VeleroBackupTooOld`, `VeleroNoBackupMetric`, `CNPGBackupChainAbsent`, `CNPGMetricsAbsent`) sont
-**commentées** — elles sonneraient sans fin. Elles se remettent avec le premier namespace remis
-sous velero, ou la première base recréée.
+⚠️ **La liste blanche de velero est la seule chose qui décide.** Un composant ajouté au cluster
+n'est pas sauvegardé tant que son namespace n'est pas dans `includedNamespaces`, et rien ne le
+signale (cf. [velero](cluster/infra/velero/README.md)).
 
-Le plan de reprise de la forge et son exercice, écrits du temps où elle vivait dans le cluster,
-restent dans [`doc/forgejo-pra.md`](doc/forgejo-pra.md) et
-[`doc/forgejo-pra-exercice.md`](doc/forgejo-pra-exercice.md).
+⚠️ Les trois règles `CNPG*Backup*` sont **commentées** — actives sans base, elles seraient vertes en
+permanence. Elles se remettent avec la première base recréée
+(cf. [cnpg-monitoring](cluster/app/cnpg-monitoring/README.md)).
 
 ## Conventions de documentation
 

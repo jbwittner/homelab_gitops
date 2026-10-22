@@ -13,8 +13,8 @@
 > `VeleroBackupStorageLocationUnavailable`. Les deux règles de fraîcheur et le dashboard Grafana
 > sont rétablis avec.
 >
-> **Pourquoi il avait été retiré :** la forge était son seul périmètre et elle a quitté le cluster
-> le 2026-09-11 ([archive/forgejo](../../../archive/forgejo/README.md)). La schedule `daily` était
+> **Pourquoi il avait été retiré :** son seul namespace sauvegardé a quitté le cluster le
+> 2026-09-11. La schedule `daily` était
 > `disabled: true` depuis, les deux règles de fraîcheur commentées. Le composant ne sauvegardait
 > donc plus rien — mais continuait à produire du BRUIT :
 > `VeleroBackupStorageLocationUnavailable` et `VeleroRepoMaintenanceFailing` étaient toutes deux
@@ -101,9 +101,8 @@ CNPG de la copie kopia, cf. Contraintes.
 - **Le credential est un `SealedSecret`, et la règle anti-cycle l'impose.** Un secret dont dépend
   la *restauration* ne peut pas vivre dans un système que la restauration doit reconstruire : on
   fermerait un cycle où la perte emporte aussi le moyen d'en sortir
-  ([`doc/regles-gitops.md`](../../../doc/regles-gitops.md)). C'est la même raison qui met
-  `forgejo-db-gcs` dans Git plutôt qu'ailleurs (du temps où la forge était dans le cluster —
-  aujourd'hui `archive/forgejo/manifests/forgejo-db-gcs.sealed.yaml`).
+  ([`doc/regles-gitops.md`](../../../doc/regles-gitops.md)). La même raison vaudra pour le
+  credential de l'`ObjectStore` de la prochaine base CNPG : scellé dans Git, pas ailleurs.
 - **Un backup manuel n'hérite RIEN de la schedule.** Le périmètre vit sur l'objet `Backup`, pas sur
   velero : `includedNamespaces` omis vaut **`["*"]`**, soit tout le cluster — y compris `monitoring`
   et ses 20 Gi de TSDB. Un `velero backup create` sans `--include-namespaces` remplit donc le bucket
@@ -161,10 +160,7 @@ CNPG de la copie kopia, cf. Contraintes.
   `velero-monitoring` reste en `.noapp.yaml`, **rien ne signalera qu'elle a cessé de fonctionner**
   — c'est exactement l'angle mort qui a laissé passer une `BackupStorageLocation` `Unavailable` le
   jour de la remise en service. Son
-  unique périmètre était alors le namespace `forgejo` ; la forge a quitté le cluster
-  ([archive/forgejo](../../../archive/forgejo/README.md)) et sa sauvegarde se joue désormais sur la
-  machine Docker (§B de
-  [`doc/forgejo-docker-bascule-et-sauvegarde.md`](../../../doc/forgejo-docker-bascule-et-sauvegarde.md)).
+  unique namespace d'alors avait quitté le cluster le 2026-09-11.
   `schedules.daily.disabled: true` fait que le chart ne rend plus l'objet `Schedule` — ArgoCD le
   prune, il n'y a plus de cron. Le reste du composant (contrôleur, node-agent, BSL, dépôt kopia)
   reste debout, et les backups déjà présents restent restaurables jusqu'à expiration de leur TTL.

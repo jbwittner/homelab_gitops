@@ -33,7 +33,7 @@ resources:
   # Vestige INERTE, le ClusterSecretStore visé n'existe plus. Les deux visent le même Secret
   # `alertmanager-smtp`. ---
   # - alertmanager-smtp.externalsecret.yaml
-  # ⚠️ REMPLACE `dashboard-talos-nodes.yaml` ET `dashboard-machine-forge.yaml`, tous deux supprimés
+  # ⚠️ REMPLACE `dashboard-talos-nodes.yaml` et l'ancien dashboard par machine, tous deux supprimés
   # le 2026-09-11. Un seul dashboard pour TOUTES les machines — nœuds Talos (job `node-exporter`)
   # et machines hors cluster (job `external-node`, composant `hosts-monitoring`). Ses variables
   # n'ont volontairement AUCUN filtre de job : c'est son objet même.
@@ -61,11 +61,6 @@ resources:
   # « plus rien n'est mesuré ». Même raisonnement que pour les règles d'alerte commentées.
   # - dashboard-cnpg-barman-plugin.yaml
   - dashboard-alertes.yaml
-  # ⚠️ La forge n'est plus dans ce cluster (archive/forgejo). Ce dashboard dépend maintenant de la
-  # `ScrapeConfig` et du token scellé de cluster/app/forgejo-monitoring/manifests, qui scrapent
-  # https://forgejo-metrics.lan.wittner.tech/metrics — il reste VIDE tant que ce token n'est pas
-  # scellé (cible en 401).
-  - dashboard-forgejo.yaml
   - servicemonitors-argocd.yaml
   # Alertes thermiques du parc, ajoutées le 2026-09-28. Elles sont ICI et non dans
   # `hosts-monitoring` parce qu'elles ne sont pas filtrées par job : c'est le pendant en règles du

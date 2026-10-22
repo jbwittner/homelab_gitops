@@ -18,7 +18,7 @@
 #   - kube-state-metrics, customResourceState (helm-values.yaml) : cnpg_backup_object_* — la liste
 #     des CRs `Backup`, que les métriques du sidecar ne donnent pas
 #
-# ⚠️ TROIS PIÈGES, tous vérifiés sur `forgejo-db` en CloudNativePG 1.30 / plugin 0.15. Ils sont
+# ⚠️ TROIS PIÈGES, tous vérifiés sur une base réelle en CloudNativePG 1.30 / plugin 0.15. Ils sont
 # les mêmes que ceux documentés en tête de cnpg-monitoring/manifests/prometheusrule.yaml, et les
 # panneaux de ce dashboard sont écrits pour les contourner :
 #
@@ -2245,7 +2245,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "A sidecar restarting during a backup makes it fail without the database flinching: PostgreSQL keeps serving, only the backup chain is hit. Cross-read with the memory curve above to tell an OOM from a redeploy.\n\n⚠️ The first query reads `kube_pod_init_container_status_restarts_total`, NOT `kube_pod_container_status_restarts_total`. The sidecar is injected as a *native sidecar* — an initContainer with `restartPolicy: Always` — so kube-state-metrics files it with the init containers. The \"obvious\" query on `kube_pod_container_*` returns an empty series without saying so, which reads exactly like \"no restart\". Verified on `forgejo-db-1`. cadvisor makes no such distinction: the two panels above do not need the guard.\n\n⚠️ Neither restart counter sees a RECREATED pod: a new pod is a new object whose counter starts back at zero. The third series counts the barman-cloud pods started less than an hour ago, which is what catches a rollout or an eviction.",
+          "description": "A sidecar restarting during a backup makes it fail without the database flinching: PostgreSQL keeps serving, only the backup chain is hit. Cross-read with the memory curve above to tell an OOM from a redeploy.\n\n⚠️ The first query reads `kube_pod_init_container_status_restarts_total`, NOT `kube_pod_container_status_restarts_total`. The sidecar is injected as a *native sidecar* — an initContainer with `restartPolicy: Always` — so kube-state-metrics files it with the init containers. The \"obvious\" query on `kube_pod_container_*` returns an empty series without saying so, which reads exactly like \"no restart\". Verified on a real CNPG instance. cadvisor makes no such distinction: the two panels above do not need the guard.\n\n⚠️ Neither restart counter sees a RECREATED pod: a new pod is a new object whose counter starts back at zero. The third series counts the barman-cloud pods started less than an hour ago, which is what catches a rollout or an eviction.",
           "fieldConfig": {
             "defaults": {
               "color": {

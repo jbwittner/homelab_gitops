@@ -76,8 +76,9 @@ qu'après le stack d'observabilité.
 >
 > La `VolumeSnapshotClass` a donc été **retirée** : advertiser une capacité dont le chemin de
 > retour est fermé est pire que ne pas l'avoir. Conséquence directe, velero ne peut pas copier
-> depuis un instantané et reste sur un parcours de système de fichiers vivant — cf.
-> [`doc/forgejo-pra.md`](../../../doc/forgejo-pra.md) §1.
+> depuis un instantané et reste sur un parcours de système de fichiers vivant : un volume écrit
+> pendant sa copie est restauré dans un état qu'il n'a jamais eu, cohérent-CRASH au mieux (cf.
+> [velero](../velero/README.md)).
 >
 > **Rouvrir ce chemin exige de passer en `thinProvision: "yes"`**, ce qui ne convertit PAS les
 > volumes existants : il faudrait une seconde StorageClass et une migration volume par volume.

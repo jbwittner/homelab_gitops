@@ -48,8 +48,8 @@ spec:
     # ⚠️ Les objets vivent ici alors que les pods scrapés vivent, eux, dans les namespaces des
     # applications consommatrices : le PodMonitor traverse les namespaces par son
     # `namespaceSelector`. C'est délibéré — un jeu d'alertes unique pour toutes les bases, plutôt
-    # qu'une copie par application consommatrice. ⚠️ Il n'y en a AUCUNE aujourd'hui : `forgejo-db`
-    # est partie avec la forge (archive/forgejo), `authentik` reste le candidat connu.
+    # qu'une copie par application consommatrice. Une seule aujourd'hui : `bankwiz` (base de dev
+    # `bankwiz-db`, non sauvegardée).
     namespace: cnpg-system
   syncPolicy:
     automated:

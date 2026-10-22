@@ -50,8 +50,8 @@ metadata:
 #
 # Garder les deux ne serait pas « une ceinture et des bretelles » mais un second chemin de
 # restauration à moitié fiable, qu'on n'utiliserait jamais et qui coûterait à chaque sauvegarde la
-# lecture intégrale du volume de la base, sur un stockage node-local que le PVC de 100Gi de Forgejo
-# occupe déjà à 03:00.
+# lecture intégrale du volume de la base, sur un stockage node-local que les autres PVC du
+# périmètre sollicitent déjà à 03:00.
 #
 # ⚠️ CE QUI TIENT CETTE DÉCISION. L'exclusion n'est défendable que parce qu'une DÉTECTION PASSIVE
 # d'une chaîne native morte en silence a été posée en face :
@@ -60,7 +60,7 @@ metadata:
 # règle indéfendable — les deux décisions se tiennent ensemble.
 #
 # ⚠️ RÈGLE CLUSTER-WIDE, ET C'EST VOULU. Le sélecteur est le label que l'opérateur pose sur TOUS
-# les PVC qu'il crée, quelle que soit la base — pas `cnpg.io/cluster: forgejo-db`, qui aurait
+# les PVC qu'il crée, quelle que soit la base — pas `cnpg.io/cluster: <base>`, qui aurait
 # demandé une ligne par base et se serait fait oublier à la suivante. Corollaire à ne pas perdre :
 # le jour où `authentik` entre dans `includedNamespaces`, sa base ne sera couverte par RIEN tant
 # qu'elle n'aura pas son propre `ObjectStore` — cette règle-ci l'aura déjà exclue de kopia. C'est

@@ -59,9 +59,8 @@ câblage côté Grafana appartient au composant qui porte Grafana, comme pour ar
   kube-state-metrics. Elles couvrent les deux pannes qu'aucun compteur d'échec ne peut voir : plus
   rien ne se déclenche, ou les sauvegardes réussissent **à vide** parce que node-agent n'est pas là.
 - **Le cluster a passé douze jours sans aucune sauvegarde planifiée** (2026-09-11 → 2026-09-23).
-  La forge était le seul namespace de `includedNamespaces` ; elle a quitté le cluster
-  ([archive/forgejo](../../../archive/forgejo/README.md)) et `schedules.daily` était passée à
-  `disabled: true`. Les **deux règles de fraîcheur** avaient été commentées en conséquence —
+  Le seul namespace de `includedNamespaces` avait quitté le cluster et `schedules.daily` était
+  passée à `disabled: true`. Les **deux règles de fraîcheur** avaient été commentées en conséquence —
   elles auraient sonné sans fin, et une alerte qui sonne toujours n'est plus lue. La schedule
   tourne de nouveau (périmètre `hermes`) et les deux règles sont rétablies, **ensemble** : le
   couple valeur + `absent(...)` ne se scinde pas.

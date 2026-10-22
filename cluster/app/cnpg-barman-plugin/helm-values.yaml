@@ -2,7 +2,7 @@
 #
 # Le chart ne prend AUCUNE configuration de bucket : la destination, les credentials et la
 # rétention vivent dans des CRs `ObjectStore`, namespacées, écrites dans le `manifests/` de
-# l'application qui possède la base (cf. `archive/forgejo/manifests/forgejo-db-objectstore.yaml`, du temps où la forge était ici).
+# l'application qui possède la base (cf. README, §Où vit la configuration d'une sauvegarde).
 # Ce fichier ne règle donc que le Deployment du plugin lui-même.
 
 replicaCount: 1

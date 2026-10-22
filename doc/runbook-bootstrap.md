@@ -80,12 +80,9 @@ cluster :
 - `helm` (un seul usage : l'install Cilium de l'étape 1).
 - `kubeseal` (scellement des 2 SealedSecrets, étapes 3 et 8a).
 - `argocd` CLI — optionnel, seulement pour le mot de passe admin (étape 2).
-- Clone de `homelab_gitops` à jour : `https://forgejo.wittner.tech/jbwittner/homelab_gitops.git`
-  (forge auto-hébergée, dépôt **privé** → le clone du poste demande un jeton Forgejo, et le
-  cluster a besoin du sien : cf. étape 3bis).
-  ⚠️ Le dépôt GitHub du même nom est un **miroir sortant, lecture seule** : on ne bootstrape pas
-  depuis lui sauf perte de la forge, et alors il faut réécrire les `repoURL`
-  (cf. §Source de vérité — la forge, et le miroir de secours).
+- Clone de `homelab_gitops` à jour : `git@github.com:jbwittner/homelab_gitops.git` (dépôt
+  **privé** → le clone du poste demande un accès GitHub, et le cluster a besoin du sien : cf.
+  étape 3bis et §Source de vérité).
 
 ```bash
 kubectl version --client
@@ -101,47 +98,24 @@ git -C . rev-parse --abbrev-ref HEAD     # doit être `main` à jour
 
 ---
 
-## Source de vérité — la forge, et le miroir de secours
+## Source de vérité — GitHub
 
-Depuis la bascule, les **29** `repoURL` de `cluster/` pointent
-`https://forgejo.wittner.tech/jbwittner/homelab_gitops.git` — la forge auto-hébergée, qui tourne en
-Docker sur une **machine dédiée, hors cluster**. Cette sortie du cluster est la condition du
-montage : tant que Forgejo était un composant `cluster/app/`, ArgoCD aurait lu un dépôt servi par
-un composant qu'ArgoCD déploie, et un cluster à froid n'aurait plus eu de source
-(cf. [`forgejo-docker-bascule-et-sauvegarde.md`](forgejo-docker-bascule-et-sauvegarde.md)).
+Toutes les `repoURL` de `cluster/` pointent `https://github.com/jbwittner/homelab_gitops.git`, dépôt
+**privé**. `argocd-repo-server` s'y authentifie sous l'identité d'une **GitHub App** en lecture
+seule (cf. [argocd](../cluster/infra/argocd/README.md) §Accès au dépôt privé). Ce que ça implique
+pour ce runbook :
 
-Ce que la bascule change pour ce runbook :
+- **l'étape 3bis pose le credential de l'App** (Secret `repo-homelab-gitops-github`) — sans lui,
+  rien ne se clone ;
+- **GitHub est un prérequis du bootstrap au même titre que le kubeconfig.** Le dépôt doit être
+  joignable AVANT l'étape 4, et l'App installée sur lui. Une panne côté GitHub ne casse rien de ce
+  qui tourne, mais gèle toute réconciliation ;
+- **`argocd-repo-server` sort du cluster vers `github.com`** : la sortie Internet des nœuds est une
+  dépendance dure de la synchro.
 
-- **l'étape 3bis pose un jeton Forgejo**, plus une deploy key SSH — la procédure a changé de nature
-  (cf. [argocd](../cluster/infra/argocd/README.md) §Accès au dépôt privé) ;
-- **la forge est un prérequis du bootstrap au même titre que le kubeconfig.** Elle doit être
-  debout et joignable AVANT l'étape 4. Un cluster vierge ne sait plus rien reconstruire tout seul ;
-- **Cloudflare devient une dépendance dure de la synchro.** `argocd-repo-server` sort du cluster
-  pour joindre `forgejo.wittner.tech` (DNS public → tunnel → reverse proxy `192.168.1.50`). Une
-  panne du tunnel ne casse rien de ce qui tourne, mais gèle toute réconciliation.
-
-### Si la forge est perdue — repartir du miroir GitHub
-
-Le dépôt GitHub privé du même nom est un **miroir sortant, en lecture seule** : la copie hors site
-qui survit à la perte de la machine de la forge. Elle ne se substitue pas à la forge telle quelle —
-les `repoURL` y pointeraient toujours un hôte mort. La reprise coûte une réécriture :
-
-```bash
-# Sur un clone du MIROIR, dans une branche dédiée — jamais sur `main` du miroir.
-git switch -c dr-github
-grep -rl 'forgejo\.wittner\.tech/jbwittner/homelab_gitops\.git' --include='*.yaml' cluster archive \
-  | xargs sed -i '' 's|https://forgejo\.wittner\.tech/jbwittner/homelab_gitops\.git|git@github.com:jbwittner/homelab_gitops.git|g'
-# + reposer un credential correspondant (deploy key SSH GitHub) dans repo-homelab-gitops,
-#   url = git@github.com:jbwittner/homelab_gitops.git, et non le jeton Forgejo.
-# + bootstrapper avec targetRevision: dr-github dans cluster/root.yaml.
-```
-
-⚠️ **`cluster/root.yaml` est le piège**, ici comme partout : rien ne le gère, il faut le
-ré-appliquer à la main après avoir changé son `repoURL` ET son `targetRevision`. Cf. argocd
-§Accès au dépôt privé.
-
-Une fois la forge remontée, l'inverse : réécrire vers Forgejo, revenir sur `main`, re-appliquer
-`root.yaml`.
+⚠️ **`cluster/root.yaml` est le piège** dès qu'on change de source (autre dépôt, branche de
+reprise) : rien ne le gère, il faut le ré-appliquer à la main après avoir changé son `repoURL` ET
+son `targetRevision`. Cf. argocd §Accès au dépôt privé.
 
 ---
 
@@ -149,16 +123,16 @@ Une fois la forge remontée, l'inverse : réécrire vers Forgejo, revenir sur `m
 
 > [!CAUTION]
 > **Tout est reconstructible depuis Git, sauf les secrets** — et ils empruntent désormais **un
-> seul** canal : les neuf `SealedSecret` du repo, tous indéchiffrables sans la **clé privée du
+> seul** canal : les douze `SealedSecret` de `cluster/`, tous indéchiffrables sans la **clé privée du
 > contrôleur sealed-secrets**. Un unique backup, mais sans aucune redondance.
 >
 > Repartir sans cette clé n'est pas un bootstrap : c'est un re-provisionnement de **tous** les
-> secrets du dépôt (étape 8), avec les credentials amont à récupérer un par un — clé GCP des deux
-> buckets de sauvegarde comprise, ce qui suppose d'en réémettre.
+> secrets du dépôt (étape 8), avec les credentials amont à récupérer un par un — clé GCP du
+> bucket de sauvegarde comprise, ce qui suppose d'en réémettre.
 >
 > ⚠️ Ordre load-bearing en reprise : **la clé sealed-secrets se restaure AVANT toute tentative de
-> restauration velero ou barman.** Sans elle, `velero-gcs` et `forgejo-db-gcs` sont indéchiffrables
-> et aucune sauvegarde n'est lisible.
+> restauration velero ou barman.** Sans elle, `velero-gcs` est indéchiffrable et aucune
+> sauvegarde n'est lisible.
 
 ### 1. La clé sealed-secrets (le credential critique)
 
@@ -201,35 +175,26 @@ ligne **avant** de continuer.
 
 ### 2. Ce que cette clé protège
 
-**Neuf fichiers, neuf documents `SealedSecret`.** Deux d'entre eux sont **bloquants au
+**Douze fichiers, douze documents `SealedSecret`.** Deux d'entre eux sont **bloquants au
 bootstrap**, dans cet ordre :
 
 | Secret | Composant | Ce que sa perte coûte |
 |---|---|---|
-| `repo-homelab-gitops` | [argocd](../cluster/infra/argocd/README.md) | le dépôt est **privé** : sans ce jeton Forgejo, `argocd-repo-server` ne clone rien et **toutes** les Applications tombent en `ComparisonError` — `argocd` compris, puisqu'il est self-managed |
+| `repo-homelab-gitops-github` | [argocd](../cluster/infra/argocd/README.md) | le dépôt est **privé** : sans le credential de la GitHub App, `argocd-repo-server` ne clone rien et **toutes** les Applications tombent en `ComparisonError` — `argocd` compris, puisqu'il est self-managed |
 | `cloudflare-api-token` | [cert-manager](../cluster/infra/cert-manager/README.md) | pas de DNS-01, donc pas de certificat, donc aucun listener TLS opérationnel sur `shared-gw` |
-| `velero-gcs` | [velero](../cluster/infra/velero/README.md) | credential du bucket GCS des sauvegardes. ⚠️ **Sans objet tant qu'aucune sauvegarde n'est planifiée** (schedule désactivée depuis le 2026-09-11) — il redevient bloquant dès qu'un namespace revient dans `includedNamespaces`, et il reste nécessaire pour **lire** les backups existants |
+| `velero-gcs` | [velero](../cluster/infra/velero/README.md) | credential du bucket GCS des sauvegardes. ⚠️ Ne bloque pas l'amorçage, mais **sans lui la schedule `daily` (namespace `hermes`) échoue** et aucun backup existant n'est lisible |
 
-Les autres (`argocd-oidc`, `argocd-notifications-secret`, `grafana-admin`, `alertmanager-smtp`,
-`hermes-env`, `renovate-github`) ne bloquent pas l'amorçage : leur composant démarre en
+Les autres (`argocd-oidc`, `argocd-notifications-secret`, `argocd-secret` (webhook),
+`grafana-admin`, `alertmanager-smtp`, `hermes-env`, `renovate-github`, `donetick-env`,
+`node-exporters`) ne bloquent pas l'amorçage : leur composant démarre en
 `CreateContainerConfigError` ou tourne dégradé, ce qui est visible et rattrapable.
-
-> [!NOTE]
-> **Quatre secrets ont quitté cette liste le 2026-09-11** : `forgejo-admin`, `forgejo-secrets`,
-> `forgejo-smtp` et `forgejo-db-gcs` — la forge est sortie du cluster
-> ([archive/forgejo](../archive/forgejo/README.md)) avec sa base. Ils vivent maintenant dans
-> l'`app.ini` et l'environnement Docker de sa machine, hors de ce dépôt. Le seul secret Forgejo
-> qui reste ici est le **token de métriques** (ns `monitoring`, cf.
-> [forgejo-monitoring](../cluster/app/forgejo-monitoring/README.md)), et il ne bloque rien : sans
-> lui, la cible de scrape est en 401 et le dashboard reste vide.
 
 ### 3. Les autres credentials (première construction, ou re-provisionnement)
 
-À avoir sous la main **avant** l'étape 8 : token API Cloudflare, **jeton d'accès Forgejo
-`read:repository`** pour le dépôt (compte bot, cf. argocd §Accès au dépôt privé), clé de compte de
-service GCP du bucket velero, PAT GitHub pour Renovate (lookups de releases), jeton Forgejo du bot
-Renovate, credentials du relais SMTP, et le `[metrics] TOKEN` de l'`app.ini` de la machine Docker
-de la forge (scrape de `forgejo-metrics.lan.wittner.tech`). Les credentials qui dépendent d'un service déployé par le cluster lui-même (ex. un
+À avoir sous la main **avant** l'étape 8 : token API Cloudflare, **App ID, Installation ID et clé
+privée de la GitHub App** d'ArgoCD (cf. argocd §Accès au dépôt privé), ceux de la GitHub App de
+Renovate, clé de compte de service GCP du bucket velero, credentials du relais SMTP, et le mot de
+passe `basicAuth` des exportateurs des machines hors cluster (`node-exporters`). Les credentials qui dépendent d'un service déployé par le cluster lui-même (ex. un
 token de service account Grafana pour les notifications ArgoCD) se créent après coup, une fois ce
 service en marche.
 
@@ -257,7 +222,7 @@ nouvelles (`gcloud iam service-accounts keys create`) et resceller.
 1. Cilium (CNI) — sans lui, RIEN ne schedule
 2. ArgoCD (kustomize épinglé, apply -k)          ← geste manuel n°1
 3. Clé sealed-secrets restaurée                  ← geste manuel n°2 (DR uniquement)
-3bis. Secret repo-homelab-gitops posé à la main  ← geste manuel n°3 — le dépôt est PRIVÉ
+3bis. Secret repo-homelab-gitops-github à la main ← geste manuel n°3 — le dépôt est PRIVÉ
 4. Tier-1 app-of-apps (apply cluster/root.yaml)  ← geste manuel n°4, UNE FOIS
      └─ déroule seul : gateway-api (-10) → sealed-secrets (-8) → cert-manager (-5)
         → argocd (-1) / cnpg-barman-plugin (-1) → cilium, openebs, cnpg,
@@ -272,15 +237,14 @@ nouvelles (`gcloud iam service-accounts keys create`) et resceller.
 
 > [!IMPORTANT]
 > **L'étape 3bis n'existait pas quand ce runbook a été écrit.** Le dépôt est passé en visibilité
-> privée : `argocd-repo-server` ne peut plus le cloner anonymement. Le Secret `repo-homelab-gitops`
-> doit donc être posé **à la main avant `cluster/root.yaml`** — son `SealedSecret` ne peut pas s'en
+> privée : `argocd-repo-server` ne peut plus le cloner anonymement. Le Secret
+> `repo-homelab-gitops-github` doit donc être posé **à la main avant `cluster/root.yaml`** — son `SealedSecret` ne peut pas s'en
 > charger, puisqu'à ce moment ni la CRD `SealedSecret` n'existe, ni le dépôt n'est lisible. Il ne
 > fait ensuite que le **reprendre en gestion**. Cf.
 > [argocd](../cluster/infra/argocd/README.md) §Accès au dépôt privé.
 >
-> **Son contenu a changé depuis la bascule vers Forgejo** : ce n'est plus une deploy key SSH
-> GitHub mais un **jeton d'accès Forgejo `read:repository`** (`username` + `password`), et l'`url`
-> du Secret doit être `https://forgejo.wittner.tech/jbwittner/homelab_gitops.git`, à la lettre.
+> **Son contenu** : `githubAppID`, `githubAppInstallationID`, `githubAppPrivateKey`, et une `url`
+> qui doit être `https://github.com/jbwittner/homelab_gitops.git`, à la lettre.
 
 ⚠️ **Les sync-waves n'ordonnent qu'à l'intérieur d'un même app-of-apps.** `cluster/infra/` et
 `cluster/app/` sont deux Applications sœurs synchronisées en parallèle : une wave d'`infra` ne
@@ -293,8 +257,8 @@ ordonnés entre eux parce qu'ils partagent le même app-of-apps, `app/`.
 |---|---|
 | 1. Cilium | Aucun CNI → tous les pods restent `Pending`, CoreDNS compris |
 | 2. ArgoCD | Pas de contrôleur GitOps → rien ne se réconcilie, tout le reste est mort-né |
-| 3. Clé sealed-secrets | Contrôleur démarré avec une clé **neuve** → les neuf SealedSecrets du repo sont indéchiffrables, tout est à resceller — y compris le credential GCS, qui est à **réémettre** |
-| 3bis. Secret `repo-homelab-gitops` | Le dépôt est privé : `argocd-repo-server` ne clone rien, **toutes** les Applications tombent en `ComparisonError`, `argocd` compris |
+| 3. Clé sealed-secrets | Contrôleur démarré avec une clé **neuve** → les SealedSecrets du repo sont indéchiffrables, tout est à resceller — y compris le credential GCS, qui est à **réémettre** |
+| 3bis. Secret `repo-homelab-gitops-github` | Le dépôt est privé : `argocd-repo-server` ne clone rien, **toutes** les Applications tombent en `ComparisonError`, `argocd` compris |
 | 4. Tier-1 | Les Applications n'existent pas : ArgoCD tourne à vide |
 | 5. Exposition | Sans restart de `cilium-operator` à la 1re pose des CRDs, la Gateway reste `Pending` ; sans secret TLS, le listener reste `ResolvedRefs=False` |
 | 6. Token du provider DNS | DNS-01 bloqué, `Certificate` jamais `Ready`, aucun accès HTTPS valide |
@@ -306,7 +270,7 @@ ordonnés entre eux parce qu'ils partagent le même app-of-apps, `app/`.
 > après l'étape 4, les étapes 5 à 7 **convergent seules** dans l'ordre des sync-waves. En rebuild,
 > ce runbook est une **checklist de vérification** autour de quatre gestes manuels irréductibles :
 > l'`apply -k` d'ArgoCD, la restauration de la clé sealed-secrets, la pose du Secret
-> `repo-homelab-gitops`, et le restart one-shot de `cilium-operator`. L'étape 8 (scellement des secrets) et la parenthèse autosignée de l'étape 6
+> `repo-homelab-gitops-github`, et le restart one-shot de `cilium-operator`. L'étape 8 (scellement des secrets) et la parenthèse autosignée de l'étape 6
 > ne concernent que la **première construction**.
 
 ---
@@ -552,10 +516,10 @@ tier 2        infra, app
 infra         gateway-api, sealed-secrets, cert-manager, argocd, cilium, openebs,
               velero, openebs-monitoring, velero-monitoring
               (external-secrets est en .noapp.yaml : ABSENT, et c'est voulu)
-app           cnpg-barman-plugin, cnpg, kube-prometheus-stack, hermes, renovate,
-              cnpg-monitoring, forgejo-monitoring
-              (forgejo est en .noapp.yaml depuis le 2026-09-11 : ABSENT, et c'est voulu —
-               la forge tourne hors du cluster, cf. archive/forgejo)
+app           cnpg, kube-prometheus-stack, hermes, renovate, donetick, bankwiz-dev,
+              cnpg-monitoring, hosts-monitoring
+              (cnpg-barman-plugin et stress-test sont en .noapp.yaml : ABSENTS,
+               et c'est voulu)
 ```
 
 Le préfixe `<cluster>-` ne s'applique qu'aux Applications générées par un `ApplicationSet` : il
@@ -747,11 +711,11 @@ pas l'existence.
 
 | Ordre | Secret | Composant | Bloquant ? |
 |---|---|---|---|
-| 1 | `repo-homelab-gitops` | argocd | **oui** — fait à l'étape 3bis, avant même le tier-1 |
+| 1 | `repo-homelab-gitops-github` | argocd | **oui** — fait à l'étape 3bis, avant même le tier-1 |
 | 2 | `cloudflare-api-token` | cert-manager | **oui** — sans lui, pas de DNS-01, donc aucun listener TLS (étape 6) |
-| 3 | `velero-gcs` | velero | non pour démarrer, **oui** pour lire les sauvegardes existantes — et de nouveau bloquant le jour où une schedule est réactivée |
+| 3 | `velero-gcs` | velero | non pour démarrer, **oui** pour la schedule `daily` et pour lire les sauvegardes existantes |
 | 4 | `grafana-admin`, `hermes-env`, `renovate-github` | kube-prometheus-stack, hermes, renovate | non — le pod reste en `CreateContainerConfigError`, panne franche |
-| 4bis | `forgejo-metrics` (ns `monitoring`) | forgejo-monitoring | non — sans lui, la cible de scrape de la forge est en 401 : dashboard vide et `ForgejoDown` au bout de 10 min |
+| 4bis | `node-exporters` (ns `monitoring`) | hosts-monitoring | non — sans lui, les cibles des machines hors cluster sont en 401 et leurs alertes `ExternalNode*` sonnent |
 | 5 | `alertmanager-smtp`, `argocd-notifications-secret`, `argocd-oidc` | kube-prometheus-stack, argocd | non — dégradation silencieuse : pas de mail, pas d'annotation Grafana, pas de SSO |
 
 Deux dépendances structurent cet ordre :
@@ -761,11 +725,10 @@ Deux dépendances structurent cet ordre :
 - les clés de **compte de service GCP** viennent du repo Terraform ; une clé JSON ne se sort pas
   d'un état Terraform sans l'y stocker en clair, donc elle s'émet à la main
   (`gcloud iam service-accounts keys create`) — la procédure détaillée est dans
-  [archive/forgejo](../archive/forgejo/README.md) §Câblage du credential GCS, écrite pour
-  `forgejo-db-gcs` mais valable telle quelle pour `velero-gcs`.
+  [velero](../cluster/infra/velero/README.md) §Opérations.
 
 **Et immédiatement après : sauvegarder la clé sealed-secrets hors ligne** (cf. étape 3). À partir
-de maintenant, elle seule ouvre les neuf `SealedSecret`.
+de maintenant, elle seule ouvre les `SealedSecret` du dépôt.
 
 ---
 
@@ -780,7 +743,6 @@ kubectl get sc                                           # openebs-lvm-thin (def
 kubectl get sealedsecrets -A                             # tous SYNCED=True
 kubectl get secret -A -l app.kubernetes.io/part-of=homelab-gitops
 curl -I https://argocd.lan.wittner.tech
-curl -I https://forgejo.wittner.tech
 ```
 
 > [!NOTE]
@@ -788,8 +750,7 @@ curl -I https://forgejo.wittner.tech
 > n'est pas celle qui a scellé (étape 3), soit le `Secret` cible **préexiste sans
 > `ownerReference`** — « already exists and is not managed by SealedSecret ». Le second cas arrive
 > après une restauration velero qui a recréé le Secret : c'est précisément pourquoi les quatre
-> Secrets reproductibles depuis Git portent `velero.io/exclude-from-backup` (cf.
-> [forgejo-pra.md](forgejo-pra.md) §5).
+> Secrets reproductibles depuis Git portent `velero.io/exclude-from-backup`.
 
 > [!IMPORTANT]
 > **Un 404 sur un hostname `*.lan.wittner.tech` alors que le `HTTPRoute` est `Accepted` n'est pas
@@ -815,15 +776,15 @@ curl -I https://forgejo.wittner.tech
 - **Secret restauré par velero par-dessus un `SealedSecret`** → le contrôleur refuse de
   s'approprier un objet préexistant, la `SealedSecret` reste `Synced=False` et le `Secret` devient
   orphelin : les rotations faites dans Git ne se propagent plus, **en silence**.
-- **Dépôt privé et Secret `repo-homelab-gitops` absent** → `ComparisonError` sur **toutes** les
+- **Dépôt privé et Secret `repo-homelab-gitops-github` absent** → `ComparisonError` sur **toutes** les
   Applications, `argocd` compris : l'outil avec lequel on diagnostiquerait est aussi la victime.
-- **`url` du Secret `repo-homelab-gitops` désaccordée des `repoURL`** (schéma SSH vs HTTPS, ou un
-  `.git` de différence) → ArgoCD apparie credential et source par égalité d'URL normalisée : pas
-  d'erreur de configuration, juste un clone anonyme. Sur Forgejo, un dépôt privé cloné sans
-  credential rend **404**, pas 403 — le symptôme ressemble à une faute de frappe dans l'URL.
-- **Forge injoignable** (machine éteinte, tunnel Cloudflare coupé) → rien de ce qui tourne ne
-  casse, mais toute réconciliation gèle et les Applications partent en `ComparisonError`. La forge
-  est hors cluster : le cluster ne peut pas la réparer.
+- **`url` du Secret `repo-homelab-gitops-github` désaccordée des `repoURL`** (schéma SSH vs HTTPS,
+  ou un `.git` de différence) → ArgoCD apparie credential et source par égalité d'URL normalisée :
+  pas d'erreur de configuration, juste un clone anonyme. Un dépôt privé cloné sans credential rend
+  **404**, pas 403 — le symptôme ressemble à une faute de frappe dans l'URL.
+- **GitHub injoignable** (panne GitHub, sortie Internet coupée, App désinstallée) → rien de ce qui
+  tourne ne casse, mais toute réconciliation gèle et les Applications partent en
+  `ComparisonError`. Le cluster ne peut rien y réparer.
 - **Fichier référencé mais absent dans un `kustomization.yaml`** (typiquement un `*.sealed.yaml`
   pas encore scellé) → `kustomize build` échoue, l'Application entière part en erreur.
 - **`bpf.masquerade=true` côté Cilium** ne cohabite pas avec un forward du DNS cluster vers

@@ -5,7 +5,7 @@
 Mises à jour de dépendances automatisées via [Renovate](https://docs.renovatebot.com/) en mode
 self-hosted. **Un seul bot**, sur github.com, authentifié comme **GitHub App** :
 
-| CronJob           | Forge      | Périmètre                                         | Secret            | Heure (Europe/Paris) |
+| CronJob           | Plateforme | Périmètre                                         | Secret            | Heure (Europe/Paris) |
 | ----------------- | ---------- | ------------------------------------------------- | ----------------- | -------------------- |
 | `renovate-github` | github.com | autodiscover = dépôts de l'**installation** de l'App | `renovate-github` | **02:00**            |
 
@@ -17,12 +17,10 @@ avoir 7 jours révolus avant qu'une branche ou une PR soit créée. ⚠️ Ce fi
 **ce dépôt-ci** — voir §Cibles & configuration.
 
 > [!NOTE]
-> **Historique.** Le composant a porté deux bots, un par forge — `platform` étant un réglage
-> **global** de Renovate, un même run ne peut pas parler à deux forges. Le bot **Forgejo**
-> (autodiscover, `https://forgejo.wittner.tech/`) gérait `homelab_gitops` tant que GitHub n'en
-> était qu'un miroir en lecture seule. Il a été **supprimé** avec la bascule de la source du GitOps
-> vers GitHub. Le bot GitHub est passé au même moment d'un fine-grained PAT et d'une liste
-> explicite de dépôts (`args`) à une GitHub App en autodiscover.
+> **Un bot par plateforme.** `platform` est un réglage **global** de Renovate : un même run ne
+> peut pas parler à deux hébergeurs de dépôts. En ajouter un second, c'est ajouter un second
+> CronJob et son Secret, pas étendre celui-ci. Le bot GitHub est passé d'un fine-grained PAT et
+> d'une liste explicite de dépôts (`args`) à une GitHub App en autodiscover.
 
 ## Fichiers
 

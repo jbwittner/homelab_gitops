@@ -2,8 +2,7 @@
 
 ## Rôle
 
-API REST de [bankwiz_server](https://forgejo.wittner.tech/jbwittner/bankwiz_server) (Spring Boot,
-hexagonal). Un sous-dossier par environnement, chacun une `Application` autonome nommée
+API REST de `bankwiz_server` (Spring Boot, hexagonal). Un sous-dossier par environnement, chacun une `Application` autonome nommée
 `bankwiz-<env>`, dans son propre namespace. Seul `dev` existe : il suit la branche `develop`.
 
 ## Fichiers
@@ -32,13 +31,16 @@ hexagonal). Un sous-dossier par environnement, chacun une `Application` autonome
 - **Reverse proxy `192.168.1.50` et résolveur DNS** : le nom doit y être déclaré, hors dépôt (cf.
   [reseau.md](../../../doc/reseau.md) §DNS et reverse proxy). Un wildcard DNS `*.lan` ne couvre pas
   forcément `*.dev.lan` selon le résolveur ; sans déclaration au proxy, l'URL répond **404**.
-- **Aucun secret de pull, et c'est voulu.** Les paquets du registre Forgejo sont **publics** :
-  leur visibilité suit celle du propriétaire (`jbwittner`), pas celle du dépôt. `bankwiz_server`
-  est privé, son image ne l'est pas — n'importe qui peut la tirer et décompiler le jar (constaté le
-  2026-10-14 : manifeste en 200 avec un jeton anonyme). Choix assumé, aucune app n'a donc
-  d'`imagePullSecrets`. Si un jour les paquets passent privés, l'accès se déclare **une fois** au
-  niveau des nœuds (`machine.registries.config."forgejo.wittner.tech".auth` dans `talconfig.yaml`
-  de `homelab_talos`, jeton chiffré SOPS) plutôt que par un Secret dupliqué dans chaque namespace.
+- ⚠️ **L'image vit dans un registre qui n'est plus alimenté.** La ligne `image:` de
+  `deployment.yaml` pointe le registre de l'ancienne forge : plus aucun build n'y publie, et rien
+  ne garantit qu'il réponde encore. Le pod tourne tant que l'image est **en cache sur son nœud** ;
+  un reschedule vers un nœud qui ne l'a pas finit en `ImagePullBackOff`, sans autre signal. À
+  migrer vers `ghcr.io` quand la CI de `bankwiz_server` passera sur GitHub Actions — d'ici là,
+  **aucune montée de version n'est possible** (§Monter de version).
+- **Aucun secret de pull.** L'image est tirée en anonyme, aucune app n'a d'`imagePullSecrets`. Si
+  le registre cible est un jour privé, l'accès se déclare **une fois** au niveau des nœuds
+  (`machine.registries.config."<registre>".auth` dans `talconfig.yaml` de `homelab_talos`, jeton
+  chiffré SOPS) plutôt que par un Secret dupliqué dans chaque namespace.
 - **Tag fixe `develop-sha-<sha>`, jamais `develop`.** Le tag mobile ne fait rien bouger côté
   ArgoCD : il faudrait un `rollout restart` à la main à chaque push. Monter de version = un commit.
 - **Une seule réplique** : le mot de passe du compte `user` est généré au démarrage, différent par
@@ -64,11 +66,12 @@ hexagonal). Un sous-dossier par environnement, chacun une `Application` autonome
 
 ### Monter de version
 
-Le workflow `develop.yml` du dépôt applicatif pousse `develop-sha-<sha court>` à chaque push sur
-`develop`. Récupérer le digest puis remplacer la ligne `image:` du `deployment.yaml` :
+⚠️ **Bloqué** : plus aucune CI ne publie d'image (cf. §Contraintes). Une fois la CI du dépôt
+applicatif migrée, elle devra pousser un tag fixe `develop-sha-<sha court>` à chaque push sur
+`develop`. Récupérer alors le digest puis remplacer la ligne `image:` du `deployment.yaml` :
 
 ```bash
-docker buildx imagetools inspect forgejo.wittner.tech/jbwittner/bankwiz-server:develop-sha-<sha> \
+docker buildx imagetools inspect <registre>/jbwittner/bankwiz-server:develop-sha-<sha> \
   --format '{{json .Manifest.Digest}}'
 ```
 

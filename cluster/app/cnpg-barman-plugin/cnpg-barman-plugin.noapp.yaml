@@ -5,8 +5,8 @@ metadata:
   namespace: argocd
   annotations:
     # Wave -1 : ce composant apporte la CRD `objectstores.barmancloud.cnpg.io`, consommée par le
-    # `manifests/` de l'application qui possède une base (wave 0 par défaut) — aucune aujourd'hui,
-    # la forge et sa base ayant quitté le cluster (archive/forgejo). Sans cet ordre, une sync à
+    # `manifests/` de l'application qui possède une base sauvegardée (wave 0 par défaut) — aucune
+    # aujourd'hui. Sans cet ordre, une sync à
     # froid ferait échouer cette application sur `no matches for kind "ObjectStore"` avant de se
     # réparer au retry. Ce symptôme-là se règle par une wave puisque les deux composants vivent
     # dans le MÊME app-of-apps

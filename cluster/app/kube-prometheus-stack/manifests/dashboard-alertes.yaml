@@ -77,7 +77,7 @@ data:
           }
         ]
       },
-      "description": "State and history of the Prometheus alerts (CNPG, Forgejo, velero, openebs, chart rules). Source: the ALERTS / ALERTS_FOR_STATE series.",
+      "description": "State and history of the Prometheus alerts (CNPG, external machines, velero, openebs, chart rules). Source: the ALERTS / ALERTS_FOR_STATE series.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
@@ -545,14 +545,14 @@ data:
           {
             "allValue": ".*",
             "current": {},
-            "description": "Filters on the alertname PREFIX, not on the namespace: rules built on absent() only carry the labels of their matchers, so several absent()-based alerts (CNPGMetricsAbsent, ForgejoScrapeMissing) have no namespace label at all. Filtering by namespace would silently hide half of them.",
+            "description": "Filters on the alertname PREFIX, not on the namespace: rules built on absent() only carry the labels of their matchers, so several absent()-based alerts (CNPGMetricsAbsent, ExternalNodeScrapeMissing) have no namespace label at all. Filtering by namespace would silently hide half of them.",
             "hide": 0,
             "includeAll": true,
             "label": "Component",
             "multi": true,
             "name": "composant",
             "options": [],
-            "query": "CNPG : CNPG.*, Forgejo : Forgejo.*, Velero : Velero.*, OpenEBS : OpenEBS.*, Kubernetes (chart) : Kube.*",
+            "query": "CNPG : CNPG.*, External machines : External.*, Velero : Velero.*, OpenEBS : OpenEBS.*, Kubernetes (chart) : Kube.*",
             "queryValue": "",
             "skipUrlSync": false,
             "type": "custom"

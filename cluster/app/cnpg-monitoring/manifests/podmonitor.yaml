@@ -21,8 +21,7 @@ metadata:
     release: kube-prometheus-stack
 spec:
   # ⚠️ `any: true` et non une liste : les pods scrapés vivent dans les namespaces des applications
-  # consommatrices (aucune aujourd'hui — `forgejo` est partie avec la forge, `authentik` reste le
-  # candidat), jamais dans `cnpg-system` où vit cet objet.
+  # consommatrices (`bankwiz-dev` aujourd'hui), jamais dans `cnpg-system` où vit cet objet.
   # Une liste explicite serait à maintenir à chaque base ajoutée, et son oubli produirait une base
   # non surveillée — silencieusement.
   namespaceSelector:

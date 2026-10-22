@@ -42,10 +42,9 @@ set -euo pipefail
 
 NAMESPACE="${VELERO_NAMESPACE:-velero}"
 TIMEOUT="${TIMEOUT:-1800}"
-# ⚠️ Depuis le 2026-09-11, cette Schedule N'EXISTE PLUS dans le cluster : son unique périmètre
-# était le namespace `forgejo`, parti avec la forge (archive/forgejo), et
-# `schedules.daily.disabled: true` empêche le chart de la rendre. `backup` échoue donc en disant
-# que la Schedule est introuvable — ce qui est le bon comportement : dériver le périmètre d'une
+# ⚠️ Si cette Schedule n'existe pas dans le cluster (`schedules.daily.disabled: true` empêche le
+# chart de la rendre — cas du 2026-09-11 au 2026-09-23), `backup` échoue en disant que la Schedule
+# est introuvable — ce qui est le bon comportement : dériver le périmètre d'une
 # Schedule absente reviendrait à sauvegarder TOUT le cluster (`includedNamespaces` omis vaut
 # `["*"]`). Les sous-commandes de lecture et de restauration (`list`, `show`, `restore`, `delete`)
 # restent utilisables sur les backups existants.

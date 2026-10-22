@@ -47,15 +47,15 @@ collecteur des instances PostgreSQL, et sept alertes sur l'état de la chaîne b
 > restent commentées tant qu'aucune base n'est sous sauvegarde. Si `bankwiz-db` disparaît sans
 > remplaçante, recommenter `CNPGMetricsAbsent` dans le même commit.
 >
-> **Aucune base dans ce cluster du 2026-09-11 au 2026-10-16** (`forgejo-db` est partie avec la
-> forge — [archive/forgejo](../../../archive/forgejo/README.md)). Les règles fondées sur une
+> **Aucune base dans ce cluster du 2026-09-11 au 2026-10-16** (la seule a quitté le cluster avec
+> son application). Les règles fondées sur une
 > VALEUR n'ont plus de série à évaluer et sont muettes, ce qui est correct. Les **deux règles en
 > `absent(...)`** — `CNPGBackupChainAbsent` et `CNPGMetricsAbsent` — sonneraient en permanence :
 > elles sont **commentées** dans `manifests/prometheusrule.yaml`, et se remettent dans le même
-> commit que le premier `Cluster` recréé ici. Les relevés ci-dessous, faits sur `forgejo-db-1`,
-> restent valables — ce sont des propriétés de CNPG, pas de cette base.
+> commit que le premier `Cluster` recréé ici. Les relevés ci-dessous, faits sur cette ancienne
+> base, restent valables — ce sont des propriétés de CNPG, pas d'une base.
 
-Tous les trois relevés sur `forgejo-db-1` en CNPG 1.30.0. Chacun produit, si on l'ignore, soit une
+Tous les trois relevés sur une instance réelle en CNPG 1.30.0. Chacun produit, si on l'ignore, soit une
 alerte qui hurle en permanence, soit une alerte muette.
 
 1. **`cnpg_pg_stat_archiver_seconds_since_last_archival` n'est PAS un indicateur de fraîcheur.**
@@ -95,8 +95,8 @@ alerte qui hurle en permanence, soit une alerte muette.
 
 > [!WARNING]
 > **`CNPGBackupChainAbsent` est la seule règle à nommer les bases en dur**
-> (elle nommait `cnpg_io_cluster="forgejo-db"`, d'où sa mise en commentaire avec le départ de la
-> base), parce qu'`absent()` perd les labels. **Mettre une base sous
+> (d'où sa mise en commentaire avec le départ de la seule base sauvegardée), parce qu'`absent()`
+> perd les labels. **Mettre une base sous
 > sauvegarde demande de l'ajouter ici, et rien ne le signale.** Les autres règles s'en dispensent :
 > les métriques du plugin n'existent que là où `spec.plugins` est câblé, donc l'intention est
 > portée par le `Cluster` lui-même.
@@ -118,7 +118,7 @@ en paraissant correcte.
 
 - **Lire l'état de la chaîne à la main**, sans passer par Prometheus :
   ```bash
-  # ⚠️ Exemple écrit du temps de `forgejo-db` : remplacer namespace et pod par ceux de la base
+  # Remplacer <ns> et <cluster> par ceux de la base
   kubectl get --raw "/api/v1/namespaces/<ns>/pods/<cluster>-1:9187/proxy/metrics" \
     | grep -E "archive_status|archiver_failed|^barman_cloud"
   ```
@@ -128,8 +128,7 @@ en paraissant correcte.
 
 - **Ajouter une base à la liste blanche** : **décommenter** `CNPGBackupChainAbsent` dans
   `manifests/prometheusrule.yaml` et écrire le sélecteur `cnpg_io_cluster` de la nouvelle base
-  (l'exemple laissé en commentaire vise `forgejo-db`, qui n'existe plus). ⚠️ Décommenter
-  **`CNPGMetricsAbsent`** dans le même commit : elle est neutralisée pour la même raison. ⚠️ Ce n'est **pas** `CNPGNoBackupYet`, qui n'a aucun sélecteur :
+  (l'exemple laissé en commentaire porte un `<base>` à remplacer). ⚠️ Ce n'est **pas** `CNPGNoBackupYet`, qui n'a aucun sélecteur :
   sa règle est un `== 0` sur toutes les séries, ce que §Le détail des règles explique. C'est le **quatrième** geste de la mise sous sauvegarde
   d'une base (cf. [cnpg-barman-plugin](../cnpg-barman-plugin/README.md) §Opérations).
 

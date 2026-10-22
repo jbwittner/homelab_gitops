@@ -9,21 +9,21 @@ seule aujourd'hui :
 | --- | --- | --- | --- |
 | `vert-emeriss` | `node-exporter-emeriss.lan.wittner.tech` | `external-node` | `vert-emeriss` |
 
-Six alertes, groupe `external-node.rules` : disponibilité, disque, mémoire, et l'état du collecteur
-`textfile`.
+Six alertes, groupe `external-node.rules` : disponibilité de la machine et de cAdvisor, disque,
+mémoire.
 
-## Pourquoi il est séparé de `forgejo-monitoring`
+## Pourquoi il est séparé de la supervision des services
 
-Le critère est le **cycle de vie**, le même qui sépare les piles `node-exporter/` et `forgejo/`
-dans `homelab_emeriss`.
+Le critère est le **cycle de vie**, le même qui fait de `node-exporter/` une pile à part dans
+`homelab_emeriss`.
 
-Une machine **précède** le service qu'elle porte et lui **survit**. `vert-emeriss` héberge la forge
-aujourd'hui ; le jour où celle-ci déménage, disparaît ou se dédouble, ce qui mesure son disque et sa
-mémoire n'a aucune raison de bouger.
+Une machine **précède** les services qu'elle porte et leur **survit**. Le jour où l'un d'eux
+déménage, disparaît ou se dédouble, ce qui mesure son disque et sa mémoire n'a aucune raison de
+bouger.
 
-⚠️ Mis dans `forgejo-monitoring`, ce scrape serait supprimé par un `prune` ArgoCD le jour où on
-retire la forge — c'est-à-dire **précisément quand on surveillerait la machine pour savoir ce
-qu'elle devient**.
+⚠️ Rangé dans le composant de supervision d'un service, ce scrape serait supprimé par un `prune`
+ArgoCD le jour où on retire ce service — c'est-à-dire **précisément quand on surveillerait la
+machine pour savoir ce qu'elle devient**.
 
 Le composant est nommé au **pluriel** parce qu'en ajouter une seconde doit être un fichier de plus,
 pas une refonte : aucune règle ne nomme de machine, toutes sélectionnent `job="external-node"` et se
@@ -31,33 +31,9 @@ ventilent par `instance`.
 
 ## Pourquoi il existe
 
-Jusqu'au 2026-09-11, la forge tournait dans ce cluster et le DaemonSet node-exporter de
-kube-prometheus-stack mesurait ses nœuds. La bascule vers Docker
-([doc/forgejo-docker-bascule-et-sauvegarde.md](../../../doc/forgejo-docker-bascule-et-sauvegarde.md))
-a emporté cette source **sans la remplacer** : entre cette date et ce composant, le disque de
-`vert-emeriss` n'était surveillé par personne — alors que c'est le mode de panne le plus probable
-de ce qu'elle porte, dépôts, base et dumps se partageant un seul stockage.
-
-## Le couplage avec `forgejo-monitoring` — à sens unique
-
-⚠️ **Ce composant transporte, sans que son nom le dise, les métriques de sauvegarde de la forge.**
-`forgejo-ctl backup` écrit un fichier `.prom` dans le collecteur `textfile` de node-exporter :
-`forgejo_backup_*` arrive donc par **ce** scrape. Les trois alertes qui s'en servent
-(`forgejo-backup.rules`) vivent dans `forgejo-monitoring` — elles parlent de la forge, pas de la
-machine.
-
-⚠️ **Le dashboard qui montre ces machines ne les AFFICHE pas pour autant.** « Machines — system » ne
-montre que la santé du *transport* (tuile « Collecteur textfile ») ; la fraîcheur et le résultat
-des sauvegardes s'affichent dans « Forge — forgejo », section Sauvegarde. Le canal appartient à la
-machine, son contenu à la forge — c'est la même frontière que pour les alertes.
-
-Conséquences, dans les deux sens :
-
-- une panne **ici** (`ExternalNodeDown`, `ExternalNodeScrapeMissing`,
-  `ExternalNodeTextfileCollectorFailing`) rend ces trois alertes-là **aveugles** ;
-- une panne **là-bas** n'a aucun effet ici.
-
-C'est écrit des deux côtés parce que rien ne le vérifie.
+Le DaemonSet node-exporter de kube-prometheus-stack ne mesure que les nœuds du cluster. Sans ce
+composant, le disque de `vert-emeriss` n'est surveillé par personne — alors que c'est le mode de
+panne le plus probable d'une machine Docker, toutes ses piles se partageant un seul stockage.
 
 ## Fichiers
 
@@ -74,10 +50,10 @@ C'est écrit des deux côtés parce que rien ne le vérifie.
 | --- | --- | --- | --- |
 | `ExternalNodeDown` | `up{job="external-node"} == 0` | 10 min | critical |
 | `ExternalNodeScrapeMissing` | `absent(up{job="external-node"})` | 15 min | critical |
+| `ExternalCadvisorDown` | `up{job="external-cadvisor"} == 0` | 30 min | warning |
 | `ExternalNodeDiskAlmostFull` | `< 10 %` libres | 30 min | critical |
 | `ExternalNodeDiskWillFill` | `predict_linear(...[6h], 4 j) < 0` **et** `< 30 %` libres | 1 h | warning |
 | `ExternalNodeMemoryPressure` | `MemAvailable < 10 %` | 20 min | warning |
-| `ExternalNodeTextfileCollectorFailing` | `node_textfile_scrape_error == 1` | 30 min | warning |
 
 ## Contraintes
 
@@ -97,20 +73,15 @@ C'est écrit des deux côtés parce que rien ne le vérifie.
 - **`job` et `instance` sont les seuls points de couplage** entre les ScrapeConfigs et les règles.
   Ils sont posés par `relabeling` ; sans lui, une ScrapeConfig nomme son job
   `scrapeConfig/monitoring/<nom>` et `instance` vaut le hostname du **proxy**, pas celui de la
-  machine. ⚠️ Le `job` est aussi lu par `forgejo-backup.rules`, **dans l'autre composant** : le
-  changer casse des règles dans deux endroits.
-- **`instance` doit rester aligné avec celui de `scrapeconfig-db.yaml`** de `forgejo-monitoring` —
-  même machine, deux composants. C'est la seule chose qui permette de rapprocher un incident de
-  base d'un incident de disque. Rien ne le vérifie ; une divergence ne casse rien, elle rend le
-  rapprochement impossible.
-- **`node_textfile_scrape_error` mérite sa propre alerte** parce que node-exporter, devant un
-  `.prom` illisible, n'abandonne pas ce fichier-là : il abandonne **tout** le collecteur textfile
-  (vérifié le 2026-09-11 sur l'image v1.12.1). Sans cette règle, la panne se présenterait comme
-  `ForgejoBackupNoMetric` — donc comme « aucune sauvegarde n'a jamais abouti », ce qui est faux et
-  envoie diagnostiquer au mauvais endroit.
-- **Le Secret est propre à ce composant.** Le `postgres-exporter` de la même machine a le sien
-  (`forgejo-db-metrics`, dans `forgejo-monitoring`). Ce n'est pas une isolation cryptographique —
-  même hôte, même `docker inspect` — c'est une indépendance de cycle de vie.
+  machine. ⚠️ Le `job` est aussi lu par le dashboard « Machines — system » de
+  kube-prometheus-stack : le changer casse des règles et des panneaux, sans erreur.
+- **Un exportateur applicatif ajouté sur une de ces machines garde le même `instance`** que sa
+  ScrapeConfig ici — même machine, deux composants. C'est la seule chose qui permette de rapprocher
+  un incident de service d'un incident de disque. Rien ne le vérifie ; une divergence ne casse rien,
+  elle rend le rapprochement impossible.
+- **Le Secret est propre à ce composant.** Un exportateur applicatif de la même machine prend le
+  sien, dans le composant de son service. Ce n'est pas une isolation cryptographique — même hôte,
+  même `docker inspect` — c'est une indépendance de cycle de vie.
 - **Le secret n'est pas partagé avec ce qu'il surveille — il en est une COPIE**, et la référence
   n'est même pas récupérable : l'hôte n'en garde qu'un **hachage bcrypt**. Une divergence se
   manifeste en **401**, donc en `up == 0`, donc en `ExternalNodeDown` : un secret mal tourné allume
@@ -131,15 +102,13 @@ La cible est produite par le dépôt **`homelab_emeriss`**, et rien ici ne peut 
 
 | Ce qui produit la cible | Où |
 | --- | --- |
-| `node-exporter` | pile **`node-exporter/`** — pile à part, elle survit à la forge |
+| `node-exporter` | pile **`node-exporter/`** — pile à part, elle survit aux piles applicatives |
 | son `basic_auth` | `/etc/node-exporter/web-config.yml` (hachage bcrypt) |
-| `forgejo_backup_*` | `forgejo/bin/forgejo-ctl`, fonction `publier_metriques` → `/var/lib/node_exporter/textfile` |
-| le router | `node-exporter/traefik/node-exporter-emeriss.yml` — copie de référence, le fichier servi vit dans `homelab_proxmox` |
+| le router | **`homelab_ysera`** : `traefik/dynamic/node-exporter-emeriss.yml`, seul exemplaire — `homelab_emeriss` n'en garde plus de copie |
 
 ## Opérations
 
-- **Sceller le `basicAuth`** (à faire une fois ; sans lui la cible reste en 401, et les trois
-  alertes de sauvegarde de `forgejo-monitoring` sont aveugles) :
+- **Sceller le `basicAuth`** (à faire une fois ; sans lui la cible reste en 401) :
   ```bash
   cp cluster/app/hosts-monitoring/manifests/node-exporters.secret.example.yaml \
      cluster/app/hosts-monitoring/manifests/node-exporters.secret.yaml
@@ -167,8 +136,8 @@ La cible est produite par le dépôt **`homelab_emeriss`**, et rien ici ne peut 
   curl -s 'localhost:19090/api/v1/targets?state=active' | python3 -m json.tool | grep -A2 lastError
   # 2. l'endpoint depuis le LAN
   curl -sI -u prometheus:<motdepasse> https://node-exporter-emeriss.lan.wittner.tech/metrics | head -1
-  # 3. le service que porte la machine — s'il répond, c'est la supervision qui est morte
-  curl -sI https://forgejo.wittner.tech/ | head -1
+  # 3. la machine elle-même — si elle répond, c'est la supervision qui est morte
+  ping -c1 <IP LAN de l'hôte>
   ```
 - **Ajouter une machine** : un `scrapeconfig-<machine>.yaml` (mêmes `job`, `basicAuth` et
   relabelings, seul `instance` et le hostname changent), sa ligne dans `kustomization.yaml`, le

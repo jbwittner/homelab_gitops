@@ -11,8 +11,7 @@ déclarées par les applications consommatrices.
 > dev **non sauvegardée**. Les alertes CNPG de sauvegarde restent commentées : les réactiver exige
 > d'abord le plugin barman-cloud, un `ObjectStore` et une `ScheduledBackup`.
 
-Anciens consommateurs archivés : [`forgejo`](../../../archive/forgejo/README.md),
-[`authentik`](../../../archive/authentik/README.md) et [`test-nginx`](../../../archive/test-nginx/README.md).
+Anciens consommateurs archivés : [`authentik`](../../../archive/authentik/README.md) et [`test-nginx`](../../../archive/test-nginx/README.md).
 
 ## Fichiers
 

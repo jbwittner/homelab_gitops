@@ -7,7 +7,7 @@ LocalPV-LVM et les alertes qui vont avec. Rien ici n'est nécessaire pour que le
 stockage — c'est précisément la raison de la séparation.
 
 Le composant `openebs` doit être debout au tout début du bootstrap (la StorageClass par défaut
-conditionne tous les PVC, à commencer par ceux des bases et de la forge), alors que ces
+conditionne tous les PVC, à commencer par ceux des bases), alors que ces
 deux objets sont des CRs `monitoring.coreos.com` : ils n'existent qu'une fois
 [kube-prometheus-stack](../../app/kube-prometheus-stack/README.md) installé. Les garder dans
 `openebs` mettait cette Application en échec sur un cluster nu, et bloquait derrière elle toutes

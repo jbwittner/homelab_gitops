@@ -46,7 +46,7 @@ spec:
   monitoring:
     enablePodMonitor: false
 
-  # Pas d'affinité avec l'API, contrairement à l'ancienne `forgejo-db` : l'API n'a aucun volume,
+  # Pas d'affinité avec l'API : l'API n'a aucun volume,
   # elle peut atterrir n'importe où sans multiplier les domaines de panne. Seule la base est
   # collée à son nœud (PV node-local).
   # Anti-affinité coupée : avec une seule instance elle n'a aucun pair à écarter. ⚠️ À remettre à

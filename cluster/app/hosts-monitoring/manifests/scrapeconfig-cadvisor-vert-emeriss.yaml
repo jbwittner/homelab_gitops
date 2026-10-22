@@ -1,9 +1,8 @@
 # Scrape des CONTENEURS de `vert-emeriss` — `cadvisor-emeriss.lan.wittner.tech`.
 #
 # ⚠️ CE QU'IL AJOUTE. `scrapeconfig-vert-emeriss.yaml` mesure la MACHINE : il dit qu'il reste 8 Go
-# de RAM, jamais QUI les consomme. Depuis la bascule de la forge vers Docker, cette question
-# n'avait plus de réponse — le DaemonSet cAdvisor de kube-prometheus-stack ne voit que les nœuds
-# Talos. C'est le seul trou que cet objet comble.
+# de RAM, jamais QUI les consomme. Sans cet objet, cette question n'a pas de réponse — le
+# DaemonSet cAdvisor de kube-prometheus-stack ne voit que les nœuds Talos. C'est le seul trou que cet objet comble.
 #
 # ⚠️ `job="external-cadvisor"` ET NON `external-node`, alors que c'est la MÊME machine. Deux
 # raisons, la première étant dirimante :
@@ -18,7 +17,7 @@
 # sur cette étiquette — « la machine manquait de RAM, et voici le conteneur qui la tenait ».
 #
 # ⚠️ MÊME SECRET que le scrape de node-exporter (`node-exporters`), et c'est délibéré : les deux
-# piles mesurent la MÊME machine, survivent à la forge et relèvent de ce composant. Côté hôte, le
+# piles mesurent la MÊME machine, survivent aux services qu'elle porte et relèvent de ce composant. Côté hôte, le
 # credential vit en deux exemplaires — `/etc/node-exporter/web-config.yml` et
 # `/etc/cadvisor/htpasswd` — et rien ne les synchronise. Une rotation touche donc TROIS fichiers.
 # ⚠️ Et un seul des deux prend effet tout seul : nginx ne relit pas son `htpasswd` à chaud,
