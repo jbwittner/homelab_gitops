@@ -6,7 +6,7 @@
 # un seul stockage.
 #
 # ⚠️ CE SCRAPE NE PARLE D'AUCUN SERVICE. Il parle d'une MACHINE, qui précède les services qu'elle
-# héberge et leur survit. Même critère que la pile `node-exporter/` à part, côté homelab_emeriss.
+# héberge et leur survit. Même critère que la pile `docker/node-exporter/` à part.
 #
 # ⚠️ LE HOSTNAME PORTE LE NOM DE LA MACHINE (`-emeriss`) et non `node-exporter` tout court : la
 # pile d'en face est duplicable sur un autre hôte, et un nom générique ferait collision au premier

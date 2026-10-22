@@ -1,0 +1,67 @@
+# EXEMPLE — versionné, sans aucune valeur réelle. Copie de référence du fichier d'hôte
+#   /etc/node-exporter/web-config.yml
+# Il se recopie, il ne s'applique pas.
+#
+# --------------------------------------------------------------------------------------------
+#
+# À quoi il sert : c'est la SEULE authentification de `node-exporter`. Le format est celui
+# d'`exporter-toolkit`, commun à tous les exportateurs Prometheus officiels — l'image le lit via
+# `--web.config.file`.
+#
+# ⚠️ LE MÊME MOT DE PASSE PROTÈGE `cadvisor/`, sous un autre format : `/etc/cadvisor/htpasswd`.
+# Les deux piles mesurent la machine et relèvent du même composant de cluster (`hosts-monitoring`,
+# un seul Secret scellé) — cf. `cadvisor/monitoring/htpasswd.example` pour l'ordre de rotation.
+#
+# ⚠️ L'AUTHENTIFICATION EST DANS L'EXPORTATEUR, PAS DANS TRAEFIK, et c'est un choix. Le port 9100
+# est lié sur l'IP LAN pour que Traefik (192.168.1.50) puisse le joindre depuis l'autre machine :
+# quiconque sur le LAN peut donc le joindre AUSSI, en court-circuitant le proxy. Une `basicAuth`
+# posée côté Traefik ne couvrirait que le chemin normal ; celle-ci couvre les deux.
+#
+# ⚠️ CE FICHIER N'EST PAS OPTIONNEL. Sans lui, l'exportateur répond à qui demande : inventaire des
+# systèmes de fichiers et de leur remplissage, interfaces et adresses, charge, uptime, version du
+# noyau. Rien qui ne soit un secret, tout ce qu'il faut pour cartographier la machine et choisir
+# le moment d'une attaque — un disque à 95 % est une information opérationnelle.
+#
+# ⚠️ LE FICHIER DOIT EXISTER AVANT LE PREMIER `docker compose up`. Le `volumes:` le monte comme
+# FICHIER ; si le chemin est absent, Docker crée un RÉPERTOIRE vide à sa place et l'exportateur
+# échoue au démarrage sur un message de parseur, pas sur « fichier manquant ».
+#
+# Mise en place (sur l'hôte, depuis la racine du dépôt) :
+#   sudo install -D -m 0644 -o root -g root \
+#     node-exporter/monitoring/web-config.example.yml /etc/node-exporter/web-config.yml
+#   # produire le hachage, SANS passer le mot de passe en argument (paquet `apache2-utils`) :
+#   htpasswd -nBC 12 "" | tr -d ':\n' ; echo
+#   sudo sed -i 's#REMPLACER#<le hachage collé ici>#' /etc/node-exporter/web-config.yml
+#   docker compose up -d
+#
+# ⚠️ `htpasswd -nBC 12 ""` demande le mot de passe à la FRAPPE et ne l'affiche pas. Le passer en
+# argument le rendrait lisible dans `ps` pendant l'exécution, puis dans `~/.bash_history`.
+#
+# ⚠️ MODE 0644 ET NON 0600, alors que le répertoire `/etc/node-exporter` est en 0700 root. Le
+# conteneur tourne en utilisateur NON privilégié, et c'est le mode du FICHIER qui lui est opposé —
+# la traversée du répertoire, elle, est faite par le démon Docker, qui est root. En 0600,
+# l'exportateur ne démarre pas. Le 0700 du parent reste ce qui empêche un compte quelconque de
+# l'hôte de lire le hachage.
+#
+# ⚠️ CE N'EST PAS UN SECRET EN CLAIR, MAIS UN BCRYPT RESTE CASSABLE : le mot de passe se choisit
+# aléatoire et long (`openssl rand -base64 24`), jamais un mot de passe réutilisé.
+#
+# ⚠️ LA MÊME PAIRE EST RECOPIÉE DANS LE CLUSTER, et rien ne les empêche de diverger. Côté cluster :
+#   homelab_gitops/cluster/app/hosts-monitoring/manifests/node-exporters.secret.example.yaml
+# (composant `hosts-monitoring`.)
+# Une divergence se lit en 401, donc en `up == 0`, donc en `ExternalNodeDown` — une alerte de
+# machine allumée par un secret mal tourné. Assumé : un scrape muet n'est pas distinguable d'une
+# machine morte.
+#
+# ⚠️ ROTATION : `exporter-toolkit` relit ce fichier À CHAQUE REQUÊTE — inutile de redémarrer le
+# conteneur. Le Secret scellé du cluster, lui, demande un commit et une synchro ArgoCD : changer
+# d'abord le cluster, puis CE fichier.
+#
+# TLS : aucun bloc `tls_server_config` ici, et c'est voulu. C'est Traefik qui termine TLS, avec le
+# wildcard Let's Encrypt `*.lan.wittner.tech` déjà en place. Chiffrer ici imposerait un certificat
+# auto-signé, donc un `insecureSkipVerify` côté Prometheus — que le dépôt GitOps refuse.
+# ⚠️ Corollaire : entre Traefik et cette machine, le mot de passe passe EN CLAIR sur le LAN.
+
+# Un seul compte. `prometheus` est le nom attendu par la `ScrapeConfig` du cluster.
+basic_auth_users:
+  prometheus: REMPLACER

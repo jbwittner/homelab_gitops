@@ -2,9 +2,12 @@
 
 ## Un seul arbre pour tous les clusters
 
-Le repo ne contient **qu'un** arbre de déploiement, `k8s/`. Il n'y a plus un dossier par
+Le repo ne contient **qu'un** arbre de déploiement Kubernetes, `k8s/`. Il n'y a plus un dossier par
 cluster : c'est **chaque composant** qui désigne sa ou ses cibles, via la `destination` de son
 `Application` ou via les sous-dossiers de son `ApplicationSet`.
+
+L'autre arbre du dépôt, [`docker/`](../docker/README.md), n'est pas lu par ArgoCD et ne suit pas
+ces conventions : il a les siennes, dans [`docker/CLAUDE.md`](../docker/CLAUDE.md).
 
 ```
 k8s/

@@ -15,7 +15,7 @@ mémoire.
 ## Pourquoi il est séparé de la supervision des services
 
 Le critère est le **cycle de vie**, le même qui fait de `node-exporter/` une pile à part dans
-`homelab_emeriss`.
+[`docker/`](../../../docker/README.md).
 
 Une machine **précède** les services qu'elle porte et leur **survit**. Le jour où l'un d'eux
 déménage, disparaît ou se dédouble, ce qui mesure son disque et sa mémoire n'a aucune raison de
@@ -98,13 +98,14 @@ panne le plus probable d'une machine Docker, toutes ses piles se partageant un s
 
 ## Ce qui vit en face
 
-La cible est produite par le dépôt **`homelab_emeriss`**, et rien ici ne peut le vérifier :
+La cible est produite par l'arbre **[`docker/`](../../../docker/README.md)** de ce dépôt,
+déployé par Komodo — pas par ArgoCD, qui ne peut donc rien en vérifier :
 
 | Ce qui produit la cible | Où |
 | --- | --- |
 | `node-exporter` | pile **`node-exporter/`** — pile à part, elle survit aux piles applicatives |
 | son `basic_auth` | `/etc/node-exporter/web-config.yml` (hachage bcrypt) |
-| le router | **`homelab_ysera`** : `traefik/dynamic/node-exporter-emeriss.yml`, seul exemplaire — `homelab_emeriss` n'en garde plus de copie |
+| le router | **`homelab_ysera`** : `traefik/dynamic/node-exporter-emeriss.yml`, seul exemplaire — `docker/` n'en garde aucune copie |
 
 ## Opérations
 

@@ -1,0 +1,162 @@
+# Supervision des CONTENEURS — consommation par conteneur (CPU, mémoire, réseau, E/S bloc).
+#
+# ⚠️ POURQUOI UNE PILE À PART. Même critère que `node-exporter/` : le CYCLE DE VIE. Ce qui est
+# mesuré ici appartient au démon Docker de la MACHINE — ça précède toute pile applicative et ça lui
+# survit. Rangé dans le compose d'une autre pile, cet exportateur serait arrêté par son
+# `docker compose down`, c'est-à-dire précisément pendant l'incident qu'on veut voir.
+#
+# ⚠️ CE QU'IL APPORTE QUE node-exporter N'A PAS. `node-exporter` mesure la MACHINE : il dit qu'il
+# reste 8 Go de RAM, jamais QUI les consomme. La répartition par conteneur est la seule chose qui
+# répond à « qu'est-ce qui a mangé la mémoire à 3 h du matin ».
+#
+# ⚠️ RIEN NE LIT CES MÉTRIQUES ICI. Elles sont scrutées depuis le CLUSTER, via le reverse proxy
+# 192.168.1.50. Cette pile n'a ni Prometheus ni Grafana.
+#
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+# DEUX CONTENEURS, ET C'EST LE POINT À COMPRENDRE AVANT DE TOUCHER À QUOI QUE CE SOIT
+# ═════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⚠️ cAdvisor NE SAIT PAS AUTHENTIFIER `/metrics`. Ce n'est pas un réglage oublié, c'est une
+# propriété du programme, vérifiée dans la source de la v0.55.1 :
+#
+#   - `--http_auth_file` / `--http_digest_file` n'enveloppent que les PAGES DE L'UI WEB et les
+#     ressources statiques (`cmd/internal/http/handlers.go`, `RegisterHandlers`). Les deux drapeaux
+#     le disent eux-mêmes : « HTTP auth file for the web UI ».
+#   - `/metrics` est posé par `RegisterPrometheusHandler`, sur le même mux mais avec un
+#     `http.HandlerFunc` NU — il ne passe jamais par l'authenticator.
+#   - `/api/v1.3/...` est pire : `api.RegisterHandlers` est appelé AVANT que l'authenticator
+#     n'existe. Toute l'API JSON est ouverte, et elle donne bien plus que les métriques.
+#
+# ⚠️ CONSÉQUENCE : posé seul sur l'IP LAN, cAdvisor livre à qui demande les noms de conteneurs, les
+# images, les labels, la consommation, l'inventaire de la machine, une UI web et une API complète.
+# C'est nettement plus bavard que node-exporter, dont on a jugé utile de fermer l'accès.
+#
+# ⚠️ D'OÙ nginx, ET D'OÙ LE FAIT QUE cAdvisor NE PUBLIE AUCUN PORT. C'est cette absence de `ports:`
+# qui fait tout le travail : cAdvisor n'est joignable QUE depuis le réseau de ce compose. Le seul
+# port ouvert sur le LAN est celui de nginx, qui exige le `basic_auth` — le court-circuit du proxy
+# tombe donc sur la MÊME authentification que le chemin normal. C'est l'invariant tenu par
+# `node-exporter/` avec son `web-config.yml` ; ici il coûte un conteneur.
+#
+# ⚠️ NE PAS « SIMPLIFIER » EN PUBLIANT cAdvisor ET EN METTANT UN `basicAuth` CÔTÉ TRAEFIK. Traefik
+# est sur une AUTRE machine (192.168.1.50) : pour qu'il joigne l'exportateur, le port devrait être
+# publié sur l'IP LAN, donc joignable directement, donc contournable. Un middleware ne couvre que le
+# chemin qui passe par lui. Cf. le même avertissement dans `node-exporter/compose.yaml`.
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────────────────────────
+  # cAdvisor — mesure. AUCUN `ports:`, c'est délibéré (cf. en-tête).
+  # ─────────────────────────────────────────────────────────────────────────────────────────────
+  cadvisor:
+    # ⚠️ Tag EN DUR, et pas via le `.env` : Renovate n'a pas de manager pour les fichiers `.env`,
+    # il lit les `image:` des compose. Un tag en variable est un tag qu'aucun robot ne suit.
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    restart: unless-stopped
+    # ⚠️ PAS de `network_mode: host`, contrairement à node-exporter — et pour une raison opposée.
+    # node-exporter mesure les interfaces de la machine et doit donc vivre dans son espace de noms
+    # réseau. cAdvisor, lui, lit les compteurs réseau de CHAQUE conteneur via `/proc/<pid>/net/dev`,
+    # en entrant dans leurs espaces de noms : son propre réseau ne change rien à ce qu'il mesure.
+    # Le réseau du compose est donc requis pour que nginx le joigne par son nom DNS.
+    volumes:
+      # ⚠️ `/` EN ENTIER, EN LECTURE SEULE — mêmes conséquences que dans `node-exporter/` : qui peut
+      # `docker exec` dans ce conteneur lit tout le disque, y compris les `.env` des autres piles.
+      # Le groupe `docker` étant déjà un équivalent root (cf. doc/bootstrap-debian.md), ça n'ouvre
+      # rien de neuf ; ça mérite d'être écrit, parce que c'est le genre de montage qu'on recopie
+      # sans le relire.
+      - /:/rootfs:ro
+      # La socket Docker et l'état du démon. ⚠️ `/var/run` PORTE `docker.sock` : ce montage donne à
+      # ce conteneur un accès LECTURE à l'API Docker. En `:ro` le montage est en lecture seule,
+      # mais la socket reste une socket — le mode du bind ne restreint pas ce qui transite dessus.
+      # cAdvisor n'émet que des requêtes de lecture ; le risque est celui d'un compromis du
+      # conteneur, pas de son fonctionnement normal.
+      - /var/run:/var/run:ro
+      # cgroups et statistiques noyau — c'est la source réelle des chiffres.
+      - /sys:/sys:ro
+      # Métadonnées des images et des couches, pour nommer les conteneurs et leurs images.
+      - /var/lib/docker/:/var/lib/docker:ro
+      # ⚠️ Nécessaire aux métriques d'E/S bloc (`container_fs_*`, `diskIO`) : sans lui, cAdvisor ne
+      # peut pas faire le lien entre un périphérique majeur/mineur et un nom de disque.
+      - /dev/disk/:/dev/disk:ro
+    command:
+      # ⚠️ ADRESSE EXPLICITE EN LOOPBACK DU CONTENEUR ? NON — `listen_ip` vide signifie « toutes les
+      # interfaces DU CONTENEUR », ce qui est ici la bonne valeur : le conteneur n'a qu'une
+      # interface, sur le réseau privé du compose, et rien ne publie ce port vers l'hôte. Le
+      # confinement vient de l'absence de `ports:`, pas d'une adresse d'écoute.
+      - --port=8080
+      # ⚠️ CARDINALITÉ — les trois drapeaux qui suivent ne sont pas cosmétiques. cAdvisor est
+      # réputé pour saturer un Prometheus : par défaut il transforme CHAQUE label de conteneur en
+      # label Prometheus, et compose en pose cinq par conteneur (`com.docker.compose.project`,
+      # `.service`, `.config-hash`, `.container-number`, `.oneoff`). Le `config-hash` change à
+      # chaque modification du compose : chaque `docker compose up` crée alors une série NEUVE,
+      # et les anciennes ne meurent jamais. C'est le mode de panne classique de cAdvisor.
+      - --store_container_labels=false
+      # Les deux seuls labels qu'on garde — ils identifient la pile et le service, et ils sont
+      # STABLES. ⚠️ Sans effet si `store_container_labels` reste à `true`.
+      - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
+      # ⚠️ `docker_only` : sans lui, cAdvisor remonte AUSSI chaque tranche cgroup de systemd —
+      # `/system.slice/...`, une série par unité de l'hôte. Ce sont des chiffres justes, sans
+      # rapport avec les conteneurs, et ils noient ceux qu'on regarde.
+      - --docker_only=true
+      # ⚠️ Le défaut est UNE SECONDE. Sur une machine qui porte trois conteneurs et que Prometheus
+      # interroge toutes les 30 s, c'est 30 relevés jetés pour un publié — du CPU brûlé en pure
+      # perte. 10 s laisse de la marge sans rien coûter.
+      - --housekeeping_interval=10s
+      # ⚠️ La liste réunit les métriques désactivées PAR DÉFAUT (il faut les redonner, le drapeau
+      # REMPLACE le défaut, il ne s'y ajoute pas) et quatre de plus :
+      #   percpu      — une série PAR CŒUR ET PAR CONTENEUR. Le pire contributeur de cardinalité,
+      #                 et l'agrégat par conteneur suffit toujours à répondre à la question posée.
+      #   perf_event  — compteurs matériels du PMU, inexploitables sans configuration dédiée.
+      #   cpuLoad     — demande le collecteur de charge par cgroup, souvent indisponible ; il
+      #                 remplit les journaux d'avertissements pour une jauge que personne ne lit.
+      #   disk        — remplissage des systèmes de fichiers VU DU CONTENEUR, donc les couches
+      #                 overlay. `node-exporter` les exclut explicitement pour la même raison :
+      #                 elles sont pleines par construction et rendent les alertes illisibles.
+      # Reste actif : cpu, memory, network, diskIO, oom_event — dont `container_oom_events_total`,
+      # qui est exactement le signal que node-exporter ne donne pas.
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp,percpu,perf_event,cpuLoad,disk,app
+    # ⚠️ PAS DE `privileged: true`, alors que la documentation amont le met dans son exemple. Il n'y
+    # est que pour lire `/dev/kmsg`, dont cAdvisor se sert à détecter les OOM tués par le NOYAU. On
+    # s'en passe : les métriques CPU/mémoire/réseau/E-S n'en dépendent pas, et
+    # `container_oom_events_total` (celui du cgroup, pas celui du journal noyau) continue de
+    # fonctionner. Le prix est une ligne d'avertissement au démarrage sur `/dev/kmsg`.
+    # ⚠️ Ne PAS ajouter `privileged: true` pour faire taire cet avertissement : ce conteneur monte
+    # déjà `/` et la socket Docker, lui donner en plus toutes les capacités est un mauvais échange
+    # contre une jauge d'événements noyau.
+
+  # ─────────────────────────────────────────────────────────────────────────────────────────────
+  # nginx — LA SEULE CHOSE QUI ÉCOUTE SUR LE LAN. Authentifie, et n'expose que `/metrics`.
+  # ─────────────────────────────────────────────────────────────────────────────────────────────
+  nginx:
+    # ⚠️ Branche STABLE (mineure paire, convention nginx), tag en dur pour Renovate.
+    image: nginx:1.31.5-alpine
+    restart: unless-stopped
+    # ⚠️ CONFORT D'ORDONNANCEMENT, PAS UNE DÉPENDANCE DURE. nginx résout `cadvisor` à chaque requête
+    # (cf. le `resolver` de `nginx/cadvisor.conf`) : il démarre et sert son 401 même si cAdvisor est
+    # absent, et repart tout seul quand il revient. Retirer cette ligne ne casserait rien — la
+    # garder évite seulement quelques 502 au premier démarrage.
+    depends_on:
+      - cadvisor
+    volumes:
+      # ⚠️ Monté DEPUIS LE DÉPÔT et non recopié sur l'hôte, contrairement au `web-config.yml` de
+      # node-exporter. La différence est qu'il ne porte AUCUN secret : le hachage vit
+      # dans le fichier `htpasswd` ci-dessous. Une conf versionnée ne dérive pas de sa copie de
+      # référence, puisqu'il n'y a pas de copie.
+      # ⚠️ Chemin RELATIF au répertoire de ce compose. Lancer la pile depuis ailleurs avec un `-f`
+      # fonctionne — compose résout les chemins relatifs depuis le fichier, pas depuis le shell.
+      - ./nginx/cadvisor.conf:/etc/nginx/conf.d/default.conf:ro
+      # FICHIER, pas répertoire — il porte le hachage bcrypt du mot de passe de scrape.
+      # ⚠️ Il vit dans `/etc/cadvisor`, en 0700 root, alors que les workers nginx tournent en
+      # utilisateur non privilégié. Ça marche quand même : Docker monte l'INODE, et la traversée du
+      # répertoire est faite par le démon, qui est root. Seul le mode du FICHIER compte côté
+      # conteneur, d'où le 0644 exigé par `monitoring/htpasswd.example`.
+      # ⚠️ IL DOIT EXISTER AVANT LE PREMIER `up` : un bind sur un chemin absent fait créer un
+      # RÉPERTOIRE vide par Docker, et nginx échoue alors sur une erreur de lecture du fichier
+      # d'authentification — pas sur « fichier manquant ».
+      - /etc/cadvisor/htpasswd:/etc/nginx/htpasswd:ro
+    ports:
+      # ⚠️ Mettre l'IP LAN de CET hôte, pas `0.0.0.0` : lier une adresse explicite est ce qui rend
+      # visible sur quelle interface la pile écoute. Même règle que `LISTEN_ADDR` de node-exporter —
+      # c'est le même hôte, les deux se changent ensemble.
+      # ⚠️ Ce port court-circuite Traefik, donc TLS : entre le proxy et cette machine le mot de
+      # passe passe en clair sur le LAN. En revanche il ne court-circuite PAS l'authentification,
+      # et c'est toute la différence avec une `basicAuth` posée côté Traefik.
+      - "${LISTEN_ADDR:?}:${LISTEN_PORT:-8080}:8080"

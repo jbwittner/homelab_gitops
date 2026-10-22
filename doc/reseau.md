@@ -70,8 +70,8 @@ uniquement en intra-cluster).
 
 | Hostname | Servi par | Vu d'ici comme |
 |---|---|---|
-| `node-exporter-emeriss.lan.wittner.tech` | machine `vert-emeriss`, pile `node-exporter/` de `homelab_emeriss`, via le proxy `192.168.1.50` | cible `job="external-node"` de [hosts-monitoring](../k8s/app/hosts-monitoring/README.md) — la machine |
-| `cadvisor-emeriss.lan.wittner.tech` | même machine, pile `cadvisor/` de `homelab_emeriss` | cible cAdvisor de hosts-monitoring — ses conteneurs |
+| `node-exporter-emeriss.lan.wittner.tech` | machine `vert-emeriss`, pile [`docker/node-exporter/`](../docker/node-exporter/README.md), via le proxy `192.168.1.50` | cible `job="external-node"` de [hosts-monitoring](../k8s/app/hosts-monitoring/README.md) — la machine |
+| `cadvisor-emeriss.lan.wittner.tech` | même machine, pile [`docker/cadvisor/`](../docker/cadvisor/README.md) | cible cAdvisor de hosts-monitoring — ses conteneurs |
 
 ⚠️ Les deux dépendent du reverse proxy et d'aucun objet de ce dépôt. Ils sont en
 `*.lan.wittner.tech` : ils tombent donc sous la règle ci-dessous — non déclarés au proxy, ils
@@ -84,8 +84,9 @@ exportateur — côté proxy, le second écrasant le premier en silence.
 
 ⚠️ **La règle Traefik n'existe qu'en un exemplaire**, dans `homelab_ysera/traefik/dynamic/`
 (`node-exporter-emeriss.yml`, `cadvisor-emeriss.yml`), monté en lecture seule sur
-`/etc/traefik-git` du CT 201. `homelab_emeriss` en gardait des « copies de référence » ; elles ont
-été retirées le 2026-09-11 parce qu'elles avaient déjà **divergé dans les deux sens** — un router
+`/etc/traefik-git` du CT 201. `homelab_emeriss` (aujourd'hui `docker/`) en gardait des « copies de
+référence » ; elles ont été retirées le 2026-09-11 parce qu'elles avaient déjà **divergé dans les
+deux sens** — un router
 servi sans copie, des copies sans router servi. **Constaté ce jour-là** : des cibles Prometheus en
 `404` alors que les exportateurs tournaient et que les Secrets étaient bons. Un 404 sur une cible
 désigne le reverse proxy, jamais le cluster.

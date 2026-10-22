@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# redeploy — tire les images et relance TOUTES les piles du dépôt, ou celles nommées en argument.
+#
+# S'exécute directement depuis le clone, sans copie sur l'hôte : aucun service systemd ne le lance
+# et il ne manipule aucun secret — il n'y a donc pas de frontière de privilège à matérialiser par un
+# exemplaire en /usr/local/sbin.
+#
+# Raison d'être : une PR Renovate mergée ne déploie RIEN. Le dépôt déclare un tag, l'hôte fait
+# tourner celui qu'il a tiré la dernière fois, et l'écart ne se voit qu'au prochain redémarrage —
+# longtemps après le merge. Cette commande est le geste qui referme l'écart, en une fois pour
+# toutes les piles, à la place d'un `cd` + `pull` + `up -d` par répertoire dont on oublie le
+# troisième.
+#
+# ⚠️ DEPUIS L'ARRIVÉE DE KOMODO, ce script ne déploie plus que les piles que Komodo NE pilote PAS
+# — en pratique `komodo/` elle-même. Les piles déclarées dans `komodo/sync/*.toml` sont écartées :
+# Komodo les lance depuis SON clone (/srv/komodo/periphery/stacks/…), et un `up` depuis celui-ci
+# recréerait les mêmes conteneurs avec l'autre copie des fichiers montés. Leur geste de
+# redéploiement est désormais automatique (procédure `deploiement-auto`), cf. komodo/README.md.
+#
+# Usage :  bin/redeploy [options] [pile...]
+#   (sans argument)   toutes les piles du dépôt, sauf celles pilotées par Komodo
+#   --no-pull         relance sans retirer les images (utile après une édition de compose.yaml)
+#   --prune           supprime ensuite les images DANGLING (celles que le pull vient d'orpheliner)
+#   --dry-run         affiche les commandes sans rien exécuter
+#
+# ⚠️ Cette commande REDÉMARRE les conteneurs dont l'image ou la définition a changé : quelques
+# secondes d'indisponibilité par pile touchée, supervision comprise.
+
+set -euo pipefail
+
+PROG=$(basename "$0")
+# Racine du dépôt déduite de l'emplacement du script, pas du répertoire courant : la commande doit
+# marcher appelée de n'importe où, y compris par un chemin absolu depuis un autre répertoire.
+RACINE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+PULL=1
+PRUNE=0
+DRY=0
+
+mourir() { printf '%s: %s\n' "$PROG" "$1" >&2; exit "${2:-1}"; }
+
+# L'aide EST l'en-tête du fichier : deux textes séparés divergent, et c'est toujours celui qu'on
+# lit qui est périmé. On rejoue donc le bandeau jusqu'à la première ligne non commentée, shebang
+# exclu — rien à retoucher ici quand une option s'ajoute là-haut.
+usage() {
+  awk 'NR>1 { if ($0 !~ /^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"
+  exit 0
+}
+
+# ORDRE DE DÉPLOIEMENT, et il n'est pas alphabétique. Les piles de supervision passent EN
+# PREMIER : elles existent précisément pour rester debout pendant que les piles applicatives
+# bougent (cf. le README racine — c'est la raison de leur séparation). Les déployer après
+# laisserait l'aveugle exactement sur la fenêtre qu'on veut voir.
+# Une pile absente de cette liste est déployée après celles qui y figurent, par ordre alphabétique :
+# ajouter un répertoire ici n'est donc pas obligatoire, seulement un moyen de le contraindre.
+# ⚠️ Les deux piles nommées ici sont aujourd'hui pilotées par Komodo, donc écartées plus bas : leur
+# ordre est porté par `after` dans `komodo/sync/piles.toml`. La liste reste pour le jour où l'une
+# en sortirait — elle retrouverait sa place sans qu'on y pense.
+ORDRE=(node-exporter cadvisor)
+
+# Piles pilotées par Komodo : les `run_directory` de `komodo/sync/*.toml`. On lit la déclaration
+# elle-même plutôt qu'une liste recopiée ici — deux listes divergent, et c'est alors ce script qui
+# redéploie en douce une pile que Komodo croit sienne.
+#
+# ⚠️ Un `run_directory` part de la RACINE DU DÉPÔT (`docker/cadvisor`), une pile de ce script part
+# de `docker/` (`cadvisor`) : le préfixe se retire, sinon aucune pile ne serait reconnue comme
+# pilotée et ce script les redéploierait toutes. Le préfixe est le nom de `$RACINE`, pas une chaîne
+# en dur : il suit un renommage de `docker/`.
+pilotees_par_komodo() {
+  local f prefixe="${RACINE##*/}/"
+  for f in "$RACINE"/komodo/sync/*.toml; do
+    [[ -e "$f" ]] || continue
+    sed -nE 's/^[[:space:]]*run_directory[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$f"
+  done | sed "s|^${prefixe}||"
+}
+
+# Une pile = un répertoire du dépôt portant un compose.yaml. Rien à tenir à jour quand une pile
+# naît : elle est prise dès qu'elle a son fichier — sauf si Komodo la pilote.
+lister_piles() {
+  local d komodo
+  komodo=$(pilotees_par_komodo)
+  {
+    for d in "${ORDRE[@]}"; do
+      [[ -f "$RACINE/$d/compose.yaml" ]] && printf '%s\n' "$d"
+    done
+    for d in "$RACINE"/*/compose.yaml; do
+      [[ -e "$d" ]] || continue
+      d=$(basename "$(dirname "$d")")
+      printf '%s\n' "${ORDRE[@]}" | grep -qxF "$d" || printf '%s\n' "$d"
+    done
+  } | grep -vxF -- "${komodo:-/}" || true
+}
+
+executer() {
+  if (( DRY )); then
+    printf '  [dry-run] %s\n' "$*"
+    return 0
+  fi
+  "$@"
+}
+
+deployer() {
+  local pile=$1 dir="$RACINE/$1"
+
+  # ⚠️ Un `.env` absent ne produit PAS un refus net partout : les variables non citées en
+  # `${VAR:?}` prendraient la valeur vide et la pile démarrerait de travers — port non publié,
+  # chemin de données à la racine. On refuse ici plutôt que de laisser compose arbitrer.
+  if [[ -f "$dir/.env.example" && ! -f "$dir/.env" ]]; then
+    printf '  .env absent — voir %s/.env.example\n' "$pile" >&2
+    return 1
+  fi
+
+  # ⚠️ On se PLACE dans le répertoire de la pile au lieu de passer `-f .../compose.yaml`. Le nom
+  # du projet compose vient du nom du répertoire de travail : lancé de la racine, `-f` donnerait
+  # le projet « docker » et compose créerait un SECOND jeu de conteneurs à côté de ceux
+  # que `cd cadvisor && docker compose up` a posés, sans jamais les voir. C'est aussi ce qui fait
+  # lire le bon `.env`, relatif au répertoire du projet.
+  (
+    cd "$dir" || return 1
+    if (( PULL )); then
+      executer docker compose pull || return 1
+    fi
+    # --remove-orphans : un service RENOMMÉ ou supprimé du compose.yaml laisse sinon son conteneur
+    # tourner indéfiniment, hors de toute commande `compose` ultérieure. Le périmètre est le projet
+    # compose de CETTE pile, jamais les conteneurs des autres.
+    executer docker compose up -d --remove-orphans || return 1
+  )
+}
+
+while (( $# )); do
+  case $1 in
+    --no-pull) PULL=0; shift ;;
+    --prune)   PRUNE=1; shift ;;
+    --dry-run) DRY=1; shift ;;
+    -h|--help) usage ;;
+    -*)        mourir "option inconnue : $1 (voir --help)" 2 ;;
+    *)         break ;;
+  esac
+done
+
+docker compose version >/dev/null 2>&1 \
+  || mourir "'docker compose' indisponible — cf. doc/bootstrap-debian.md §2" 2
+# Le défaut d'accès au démon se voit ici, avant d'avoir touché la moitié des piles : sans ce test
+# la première pile échoue sur une erreur de socket et les suivantes répètent la même.
+docker info >/dev/null 2>&1 \
+  || mourir "démon Docker injoignable — lancer par sudo, ou ajouter le compte au groupe docker" 2
+
+if (( $# )); then
+  piles=("$@")
+  for p in "${piles[@]}"; do
+    [[ -f "$RACINE/$p/compose.yaml" ]] || mourir "pile inconnue : $p" 2
+    pilotees_par_komodo | grep -qxF -- "$p" \
+      && mourir "$p est pilotée par Komodo (komodo/sync/) — redéployer depuis Komodo : Resource Sync « homelab_gitops » → Execute (ou attendre la procédure deploiement-auto, 15 min)" 2
+  done
+else
+  mapfile -t piles < <(lister_piles)
+fi
+(( ${#piles[@]} )) || mourir "aucune pile trouvée sous $RACINE" 1
+
+echec=()
+for pile in "${piles[@]}"; do
+  printf '\n=== %s ===\n' "$pile"
+  # Volontairement sans `set -e` fatal : une pile en échec ne doit pas priver les suivantes d'une
+  # mise à jour. Le bilan final porte le code de sortie.
+  if ! deployer "$pile"; then
+    echec+=("$pile")
+  fi
+done
+
+if (( PRUNE )); then
+  printf '\n=== images orphelines ===\n'
+  # `--filter dangling=true` est le DÉFAUT de `image prune`, mais explicité : sans lui on lit la
+  # commande comme si elle pouvait toucher les images taguées d'une pile arrêtée. Elle ne le fait
+  # pas — seul `-a` s'y risquerait, et il n'a rien à faire ici.
+  executer docker image prune -f --filter dangling=true
+fi
+
+printf '\n'
+if (( ${#echec[@]} )); then
+  printf '%s: ÉCHEC sur %d pile(s) : %s\n' "$PROG" "${#echec[@]}" "${echec[*]}" >&2
+  exit 1
+fi
+printf '%s: %d pile(s) à jour : %s\n' "$PROG" "${#piles[@]}" "${piles[*]}"

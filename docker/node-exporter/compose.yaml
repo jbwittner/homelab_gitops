@@ -1,0 +1,85 @@
+# Supervision de l'HÔTE — une pile à part, et c'est le point à comprendre avant de la déplacer.
+#
+# ⚠️ POURQUOI UNE PILE À PART. Le critère est le CYCLE DE VIE, pas la machine. Ce qui est mesuré
+# ici — disque, mémoire, charge, réseau — appartient à la MACHINE : ça précède toute pile applicative
+# et ça lui survit. Rangé dans le compose d'une autre pile, cet exportateur serait arrêté par son
+# `docker compose down`, c'est-à-dire précisément pendant l'incident qu'on veut voir.
+#
+# ⚠️ RIEN NE LIT CES MÉTRIQUES ICI. Elles sont scrutées depuis le CLUSTER, par le composant
+# `hosts-monitoring` de homelab_gitops, via le reverse proxy 192.168.1.50. Cette pile n'a ni
+# Prometheus ni Grafana : ce serait un second système d'observabilité à maintenir pour une seule
+# machine.
+
+services:
+  node-exporter:
+    # ⚠️ Tag EN DUR, et pas via le `.env` : Renovate n'a pas de manager pour les fichiers `.env`,
+    # il lit les `image:` des compose. Un tag en variable est un tag qu'aucun robot ne suit.
+    image: quay.io/prometheus/node-exporter:v1.12.1
+    restart: unless-stopped
+    # ⚠️ `host` et NON un réseau bridge. Sur un bridge, node-exporter mesurerait les interfaces et
+    # les compteurs réseau DU CONTENEUR — des chiffres plausibles, entièrement faux, que rien ne
+    # signale. Le prix est qu'il n'y a pas de `ports:` : c'est `--web.listen-address` qui choisit
+    # l'interface, et il le fait de façon tout aussi explicite.
+    network_mode: host
+    # Sans lui, le namespace PID vu dans `/host/proc` est celui du conteneur. Aucun collecteur
+    # activé par défaut n'en dépend aujourd'hui ; c'est la disposition recommandée en amont, et
+    # elle évite d'avoir à y revenir en activant un collecteur de plus.
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # ⚠️ `/` EST MONTÉ EN ENTIER, EN LECTURE SEULE. C'est le conteneur le plus exposé de cet
+      # hôte : il voit `/etc` et les `.env` des autres piles. Il ne les LIT pas — le collecteur
+      # `filesystem` n'appelle que `statfs(2)` sur les points de montage — mais qui peut
+      # `docker exec` dedans lit tout le disque. Le groupe `docker` étant déjà un
+      # équivalent root (cf. doc/bootstrap-debian.md), ça n'ouvre rien de neuf ; ça mérite d'être
+      # écrit, parce que c'est le genre de montage qu'on recopie sans le relire.
+      # `rslave` propage les montages apparus APRÈS le démarrage du conteneur : sans lui, un
+      # volume monté plus tard reste invisible, donc non surveillé, et son remplissage n'alerte
+      # personne.
+      - /:/rootfs:ro,rslave
+      # FICHIER, pas répertoire — il porte le hachage bcrypt du mot de passe de scrape.
+      # ⚠️ Il vit dans `/etc/node-exporter`, en 0700 root, alors que ce conteneur tourne en
+      # utilisateur non privilégié. Ça marche quand même : Docker monte l'INODE, et la traversée
+      # du répertoire est faite par le démon, qui est root. Seul le mode du FICHIER compte côté
+      # conteneur, d'où le 0644 exigé par `monitoring/web-config.example.yml`.
+      # ⚠️ IL DOIT EXISTER AVANT LE PREMIER `up` : un bind sur un chemin absent fait créer un
+      # RÉPERTOIRE vide par Docker, et l'exportateur échoue alors sur une erreur de parseur.
+      - /etc/node-exporter/web-config.yml:/etc/node-exporter/web-config.yml:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      # ⚠️ INDISPENSABLE avec le montage de `/` ci-dessus. Sans lui, node-exporter mesure le
+      # système de fichiers du CONTENEUR — la couche overlay — et non `/srv` ni `/var`. Les
+      # métriques existent, elles sont fausses, et les alertes de disque ne se déclenchent jamais.
+      # Le préfixe `/rootfs` est retiré des étiquettes `mountpoint` par l'exportateur lui-même :
+      # les alertes parlent bien de `/srv`.
+      - --path.rootfs=/rootfs
+      # ⚠️ Sans ces deux filtres, chaque conteneur ajoute ses montages overlay : les systèmes de
+      # fichiers qui comptent (`/`, `/var`, `/srv`) se noient.
+      #
+      # ⚠️ DEUX ÉCARTS DÉLIBÉRÉS AU DÉFAUT AMONT (`defFSTypesExcluded`, collector/filesystem_linux.go) :
+      #   + `tmpfs`, que le défaut n'exclut PAS. Vérifié en production le 2026-09-11 : sans lui,
+      #     `/run`, `/run/lock`, `/run/user/1000` et `/tmp` sont mesurés. `/run/lock` fait **5 Mio**
+      #     — quelques fichiers de verrou suffisent à le remplir, et `ExternalNodeDiskAlmostFull`
+      #     est une alerte CRITIQUE. Une alerte qu'on apprend à ignorer ne protège plus de rien.
+      #     Le prix est assumé : `/tmp` n'est plus surveillé ici. Il est en RAM sur cet hôte, donc
+      #     son remplissage est une pression MÉMOIRE — déjà couverte par
+      #     `ExternalNodeMemoryPressure`, qui en nomme mieux la cause qu'une alerte de disque.
+      #   + `erofs`, simple rattrapage : il est dans le défaut amont et manquait ici.
+      # ⚠️ Ce filtre est le SEUL endroit où le tri se fait. Les règles de `hosts-monitoring` et les
+      # panneaux du dashboard « Machine — vert-emeriss » ne filtrent PAS par `fstype` : refiltrer
+      # là-bas ferait diverger deux listes que rien ne compare.
+      - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|erofs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs)$$
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/credentials/.+|var/lib/docker/.+)($$|/)
+      # ⚠️ ADRESSE EXPLICITE : en `network_mode: host`, le défaut de node-exporter est `:9100`,
+      # donc TOUTES les interfaces.
+      # Lier une adresse nommée est ce qui rend visible sur quoi l'exportateur écoute.
+      # ⚠️ Cette valeur DOIT rester alignée avec l'URL du service dans un AUTRE DÉPÔT :
+      # `homelab_ysera/traefik/dynamic/node-exporter-emeriss.yml`
+      # et avec `LISTEN_ADDR` de `cadvisor/.env` — c'est le même hôte.
+      - --web.listen-address=${LISTEN_ADDR:?}:${LISTEN_PORT:-9100}
+      # ⚠️ PAS OPTIONNEL. Sans ce fichier l'exportateur répond à qui demande, et ce qu'il livre —
+      # inventaire des systèmes de fichiers, des interfaces, charge, uptime — est exactement ce
+      # qu'il faut pour cartographier la machine. Cf. `monitoring/web-config.example.yml`.
+      - --web.config.file=/etc/node-exporter/web-config.yml

@@ -3,13 +3,15 @@
   "extends": ["config:recommended"],
   "description": [
     "Cooldown supply-chain : une release doit exister depuis 7 jours avant d'être proposée.",
-    "internalChecksFilter=strict est le défaut, mais explicité ici car load-bearing : les versions encore 'pending' sont filtrées AVANT création de branche/PR, donc rien n'est ni ouvert ni automergé avant J+7. Sans strict, ignoreTests=true ci-dessous rendrait le check renovate/stability-days vert d'office et l'automerge passerait immédiatement."
+    "internalChecksFilter=strict est le défaut, mais explicité ici car load-bearing : les versions encore 'pending' sont filtrées AVANT création de branche/PR, donc rien n'est ni ouvert ni automergé avant J+7. Sans strict, ignoreTests=true ci-dessous rendrait le check renovate/stability-days vert d'office et l'automerge passerait immédiatement.",
+    "DEUX ARBRES, UN RÉGIME : k8s/ (ArgoCD) et docker/ (Komodo) se déploient tous deux seuls après un merge sur main — ArgoCD par self-heal, Komodo par sa procédure deploiement-auto (docker/komodo/sync/piles.toml). L'automerge des patch/minor vaut donc pour les deux. Le manager docker-compose, actif par défaut, lit les image: des compose.yaml de docker/ : les tags y sont EN DUR, jamais dans un .env, que Renovate ne lit pas."
   ],
   "minimumReleaseAge": "7 days",
   "internalChecksFilter": "strict",
   "ignorePaths": [
     "archive/**",
-    "doc/**"
+    "doc/**",
+    "docker/doc/**"
   ],
   "argocd": {
     "managerFilePatterns": ["/\\.app\\.yaml$/", "/\\.appset\\.yaml$/"]
@@ -44,6 +46,30 @@
       "description": "Argo CD est self-managed : merge manuel obligatoire, quel que soit le type d'update",
       "matchPackageNames": ["argoproj/argo-cd"],
       "automerge": false
+    },
+    {
+      "description": "La pile docker/komodo/ n'est déployée par PERSONNE d'autre qu'un humain (bin/redeploy komodo) : Komodo ne se pilote pas lui-même, il s'arrêterait au milieu de l'opération. Automerger ferait déclarer au dépôt une version que l'hôte ne fait pas tourner, et l'écart ne se verrait qu'au prochain redémarrage, longtemps après la PR. Merge manuel, suivi du geste — cf. docker/komodo/README.md §« Mise à jour ».",
+      "matchFileNames": ["docker/komodo/**"],
+      "automerge": false
+    },
+    {
+      "description": "MongoDB de la pile komodo : une montée de version peut migrer les fichiers de données sans retour arrière, et MongoDB ne saute pas de majeure (passage obligé par chaque majeure, setFeatureCompatibilityVersion entre deux). Rien n'est proposé sans approbation explicite dans le dashboard, et une sauvegarde précède le pull — cf. docker/komodo/README.md §« Mise à jour ».",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mongo"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Komodo Core et Periphery vont PAR PAIRE : même tag, toujours. Une PR unique les monte ensemble ; deux PR séparées laisseraient l'hôte avec un Core et un agent de versions différentes entre deux merges.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/moghtech/komodo-core", "ghcr.io/moghtech/komodo-periphery"],
+      "groupName": "komodo"
+    },
+    {
+      "description": "Une MAJEURE de Komodo migre la base Core au démarrage (v1→v2 a changé l'authentification Core↔Periphery et le schéma) : derrière le dashboard, comme mongo. Les mineures et correctifs passent en PR normale — sans automerge, cf. la règle docker/komodo/** plus haut.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/moghtech/komodo-core", "ghcr.io/moghtech/komodo-periphery"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
     }
   ]
 }

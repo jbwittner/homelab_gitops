@@ -1,0 +1,156 @@
+# Komodo — gestionnaire de piles Docker : Core (UI + API), Periphery (agent sur l'hôte), MongoDB.
+#
+# Procédure amont : https://komo.do/docs/setup/mongo — fichiers de référence
+# `compose/mongo.compose.yaml` et `compose/compose.env` du dépôt moghtech/komodo, tag v2.3.3.
+# Ce compose en DIVERGE délibérément sur quatre points, chacun commenté en place :
+#   - tags épinglés (l'amont tire `mongo` sans tag, soit la dernière majeure) ;
+#   - données en bind sous `/srv/komodo/`, pas en volumes nommés ;
+#   - environnement EXPLICITE par service, pas `env_file: compose.env` partagé ;
+#   - port publié sur l'IP LAN, pas sur toutes les interfaces.
+#
+# ⚠️ CETTE PILE NE SE PILOTE PAS ELLE-MÊME. Komodo déploie les autres piles du dépôt (déclarées
+# dans `komodo/sync/`), mais la sienne reste sur `bin/redeploy komodo` : un Core qui redéploie son
+# propre compose s'arrête au milieu de l'opération qu'il conduit, et Periphery avec lui.
+#
+# ⚠️ PERIPHERY MONTE LA SOCKET DOCKER : c'est un équivalent root sur l'hôte, et l'UI Komodo est la
+# télécommande de ce root. Avec les terminaux ACTIVÉS (choix assumé, cf. README), un compte Komodo
+# compromis donne un shell root. D'où l'exposition LAN seule et l'inscription fermée.
+
+services:
+  mongo:
+    # ⚠️ Tag EN DUR et ÉPINGLÉ. L'amont écrit `image: mongo` sans tag : le prochain `pull`
+    # tirerait la dernière MAJEURE (9.x en octobre 2026), et MongoDB ne saute pas de majeure —
+    # une base écrite en 8.0 doit passer par chaque majeure intermédiaire, avec un
+    # `setFeatureCompatibilityVersion` entre deux. Une majeure sautée refuse de démarrer.
+    #
+    # ⚠️ La 8.0 et pas la 8.3 : 8.0 est une version MAJEURE (support long), 8.1→8.3 sont des
+    # « rapid releases » à support court. Règle `mongo` de `renovate.json` : toute montée passe par
+    # le dashboard, et une SAUVEGARDE (README §« Sauvegarde ») précède le `pull`.
+    #
+    # ⚠️ MongoDB ≥ 5.0 exige AVX sur x86_64. Sans lui, le conteneur meurt au démarrage sur
+    # « Illegal instruction » (code 132), sans autre message. Vérifié présent sur vert-emeriss ;
+    # cf. bootstrap §6 pour la commande.
+    image: mongo:8.0.34
+    # Empêche l'action « Stop All Containers » de Komodo d'arrêter sa propre base. Label amont.
+    labels:
+      komodo.skip:
+    # ⚠️ `--wiredTigerCacheSizeGB 0.25` : sans lui, WiredTiger réserve la MOITIÉ de la RAM moins
+    # 1 Go — 7 Go sur cet hôte, pour une base de quelques méga-octets. Valeur amont, conservée.
+    # Le premier argument commence par `-` : l'entrypoint de l'image préfixe alors `mongod`.
+    command: --quiet --wiredTigerCacheSizeGB 0.25
+    restart: unless-stopped
+    # ⚠️ AUCUN `ports:`. La base n'a qu'un client, Core, qui la joint par le réseau du compose.
+    # Publier 27017 exposerait au LAN une base qui porte les comptes Komodo et le jeton GitHub.
+    volumes:
+      # ⚠️ Bind et non volume nommé : les données vivent sous /srv (convention du dépôt), et un
+      # volume nommé disparaît au premier `docker compose down -v` sans prévenir.
+      # Le propriétaire n'est pas à poser : lancée en root, l'entrypoint de l'image fait un
+      # `chown mongodb` (uid 999) de /data/db et /data/configdb avant de rendre la main.
+      - /srv/komodo/mongo/db:/data/db
+      - /srv/komodo/mongo/configdb:/data/configdb
+    environment:
+      # ⚠️ Lues UNE SEULE FOIS, à l'initialisation d'un /data/db VIDE. Changer le mot de passe dans
+      # le `.env` après coup ne change RIEN dans la base, et Core échoue alors à s'authentifier.
+      # Rotation : README §« Opérations ».
+      MONGO_INITDB_ROOT_USERNAME: ${KOMODO_DATABASE_USERNAME:?}
+      MONGO_INITDB_ROOT_PASSWORD: ${KOMODO_DATABASE_PASSWORD:?}
+
+  core:
+    # ⚠️ Core et Periphery vont PAR PAIRE : même tag, toujours. La règle `komodo` de
+    # `renovate.json` les groupe dans une seule PR. L'amont met le tag en variable
+    # (`COMPOSE_KOMODO_IMAGE_TAG`) — invisible pour Renovate, d'où le tag en dur ici.
+    image: ghcr.io/moghtech/komodo-core:2.3.3
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    # Le reverse-proxy est sur une AUTRE machine (Traefik, 192.168.1.50) : il ne joint Core que par
+    # une adresse de l'hôte. Route : `homelab_ysera/traefik/dynamic/komodo.yaml`.
+    #
+    # ⚠️ CE PORT COURT-CIRCUITE TRAEFIK, donc TLS : `http://<IP_LAN>:9120` donne l'UI en clair,
+    # mot de passe de connexion compris. Il reste le chemin de secours quand Traefik est en panne.
+    # Le pare-feu de l'hôte ne le ferme pas (désactivé depuis le 10 septembre 2026).
+    ports:
+      - "${LISTEN_ADDR:?}:${LISTEN_PORT:-9120}:9120"
+    environment:
+      TZ: ${TZ:-Europe/Paris}   # fuseau des Procedures planifiées (sauvegarde quotidienne)
+      KOMODO_DATABASE_ADDRESS: mongo:27017
+      KOMODO_DATABASE_USERNAME: ${KOMODO_DATABASE_USERNAME:?}
+      KOMODO_DATABASE_PASSWORD: ${KOMODO_DATABASE_PASSWORD:?}
+      # URL que Komodo écrit dans les liens et les callbacks OAuth/webhook. Doit être celle de
+      # Traefik, pas l'IP : c'est elle que le navigateur utilise.
+      KOMODO_HOST: ${KOMODO_HOST:?}
+      KOMODO_TITLE: Komodo — emeriss
+      # Clé publique que Periphery écrit dans `/srv/komodo/keys` (partagé) à son premier démarrage.
+      # Core accepte tout agent qui la présente : c'est elle, et non un mot de passe, qui
+      # authentifie le lien Core ↔ Periphery en v2.
+      KOMODO_PERIPHERY_PUBLIC_KEY: file:/config/keys/periphery.pub
+      KOMODO_LOCAL_AUTH: "true"
+      # ⚠️ Créé au PREMIER démarrage seulement, quand la base n'a aucun utilisateur. Le changer
+      # ensuite dans le `.env` ne fait rien : le mot de passe se change dans l'UI. Obligatoire
+      # quand même — vide, Komodo démarrerait sans admin, et le premier inscrit le deviendrait.
+      KOMODO_INIT_ADMIN_USERNAME: ${KOMODO_INIT_ADMIN_USERNAME:?}
+      KOMODO_INIT_ADMIN_PASSWORD: ${KOMODO_INIT_ADMIN_PASSWORD:?}
+      # Nom du Server créé au premier démarrage, et sous lequel Periphery se présente (cf.
+      # `PERIPHERY_CONNECT_AS`). ⚠️ C'est aussi le `server` de `komodo/sync/piles.toml` : les trois
+      # doivent rester égaux, sinon la sync déclare des piles sur un serveur qui n'existe pas.
+      KOMODO_FIRST_SERVER_NAME: vert-emeriss
+      # ⚠️ Inscription FERMÉE (l'amont la laisse ouverte) : un seul exploitant, et tout compte
+      # Komodo pilote la socket Docker. Les comptes supplémentaires se créent depuis l'UI admin.
+      KOMODO_DISABLE_USER_REGISTRATION: "true"
+      KOMODO_ENABLE_NEW_USERS: "false"
+      # Les procédures par défaut, dont « Backup Core Database » (quotidienne, 01:00) — la seule
+      # sauvegarde de cette pile. Ne pas les désactiver.
+      KOMODO_DISABLE_INIT_RESOURCES: "false"
+      # ⚠️ Aucun webhook n'est branché (Komodo n'est pas joignable depuis GitHub), mais Core signe
+      # avec ce secret tout webhook qu'on créerait : jamais la valeur d'exemple amont.
+      KOMODO_WEBHOOK_SECRET: ${KOMODO_WEBHOOK_SECRET:?}
+      # ⚠️ Signe les sessions. Le changer déconnecte tout le monde, rien de plus.
+      KOMODO_JWT_SECRET: ${KOMODO_JWT_SECRET:?}
+      KOMODO_JWT_TTL: 1-day
+    volumes:
+      # ⚠️ Clés privées Core ET Periphery, générées au premier démarrage. Les perdre oblige à
+      # ré-appairer l'agent. Répertoire en 0700 root (bootstrap §5.2).
+      - /srv/komodo/keys:/config/keys
+      # Sauvegardes de la base, écrites par la procédure « Backup Core Database ».
+      # ⚠️ MÊME DISQUE que la base : elles protègent d'une fausse manipulation, pas d'une perte de
+      # l'hôte. Cf. README §« Sauvegarde ».
+      - /srv/komodo/backups:/backups
+
+  periphery:
+    image: ghcr.io/moghtech/komodo-periphery:2.3.3
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - core
+    # ⚠️ AUCUN `ports:` : en v2, Periphery se connecte VERS Core (mode sortant,
+    # `PERIPHERY_CORE_ADDRESS`), par le réseau du compose. Il n'écoute rien.
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+      PERIPHERY_CORE_ADDRESS: ws://core:9120
+      PERIPHERY_CONNECT_AS: vert-emeriss   # = KOMODO_FIRST_SERVER_NAME, cf. plus haut
+      PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
+      # ⚠️ Doit être le MÊME chemin dans et hors du conteneur (cf. le volume ci-dessous). Periphery
+      # clone le dépôt dans `<racine>/stacks/<pile>/` et y lance `docker compose` via la socket :
+      # c'est le DÉMON de l'hôte qui résout les binds relatifs (`./nginx/cadvisor.conf` de la pile
+      # cadvisor), donc dans l'arborescence de l'HÔTE. Un chemin différent dedans et dehors, et
+      # le démon monte un répertoire qui n'existe pas — Docker le crée vide, sans erreur.
+      PERIPHERY_ROOT_DIRECTORY: /srv/komodo/periphery
+      # ⚠️ Terminaux ACTIVÉS, choix assumé (défaut amont). Shell dans Periphery = shell root sur
+      # l'hôte via la socket. Pour les fermer : passer les deux à "true" et `bin/redeploy komodo`.
+      PERIPHERY_DISABLE_TERMINALS: "false"
+      PERIPHERY_DISABLE_CONTAINER_TERMINALS: "false"
+      # Sans filtre, Periphery additionne tous les montages qu'il voit et sur-déclare le disque.
+      # ⚠️ Ne montre que `/` (10 Go sur cet hôte) — `/srv` et `/var` sont des LV séparés que ce
+      # chiffre ne couvre pas. La place de l'hôte se lit dans node-exporter, pas ici.
+      PERIPHERY_INCLUDE_DISK_MOUNTS: /etc/hostname
+    volumes:
+      # ⚠️ LE MÊME répertoire que Core : chacun y lit la clé publique de l'autre.
+      - /srv/komodo/keys:/config/keys
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Laisse Periphery voir les processus de l'hôte (onglet « Processes »). Amont.
+      - /proc:/proc
+      - /srv/komodo/periphery:/srv/komodo/periphery
+
+# ⚠️ IL N'Y A PAS DE REVERSE-PROXY DANS CETTE PILE. La route vit dans un AUTRE DÉPÔT,
+# `homelab_ysera/traefik/dynamic/komodo.yaml`, seul exemplaire (cf. CLAUDE.md).

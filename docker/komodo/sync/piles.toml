@@ -1,0 +1,116 @@
+# Piles de `docker/` PILOTÉES PAR KOMODO — lu par la Resource Sync « homelab_gitops » (README de
+# `komodo/`, §« Mise en service »), qui clone ce dépôt depuis GitHub et compare ce fichier à ce que
+# Komodo connaît. Schéma : https://komo.do/docs/automate/sync-resources
+#
+# ⚠️ Le dépôt est PARTAGÉ avec ArgoCD, qui lit `k8s/` : Komodo ne regarde que `docker/komodo/sync`
+# (Resource paths de la Sync) et les `run_directory` ci-dessous. Rien ici n'atteint le cluster, et
+# rien sous `k8s/` n'atteint l'hôte.
+#
+# ⚠️ CE FICHIER EST LA LISTE DE VÉRITÉ. Une pile déclarée ici n'est plus déployée par
+# `bin/redeploy`, qui la refuse (il lit les `run_directory` de ce répertoire) : deux outils qui
+# lancent `docker compose up` sur le même projet depuis deux clones différents se volent les
+# conteneurs à chaque passage, et chacun monte SA copie de `./nginx/cadvisor.conf`.
+#
+# ⚠️ LA PILE `komodo/` N'Y FIGURE PAS, et ne doit pas y figurer : cf. l'en-tête de son compose.
+#
+# ⚠️ CE QUE FAIT `deploy = true`, vérifié dans la source v2.3.3 (`bin/core/src/sync/deploy.rs`) :
+# à l'EXÉCUTION de la sync, une pile est redéployée si elle ne tourne pas, si sa config ci-dessous
+# a changé, ou si le contenu de son `compose.yaml` dans git a changé.
+#
+# ⚠️ AUTO-DÉPLOIEMENT : la sync ne s'exécute PAS d'elle-même — Core relit le dépôt toutes les heures
+# (`KOMODO_RESOURCE_POLL_INTERVAL`) et marque la sync « en attente », c'est tout. C'est la procédure
+# `deploiement-auto` en bas de ce fichier qui joue `RunSync` toutes les 15 min : un merge sur `main`
+# (Renovate compris, automerge des patch/minor) part en production dans le quart d'heure, sans clic.
+# Pas de webhook GitHub : Komodo n'est pas joignable depuis Internet. Pour SUSPENDRE
+# l'auto-déploiement (incident, migration) : `schedule_enabled = false` ci-dessous et un dernier
+# Execute à la main — ou le même interrupteur dans l'UI, que le prochain Execute remet à la
+# valeur du dépôt.
+
+# --- Variables ----------------------------------------------------------------------------------
+# ⚠️ L'IP LAN de l'hôte, une seule fois pour les deux piles. Répétée ailleurs, et chaque occurrence
+# doit rester alignée : `LISTEN_ADDR` de `komodo/.env` (même hôte), et les URL des services dans
+# `homelab_ysera/traefik/dynamic/{node-exporter-emeriss,cadvisor-emeriss,komodo}.y*ml` — un AUTRE
+# dépôt. Ni secrète ni propre à une machine inconnue : elle est déjà écrite dans le bootstrap.
+[[variable]]
+name = "EMERISS_LAN_IP"
+description = "IP LAN de vert-emeriss — cf. docker/komodo/sync/piles.toml"
+value = "192.168.1.15"
+
+# --- Piles --------------------------------------------------------------------------------------
+# Champs communs, et pourquoi :
+#   server        = KOMODO_FIRST_SERVER_NAME de `komodo/compose.yaml` — sinon « serveur inconnu ».
+#   git_account   = le compte du jeton GitHub saisi dans Settings → Providers (README de komodo/).
+#   run_directory = le répertoire de la pile DANS le clone, depuis la racine du dépôt (d'où
+#                   `docker/`) : c'est là que compose est lancé, donc là que se résolvent les
+#                   binds relatifs et que Komodo écrit le `.env`.
+#   project_name  = explicite, et égal au nom du répertoire : c'est le nom sous lequel
+#                   `bin/redeploy` a créé les conteneurs (`cadvisor-nginx-1`…). Komodo les ADOPTE
+#                   au lieu d'en créer un second jeu à côté.
+#   environment   = le contenu du `.env` de la pile, que Komodo écrit à chaque déploiement. Le
+#                   `.env` du clone de /opt/homelab n'est PLUS lu. Aucun secret ici, et aucun ne
+#                   doit y entrer : ce fichier est versionné. Un secret passerait par une Variable
+#                   Komodo marquée secrète, créée dans l'UI, et référencée en `[[NOM]]`.
+
+[[stack]]
+name = "node-exporter"
+description = "Supervision de l'hôte — cf. node-exporter/README.md"
+deploy = true
+[stack.config]
+server = "vert-emeriss"
+git_provider = "github.com"
+git_account = "jbwittner"
+repo = "jbwittner/homelab_gitops"
+branch = "main"
+run_directory = "docker/node-exporter"
+file_paths = ["compose.yaml"]
+project_name = "node-exporter"
+environment = """
+LISTEN_ADDR = [[EMERISS_LAN_IP]]
+LISTEN_PORT = 9100
+"""
+
+[[stack]]
+name = "cadvisor"
+description = "Supervision des conteneurs — cf. cadvisor/README.md"
+deploy = true
+# Même ordre que l'ancien `ORDRE` de `bin/redeploy` : l'hôte d'abord, les conteneurs ensuite.
+after = ["node-exporter"]
+[stack.config]
+server = "vert-emeriss"
+git_provider = "github.com"
+git_account = "jbwittner"
+repo = "jbwittner/homelab_gitops"
+branch = "main"
+run_directory = "docker/cadvisor"
+file_paths = ["compose.yaml"]
+project_name = "cadvisor"
+environment = """
+LISTEN_ADDR = [[EMERISS_LAN_IP]]
+LISTEN_PORT = 8080
+"""
+
+# --- Auto-déploiement ---------------------------------------------------------------------------
+# Joue la sync elle-même toutes les 15 min — cf. l'en-tête. Schéma vérifié dans la source v2.3.3
+# (`client/core/rs/src/entities/procedure.rs`, `api/execute/sync.rs`) :
+#   schedule_format = "Cron" — six champs, SECONDE en tête. Le défaut est "English" (« Every day at
+#                     01:00 », comme la procédure de sauvegarde) : une expression cron lue en
+#                     English est rejetée, et l'erreur ne se voit que dans la liste des procédures.
+#   schedule_alert  = false — le défaut est `true` : une alerte à CHAQUE passage, 96 par jour.
+#   failure_alert   = laissé au défaut `true` : un RunSync qui échoue (jeton GitHub expiré, TOML
+#                     invalide) doit se voir — c'est la seule trace d'un auto-déploiement bloqué.
+# ⚠️ Le nom de la sync, "homelab_gitops", est celui de la Resource Sync créée à la main dans l'UI
+# (README de komodo/) : une sync renommée là-bas laisse cette procédure en échec à chaque passage.
+[[procedure]]
+name = "deploiement-auto"
+description = "Joue la Resource Sync homelab_gitops toutes les 15 min — cf. docker/komodo/sync/piles.toml"
+[procedure.config]
+schedule_format = "Cron"
+schedule = "0 */15 * * * *"
+schedule_enabled = true
+schedule_alert = false
+
+[[procedure.config.stage]]
+name = "Sync"
+executions = [
+  { execution.type = "RunSync", execution.params.sync = "homelab_gitops", enabled = true },
+]

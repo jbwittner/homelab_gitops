@@ -1,7 +1,7 @@
 # Supervision des MACHINES hors cluster — celles que ce cluster surveille sans les porter.
 #
 # ⚠️ POURQUOI CE COMPOSANT EXISTE À PART de la supervision des services. Le critère est le même que
-# celui qui fait de `node-exporter/` une pile à part dans homelab_emeriss : le CYCLE DE VIE. Une
+# celui qui fait de `node-exporter/` une pile à part dans docker/ : le CYCLE DE VIE. Une
 # machine précède les services qu'elle porte et leur survit ; le jour où un service déménage,
 # disparaît ou se dédouble, ce qui mesure son disque et sa mémoire n'a aucune raison de bouger.
 # Rangé dans le composant de supervision d'un service, ce scrape serait supprimé par un `prune`

@@ -1,8 +1,16 @@
 # Homelab gitops
 
-L'intégralité d'un homelab Kubernetes, déclarée en Git et appliquée par ArgoCD. Un seul cluster
-Talos, `bleu-kalecgos`, et une règle qui prime sur les autres : **aucune donnée ne rentre dans le
-cluster hors GitOps** — cf. [`doc/regles-gitops.md`](doc/regles-gitops.md).
+L'intégralité d'un homelab, déclarée en Git, en **deux arbres** que lisent deux moteurs :
+
+| Arbre | Cible | Moteur |
+|---|---|---|
+| [`k8s/`](#larbre) | le cluster Talos `bleu-kalecgos` | **ArgoCD**, self-heal |
+| [`docker/`](docker/README.md) | l'hôte Docker `vert-emeriss` | **Komodo**, procédure `deploiement-auto` (15 min) |
+
+Les deux se déploient **seuls** après un merge sur `main`, et aucun ne lit l'arbre de l'autre. Une
+règle prime sur les autres côté cluster : **aucune donnée ne rentre dans le cluster hors GitOps** —
+cf. [`doc/regles-gitops.md`](doc/regles-gitops.md). `doc/`, `script/` et `archive/` à la racine
+sont propres à `k8s/` ; `docker/` porte sa propre doc, ses outils et ses conventions.
 
 Le dépôt de référence est **GitHub**, en dépôt **privé** :
 `https://github.com/jbwittner/homelab_gitops`. C'est la source que lit ArgoCD : toutes les
@@ -24,6 +32,7 @@ Applications passent en `ComparisonError`, `argocd` compris.
 | exposer un service, ou comprendre un 404 | [`doc/reseau.md`](doc/reseau.md) |
 | reconstruire le cluster à froid | [`doc/runbook-bootstrap.md`](doc/runbook-bootstrap.md) |
 | lancer un outil (sauvegarde, restauration, inspection) | [`script/README.md`](script/README.md) |
+| ajouter une pile Docker, ou préparer l'hôte | [`docker/README.md`](docker/README.md) |
 
 ## L'arbre
 
@@ -39,6 +48,7 @@ k8s/
 doc/                          règles, conventions, réseau, runbooks
 script/                       les outils, tous ici et nulle part ailleurs
 archive/                      composants retirés du déploiement, conservés pour mémoire
+docker/                       l'hôte vert-emeriss, lu par Komodo — cf. docker/README.md
 ```
 
 ⚠️ **Le suffixe fait tout.** Un composant en `*.app.yaml` est déployé ; en `*.noapp.yaml` il est
