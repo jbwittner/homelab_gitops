@@ -5,9 +5,9 @@
 > (commit `291f61e`).
 >
 > Il n'a plus aucun consommateur : la seule VM qu'il faisait tourner a été retirée du dépôt. Le
-> `path:` de l'Application pointe toujours `cluster/infra/kubevirt/manifests`, qui n'existe plus —
+> `path:` de l'Application pointe toujours `k8s/infra/kubevirt/manifests`, qui n'existe plus —
 > les manifestes sont à côté de ce fichier. ⚠️ Pour le remettre en service : le ramener sous
-> `cluster/infra/` (la wave 1 n'ordonne CDI après `openebs` qu'**à l'intérieur** de l'app-of-apps
+> `k8s/infra/` (la wave 1 n'ordonne CDI après `openebs` qu'**à l'intérieur** de l'app-of-apps
 > `infra`), corriger `path:`, puis renommer en `.app.yaml`.
 
 ## Rôle
@@ -18,8 +18,8 @@ leurs images disque dans des PVC.
 ## Fichiers
 
 - `kubevirt.noapp.yaml` — Application (archétype (c) : kustomize seul), **wave 1**. Même wave que
-  [velero](../../cluster/infra/velero/README.md) et pour la même raison : CDI a besoin d'une StorageClass, donc
-  d'[openebs](../../cluster/infra/openebs/README.md) qui est en wave 0 du même app-of-apps.
+  [velero](../../k8s/infra/velero/README.md) et pour la même raison : CDI a besoin d'une StorageClass, donc
+  d'[openebs](../../k8s/infra/openebs/README.md) qui est en wave 0 du même app-of-apps.
 - `manifests/kustomization.yaml` — les **quatre** installs upstream épinglés par URL (opérateur +
   CR, pour KubeVirt et pour CDI), et les deux `patches` qui les configurent. Ces URLs sont la
   source unique des deux versions.

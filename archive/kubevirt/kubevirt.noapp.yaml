@@ -18,7 +18,7 @@ spec:
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
-    path: cluster/infra/kubevirt/manifests
+    path: k8s/infra/kubevirt/manifests
   destination:
     name: bleu-kalecgos
     namespace: kubevirt

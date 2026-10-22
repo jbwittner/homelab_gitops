@@ -18,12 +18,12 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   `restore`, `delete`. Le périmètre y est toujours **dérivé** (d'une Schedule pour un backup, du
   Backup source pour un restore) et jamais retapé. Ce n'est **pas** la CLI `velero` : tout passe
   par `kubectl` et `jq`. Documentation complète dans
-  [`cluster/infra/velero/README.md`](../cluster/infra/velero/README.md), section Opérations
+  [`k8s/infra/velero/README.md`](../k8s/infra/velero/README.md), section Opérations
 - [`cnpg-barman-plugin-script.sh`](cnpg-barman-plugin-script.sh) — sauvegardes **PostgreSQL
   barman-cloud** : `list`, `show`, `backup`, `restore`, `delete`. Même principe de dérivation (la
   spec d'une sauvegarde manuelle vient de la `ScheduledBackup`, celle d'une restauration du
   `Cluster` source). Ce n'est **pas** la CLI `cnpg` ni `barman-cloud-*`. Documentation complète
-  dans [`cluster/app/cnpg-barman-plugin/README.md`](../cluster/app/cnpg-barman-plugin/README.md),
+  dans [`k8s/app/cnpg-barman-plugin/README.md`](../k8s/app/cnpg-barman-plugin/README.md),
   section Opérations.
 
   > [!IMPORTANT]
@@ -42,7 +42,7 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   base **par profil**, et `profiles` montre laquelle chaque profil lit réellement. **Seul script du dossier qui n'écrit nulle part** : ni dans le cluster, ni dans
   la base — la mémoire de l'agent se modifie par l'agent (`fact_store`, `fact_feedback`), pas
   d'ici. Documentation du composant dans
-  [`cluster/app/hermes/README.md`](../cluster/app/hermes/README.md), section Mémoire.
+  [`k8s/app/hermes/README.md`](../k8s/app/hermes/README.md), section Mémoire.
 
   > [!IMPORTANT]
   > Deux précautions que le script prend et qu'une commande tapée à la main oublie :
@@ -62,7 +62,7 @@ trouvé ailleurs que dans ce dossier est une exception à corriger.
   l'applique ; ce que ces scripts fabriquent, ce sont des **événements** (un `Backup`, un
   `Restore`, un `DeleteBackupRequest`), pas des états désirés. Committés, ArgoCD les rejouerait
   sans fin après chaque expiration de TTL. Leur place est une commande. Tout ce qui décrit un
-  **état** reste un manifeste sous `cluster/`, jamais un script.
+  **état** reste un manifeste sous `k8s/`, jamais un script.
 - **Corollaire : un script qui produirait un état l'IMPRIME au lieu de l'appliquer.** C'est le cas
   de `cnpg-barman-plugin-script.sh restore`, dont la sortie est un manifeste à committer. La règle
   ne se contourne pas par commodité — elle change ce que le script rend.

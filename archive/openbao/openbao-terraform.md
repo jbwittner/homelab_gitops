@@ -3,9 +3,9 @@
 > [!IMPORTANT]
 > **ARCHIVÉ — document conservé pour mémoire, plus rien de tout ceci n'est en service.**
 >
-> openbao est archivé et [external-secrets](../../cluster/infra/external-secrets/README.md) est en
+> openbao est archivé et [external-secrets](../../k8s/infra/external-secrets/README.md) est en
 > `.noapp.yaml` : la CRD `ExternalSecret` n'existe plus dans le cluster, et le seul canal de
-> secrets actif est [sealed-secrets](../../cluster/infra/sealed-secrets/README.md) — cf.
+> secrets actif est [sealed-secrets](../../k8s/infra/sealed-secrets/README.md) — cf.
 > [`doc/regles-gitops.md`](../../doc/regles-gitops.md).
 >
 > Ce fichier vivait dans `doc/` ; il a été déplacé ici avec le composant, ses seuls lecteurs étant
@@ -14,7 +14,7 @@
 
 Ce que le **repo Terraform** devait poser dans le coffre pour que les clusters puissent lire leurs
 secrets. Ce dépôt-ci déclarait les *consommateurs*
-([external-secrets](../../cluster/infra/external-secrets/README.md)) ; il ne configurait **rien**
+([external-secrets](../../k8s/infra/external-secrets/README.md)) ; il ne configurait **rien**
 dans openbao et ne vérifiait rien. La seule preuve que les deux s'accordaient était l'état `Ready`
 des `ExternalSecret`.
 
@@ -43,7 +43,7 @@ l'**humain** (§5). Les deux jeux sont indépendants : casser l'OIDC ne coupe pa
 
 ## Prérequis
 
-- OpenBao déployé et **descellé** ([cluster/infra/openbao](README.md)) ;
+- OpenBao déployé et **descellé** ([k8s/infra/openbao](README.md)) ;
 - Terraform authentifié auprès de lui — via `BAO_ADDR`/`VAULT_ADDR` sur
   `https://openbao.lan.wittner.tech` et un token. Le token root convient pour l'amorçage, mais
   n'a rien à faire dans un CI : prévoir un AppRole dédié ensuite ;
@@ -109,7 +109,7 @@ resource "vault_auth_backend" "k8s" {
   for_each = var.clusters
   type     = "kubernetes"
   # ⚠️ Ce path DOIT matcher le `mountPath` du ClusterSecretStore du cluster. Aujourd'hui seul le
-  # hub en a un : cluster/infra/external-secrets/manifests/clustersecretstore-openbao.yaml
+  # hub en a un : k8s/infra/external-secrets/manifests/clustersecretstore-openbao.yaml
   # (le composant est mono-cluster ; un second cluster le ferait passer en ApplicationSet, avec
   # un store par sous-dossier <cluster>/manifests/).
   path     = "kubernetes-${each.key}"
@@ -143,7 +143,7 @@ hub.
 
 > [!WARNING]
 > **Ces manifestes n'existent pas**, et ESO ne tourne plus sur le spoke : le composant
-> [external-secrets](../../cluster/infra/external-secrets/README.md) est mono-cluster (hub). Seul le
+> [external-secrets](../../k8s/infra/external-secrets/README.md) est mono-cluster (hub). Seul le
 > hub lit le coffre. Ouvrir un spoke suppose d'abord d'y redéployer ESO (migration en
 > `ApplicationSet`), puis d'y poser le ServiceAccount `auth-delegator` ci-dessus.
 
@@ -194,7 +194,7 @@ resource "vault_kubernetes_auth_backend_role" "external_secrets" {
   role_name = "external-secrets"
 
   # Le ServiceAccount d'ESO, tel que le pose le chart (`serviceAccount.name` dans
-  # cluster/infra/external-secrets/helm-values.yaml).
+  # k8s/infra/external-secrets/helm-values.yaml).
   bound_service_account_names      = ["external-secrets"]
   bound_service_account_namespaces = ["external-secrets"]
 
@@ -212,8 +212,8 @@ resource "vault_kubernetes_auth_backend_role" "external_secrets" {
 Tout ce qui précède sert les **machines**. Pour ouvrir l'UI `https://openbao.lan.wittner.tech`
 ou lancer un `bao kv put` sans coller le token root, il faut un mount **`oidc`** adossé à
 authentik — le même fournisseur d'identité que
-[argocd](../../cluster/infra/argocd/README.md) et
-[grafana](../../cluster/app/kube-prometheus-stack/README.md), avec la même convention de groupe.
+[argocd](../../k8s/infra/argocd/README.md) et
+[grafana](../../k8s/app/kube-prometheus-stack/README.md), avec la même convention de groupe.
 
 > [!IMPORTANT]
 > **Le token root reste le break-glass, et il ne se supprime pas.** L'OIDC ajoute un chemin de
@@ -424,7 +424,7 @@ Propres au login OIDC (§5) :
 
 ## Ajouter un cluster
 
-1. Créer `cluster/infra/external-secrets/<cluster>/manifests/` dans **ce** dépôt (kustomization +
+1. Créer `k8s/infra/external-secrets/<cluster>/manifests/` dans **ce** dépôt (kustomization +
    `ClusterSecretStore`), en partant d'un existant. L'`ApplicationSet` le découvre seul.
 2. Si c'est un **spoke** : y ajouter aussi le `ServiceAccount` + `ClusterRoleBinding`
    `system:auth-delegator` + `Secret` de token, pour le `token_reviewer_jwt`.

@@ -10,7 +10,7 @@ La frontière avec le reste du dépôt :
 
 | Où | Quoi |
 | --- | --- |
-| `cluster/**/README.md` | ce que le composant **est**, et pourquoi il est réglé ainsi |
+| `k8s/**/README.md` | ce que le composant **est**, et pourquoi il est réglé ainsi |
 | `script/` | ce qui se **tape souvent**, automatisé |
 | `doc/` | ce qui **vaut pour tout le dépôt** (règles, conventions, réseau), et ce qui se **conduit** en plusieurs étapes avec des décisions entre elles |
 
@@ -26,7 +26,7 @@ ces pages iraient dans le README du composant concerné.
   GitOps, les cinq gestes impératifs assumés, le canal de secrets (sealed-secrets, désormais le
   seul), et pourquoi le dépôt **s'écrit comme s'il était public** — réécriture d'historique plutôt
   que commit correctif, et la clé sealed-secrets comme point de fuite rétroactif.
-- [`conventions.md`](conventions.md) — la forme d'un composant : arbre `cluster/`, suffixes
+- [`conventions.md`](conventions.md) — la forme d'un composant : arbre `k8s/`, suffixes
   `.app.yaml` / `.noapp.yaml`, archétypes, sync-waves, règle README.
 - [`reseau.md`](reseau.md) — le `shared-gw`, ses trois listeners, ce qui est exposé, le DNS — et le
   **reverse proxy `192.168.1.50`**, sans lequel un `HTTPRoute` sain répond 404.
@@ -47,10 +47,10 @@ ces pages iraient dans le README du composant concerné.
 - **Une procédure d'ici a été exécutée au moins une fois.** Les valeurs et les messages d'erreur
   qu'elle contient sont relevés, pas supposés. Une étape jamais jouée est signalée comme telle.
 - **Les commandes s'exécutent depuis la racine du dépôt** — les chemins sont écrits
-  `script/<nom>.sh`, `cluster/app/<composant>/…`.
+  `script/<nom>.sh`, `k8s/app/<composant>/…`.
 - **Une procédure qui écrit dans le cluster dit où elle écrit, et comment défaire.** Le démontage
   fait partie de la procédure, jamais des options : c'est l'étape qu'on saute quand tout s'est
   bien passé, et c'est celle qui laisse traîner un volume, un namespace ou un port.
 - **La règle GitOps s'applique aussi ici.** Ce que ces pages appliquent à la main sont soit des
   **événements** (un `Backup`, un `Restore`), soit un **périmètre jetable et hors ArgoCD**, jamais
-  un état durable de la production. Tout ce qui doit durer redevient un manifeste sous `cluster/`.
+  un état durable de la production. Tout ce qui doit durer redevient un manifeste sous `k8s/`.

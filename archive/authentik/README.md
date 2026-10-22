@@ -5,7 +5,7 @@
 >
 > Le motif n'est pas consigné ; la conséquence l'est. **Il n'y a plus de SSO nulle part** : le bloc
 > `oidc.config` d'ArgoCD est commenté et son patch RBAC n'est pas appliqué
-> ([argocd](../../cluster/infra/argocd/README.md) §SSO), l'`ExternalSecret` `grafana-oidc` est
+> ([argocd](../../k8s/infra/argocd/README.md) §SSO), l'`ExternalSecret` `grafana-oidc` est
 > commenté lui aussi. Les comptes locaux (`admin` ArgoCD, `grafana-admin`) sont aujourd'hui le seul
 > moyen d'entrer.
 >
@@ -16,12 +16,12 @@
 ## Rôle
 
 Identity Provider du homelab (SSO : OIDC, SAML, LDAP, proxy). Base de données PostgreSQL dédiée,
-portée par un `Cluster` CNPG (opérateur fourni par [`cnpg`](../../cluster/app/cnpg/README.md)). Exposé
+portée par un `Cluster` CNPG (opérateur fourni par [`cnpg`](../../k8s/app/cnpg/README.md)). Exposé
 publiquement sur `https://authentik.wittner.tech` via `shared-gw` (listener `https-public`,
 cf. [doc/reseau.md](../../doc/reseau.md)).
 
-C'est le fournisseur d'identité de [`argocd`](../../cluster/infra/argocd/README.md) et de
-[`kube-prometheus-stack`](../../cluster/app/kube-prometheus-stack/README.md) : les Providers, Applications et
+C'est le fournisseur d'identité de [`argocd`](../../k8s/infra/argocd/README.md) et de
+[`kube-prometheus-stack`](../../k8s/app/kube-prometheus-stack/README.md) : les Providers, Applications et
 groupes côté authentik sont gérés en **Terraform** (autre repo), pas ici.
 
 ## Fichiers

@@ -45,7 +45,7 @@
 # donc cohérente, WAL inclus. Un `kubectl cp` du `.db` seul, sur une base vivante, produit un
 # fichier tronqué — c'est exactement le piège n°2 vu depuis l'autre bout.
 #
-# Documentation du composant : cluster/app/hermes/README.md, section Mémoire.
+# Documentation du composant : k8s/app/hermes/README.md, section Mémoire.
 
 set -euo pipefail
 

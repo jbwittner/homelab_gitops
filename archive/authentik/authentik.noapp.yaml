@@ -18,14 +18,14 @@ spec:
       helm:
         releaseName: authentik
         valueFiles:
-          - $values/cluster/app/authentik/helm-values.yaml
+          - $values/k8s/app/authentik/helm-values.yaml
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
     # Ressources annexes : namespace, Cluster CNPG, SealedSecret, HTTPRoute.
     - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
-      path: cluster/app/authentik/manifests
+      path: k8s/app/authentik/manifests
   destination:
     name: bleu-kalecgos
     namespace: authentik

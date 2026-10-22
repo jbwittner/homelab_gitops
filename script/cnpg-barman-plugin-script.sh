@@ -608,7 +608,7 @@ cmd_backup() {
   [[ "$p" != "null" ]] \
     || die "Le Cluster '$ns/$cluster' ne porte PAS le plugin '$PLUGIN_NAME'.
        Ni ObjectStore ni ScheduledBackup ne suffisent : « spec.plugins » est ce qui met une base
-       sous sauvegarde. Voir cluster/app/cnpg-barman-plugin/README.md §Opérations."
+       sous sauvegarde. Voir k8s/app/cnpg-barman-plugin/README.md §Opérations."
 
   # Piège n°5 : sans isWALArchiver, la sauvegarde partira, sera VERTE, et n'aura aucun WAL.
   [[ "$(jq -r '.isWALArchiver // false' <<<"$p")" == "true" ]] \
@@ -641,7 +641,7 @@ cmd_backup() {
   case "$(jq 'length' <<<"$sb")" in
     0) die "Aucune ScheduledBackup pour '$ns/$cluster'. La spec d'une sauvegarde manuelle est
        DÉRIVÉE de la schedule, jamais retapée — sans schedule, la chaîne n'est pas montée.
-       Voir cluster/app/cnpg-barman-plugin/README.md §Opérations." ;;
+       Voir k8s/app/cnpg-barman-plugin/README.md §Opérations." ;;
     1) ;;
     *) die "Plusieurs ScheduledBackup visent '$ns/$cluster' — la spec à dériver est ambiguë :
 $(jq -r '.[] | "         " + .metadata.name' <<<"$sb")" ;;
@@ -925,13 +925,13 @@ cmd_restore() {
   if [[ -t 1 ]]; then
     jq . <<<"$manifest" | sed 's|^|  |'
     echo
-    echo "  Destination suggérée : cluster/app/<application>/manifests/${newname}.yaml"
+    echo "  Destination suggérée : k8s/app/<application>/manifests/${newname}.yaml"
     echo "  (puis l'ajouter au kustomization.yaml du même dossier)"
   else
     jq . <<<"$manifest"
     {
       echo
-      echo "  Destination suggérée : cluster/app/<application>/manifests/${newname}.yaml"
+      echo "  Destination suggérée : k8s/app/<application>/manifests/${newname}.yaml"
       echo "  (puis l'ajouter au kustomization.yaml du même dossier)"
     } >&2
   fi

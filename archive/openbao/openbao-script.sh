@@ -28,17 +28,17 @@
 # `bao operator unseal`.
 #
 # Usage, depuis n'importe où :
-#   cluster/infra/openbao/openbao-script.sh status
-#   cluster/infra/openbao/openbao-script.sh list [motif]
-#   cluster/infra/openbao/openbao-script.sh snapshot
-#   cluster/infra/openbao/openbao-script.sh fetch <réf> [-o fichier]
-#   cluster/infra/openbao/openbao-script.sh check <réf>
-#   cluster/infra/openbao/openbao-script.sh verify <réf> [--unseal] [--keep]
-#   cluster/infra/openbao/openbao-script.sh up <réf> [--unseal] [--replace]
-#   cluster/infra/openbao/openbao-script.sh unseal
-#   cluster/infra/openbao/openbao-script.sh bao <args…>
-#   cluster/infra/openbao/openbao-script.sh stop
-#   cluster/infra/openbao/openbao-script.sh restore <réf> [--no-pre-snapshot]
+#   k8s/infra/openbao/openbao-script.sh status
+#   k8s/infra/openbao/openbao-script.sh list [motif]
+#   k8s/infra/openbao/openbao-script.sh snapshot
+#   k8s/infra/openbao/openbao-script.sh fetch <réf> [-o fichier]
+#   k8s/infra/openbao/openbao-script.sh check <réf>
+#   k8s/infra/openbao/openbao-script.sh verify <réf> [--unseal] [--keep]
+#   k8s/infra/openbao/openbao-script.sh up <réf> [--unseal] [--replace]
+#   k8s/infra/openbao/openbao-script.sh unseal
+#   k8s/infra/openbao/openbao-script.sh bao <args…>
+#   k8s/infra/openbao/openbao-script.sh stop
+#   k8s/infra/openbao/openbao-script.sh restore <réf> [--no-pre-snapshot]
 #
 # <réf> = un nom d'objet du bucket, le mot-clé `latest` ou `oldest`, ou un chemin de fichier local.
 #

@@ -4,16 +4,16 @@
 
 Cilium implémente **Gateway API**. Le `Gateway` partagé unique est **`shared-gw`** (ns `gateway`,
 classe `cilium`), défini dans
-[`cluster/infra/gateway-api/manifests/gateway.yaml`](../cluster/infra/gateway-api/manifests/gateway.yaml).
+[`k8s/infra/gateway-api/manifests/gateway.yaml`](../k8s/infra/gateway-api/manifests/gateway.yaml).
 Exposer un service = un `HTTPRoute` qui s'y attache.
 
 - **LB** : une IP allouée par le `CiliumLoadBalancerIPPool` `bleu-kalecgos-pool`
-  (`192.168.1.80-89`, [`ip-pool.yaml`](../cluster/infra/cilium/manifests/ip-pool.yaml)) et annoncée
+  (`192.168.1.80-89`, [`ip-pool.yaml`](../k8s/infra/cilium/manifests/ip-pool.yaml)) et annoncée
   en **L2** (`bleu-kalecgos-l2`, `loadBalancerIPs: true`). En pratique `shared-gw` prend
   **`192.168.1.80`**.
 - **TLS terminé au Gateway** : secrets `wildcard-public-tls`, `wildcard-lan-tls` et `wildcard-dev-lan-tls` (ns `gateway`),
   émis par cert-manager (Let's Encrypt DNS-01 Cloudflare,
-  [`certificates.yaml`](../cluster/infra/cert-manager/manifests/certificates.yaml)) et référencés en
+  [`certificates.yaml`](../k8s/infra/cert-manager/manifests/certificates.yaml)) et référencés en
   `Terminate` par les listeners. Les backends sont joints en **HTTP clair**.
 - La `GatewayClass cilium` est **auto-créée par le contrôleur Cilium** — ne pas la déclarer.
 
@@ -45,16 +45,16 @@ wildcard pour `*.dev.lan.wittner.tech` ; au SNI, le hostname le plus spécifique
 
 | Hostname | Listener | Composant |
 |---|---|---|
-| `argocd.lan.wittner.tech` | `https-internal` | [argocd](../cluster/infra/argocd/README.md) |
-| `grafana.lan.wittner.tech` | `https-internal` | [kube-prometheus-stack](../cluster/app/kube-prometheus-stack/README.md) |
-| `alertmanager.lan.wittner.tech` | `https-internal` | [kube-prometheus-stack](../cluster/app/kube-prometheus-stack/README.md) |
-| `hermes.lan.wittner.tech` | `https-internal` | [hermes](../cluster/app/hermes/README.md) — dashboard (9119) |
-| `hermes-api.lan.wittner.tech` | `https-internal` | [hermes](../cluster/app/hermes/README.md) — API (8642) |
-| `bankwiz-api.dev.lan.wittner.tech` | `https-dev` | [bankwiz](../cluster/app/bankwiz/README.md) — API, environnement `dev` |
+| `argocd.lan.wittner.tech` | `https-internal` | [argocd](../k8s/infra/argocd/README.md) |
+| `grafana.lan.wittner.tech` | `https-internal` | [kube-prometheus-stack](../k8s/app/kube-prometheus-stack/README.md) |
+| `alertmanager.lan.wittner.tech` | `https-internal` | [kube-prometheus-stack](../k8s/app/kube-prometheus-stack/README.md) |
+| `hermes.lan.wittner.tech` | `https-internal` | [hermes](../k8s/app/hermes/README.md) — dashboard (9119) |
+| `hermes-api.lan.wittner.tech` | `https-internal` | [hermes](../k8s/app/hermes/README.md) — API (8642) |
+| `bankwiz-api.dev.lan.wittner.tech` | `https-dev` | [bankwiz](../k8s/app/bankwiz/README.md) — API, environnement `dev` |
 
 ⚠️ **`argocd.lan.wittner.tech` n'est pas qu'une UI** : `/api/webhook` y est l'endpoint du webhook
 « push » qui déclenche la sync immédiate au lieu du polling de 3 min
-([argocd §Webhook](../cluster/infra/argocd/README.md)). ⚠️ Le nom étant en `*.lan`, un webhook
+([argocd §Webhook](../k8s/infra/argocd/README.md)). ⚠️ Le nom étant en `*.lan`, un webhook
 GitHub **ne peut pas** le joindre : GitHub livre depuis Internet, et aucune route publique n'aboutit
 dans ce cluster (cf. §Chemin d'entrée public). Tant que rien n'est exposé, le polling est le seul
 déclencheur.
@@ -70,7 +70,7 @@ uniquement en intra-cluster).
 
 | Hostname | Servi par | Vu d'ici comme |
 |---|---|---|
-| `node-exporter-emeriss.lan.wittner.tech` | machine `vert-emeriss`, pile `node-exporter/` de `homelab_emeriss`, via le proxy `192.168.1.50` | cible `job="external-node"` de [hosts-monitoring](../cluster/app/hosts-monitoring/README.md) — la machine |
+| `node-exporter-emeriss.lan.wittner.tech` | machine `vert-emeriss`, pile `node-exporter/` de `homelab_emeriss`, via le proxy `192.168.1.50` | cible `job="external-node"` de [hosts-monitoring](../k8s/app/hosts-monitoring/README.md) — la machine |
 | `cadvisor-emeriss.lan.wittner.tech` | même machine, pile `cadvisor/` de `homelab_emeriss` | cible cAdvisor de hosts-monitoring — ses conteneurs |
 
 ⚠️ Les deux dépendent du reverse proxy et d'aucun objet de ce dépôt. Ils sont en
@@ -123,13 +123,13 @@ Créer un `HTTPRoute` dans le `manifests/` du composant :
 - `parentRefs` → `shared-gw` (ns `gateway`) + `sectionName` du listener adapté ;
 - `group`/`kind`/`weight` et le `matches` **explicites** — plus obligatoires depuis que le
   server-side diff est actif (`controller.diff.server.side` dans
-  [argocd](../cluster/infra/argocd/README.md), qui absorbe les defaults injectés par le CRD),
+  [argocd](../k8s/infra/argocd/README.md), qui absorbe les defaults injectés par le CRD),
   mais gardés dans le modèle : ils documentent ce qui est réellement appliqué ;
 - backend en **HTTP clair** (le TLS est terminé au Gateway) ;
 - puis, pour un nom en `.lan`, **le déclarer au reverse proxy `192.168.1.50`**.
 
 Modèle de référence :
-[`grafana-httproute.yaml`](../cluster/app/kube-prometheus-stack/manifests/grafana-httproute.yaml).
+[`grafana-httproute.yaml`](../k8s/app/kube-prometheus-stack/manifests/grafana-httproute.yaml).
 
 ## Vérifier
 

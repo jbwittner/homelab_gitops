@@ -11,7 +11,7 @@ status: stable
 
 > [!NOTE]
 > **Objet** — amener un cluster Kubernetes **vierge** à l'état complet décrit par ce repo : tous
-> les composants de `cluster/` qui le désignent, déployés et réconciliés par ArgoCD.
+> les composants de `k8s/` qui le désignent, déployés et réconciliés par ArgoCD.
 >
 > Cette procédure est **générique** : elle vaut pour tout cluster du repo. Les valeurs propres à
 > un cluster (IP, wildcard DNS, disque, inventaire des secrets) vivent dans sa
@@ -34,9 +34,9 @@ Le wildcard interne n'est **pas** paramétré : il n'y a qu'un cluster et le lis
 `*.lan.wittner.tech`, sans préfixe de cluster (cf. [reseau.md](reseau.md)).
 
 ⚠️ `${CLUSTER}` n'est **plus** un dossier de premier niveau : l'arbre de déploiement est unique
-(`cluster/`). La variable nomme le cluster — donc son Secret d'enregistrement
+(`k8s/`). La variable nomme le cluster — donc son Secret d'enregistrement
 (`cluster-${CLUSTER}`), le suffixe de son backup de clé, et les sous-dossiers qu'il aurait dans
-un composant multi-cluster (`cluster/infra/<name>/${CLUSTER}/`). Le repo n'ayant plus qu'un
+un composant multi-cluster (`k8s/infra/<name>/${CLUSTER}/`). Le repo n'ayant plus qu'un
 cluster, aucun composant n'est aujourd'hui dans ce cas : tous sont des `Application`.
 
 > [!NOTE]
@@ -100,9 +100,9 @@ git -C . rev-parse --abbrev-ref HEAD     # doit être `main` à jour
 
 ## Source de vérité — GitHub
 
-Toutes les `repoURL` de `cluster/` pointent `https://github.com/jbwittner/homelab_gitops.git`, dépôt
+Toutes les `repoURL` de `k8s/` pointent `https://github.com/jbwittner/homelab_gitops.git`, dépôt
 **privé**. `argocd-repo-server` s'y authentifie sous l'identité d'une **GitHub App** en lecture
-seule (cf. [argocd](../cluster/infra/argocd/README.md) §Accès au dépôt privé). Ce que ça implique
+seule (cf. [argocd](../k8s/infra/argocd/README.md) §Accès au dépôt privé). Ce que ça implique
 pour ce runbook :
 
 - **l'étape 3bis pose le credential de l'App** (Secret `repo-homelab-gitops-github`) — sans lui,
@@ -113,7 +113,7 @@ pour ce runbook :
 - **`argocd-repo-server` sort du cluster vers `github.com`** : la sortie Internet des nœuds est une
   dépendance dure de la synchro.
 
-⚠️ **`cluster/root.yaml` est le piège** dès qu'on change de source (autre dépôt, branche de
+⚠️ **`k8s/root.yaml` est le piège** dès qu'on change de source (autre dépôt, branche de
 reprise) : rien ne le gère, il faut le ré-appliquer à la main après avoir changé son `repoURL` ET
 son `targetRevision`. Cf. argocd §Accès au dépôt privé.
 
@@ -123,7 +123,7 @@ son `targetRevision`. Cf. argocd §Accès au dépôt privé.
 
 > [!CAUTION]
 > **Tout est reconstructible depuis Git, sauf les secrets** — et ils empruntent désormais **un
-> seul** canal : les douze `SealedSecret` de `cluster/`, tous indéchiffrables sans la **clé privée du
+> seul** canal : les douze `SealedSecret` de `k8s/`, tous indéchiffrables sans la **clé privée du
 > contrôleur sealed-secrets**. Un unique backup, mais sans aucune redondance.
 >
 > Repartir sans cette clé n'est pas un bootstrap : c'est un re-provisionnement de **tous** les
@@ -145,7 +145,7 @@ backup est un manifeste `kind: List` réapplicable tel quel.
 couvre tous.
 
 ⚠️ **La rotation automatique est coupée** (`keyrenewperiod: "0"`, cf.
-[sealed-secrets](../cluster/infra/sealed-secrets/README.md)) : il n'y a qu'**une** clé active, donc
+[sealed-secrets](../k8s/infra/sealed-secrets/README.md)) : il n'y a qu'**une** clé active, donc
 un seul fichier à garder — mais aussi aucune génération de secours si celui-ci est perdu.
 
 **Où la trouver**, dans l'ordre :
@@ -180,9 +180,9 @@ bootstrap**, dans cet ordre :
 
 | Secret | Composant | Ce que sa perte coûte |
 |---|---|---|
-| `repo-homelab-gitops-github` | [argocd](../cluster/infra/argocd/README.md) | le dépôt est **privé** : sans le credential de la GitHub App, `argocd-repo-server` ne clone rien et **toutes** les Applications tombent en `ComparisonError` — `argocd` compris, puisqu'il est self-managed |
-| `cloudflare-api-token` | [cert-manager](../cluster/infra/cert-manager/README.md) | pas de DNS-01, donc pas de certificat, donc aucun listener TLS opérationnel sur `shared-gw` |
-| `velero-gcs` | [velero](../cluster/infra/velero/README.md) | credential du bucket GCS des sauvegardes. ⚠️ Ne bloque pas l'amorçage, mais **sans lui la schedule `daily` (namespace `hermes`) échoue** et aucun backup existant n'est lisible |
+| `repo-homelab-gitops-github` | [argocd](../k8s/infra/argocd/README.md) | le dépôt est **privé** : sans le credential de la GitHub App, `argocd-repo-server` ne clone rien et **toutes** les Applications tombent en `ComparisonError` — `argocd` compris, puisqu'il est self-managed |
+| `cloudflare-api-token` | [cert-manager](../k8s/infra/cert-manager/README.md) | pas de DNS-01, donc pas de certificat, donc aucun listener TLS opérationnel sur `shared-gw` |
+| `velero-gcs` | [velero](../k8s/infra/velero/README.md) | credential du bucket GCS des sauvegardes. ⚠️ Ne bloque pas l'amorçage, mais **sans lui la schedule `daily` (namespace `hermes`) échoue** et aucun backup existant n'est lisible |
 
 Les autres (`argocd-oidc`, `argocd-notifications-secret`, `argocd-secret` (webhook),
 `grafana-admin`, `alertmanager-smtp`, `hermes-env`, `renovate-github`, `donetick-env`,
@@ -223,7 +223,7 @@ nouvelles (`gcloud iam service-accounts keys create`) et resceller.
 2. ArgoCD (kustomize épinglé, apply -k)          ← geste manuel n°1
 3. Clé sealed-secrets restaurée                  ← geste manuel n°2 (DR uniquement)
 3bis. Secret repo-homelab-gitops-github à la main ← geste manuel n°3 — le dépôt est PRIVÉ
-4. Tier-1 app-of-apps (apply cluster/root.yaml)  ← geste manuel n°4, UNE FOIS
+4. Tier-1 app-of-apps (apply k8s/root.yaml)  ← geste manuel n°4, UNE FOIS
      └─ déroule seul : gateway-api (-10) → sealed-secrets (-8) → cert-manager (-5)
         → argocd (-1) / cnpg-barman-plugin (-1) → cilium, openebs, cnpg,
           kube-prometheus-stack, hermes, renovate (0) → velero (1)
@@ -238,16 +238,16 @@ nouvelles (`gcloud iam service-accounts keys create`) et resceller.
 > [!IMPORTANT]
 > **L'étape 3bis n'existait pas quand ce runbook a été écrit.** Le dépôt est passé en visibilité
 > privée : `argocd-repo-server` ne peut plus le cloner anonymement. Le Secret
-> `repo-homelab-gitops-github` doit donc être posé **à la main avant `cluster/root.yaml`** — son `SealedSecret` ne peut pas s'en
+> `repo-homelab-gitops-github` doit donc être posé **à la main avant `k8s/root.yaml`** — son `SealedSecret` ne peut pas s'en
 > charger, puisqu'à ce moment ni la CRD `SealedSecret` n'existe, ni le dépôt n'est lisible. Il ne
 > fait ensuite que le **reprendre en gestion**. Cf.
-> [argocd](../cluster/infra/argocd/README.md) §Accès au dépôt privé.
+> [argocd](../k8s/infra/argocd/README.md) §Accès au dépôt privé.
 >
 > **Son contenu** : `githubAppID`, `githubAppInstallationID`, `githubAppPrivateKey`, et une `url`
 > qui doit être `https://github.com/jbwittner/homelab_gitops.git`, à la lettre.
 
-⚠️ **Les sync-waves n'ordonnent qu'à l'intérieur d'un même app-of-apps.** `cluster/infra/` et
-`cluster/app/` sont deux Applications sœurs synchronisées en parallèle : une wave d'`infra` ne
+⚠️ **Les sync-waves n'ordonnent qu'à l'intérieur d'un même app-of-apps.** `k8s/infra/` et
+`k8s/app/` sont deux Applications sœurs synchronisées en parallèle : une wave d'`infra` ne
 garantit rien vis-à-vis d'un composant d'`app`. C'est la raison pour laquelle **velero est un
 composant d'infra** — c'est ce qui lui permet de porter la wave `1`, donc d'être ordonné après la
 StorageClass d'openebs. À l'inverse, `cnpg-barman-plugin` (wave `-1`) et `cnpg` (wave `0`) sont
@@ -282,19 +282,19 @@ ordonnés entre eux parce qu'ils partagent le même app-of-apps, `app/`.
 > restent `Pending` jusqu'à ce que Cilium tourne.
 
 Cilium est aujourd'hui un composant **mono-cluster** : une `Application`
-([`cluster/infra/cilium/cilium.app.yaml`](../cluster/infra/cilium/cilium.app.yaml)) qui porte la
+([`k8s/infra/cilium/cilium.app.yaml`](../k8s/infra/cilium/cilium.app.yaml)) qui porte la
 version du chart et pointe un `helm-values.yaml` unique. Version et values ont donc une **source
 unique** dans le repo : ne jamais les retaper à la main — les lire.
 
 ```bash
 helm repo add cilium https://helm.cilium.io/ && helm repo update cilium
 
-CILIUM_VERSION="$(command grep -A3 'chart: cilium' cluster/infra/cilium/cilium.app.yaml \
+CILIUM_VERSION="$(command grep -A3 'chart: cilium' k8s/infra/cilium/cilium.app.yaml \
   | command grep 'targetRevision:' | awk '{print $2}')"
 echo "Cilium ${CILIUM_VERSION}"     # doit correspondre au targetRevision de l'Application
 
 helm install cilium cilium/cilium --version "${CILIUM_VERSION}" -n kube-system \
-  -f cluster/infra/cilium/helm-values.yaml
+  -f k8s/infra/cilium/helm-values.yaml
 ```
 
 > [!WARNING]
@@ -306,9 +306,9 @@ helm install cilium cilium/cilium --version "${CILIUM_VERSION}" -n kube-system \
 > [!NOTE]
 > **Bootstrap d'un second cluster.** Cilium redeviendrait alors multi-cluster (`ApplicationSet`,
 > values en deux couches `common/` + `${CLUSTER}/`, cf.
-> [`cluster/infra/cilium/README.md`](../cluster/infra/cilium/README.md)) : c'est la migration à
+> [`k8s/infra/cilium/README.md`](../k8s/infra/cilium/README.md)) : c'est la migration à
 > faire **avant** cette étape, et les chemins ci-dessus deviennent
-> `cluster/infra/cilium/{cilium.appset.yaml,common/helm-values.yaml}` plus l'éventuelle surcharge
+> `k8s/infra/cilium/{cilium.appset.yaml,common/helm-values.yaml}` plus l'éventuelle surcharge
 > `${CLUSTER}/helm-values.yaml`, passée **après** la couche commune.
 
 **Vérification :**
@@ -331,7 +331,7 @@ kubectl -n kube-system get pods -l k8s-app=kube-dns      # CoreDNS passe Running
 > [!NOTE]
 > [!IMPORTANT]
 > **Pas de Helm ici.** ArgoCD s'installe depuis le dossier auto-contenu
-> `cluster/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (le tag
+> `k8s/infra/argocd/manifests/` : kustomize avec install upstream **épinglé** (le tag
 > exact vit dans `kustomization.yaml`, source unique) + namespace + patchs
 > (`argocd-cmd-params-cm`, `argocd-cm`, `argocd-rbac-cm`, `argocd-notifications-cm`) + la
 > HTTPRoute UI + les Secrets de cluster. Ce **même dossier** sert à l'apply manuel du bootstrap
@@ -340,7 +340,7 @@ kubectl -n kube-system get pods -l k8s-app=kube-dns      # CoreDNS passe Running
 ### 2.1 Installer
 
 ```bash
-kubectl apply -k cluster/infra/argocd/manifests --server-side --force-conflicts
+kubectl apply -k k8s/infra/argocd/manifests --server-side --force-conflicts
 ```
 
 > [!WARNING]
@@ -356,7 +356,7 @@ kubectl apply -k cluster/infra/argocd/manifests --server-side --force-conflicts
 >   avant que le contrôleur sealed-secrets ait déchiffré leur Secret de cluster.
 >
 > Les `ExternalSecret` d'ArgoCD, eux, **ne sont pas concernés** : ils vivent dans
-> `cluster/infra/argocd/post-bootstrap/`, hors du dossier de cet `apply -k`, précisément pour
+> `k8s/infra/argocd/post-bootstrap/`, hors du dossier de cet `apply -k`, précisément pour
 > que leur CRD absente ne fasse pas échouer le geste d'amorçage.
 >
 > Si l'`apply -k` refuse **en bloc** à cause d'un type inconnu : commenter temporairement les
@@ -385,7 +385,7 @@ kubectl -n argocd port-forward svc/argocd-server 8080:443
 > repo désignent leur cluster par `name:`, cluster local compris — sans ce Secret, ArgoCD ne
 > connaît son propre cluster que sous l'entrée codée en dur `in-cluster`, et **chaque**
 > Application posée à l'étape 4 tombe en `ComparisonError: cluster not found`. Il vit dans
-> `cluster/infra/argocd/manifests/` justement pour être posé par l'`apply -k` ci-dessus : ne
+> `k8s/infra/argocd/manifests/` justement pour être posé par l'`apply -k` ci-dessus : ne
 > pas l'en sortir. Symptôme inverse (apps `Unknown` en masse après coup) → vérifier d'abord ce
 > Secret.
 
@@ -474,11 +474,11 @@ revenir à un état propre : supprimer la clé neuve, puis `rollout restart`.
 **Toujours sur le HUB**, et **une seule fois pour tout le repo** :
 
 ```bash
-kubectl apply -f cluster/root.yaml
+kubectl apply -f k8s/root.yaml
 ```
 
 > [!IMPORTANT]
-> **Ce geste n'est pas par cluster.** L'arbre `cluster/` est commun : `root` découvre les deux
+> **Ce geste n'est pas par cluster.** L'arbre `k8s/` est commun : `root` découvre les deux
 > `*.bootstrap.yaml` (`infra`, `app`), qui découvrent chacun leurs `*.app.yaml` / `*.appset.yaml`,
 > tous clusters confondus. Ajouter un cluster au repo ne se termine donc **pas** par un apply :
 > une fois son Secret de cluster déchiffré (étapes 2bis/3) et ses sous-dossiers committés, les
@@ -495,7 +495,7 @@ Les Applications `${CLUSTER}-cilium` adoptent le `helm install` de l'étape 1.
 > - Repo-server et application-controller peuvent redémarrer une fois après le premier sync :
 >   normal, laisser se stabiliser.
 > - Crash-loop après un upgrade de Kubernetes → bumper le tag Argo CD dans
->   `cluster/infra/argocd/manifests/kustomization.yaml`.
+>   `k8s/infra/argocd/manifests/kustomization.yaml`.
 > - Le contrôleur **ApplicationSet** n'est plus load-bearing (aucun `*.appset.yaml` dans le repo) :
 >   s'il ne tourne pas, ces Applications n'existent tout simplement pas — et le CNI d'un cluster
 >   fraîchement bootstrappé n'est jamais adopté.
@@ -594,7 +594,7 @@ Le header `server: envoy` confirme le proxy Cilium.
 > `_acme-challenge` via le DNS **du cluster**. Si celui-ci remonte vers un upstream qui renvoie
 > NXDOMAIN sur ce nom (déjà observé avec Quad9), le challenge reste `Pending` indéfiniment.
 > Remède : épingler les résolveurs récursifs dans
-> `cluster/infra/cert-manager/helm-values.yaml` —
+> `k8s/infra/cert-manager/helm-values.yaml` —
 > ```yaml
 > extraArgs:
 >   - --dns01-recursive-nameservers=1.1.1.1:53
@@ -608,7 +608,7 @@ Le header `server: envoy` confirme le proxy Cilium.
 > **Première construction seulement — la parenthèse autosignée.** Si le token du provider DNS
 > n'est pas encore scellé, aucun certificat ne peut être émis et les listeners restent
 > `ResolvedRefs=False`. Pour sortir du port-forward en attendant, ajouter temporairement un
-> `ClusterIssuer selfsigned` dans `cluster/infra/cert-manager/manifests/` et pointer
+> `ClusterIssuer selfsigned` dans `k8s/infra/cert-manager/manifests/` et pointer
 > les `Certificate` dessus :
 > ```yaml
 > apiVersion: cert-manager.io/v1
@@ -693,7 +693,7 @@ recopier en `*.secret.yaml` (gitignoré), le renseigner, sceller, supprimer le c
 `*.sealed.yaml` :
 
 ```bash
-D=cluster/<infra|app>/<composant>/manifests
+D=k8s/<infra|app>/<composant>/manifests
 cp $D/<secret>.secret.example.yaml $D/<secret>.secret.yaml
 $EDITOR $D/<secret>.secret.yaml                       # remplacer les REMPLACER
 
@@ -725,7 +725,7 @@ Deux dépendances structurent cet ordre :
 - les clés de **compte de service GCP** viennent du repo Terraform ; une clé JSON ne se sort pas
   d'un état Terraform sans l'y stocker en clair, donc elle s'émet à la main
   (`gcloud iam service-accounts keys create`) — la procédure détaillée est dans
-  [velero](../cluster/infra/velero/README.md) §Opérations.
+  [velero](../k8s/infra/velero/README.md) §Opérations.
 
 **Et immédiatement après : sauvegarder la clé sealed-secrets hors ligne** (cf. étape 3). À partir
 de maintenant, elle seule ouvre les `SealedSecret` du dépôt.

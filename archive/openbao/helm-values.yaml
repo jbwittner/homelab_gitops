@@ -125,11 +125,11 @@ serverTelemetry:
   #
   # Raison du basculement : la doc de ce chart prévient que « the Prometheus operator *must* be
   # installed before enabling this feature, if not the chart will fail to install due to missing
-  # CustomResourceDefinitions ». C'était vrai tant qu'openbao vivait sous `cluster/app/`, aux
-  # côtés de kube-prometheus-stack ; depuis son passage dans `cluster/infra/`, plus aucune
+  # CustomResourceDefinitions ». C'était vrai tant qu'openbao vivait sous `k8s/app/`, aux
+  # côtés de kube-prometheus-stack ; depuis son passage dans `k8s/infra/`, plus aucune
   # relation d'ordre ne lie les deux (les waves ne s'ordonnent qu'à l'intérieur d'un
   # app-of-apps) et la sync échouait au bootstrap. Le ServiceMonitor a donc été sorti du chart
-  # plutôt que supprimé — cf. cluster/infra/openbao-monitoring/README.md.
+  # plutôt que supprimé — cf. k8s/infra/openbao-monitoring/README.md.
   serviceMonitor:
     enabled: false
 

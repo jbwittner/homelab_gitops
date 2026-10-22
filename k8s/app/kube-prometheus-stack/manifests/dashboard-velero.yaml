@@ -1,0 +1,2119 @@
+# k8s/app/kube-prometheus-stack/manifests/dashboard-velero.yaml
+# Dashboard Grafana « Backups — velero »
+# Chargé automatiquement par le sidecar de kube-prometheus-stack
+# via le label grafana_dashboard: "1".
+#
+# Sources de métriques (ServiceMonitor + PodMonitor : k8s/infra/velero-monitoring) :
+#   - Service `velero` (8085)      : velero_backup_*, velero_restore_*, velero_repo_maintenance_*,
+#                                    velero_backup_location_status_gauge
+#   - pods `node-agent` (8085)     : podVolume_* — copie kopia des données de PV
+#
+# ⚠️ Les métriques du node-agent portent le préfixe `podVolume`, PAS `velero` (le code les
+# enregistre sous `podVolumeMetricsNamespace = "podVolume"`, casse comprise). Une requête
+# `velero_pod_volume_…` renvoie une série vide sans le dire.
+#
+# Ce que ce dashboard ne peut PAS montrer : la taille occupée dans le bucket GCS. velero expose la
+# taille du tarball d'OBJETS (velero_backup_tarball_size_bytes), jamais le volume du dépôt kopia
+# où vivent les données de PV — celui-ci se mesure côté GCP (`gcloud storage du`).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-velero
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: Wittnerlab
+data:
+  velero.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "id": 100,
+          "panels": [],
+          "title": "State",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Time elapsed since the last successful SCHEDULED backup — manual backups are excluded on purpose (neighbouring tile): a hand-launched backup does not prove the schedule runs, and counting it here would hide a dead schedule. Red beyond 36 h, the schedule being daily. \"No data\" is not reassuring — the metric disappears when the velero server restarts and until a scheduled backup has succeeded.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 93600
+                  },
+                  {
+                    "color": "red",
+                    "value": 129600
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 1
+          },
+          "id": 1,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "time() - max(velero_backup_last_successful_timestamp{schedule=~\"$schedule\", schedule!=\"manuel\"})",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Last scheduled backup",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Time elapsed since the last backup launched BY HAND (`schedule=\"manuel\"`, a label value rewritten at scrape time by the ServiceMonitor of velero-monitoring — velero itself emits an empty label that Prometheus would drop; the value stays spelled in French because the PrometheusRule and the stored samples carry it). No threshold: nothing requires taking one, this tile is not a health indicator. It answers \"did my manual backup go through?\" and spots ad hoc backups — whose scope is the whole cluster unless it was restricted.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 1
+          },
+          "id": 14,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "time() - max(velero_backup_last_successful_timestamp{schedule=\"manuel\"})",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Last manual backup",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Periodic validation of the BackupStorageLocation by velero. Unavailable = unreachable bucket, invalid service account key or revoked IAM rights: no backup will succeed.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "0": {
+                      "color": "red",
+                      "index": 1,
+                      "text": "Unavailable"
+                    },
+                    "1": {
+                      "color": "green",
+                      "index": 0,
+                      "text": "Available"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 12,
+            "y": 1
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "velero_backup_location_status_gauge",
+              "instant": true,
+              "legendFormat": "{{backup_location_name}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Bucket (BackupStorageLocation)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Number of existing Backups, across all schedules. It goes down when the TTL (30 d) expires and velero's GC runs.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 16,
+            "y": 1
+          },
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "velero_backup_total",
+              "instant": false,
+              "legendFormat": "",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Backups retained",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Outright failures over 24 h. PARTIAL failures are not counted here: see the \"Backup outcomes\" graph.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 20,
+            "y": 1
+          },
+          "id": 4,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(velero_backup_failure_total{schedule=~\"$schedule\"}[24h])) or vector(0)",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Failures (24 h)",
+          "type": "stat"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 5
+          },
+          "id": 101,
+          "panels": [],
+          "title": "Backups",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Same reading as the table below, but aggregated: one row per schedule instead of one per backup. \"manuel\" groups the hand-launched backups. The totals cover the backups STILL PRESENT: they drop when the TTL expires. \"Data copied\" is the sum of the PodVolumeBackups before kopia deduplication — it is not the bucket usage.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Last status"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "0": {
+                            "color": "red",
+                            "index": 1,
+                            "text": "Failed"
+                          },
+                          "1": {
+                            "color": "green",
+                            "index": 0,
+                            "text": "Succeeded"
+                          }
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-text"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Start (last)"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "End (last)"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Data copied"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "gauge",
+                      "mode": "gradient"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Next expiry"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 6
+          },
+          "id": 5,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": [
+                "Data copied"
+              ],
+              "reducer": [
+                "sum"
+              ],
+              "show": true
+            },
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": false,
+                "displayName": "Schedule"
+              }
+            ]
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(count by (schedule) (velero_backup_object_info), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "velero_backup_last_status{schedule=~\"$schedule\"}",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(max by (schedule) ((velero_backup_object_start_time * on(backup) group_left(schedule) velero_backup_object_info)) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(max by (schedule) ((velero_backup_object_completion_time * on(backup) group_left(schedule) velero_backup_object_info)) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(sum by (schedule) ((velero_backup_object_items_backed_up * on(backup) group_left(schedule) velero_backup_object_info)), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "E"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(sum by (schedule) (sum by (backup) (velero_pvb_object_bytes) * on(backup) group_left(schedule) velero_backup_object_info), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "F"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(min by (schedule) ((velero_backup_object_expiration * on(backup) group_left(schedule) velero_backup_object_info)) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "G"
+            }
+          ],
+          "title": "Per schedule (aggregated)",
+          "transformations": [
+            {
+              "id": "joinByField",
+              "options": {
+                "byField": "schedule",
+                "mode": "outer"
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Time 1": true,
+                  "Time 2": true,
+                  "Time 3": true,
+                  "Time 4": true,
+                  "Time 5": true,
+                  "Time 6": true,
+                  "Time 7": true,
+                  "__name__": true,
+                  "__name__ 1": true,
+                  "__name__ 2": true,
+                  "__name__ 3": true,
+                  "__name__ 4": true,
+                  "__name__ 5": true,
+                  "__name__ 6": true,
+                  "__name__ 7": true,
+                  "container": true,
+                  "container 1": true,
+                  "container 2": true,
+                  "container 3": true,
+                  "container 4": true,
+                  "container 5": true,
+                  "container 6": true,
+                  "container 7": true,
+                  "endpoint": true,
+                  "endpoint 1": true,
+                  "endpoint 2": true,
+                  "endpoint 3": true,
+                  "endpoint 4": true,
+                  "endpoint 5": true,
+                  "endpoint 6": true,
+                  "endpoint 7": true,
+                  "instance": true,
+                  "instance 1": true,
+                  "instance 2": true,
+                  "instance 3": true,
+                  "instance 4": true,
+                  "instance 5": true,
+                  "instance 6": true,
+                  "instance 7": true,
+                  "job": true,
+                  "job 1": true,
+                  "job 2": true,
+                  "job 3": true,
+                  "job 4": true,
+                  "job 5": true,
+                  "job 6": true,
+                  "job 7": true,
+                  "namespace": true,
+                  "namespace 1": true,
+                  "namespace 2": true,
+                  "namespace 3": true,
+                  "namespace 4": true,
+                  "namespace 5": true,
+                  "namespace 6": true,
+                  "namespace 7": true,
+                  "pod": true,
+                  "pod 1": true,
+                  "pod 2": true,
+                  "pod 3": true,
+                  "pod 4": true,
+                  "pod 5": true,
+                  "pod 6": true,
+                  "pod 7": true,
+                  "service": true,
+                  "service 1": true,
+                  "service 2": true,
+                  "service 3": true,
+                  "service 4": true,
+                  "service 5": true,
+                  "service 6": true,
+                  "service 7": true,
+                  "uid": true,
+                  "uid 1": true,
+                  "uid 2": true,
+                  "uid 3": true,
+                  "uid 4": true,
+                  "uid 5": true,
+                  "uid 6": true,
+                  "uid 7": true,
+                  "customresource_group": true,
+                  "customresource_group 1": true,
+                  "customresource_group 2": true,
+                  "customresource_group 3": true,
+                  "customresource_group 4": true,
+                  "customresource_group 5": true,
+                  "customresource_group 6": true,
+                  "customresource_group 7": true,
+                  "customresource_kind": true,
+                  "customresource_kind 1": true,
+                  "customresource_kind 2": true,
+                  "customresource_kind 3": true,
+                  "customresource_kind 4": true,
+                  "customresource_kind 5": true,
+                  "customresource_kind 6": true,
+                  "customresource_kind 7": true,
+                  "customresource_version": true,
+                  "customresource_version 1": true,
+                  "customresource_version 2": true,
+                  "customresource_version 3": true,
+                  "customresource_version 4": true,
+                  "customresource_version 5": true,
+                  "customresource_version 6": true,
+                  "customresource_version 7": true,
+                  "storage_location": true,
+                  "storage_location 1": true,
+                  "storage_location 2": true,
+                  "storage_location 3": true,
+                  "storage_location 4": true,
+                  "storage_location 5": true,
+                  "storage_location 6": true,
+                  "storage_location 7": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "schedule": "Schedule",
+                  "Value #A": "Backups",
+                  "Value #B": "Last status",
+                  "Value #C": "Start (last)",
+                  "Value #D": "End (last)",
+                  "Value #E": "Items (total)",
+                  "Value #F": "Data copied",
+                  "Value #G": "Next expiry"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "The real inventory of the Backup objects, one row per backup — impossible to get from velero's native metrics, which are aggregated per schedule and overwritten on every run. Source: kube-state-metrics (customResourceState, configured in this component's helm-values). An empty \"Schedule\" = a hand-launched backup. \"Data copied\" is the sum of the PodVolumeBackups: it excludes the object tarball and does NOT measure the bucket usage, since kopia deduplicates across backups.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Phase"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "Completed": {
+                            "color": "green",
+                            "index": 0
+                          },
+                          "PartiallyFailed": {
+                            "color": "orange",
+                            "index": 1
+                          },
+                          "Failed": {
+                            "color": "red",
+                            "index": 2
+                          },
+                          "FailedValidation": {
+                            "color": "red",
+                            "index": 3
+                          },
+                          "InProgress": {
+                            "color": "blue",
+                            "index": 4
+                          },
+                          "Deleting": {
+                            "color": "text",
+                            "index": 5
+                          }
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-text"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Start"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "End"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Data copied"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "gauge",
+                      "mode": "gradient"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Expires on"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dateTimeAsIso"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 13
+          },
+          "id": 15,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": [
+                "Data copied"
+              ],
+              "reducer": [
+                "sum"
+              ],
+              "show": true
+            },
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Start"
+              }
+            ]
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(velero_backup_object_info, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "velero_backup_object_start_time * 1000",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "velero_backup_object_completion_time * 1000",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "velero_backup_object_items_backed_up",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (backup) (velero_pvb_object_bytes)",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "E"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "velero_backup_object_expiration * 1000",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "F"
+            }
+          ],
+          "title": "All backups (Backup objects)",
+          "transformations": [
+            {
+              "id": "joinByField",
+              "options": {
+                "byField": "backup",
+                "mode": "outer"
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Time 1": true,
+                  "Time 2": true,
+                  "Time 3": true,
+                  "Time 4": true,
+                  "Time 5": true,
+                  "Time 6": true,
+                  "__name__": true,
+                  "__name__ 1": true,
+                  "__name__ 2": true,
+                  "__name__ 3": true,
+                  "__name__ 4": true,
+                  "__name__ 5": true,
+                  "__name__ 6": true,
+                  "container": true,
+                  "container 1": true,
+                  "container 2": true,
+                  "container 3": true,
+                  "container 4": true,
+                  "container 5": true,
+                  "container 6": true,
+                  "endpoint": true,
+                  "endpoint 1": true,
+                  "endpoint 2": true,
+                  "endpoint 3": true,
+                  "endpoint 4": true,
+                  "endpoint 5": true,
+                  "endpoint 6": true,
+                  "instance": true,
+                  "instance 1": true,
+                  "instance 2": true,
+                  "instance 3": true,
+                  "instance 4": true,
+                  "instance 5": true,
+                  "instance 6": true,
+                  "job": true,
+                  "job 1": true,
+                  "job 2": true,
+                  "job 3": true,
+                  "job 4": true,
+                  "job 5": true,
+                  "job 6": true,
+                  "namespace": true,
+                  "namespace 1": true,
+                  "namespace 2": true,
+                  "namespace 3": true,
+                  "namespace 4": true,
+                  "namespace 5": true,
+                  "namespace 6": true,
+                  "pod": true,
+                  "pod 1": true,
+                  "pod 2": true,
+                  "pod 3": true,
+                  "pod 4": true,
+                  "pod 5": true,
+                  "pod 6": true,
+                  "service": true,
+                  "service 1": true,
+                  "service 2": true,
+                  "service 3": true,
+                  "service 4": true,
+                  "service 5": true,
+                  "service 6": true,
+                  "uid": true,
+                  "uid 1": true,
+                  "uid 2": true,
+                  "uid 3": true,
+                  "uid 4": true,
+                  "uid 5": true,
+                  "uid 6": true,
+                  "customresource_group": true,
+                  "customresource_group 1": true,
+                  "customresource_group 2": true,
+                  "customresource_group 3": true,
+                  "customresource_group 4": true,
+                  "customresource_group 5": true,
+                  "customresource_group 6": true,
+                  "customresource_kind": true,
+                  "customresource_kind 1": true,
+                  "customresource_kind 2": true,
+                  "customresource_kind 3": true,
+                  "customresource_kind 4": true,
+                  "customresource_kind 5": true,
+                  "customresource_kind 6": true,
+                  "customresource_version": true,
+                  "customresource_version 1": true,
+                  "customresource_version 2": true,
+                  "customresource_version 3": true,
+                  "customresource_version 4": true,
+                  "customresource_version 5": true,
+                  "customresource_version 6": true,
+                  "storage_location": true,
+                  "storage_location 1": true,
+                  "storage_location 2": true,
+                  "storage_location 3": true,
+                  "storage_location 4": true,
+                  "storage_location 5": true,
+                  "storage_location 6": true,
+                  "Value #A": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "backup": "Backup",
+                  "phase": "Phase",
+                  "schedule": "Schedule",
+                  "Value #B": "Start",
+                  "Value #C": "End",
+                  "Value #D": "Items",
+                  "Value #E": "Data copied",
+                  "Value #F": "Expires on"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Counters accumulated over the refresh window. A PARTIAL failure is a backup that exists and restores, but is missing items — most often a volume node-agent could not read.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*[Éé]chec.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*Succès.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "green",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 22
+          },
+          "id": 6,
+          "options": {
+            "legend": {
+              "calcs": [
+                "sum"
+              ],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(sum by (schedule) (increase(velero_backup_success_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "Succeeded — {{schedule}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(sum by (schedule) (increase(velero_backup_partial_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "Partially failed — {{schedule}}",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(sum by (schedule) (increase(velero_backup_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "Failed — {{schedule}}",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(sum by (schedule) (increase(velero_backup_validation_failure_total{schedule=~\"$schedule\"}[$__rate_interval])), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "Validation failed — {{schedule}}",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "title": "Backup outcomes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Quantiles computed on the velero_backup_duration_seconds histogram. The histogram buckets stop at 4 h: beyond that, the quantile saturates.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 30
+          },
+          "id": 7,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max"
+              ],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(histogram_quantile(0.95, sum by (le, schedule) (rate(velero_backup_duration_seconds_bucket{schedule=~\"$schedule\"}[$__rate_interval]))), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "p95 — {{schedule}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(histogram_quantile(0.50, sum by (le, schedule) (rate(velero_backup_duration_seconds_bucket{schedule=~\"$schedule\"}[$__rate_interval]))), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "p50 — {{schedule}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Backup duration",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Size of the Kubernetes OBJECT tarball only. PV data is not counted here: it goes to the kopia repository, whose size can only be measured on the bucket side (`gcloud storage du`).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 38
+          },
+          "id": 8,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(velero_backup_tarball_size_bytes{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "{{schedule}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Object tarball size",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Number of Kubernetes items processed, and among them those in error. A sudden drop in the item count signals a scope (includedNamespaces) that changed unintentionally.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "En erreur.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 46
+          },
+          "id": 9,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(velero_backup_items_total{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "Items — {{schedule}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(velero_backup_items_errors{schedule=~\"$schedule\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\")",
+              "legendFormat": "In error — {{schedule}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Items backed up",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 54
+          },
+          "id": 102,
+          "panels": [],
+          "title": "PV data — node-agent / kopia",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "PodVolumeBackups enqueued and processed, per node. A lasting gap between the two curves = copies piling up without being processed.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 55
+          },
+          "id": 11,
+          "options": {
+            "legend": {
+              "calcs": [
+                "sum"
+              ],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (node) (increase(podVolume_pod_volume_backup_enqueue_count[$__rate_interval]))",
+              "legendFormat": "Enqueued — {{node}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (node) (increase(podVolume_pod_volume_backup_dequeue_count[$__rate_interval]))",
+              "legendFormat": "Processed — {{node}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "PodVolumeBackup — queue",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 63
+          },
+          "id": 103,
+          "panels": [],
+          "title": "kopia repository and restores",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Maintenance of the kopia repository is what actually FREES the space of expired backups. Failing for long, the bucket grows without a single backup failing. EMPTY panel on a fresh install: these counters only appear after the first maintenance — the absence of a curve is no proof of good health.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "[ÉE]chec.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 64
+          },
+          "id": 12,
+          "options": {
+            "legend": {
+              "calcs": [
+                "sum"
+              ],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (repository_name) (increase(velero_repo_maintenance_success_total[$__rate_interval]))",
+              "legendFormat": "Succeeded — {{repository_name}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (repository_name) (increase(velero_repo_maintenance_failure_total[$__rate_interval]))",
+              "legendFormat": "Failed — {{repository_name}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "kopia repository maintenance",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Restores. A flat panel in normal times — it only serves to confirm, on the day a restore happens, that the operation went through.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "[ÉE]chec.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 72
+          },
+          "id": 13,
+          "options": {
+            "legend": {
+              "calcs": [
+                "sum"
+              ],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_restore_success_total[$__rate_interval]))",
+              "legendFormat": "Succeeded",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_restore_partial_failure_total[$__rate_interval]))",
+              "legendFormat": "Partial",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_restore_failed_total[$__rate_interval]))",
+              "legendFormat": "Failed",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (schedule) (increase(velero_restore_validation_failed_total[$__rate_interval]))",
+              "legendFormat": "Validation failed",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "title": "Restores",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": [
+        "wittnerlab",
+        "velero",
+        "backup"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "definition": "label_values(velero_backup_last_status, schedule)",
+            "description": "Hand-launched backups carry an EMPTY `schedule`: they show up as a blank entry in this list, and under the name \"manuel\" in the graphs and the table (label_replace). Leave \"All\" to see everything.",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Schedule",
+            "multi": true,
+            "name": "schedule",
+            "options": [],
+            "query": {
+              "qryType": 1,
+              "query": "label_values(velero_backup_last_status, schedule)",
+              "refId": "schedule"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-7d",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "utc",
+      "title": "Backups — velero",
+      "description": "Cluster backups taken by velero: freshness of the last scheduled backup, bucket availability, per-schedule and per-object inventory, PV data copied by node-agent/kopia, and restores. Read it before trusting that a restore is possible.",
+      "uid": "velero-backups",
+      "version": 1,
+      "weekStart": ""
+    }

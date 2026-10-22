@@ -2,12 +2,12 @@
 
 ## Un seul arbre pour tous les clusters
 
-Le repo ne contient **qu'un** arbre de déploiement, `cluster/`. Il n'y a plus un dossier par
+Le repo ne contient **qu'un** arbre de déploiement, `k8s/`. Il n'y a plus un dossier par
 cluster : c'est **chaque composant** qui désigne sa ou ses cibles, via la `destination` de son
 `Application` ou via les sous-dossiers de son `ApplicationSet`.
 
 ```
-cluster/
+k8s/
 ├── root.yaml                        # TIER 1 — glob '*.bootstrap.yaml' (recurse)
 ├── infra/
 │   ├── infra.bootstrap.yaml         # TIER 2 — glob '{*.app.yaml,*.appset.yaml}' (recurse)
@@ -21,7 +21,7 @@ cluster/
 
 | Fichier | Découvert par | Remarque |
 |---|---|---|
-| `cluster/root.yaml` | personne — **apply manuel**, une fois | S'il s'appelait `root.bootstrap.yaml` il matcherait son propre glob et se gérerait lui-même. |
+| `k8s/root.yaml` | personne — **apply manuel**, une fois | S'il s'appelait `root.bootstrap.yaml` il matcherait son propre glob et se gérerait lui-même. |
 | `*.bootstrap.yaml` | `root` | Deux exemplaires : `infra` et `app`. |
 | `*.app.yaml` / `*.appset.yaml` | `infra` / `app` | Suffixe **exact** requis, sinon le composant n'est pas découvert. |
 
@@ -91,15 +91,15 @@ vers un cluster inexistant :
 
 ```yaml
 directories:
-  - path: cluster/infra/<name>/*
-  - path: cluster/infra/<name>/common
+  - path: k8s/infra/<name>/*
+  - path: k8s/infra/<name>/common
     exclude: true
 ```
 
 Aucun composant n'est aujourd'hui sous cette forme — le repo n'a plus qu'un cluster. Le dernier à
-l'avoir été est [`infra/cilium`](../cluster/infra/cilium/README.md) (chart + values en deux
+l'avoir été est [`infra/cilium`](../k8s/infra/cilium/README.md) (chart + values en deux
 couches + base kustomize commune) ; son README décrit la migration inverse, et `git log
-cluster/infra/cilium` en donne le modèle exact.
+k8s/infra/cilium` en donne le modèle exact.
 
 ## Règles sur l'Application
 
@@ -117,7 +117,7 @@ cluster/infra/cilium` en donne le modèle exact.
   qui se désigne `name: bleu-kalecgos` et non par l'URL interne. Le nom est celui porté par le
   Secret de cluster du namespace `argocd` **du hub** (`cluster-<cluster>`), y compris pour le
   cluster local : c'est
-  [`cluster/infra/argocd/manifests/cluster-bleu-kalecgos.yaml`](../cluster/infra/argocd/manifests/cluster-bleu-kalecgos.yaml)
+  [`k8s/infra/argocd/manifests/cluster-bleu-kalecgos.yaml`](../k8s/infra/argocd/manifests/cluster-bleu-kalecgos.yaml)
   qui remplace l'entrée `in-cluster` codée en dur d'ArgoCD. Une destination lue au nom du cluster
   se relit sans ambiguïté ; se tromper de nom déploie le composant **sur le mauvais cluster**.
 - **`releaseName` explicite** sur toute source Helm.
@@ -143,7 +143,7 @@ sources:
     helm:
       releaseName: <name>
       valueFiles:
-        - $values/cluster/infra/<name>/helm-values.yaml
+        - $values/k8s/infra/<name>/helm-values.yaml
   - repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
     ref: values
@@ -155,7 +155,7 @@ facultative :
 
 ```yaml
 valueFiles:
-  - '$values/cluster/infra/<name>/common/helm-values.yaml'
+  - '$values/k8s/infra/<name>/common/helm-values.yaml'
   - '$values/{{.path.path}}/helm-values.yaml'
 ignoreMissingValueFiles: true
 ```
@@ -175,7 +175,7 @@ dans `helm-values.yaml`.
 
 ⚠️ `argocd` est en (c) avec **deux** sources : `manifests/` (cible de l'`apply -k` d'amorçage, objets
 d'API cœur uniquement) et `post-bootstrap/` (ce qui suppose une CRD tierce). La séparation est
-load-bearing — cf. [argocd](../cluster/infra/argocd/README.md).
+load-bearing — cf. [argocd](../k8s/infra/argocd/README.md).
 
 ## Sync-waves
 
@@ -230,14 +230,14 @@ Un `SealedSecret` est chiffré pour un couple **(nom, namespace)** et pour la cl
 déplacer, ou le renommer, impose de le resceller.
 
 ⚠️ **Un `SealedSecret` ne va jamais dans un dossier servant à l'`apply -k` d'amorçage.** Seul
-`cluster/infra/argocd/manifests/` est dans ce cas : ses `SealedSecret` vivent donc dans
-`cluster/infra/argocd/post-bootstrap/`, déclaré comme second `source` de la même Application. À
+`k8s/infra/argocd/manifests/` est dans ce cas : ses `SealedSecret` vivent donc dans
+`k8s/infra/argocd/post-bootstrap/`, déclaré comme second `source` de la même Application. À
 l'étape 2 du bootstrap, la CRD `SealedSecret` n'existe pas encore.
 
 ## Commandes de la documentation
 
 Toute commande d'un README doit être exécutable **depuis la racine du repo**, telle quelle :
-chemins complets depuis la racine (`cluster/app/<name>/manifests/…`), jamais relatifs au
+chemins complets depuis la racine (`k8s/app/<name>/manifests/…`), jamais relatifs au
 dossier du README.
 
 ## Règle README composant

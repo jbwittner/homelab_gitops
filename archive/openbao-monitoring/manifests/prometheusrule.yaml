@@ -86,7 +86,7 @@ spec:
             severity: warning
           annotations:
             summary: "OpenBao : aucun snapshot depuis plus de 26 h"
-            description: "Le CronJob 'openbao-snapshot' (0 3 * * *) n'a pas réussi depuis plus d'un cycle, ou a disparu. Le namespace openbao étant hors du périmètre velero, ce CronJob est la SEULE sauvegarde du coffre. Action, depuis la racine du repo : cluster/infra/openbao/openbao-script.sh status, puis cluster/infra/openbao/openbao-script.sh snapshot."
+            description: "Le CronJob 'openbao-snapshot' (0 3 * * *) n'a pas réussi depuis plus d'un cycle, ou a disparu. Le namespace openbao étant hors du périmètre velero, ce CronJob est la SEULE sauvegarde du coffre. Action, depuis la racine du repo : k8s/infra/openbao/openbao-script.sh status, puis k8s/infra/openbao/openbao-script.sh snapshot."
 
         # Même condition, horizon doublé : à ce stade ce n'est plus un cycle raté, c'est une chaîne
         # de sauvegarde arrêtée.
@@ -99,4 +99,4 @@ spec:
             severity: critical
           annotations:
             summary: "OpenBao sans sauvegarde depuis 2 jours"
-            description: "Deux cycles consécutifs manqués. Le coffre n'a plus de sauvegarde récente et aucun filet velero : une perte du PVC raft serait définitive au-delà du dernier snapshot présent dans le bucket. Action immédiate, depuis la racine du repo : cluster/infra/openbao/openbao-script.sh snapshot, puis cluster/infra/openbao/openbao-script.sh verify latest --unseal."
+            description: "Deux cycles consécutifs manqués. Le coffre n'a plus de sauvegarde récente et aucun filet velero : une perte du PVC raft serait définitive au-delà du dernier snapshot présent dans le bucket. Action immédiate, depuis la racine du repo : k8s/infra/openbao/openbao-script.sh snapshot, puis k8s/infra/openbao/openbao-script.sh verify latest --unseal."

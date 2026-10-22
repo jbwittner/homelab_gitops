@@ -1,0 +1,47 @@
+# Supervision des MACHINES hors cluster — celles que ce cluster surveille sans les porter.
+#
+# ⚠️ POURQUOI CE COMPOSANT EXISTE À PART de la supervision des services. Le critère est le même que
+# celui qui fait de `node-exporter/` une pile à part dans homelab_emeriss : le CYCLE DE VIE. Une
+# machine précède les services qu'elle porte et leur survit ; le jour où un service déménage,
+# disparaît ou se dédouble, ce qui mesure son disque et sa mémoire n'a aucune raison de bouger.
+# Rangé dans le composant de supervision d'un service, ce scrape serait supprimé par un `prune`
+# ArgoCD le jour où on retire ce service — c'est-à-dire précisément quand on surveillerait la
+# machine pour savoir ce qu'elle devient.
+#
+# Une SEULE machine aujourd'hui. Le composant est nommé au pluriel parce qu'en ajouter une seconde
+# doit être un fichier de plus, pas une refonte : les règles sont écrites sur `job="external-node"`
+# et se ventilent par `instance`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hosts-monitoring
+  namespace: argocd
+  annotations:
+    # Wave 2, comme les composants frères : après les CRDs de kube-prometheus-stack.
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/name: hosts-monitoring
+    app.kubernetes.io/part-of: homelab-gitops
+    # ⚠️ `infrastructure` : ce composant ne parle d'aucun service, il parle des
+    # machines. C'est le label qui rend la distinction lisible dans `kubectl -n argocd get app -L`.
+    app.kubernetes.io/component: infrastructure
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: k8s/app/hosts-monitoring/manifests
+  destination:
+    name: bleu-kalecgos
+    # `monitoring` : c'est le namespace du prometheus-operator, et surtout celui où doit vivre le
+    # Secret référencé par la ScrapeConfig — l'opérateur ne lit les références d'authentification
+    # que dans le namespace de l'objet qui les porte.
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true

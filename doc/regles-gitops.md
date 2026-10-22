@@ -15,7 +15,7 @@
 `kubectl` en écriture est réservé à **deux cas**, rien d'autre :
 
 1. **Bootstrap initial** — cf. [runbook](runbook-bootstrap.md) et
-   [`cluster/infra/argocd/README.md`](../cluster/infra/argocd/README.md).
+   [`k8s/infra/argocd/README.md`](../k8s/infra/argocd/README.md).
 2. **Debug read-only** — `get`, `describe`, `logs`, `diff`.
 
 ### Les gestes impératifs assumés (et leur périmètre exact)
@@ -25,9 +25,9 @@ Ils sont au nombre de **cinq**, tous documentés dans le runbook. Aucun autre n'
 | Geste | Quand | Pourquoi il ne peut pas être GitOps |
 |---|---|---|
 | `helm install cilium …` | bootstrap, une fois | Sans CNI, ArgoCD ne peut pas démarrer. La release est ensuite **adoptée** par l'Application `cilium`. |
-| `kubectl apply -k cluster/infra/argocd/manifests --server-side` | bootstrap, une fois | Il faut ArgoCD pour faire du GitOps. Même dossier que l'Application self-managed → convergence immédiate. |
+| `kubectl apply -k k8s/infra/argocd/manifests --server-side` | bootstrap, une fois | Il faut ArgoCD pour faire du GitOps. Même dossier que l'Application self-managed → convergence immédiate. |
 | `kubectl apply -f .../repo-homelab-gitops.secret.yaml` | bootstrap, une fois | Le dépôt est **privé** : sans ce credential SSH, `argocd-repo-server` ne peut cloner ni `root.yaml` ni quoi que ce soit. Repris ensuite en gestion par son `SealedSecret`. |
-| `kubectl apply -f cluster/root.yaml` | **une fois pour le repo** | Le point d'entrée de l'app-of-apps ne peut pas se déployer lui-même. |
+| `kubectl apply -f k8s/root.yaml` | **une fois pour le repo** | Le point d'entrée de l'app-of-apps ne peut pas se déployer lui-même. |
 | `kubectl apply -f sealed-secrets-key.yaml` | DR | La clé privée ne peut pas vivre dans Git, par définition. |
 
 Le mot de passe admin ArgoCD se fixe aussi à la main au bootstrap (`argocd-secret` n'est pas dans
@@ -39,7 +39,7 @@ un **événement de bootstrap**, pas une écriture d'état.
 
 Le cluster n'existe pour ArgoCD que par son **Secret de cluster** (`cluster-bleu-kalecgos`, label
 `argocd.argoproj.io/secret-type: cluster`) dans le namespace `argocd`. Il vit dans
-[`cluster/infra/argocd/manifests/`](../cluster/infra/argocd/manifests/), donc dans Git, **en clair**
+[`k8s/infra/argocd/manifests/`](../k8s/infra/argocd/manifests/), donc dans Git, **en clair**
 — il ne porte aucun credential (cf. exceptions ci-dessous).
 
 ⚠️ `argocd cluster add` fait le même travail **impérativement** : le Secret n'existe alors que dans
@@ -90,7 +90,7 @@ cluster (cf. [`reseau.md`](reseau.md)).
 > [!IMPORTANT]
 > **Le second canal est mort.** Ce dépôt a eu deux canaux : sealed-secrets, et un backend de
 > secrets externe consommé via external-secrets. Le backend a été **retiré du dépôt**, et
-> [external-secrets](../cluster/infra/external-secrets/README.md) est en `.noapp.yaml` : la CRD
+> [external-secrets](../k8s/infra/external-secrets/README.md) est en `.noapp.yaml` : la CRD
 > `ExternalSecret` n'existe plus dans le cluster. Les quatre `*.externalsecret.yaml` qui subsistent
 > sont des **vestiges inertes** — non référencés, et pointant un `ClusterSecretStore` supprimé.
 >
@@ -106,7 +106,7 @@ Fichiers, dans le `manifests/` du composant consommateur :
   porteuse de la procédure. Jamais dans le `kustomization.yaml` ;
 - `<name>.sealed.yaml` — le `SealedSecret`, **committé** et référencé dans le `kustomization.yaml`.
 
-Procédure : [`cluster/infra/sealed-secrets/README.md`](../cluster/infra/sealed-secrets/README.md).
+Procédure : [`k8s/infra/sealed-secrets/README.md`](../k8s/infra/sealed-secrets/README.md).
 
 ⚠️ **Décommenter la ligne du `kustomization.yaml` DANS LE MÊME COMMIT que le fichier scellé.** Un
 `resources:` pointant un fichier absent fait échouer le `kustomize build` **entier**, donc
@@ -114,12 +114,12 @@ l'Application. Et un fichier scellé **vide** (0 octet) ne fait PAS échouer le 
 l'accepte et ne rend rien. Vérifier le contenu, pas l'existence — ce dépôt est déjà tombé dans ce
 piège.
 
-Douze fichiers sous `cluster/`, douze documents `SealedSecret` : `cloudflare-api-token`,
+Douze fichiers sous `k8s/`, douze documents `SealedSecret` : `cloudflare-api-token`,
 `velero-gcs`, `repo-homelab-gitops-github`, `argocd-oidc`, `argocd-notifications-secret`,
 `argocd-secret` (clé du webhook, fichier `argocd-webhook.sealed.yaml`), `grafana-admin`, `alertmanager-smtp`, `hermes-env`, `renovate-github`,
 `donetick-env`, `node-exporters`. (Le treizième, sous `archive/`, n'est appliqué par personne.)
 
-`node-exporters` ([hosts-monitoring](../cluster/app/hosts-monitoring/README.md), ns `monitoring`)
+`node-exporters` ([hosts-monitoring](../k8s/app/hosts-monitoring/README.md), ns `monitoring`)
 porte le `basicAuth` des `node-exporter` des machines hors cluster. ⚠️ **Il appartient à la
 supervision des machines, pas à celle d'un service qu'elles hébergent** : la supervision d'une
 machine survit au service qu'elle héberge, donc retirer un service du parc doit pouvoir supprimer
@@ -134,11 +134,11 @@ ici, le fichier d'authentification là-bas).
 > **Exceptions admises à « pas de `kind: Secret` dans Git » — un Secret dont le manifeste ne porte
 > aucun credential.** Deux formes, deux cas, et rien d'autre :
 > - **Coquille annotée pour un contrôleur** :
->   [`argocd-notifications-secret.yaml`](../cluster/infra/argocd/manifests/argocd-notifications-secret.yaml),
+>   [`argocd-notifications-secret.yaml`](../k8s/infra/argocd/manifests/argocd-notifications-secret.yaml),
 >   qui ne porte que `sealedsecrets.bitnami.com/managed: "true"` sur le Secret livré vide par
 >   l'upstream — sans quoi le contrôleur sealed-secrets refuse d'y écrire.
 > - **Secret de cluster du cluster local** :
->   [`cluster-bleu-kalecgos.yaml`](../cluster/infra/argocd/manifests/cluster-bleu-kalecgos.yaml).
+>   [`cluster-bleu-kalecgos.yaml`](../k8s/infra/argocd/manifests/cluster-bleu-kalecgos.yaml).
 >   Son `stringData` ne porte qu'un nom, l'URL interne `https://kubernetes.default.svc` et
 >   `{"tlsClientConfig":{"insecure":false}}` : sur cette adresse ArgoCD se connecte via son propre
 >   ServiceAccount et **ignore** toute identité qu'on y mettrait. Rien à sceller.

@@ -23,8 +23,8 @@ spec:
   # (`serverTelemetry.serviceMonitor.enabled`), mais sa propre doc prévient : « The Prometheus
   # operator *must* be installed before enabling this feature, if not the chart will fail to
   # install due to missing CustomResourceDefinitions ». Tant qu'openbao vivait sous
-  # `cluster/app/`, il était synchronisé par le même app-of-apps que kube-prometheus-stack et la
-  # CRD était là. Depuis son passage dans `cluster/infra/`, plus aucune relation d'ordre ne les
+  # `k8s/app/`, il était synchronisé par le même app-of-apps que kube-prometheus-stack et la
+  # CRD était là. Depuis son passage dans `k8s/infra/`, plus aucune relation d'ordre ne les
   # lie (les waves ne s'ordonnent qu'à l'intérieur d'un app-of-apps) : le flag a dû être coupé
   # pour débloquer la sync, et le coffre s'est retrouvé sans supervision. Le ServiceMonitor est
   # donc écrit à la main ici — même contenu, mais dans une Application qui peut échouer sans
@@ -36,7 +36,7 @@ spec:
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
-    path: cluster/infra/openbao-monitoring/manifests
+    path: k8s/infra/openbao-monitoring/manifests
   destination:
     name: bleu-kalecgos
     # ns `openbao` — créé par le composant openbao (manifests/namespace.yaml, wave -1).

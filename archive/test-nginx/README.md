@@ -19,8 +19,8 @@ dans le ns `test-nginx` :
 
 - **nginx** — le workload tourne et se joint ;
 - **lvm-test** — un PVC sur `openebs-lvm-thin` est provisionné et monté
-  ([openebs](../../cluster/infra/openebs/README.md)) ;
-- **cluster-example** — un `Cluster` CNPG démarre ([cnpg](../../cluster/app/cnpg/README.md)).
+  ([openebs](../../k8s/infra/openebs/README.md)) ;
+- **cluster-example** — un `Cluster` CNPG démarre ([cnpg](../../k8s/app/cnpg/README.md)).
 
 ## Fichiers
 
