@@ -1,0 +1,61 @@
+# Arborescence
+
+```
+components/
+  cert-manager/
+    values.yaml                  # values Helm communes
+    manifests/                   # base kustomize commune
+clusters/
+  bleu-malygos/
+    cluster.yaml                 # déclaration du cluster dans ArgoCD
+    argocd/                      # contient aussi root.app.yaml (app-of-apps)
+    cert-manager/
+      cert-manager.app.yaml      # Application ArgoCD
+      values.yaml                # surcharge (si besoin)
+      manifests/                 # overlay (si besoin)
+  bleu-kalecgos/
+    cluster.sealed.yaml
+    cert-manager/
+    <app>/
+doc/
+script/
+```
+
+Un dossier par composant et par cluster. Pas de sous-niveau.
+
+## Surcharger le commun
+
+**Values Helm** : `valueFiles` dans l'ordre, le dernier gagne.
+
+| Cas | `valueFiles` |
+|---|---|
+| Commun seul | `components/<comp>/values.yaml` |
+| Commun + surcharge | commun, puis `clusters/<nom>/<comp>/values.yaml` |
+| Spécifique seul | `clusters/<nom>/<comp>/values.yaml` |
+
+- Maps : fusionnées.
+- Listes : **remplacées en entier**.
+
+**Manifests** : base kustomize + overlay.
+
+| Cas | `path` de l'Application |
+|---|---|
+| Commun seul | `components/<comp>/manifests` |
+| Commun + surcharge | `clusters/<nom>/<comp>/manifests` (inclut la base, ajoute des patches) |
+| Spécifique seul | `clusters/<nom>/<comp>/manifests` |
+
+```yaml
+# clusters/<nom>/<comp>/manifests/kustomization.yaml
+resources:
+  - ../../../../components/<comp>/manifests
+patches: []
+```
+
+## Règle
+
+Le commun ne contient que ce qui vaut pour **tous** les clusters qui l'utilisent. Si un cluster doit défaire une valeur, elle va dans les surcharges.
+
+## Nommage
+
+- Application : `<cluster-court>-<comp>` → `malygos-openbao`, `kalecgos-cert-manager`.
+- Fichiers suivis par Renovate : `*.app.yaml`, dossiers `manifests/`.
