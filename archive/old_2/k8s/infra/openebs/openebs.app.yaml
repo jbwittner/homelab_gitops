@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openebs
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: openebs
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: storage
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # OpenEBS via le chart PARAPLUIE `openebs` (chemin recommandé upstream), dont on n'active QUE le
+  # moteur LVM (LocalPV-LVM). Le parapluie 4.6.0 embarque lvm-localpv 1.10.0 comme sous-chart
+  # (même version que l'image `lvm-driver` épinglée dans manifests/vg-bootstrap-daemonset.yaml).
+  # Pattern multi-source calqué sur cilium : chart Helm + `$values` (helm-values.yaml) + `manifests/`.
+  #   - helm-values.yaml : coupe tous les autres moteurs (zfs/hostpath/mayastor/rawfile) + loki/alloy
+  #     + preUpgradeHook ; ne garde que LVM. Values LVM re-nichées sous `lvm-localpv:`.
+  #   - L'image `openebs/lvm-driver` embarque lvm2 → commandes LVM DANS le conteneur (node-plugin
+  #     monte /dev de l'hôte, privileged) : aucun lvm2 userspace requis côté Talos immuable.
+  #   - `manifests/` porte l'ordonnancement irréductible via sync-waves de RESSOURCE :
+  #       namespace (privileged, -1) → DaemonSet bootstrap VG (0) → StorageClass thin (1).
+  #     Le bootstrap du VG est un DaemonSet (et non un Job) : stockage node-local ⇒ un VG par
+  #     nœud, y compris sur un nœud ajouté après coup (détail : manifests/vg-bootstrap-daemonset.yaml).
+  #   - Pas de CreateNamespace : le namespace est créé ET labellisé `privileged` par
+  #     manifests/namespace.yaml (sinon les DaemonSets privileged sont rejetés par PSA baseline).
+  #   - VOLET BOOTSTRAP UNIQUEMENT : objets d'API cœur, déployables sur un cluster nu. Le
+  #     ServiceMonitor et le PrometheusRule du driver sont dans le composant frère
+  #     `openebs-monitoring` (wave 2) — leurs CRDs n'existent pas encore quand le stockage,
+  #     lui, doit déjà être debout.
+  sources:
+    - repoURL: https://openebs.github.io/openebs
+      chart: openebs
+      targetRevision: 4.6.2
+      helm:
+        releaseName: openebs
+        valueFiles:
+          - $values/k8s/infra/openebs/helm-values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: k8s/infra/openebs/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: openebs
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true       # CRDs LVMVolume/LVMSnapshot + VolumeSnapshot (annotations volumineuses)

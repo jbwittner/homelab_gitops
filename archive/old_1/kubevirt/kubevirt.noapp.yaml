@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubevirt
+  namespace: argocd
+  annotations:
+    # Wave 1, comme velero, et pour la MÊME raison : CDI a besoin d'une StorageClass (son scratch
+    # space, et les PVC des DataVolume) — donc de `openebs`, qui est en wave 0 du même app-of-apps.
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: kubevirt
+    app.kubernetes.io/part-of: homelab-gitops
+    app.kubernetes.io/component: virtualization
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: k8s/infra/kubevirt/manifests
+  destination:
+    name: bleu-kalecgos
+    namespace: kubevirt
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      # Les deux installs upstream posent ~15 CRDs volumineuses (VirtualMachine, DataVolume…) :
+      # sans SSA, l'annotation last-applied-configuration dépasse la limite de 262 ko.
+      - ServerSideApply=true

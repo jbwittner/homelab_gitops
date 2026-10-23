@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: donetick
+resources:
+  - namespace.yaml
+  # ⚠️ Produit par kubeseal (cf. README.md §Câblage du secret et donetick-env.secret.example.yaml).
+  # À DÉCOMMENTER dans le même commit que le scellement — référencer un fichier absent fait
+  # échouer le rendu kustomize, donc le sync ArgoCD ENTIER, pas seulement ce Secret.
+  # Tant qu'il manque, le Secret `donetick-env` n'existe pas et le pod reste en
+  # `CreateContainerConfigError` (`envFrom.secretRef` du StatefulSet). C'est l'échec VOULU : cf.
+  # README.md, l'image embarque sinon une clé JWT publique.
+  - donetick-env.sealed.yaml
+  #
+  # --- ANCIEN CANAL external-secrets. Vestige INERTE, jamais fonctionnel dans ce cluster : la CRD
+  # `ExternalSecret` n'est pas posée (external-secrets est en `.noapp.yaml`) et le
+  # `ClusterSecretStore openbao` qu'il vise est archivé (archive/openbao). Laissé ACTIF dans les
+  # `resources` jusqu'au 2026-09-23, il faisait échouer la sync de toute l'Application — donc
+  # aucun objet donetick n'était créé. Même traitement que les vestiges de cert-manager et
+  # kube-prometheus-stack. Les deux viseraient de toute façon le même Secret `donetick-env`. ---
+  # - donetick-env.externalsecret.yaml
+  - statefulset.yaml
+  - service.yaml
+  - donetick-httproute.yaml
+
+# Le suffixe de hash fait redémarrer le StatefulSet quand la configuration non
+# secrète change. Le Secret est produit par External Secrets et reste hors Git.
+configMapGenerator:
+  - name: donetick-vars
+    envs:
+      - config/donetick.env

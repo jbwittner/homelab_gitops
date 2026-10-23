@@ -1,0 +1,70 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+resources:
+  - namespace.yaml
+  - grafana-httproute.yaml
+  # Exposition LAN d'Alertmanager. ⚠️ Indissociable de l'`externalUrl` d'alertmanagerSpec dans
+  # helm-values.yaml : retirer cette route en la laissant là-bas rend morts les liens des mails.
+  - alertmanager-httproute.yaml
+  # Compte admin local Grafana : canal sealed-secrets (le SealedSecret porte la valeur, pas
+  # un pointeur). Déchiffré par le contrôleur sealed-secrets (wave -8), donc bien avant cette
+  # app. Rotation = kubeseal + commit (cf. README.md §Compte admin Grafana).
+  - grafana-admin.sealed.yaml
+  #
+  # --- SSO authentik DÉSACTIVÉ : à décommenter avec les blocs `envValueFrom` et
+  # `auth.generic_oauth` de helm-values.yaml (les trois vont ensemble). ---
+  # - grafana-oidc.externalsecret.yaml
+  #
+  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal external-secrets. Vestige INERTE,
+  # le ClusterSecretStore visé n'existe plus. Les deux visent le même Secret `grafana-admin`. ---
+  # - grafana-admin.externalsecret.yaml
+  #
+  # Credential SMTP d'Alertmanager : canal sealed-secrets (le SealedSecret porte la valeur, pas
+  # un pointeur), comme grafana-admin ci-dessus et pour la même raison en plus forte — l'alerting
+  # doit parler quand le reste se tait, il ne peut pas dépendre d'un service tiers debout.
+  #
+  # ⚠️ Indissociable du `secrets:` et du bloc `config:` d'alertmanager dans helm-values.yaml : le
+  # retirer ici en les laissant là-bas met le pod Alertmanager en ContainerCreating indéfiniment
+  # (volume dont le Secret manque). Les trois se déplacent ensemble.
+  - alertmanager-smtp.sealed.yaml
+  #
+  # --- REMPLACÉ par le SealedSecret ci-dessus : ancien canal external-secrets, jamais activé.
+  # Vestige INERTE, le ClusterSecretStore visé n'existe plus. Les deux visent le même Secret
+  # `alertmanager-smtp`. ---
+  # - alertmanager-smtp.externalsecret.yaml
+  # ⚠️ REMPLACE `dashboard-talos-nodes.yaml` et l'ancien dashboard par machine, tous deux supprimés
+  # le 2026-09-11. Un seul dashboard pour TOUTES les machines — nœuds Talos (job `node-exporter`)
+  # et machines hors cluster (job `external-node`, composant `hosts-monitoring`). Ses variables
+  # n'ont volontairement AUCUN filtre de job : c'est son objet même.
+  - dashboard-machines.yaml
+  # Ce qui a été retiré du dashboard ci-dessus parce que ça ne parlait pas d'une MACHINE mais du
+  # CLUSTER : état des nœuds Kubernetes (kube-state-metrics) et VolumeGroups LVM (OpenEBS).
+  # ⚠️ Ses variables, elles, SONT filtrées sur `job="node-exporter"` — l'inverse du précédent, et
+  # pour la même raison : `lvm_*` n'existe que dans le cluster.
+  - dashboard-stockage-cluster.yaml
+  - dashboard-argocd.yaml
+  - dashboard-ressources-cluster.yaml
+  - dashboard-ressources-namespaces.yaml
+  - dashboard-ressources-workloads.yaml
+  - dashboard-ressources-pods.yaml
+  - dashboard-ressources-volumes.yaml
+  - dashboard-logs.yaml
+  # Rebranché le 2026-09-23 avec la remise en service de velero. Il avait été retiré le
+  # 2026-09-11 parce qu'un dashboard vide EN PERMANENCE se lit « rien à signaler » alors que la
+  # vérité était « plus rien n'est mesuré » — la condition est levée, la schedule tourne.
+  - dashboard-velero.yaml
+  - dashboard-cnpg.yaml
+  # --- RETIRÉ LE 2026-09-11 : le plugin barman n'est plus déployé (`.noapp.yaml`) --------------
+  # Le fichier reste dans le dépôt, prêt à revenir avec le composant. Le laisser ICI produirait un
+  # dashboard vide EN PERMANENCE, ce qui se lit comme « rien à signaler » alors que la vérité est
+  # « plus rien n'est mesuré ». Même raisonnement que pour les règles d'alerte commentées.
+  # - dashboard-cnpg-barman-plugin.yaml
+  - dashboard-alertes.yaml
+  - servicemonitors-argocd.yaml
+  # Alertes thermiques du parc, ajoutées le 2026-09-28. Elles sont ICI et non dans
+  # `hosts-monitoring` parce qu'elles ne sont pas filtrées par job : c'est le pendant en règles du
+  # `dashboard-machines.yaml` ci-dessus, qui couvre lui aussi tout le parc. ⚠️ Le chart ne fournit
+  # AUCUNE règle de température — ses ~40 `node-exporter.rules` n'en parlent pas — donc retirer ce
+  # fichier ne dégrade pas la surveillance thermique : il la supprime.
+  - prometheusrule.yaml

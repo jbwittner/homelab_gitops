@@ -1,0 +1,24 @@
+# Configuration Spring Boot de l'environnement dev, montée en /app/config/application.yaml.
+# Spring lit `./config/` (répertoire de travail /app) APRÈS le application.yaml du jar : chaque clé
+# posée ici écrase celle de l'image, les autres gardent leur valeur par défaut.
+# Modifier ce fichier change le hash du ConfigMap, donc le pod template : redémarrage automatique.
+spring:
+  profiles:
+    active: "dev"
+  # Service `-rw` généré par CNPG pour le `Cluster` bankwiz-db (manifests/bankwiz-db.yaml) : il suit
+  # toujours le primaire. Identifiants hors de ce fichier, injectés par variables d'environnement
+  # depuis le secret `bankwiz-db-app` (deployment.yaml).
+  # Ignoré tant que l'image tourne sur `spi-memory` : sans JDBC dans le classpath, Spring ne lit pas
+  # `spring.datasource`.
+  datasource:
+    url: "jdbc:postgresql://bankwiz-db-rw:5432/bankwiz"
+server:
+  # Le TLS est terminé au Gateway et le pod reçoit du HTTP clair : sans ça, Spring génère des URL
+  # en `http://` (serveur déclaré par Swagger UI, redirections), bloquées par le navigateur en
+  # contenu mixte. Envoy pose X-Forwarded-Proto/Host.
+  forward-headers-strategy: "framework"
+management:
+  server:
+    # Actuator sorti du port applicatif : le Service n'expose que 8080, donc rien sous `/actuator`
+    # n'est joignable par l'HTTPRoute. Les sondes visent ce port directement (deployment.yaml).
+    port: 8081

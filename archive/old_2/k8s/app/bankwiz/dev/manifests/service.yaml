@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bankwiz-api
+  namespace: bankwiz-dev
+  labels:
+    app.kubernetes.io/name: bankwiz-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: bankwiz-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

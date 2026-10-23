@@ -3,7 +3,8 @@
   "extends": ["config:recommended"],
   "description": [
     "Cooldown supply-chain : une release doit exister depuis 7 jours avant d'être proposée.",
-    "internalChecksFilter=strict est le défaut, mais explicité ici car load-bearing : les versions encore 'pending' sont filtrées AVANT création de branche/PR, donc rien n'est ni ouvert ni automergé avant J+7. Sans strict, ignoreTests=true ci-dessous rendrait le check renovate/stability-days vert d'office et l'automerge passerait immédiatement."
+    "internalChecksFilter=strict est le défaut, mais explicité ici car load-bearing : les versions encore 'pending' sont filtrées AVANT création de branche/PR, donc rien n'est ni ouvert ni automergé avant J+7. Sans strict, ignoreTests=true ci-dessous rendrait le check renovate/stability-days vert d'office et l'automerge passerait immédiatement.",
+    "DEUX ARBRES, UN RÉGIME : k8s/ (ArgoCD) et docker/ (Komodo) se déploient tous deux seuls après un merge sur main — ArgoCD par self-heal, Komodo par sa procédure deploiement-auto (docker/komodo-sync/piles.toml). L'automerge des patch/minor vaut donc pour les deux. Komodo lui-même (sa pile, mongo) n'est PAS ici : il vit dans homelab_emeriss, dont le renovate.json garde ses règles d'approbation et son absence d'automerge. Le manager docker-compose, actif par défaut, lit les image: des compose.yaml de docker/ : les tags y sont EN DUR, jamais dans un .env, que Renovate ne lit pas."
   ],
   "minimumReleaseAge": "7 days",
   "internalChecksFilter": "strict",

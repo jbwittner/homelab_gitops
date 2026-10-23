@@ -1,0 +1,217 @@
+# helm-values — chart velero (sauvegarde/restauration du cluster vers un bucket GCS)
+#
+# Deux volets, distincts et tous deux nécessaires :
+#   - les OBJETS Kubernetes, sérialisés en tar dans le bucket par le Deployment `velero` ;
+#   - les DONNÉES des PV, copiées fichier à fichier par le DaemonSet `node-agent` (kopia).
+# Le second n'est pas un luxe ici : le stockage est OpenEBS LocalPV-LVM, dont les snapshots CSI
+# sont NODE-LOCAUX — ils ne survivent pas à la perte du nœud, donc ne sauvegardent rien au sens DR.
+
+# --- Accès au bucket ---
+# Secret pré-existant, produit par sealed-secrets (manifests/velero-gcs.sealed.yaml) et NON par le
+# chart : `secretContents` écrirait le credential en clair dans ce fichier, donc dans Git.
+# La clé DOIT s'appeler `cloud` ; pour le plugin GCP son contenu est la clé JSON d'un compte de
+# service (le fichier entier, tel que téléchargé), et non des clés HMAC d'interopérabilité S3.
+credentials:
+  useSecret: true
+  existingSecret: velero-gcs
+
+# --- Plugin objet ---
+# initContainer qui dépose son binaire dans le volume `plugins` partagé avec le serveur velero.
+# Plugin GCP, donc API GCS NATIVE : pas d'endpoint S3 à déclarer, pas de `region`, et surtout pas
+# le contournement `checksumAlgorithm: ""` qu'impose l'API XML compatible S3 de GCS au plugin AWS.
+# Contrepartie : le credential est une clé de compte de service JSON, pas une paire HMAC.
+initContainers:
+  - name: velero-plugin-for-gcp
+    image: velero/velero-plugin-for-gcp:v1.14.2
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: gcp
+      # ⚠️ Le bucket n'est PAS créé par ce composant : il est posé par le repo Terraform, avec le
+      # compte de service qui l'accède (README, Contraintes). Bucket DÉDIÉ, jamais partagé avec une
+      # autre chaîne de sauvegarde : velero fait son propre GC des backups expirés, et un lifecycle
+      # GCS posé pour un autre usage casserait ses restaurations. Le suffixe aléatoire vient du côté Terraform (unicité globale des
+      # noms de bucket GCS) : le recopier tel quel, il n'est pas déductible.
+      bucket: homelab-velero-backups-157294d1
+      default: true
+      accessMode: ReadWrite
+      credential:
+        name: velero-gcs
+        key: cloud
+      # Aucun `config` : le plugin GCP lit la localisation du bucket via l'API. Ne PAS y mettre
+      # `serviceAccount` — ce champ sert au Workload Identity (sans clé), qui suppose un cluster
+      # GKE ; ici l'authentification se fait par la clé JSON montée depuis le Secret `velero-gcs`.
+      config: {}
+
+  # Pas de VolumeSnapshotLocation : voir `snapshotsEnabled` plus bas.
+
+  # --- Comportement serveur ---
+  # Tout volume est sauvegardé par node-agent SANS annotation sur le pod. C'est l'inverse du défaut
+  # velero (opt-in par pod) : ici l'oubli d'une annotation produirait une sauvegarde qui a l'air
+  # verte mais ne contient aucune donnée — le mode d'échec le plus coûteux d'un outil de backup.
+  defaultVolumesToFsBackup: true
+  uploaderType: kopia
+  # Filet : durée de vie d'un backup créé à la main sans `--ttl`. Les schedules fixent la leur.
+  defaultBackupTTL: 720h
+  logLevel: info
+
+# --- Job Helm de mise à jour des CRDs (→ PreSync ArgoCD à chaque sync) : coupé ---
+# Il existe pour Helm, qui n'applique le dossier `crds/` qu'à l'INSTALL et jamais aux upgrades.
+# ArgoCD, lui, rend le chart avec `--include-crds` : les 13 CRDs font partie de l'ensemble désiré
+# et sont réconciliées à chaque sync. Le Job ferait donc le travail une seconde fois, en impératif,
+# et rejouerait un Job à chaque sync du composant.
+upgradeCRDs: false
+
+# --- Données des PV : node-agent (kopia) ---
+deployNodeAgent: true
+nodeAgent:
+  # Défauts conformes à Talos (kubelet en /var/lib/kubelet) → aucun override de chemin.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 2Gi
+  # Pas de tolerations : les nœuds portant des PV sont schedulables. Un nœud tainté sans node-agent
+  # sauvegarderait ses objets mais pas ses données — même échec silencieux que ci-dessus.
+
+# --- Snapshots de volume : coupés ---
+# Un VolumeSnapshot LVM localpv reste sur le nœud qui porte le LV. Perte du nœud = perte du
+# snapshot AVEC le volume : ça ne protège de rien d'autre qu'une erreur logique, et ça donnerait
+# un second chemin de sauvegarde à moitié fiable en concurrence de kopia. À rouvrir seulement le
+# jour où le cluster aura un stockage répliqué ou un data-mover CSI.
+snapshotsEnabled: false
+
+# --- Observabilité : hors composant ---
+# Le chart sait poser ServiceMonitor et PodMonitor, mais l'`autodetect` s'appuie sur les
+# Capabilities Helm — donc sur l'existence des CRDs prometheus-operator au moment du rendu, ce qui
+# n'est pas garanti au bootstrap (kube-prometheus-stack vit dans le tier `app`, sans relation
+# d'ordre avec `infra`). Coupé explicitement ; sa place est un composant frère
+# `velero-monitoring` le jour où on voudra alerter sur les échecs de sauvegarde.
+metrics:
+  enabled: true          # port 8085 exposé, Service créé
+  serviceMonitor:
+    autodetect: false
+    enabled: false
+  nodeAgentPodMonitor:
+    autodetect: false
+    enabled: false
+
+# --- Sauvegarde planifiée ---
+# Portée par le chart (et non par `manifests/`) pour que la Schedule soit rendue APRÈS les CRDs du
+# même release, sans dépendre de l'ordre de kind d'ArgoCD.
+schedules:
+  daily:
+    # ⚠️ ACTIVE depuis le 2026-09-23, sur `hermes` (cf. `includedNamespaces` plus bas). Elle a été
+    # désactivée du 2026-09-11 au 2026-09-23 : le seul namespace qu'elle couvrait avait quitté le
+    # cluster. Leçon à garder — une schedule qui vise un namespace absent ne produit pas une
+    # erreur, elle produit des backups VIDES qui réussissent. C'est pire que rien : les alertes de
+    # fraîcheur (`VeleroBackupTooOld`, `VeleroNoBackupMetric`) resteraient vertes en ne
+    # sauvegardant rien. Retirer un namespace de la liste blanche impose donc de se demander s'il
+    # en reste un.
+    #
+    # `disabled: true` fait que le chart NE REND PAS l'objet `Schedule` : ArgoCD le prune, il n'y
+    # a plus de cron. Le reste du composant (contrôleur, node-agent, BSL, dépôt kopia) reste
+    # debout et prêt — les backups existants restent restaurables jusqu'à expiration de leur TTL.
+    disabled: false
+    # ⚠️ CET HORAIRE EST EN **UTC**, et il ne peut pas être autre chose. Ni `Schedule` (velero) ni
+    # `ScheduledBackup` (CNPG) n'exposent de champ `timezone` — seul un `CronJob` Kubernetes en a un
+    # (`timeZone`), d'où le `Europe/Paris` des CronJobs renovate. Les deux chaînes de sauvegarde, elles,
+    # sont en UTC en dur.
+    #
+    #   02:00 UTC = 04:00 Paris l'été (CEST) · 03:00 Paris l'hiver (CET)
+    #   03:00 UTC = 05:00 Paris l'été        · 04:00 Paris l'hiver
+    #
+    # ⚠️ NE PAS « corriger » en décalant d'une heure pour viser un horaire de Paris. Deux raisons :
+    #   1. un cron UTC fixe ne peut viser une heure locale qu'à UNE saison — il faudrait 00:00 UTC
+    #      l'été et 01:00 UTC l'hiver, donc on se tromperait six mois par an ;
+    #   2. le décalage créerait une COLLISION : `renovate-github` tourne à 02:00 Europe/Paris, soit
+    #      01:00 UTC en hiver. Y placer la sauvegarde ferait tourner le bot pendant la copie, et
+    #      ses écritures dans un namespace sauvegardé produiraient une copie incohérente.
+    # En l'état l'ordre base → PVC tient aux DEUX saisons : 2 h de marge l'été, 1 h l'hiver.
+    schedule: "0 3 * * *"
+    # ⚠️ NE PAS déclarer `skipImmediately` ici. C'est un ordre à usage unique, pas un état désiré :
+    # le contrôleur le remet lui-même à `false` après l'avoir consommé (schedule_controller.go, il
+    # écrit aussi `status.lastSkipped`). Déclaré à `true`, il crée une boucle de dérive permanente
+    # avec `selfHeal` — ArgoCD le repose à `true`, velero le repasse à `false`, indéfiniment.
+    # Conséquence assumée : créer ou recréer la Schedule déclenche une sauvegarde immédiate, la
+    # première du cycle n'attendant pas 03:00. Pour l'éviter durablement, le levier déclaratif est
+    # le flag serveur `--schedule-skip-immediately=true` (configuration.extraArgs), pas ce champ.
+    template:
+      # 30 j. Ce TTL est une FENÊTRE DE RÉCUPÉRATION avant d'être un réglage de taille : le
+      # raccourcir ferait surtout perdre la capacité à rattraper une corruption ou une suppression
+      # logique repérée tardivement. Côté stockage le gain serait sous-linéaire — kopia déduplique
+      # et n'écrit que des deltas, donc 30 snapshots quotidiens d'une donnée stable ne pèsent pas
+      # 30 fois un snapshot. Et l'espace d'un backup expiré n'est de toute façon rendu qu'à la
+      # MAINTENANCE du dépôt kopia (toutes les heures par défaut), pas à sa disparition de
+      # `kubectl get backups`. Pour aller plus loin dans le temps sans gonfler le bucket, ajouter
+      # une schedule hebdomadaire à TTL long plutôt que d'allonger celle-ci.
+      ttl: 720h
+      storageLocation: default
+      # LISTE BLANCHE, et non une liste d'exclusions : rien n'est sauvegardé sans figurer ici.
+      # Contrepartie assumée — un composant ajouté au cluster n'est PAS couvert tant que son
+      # namespace n'est pas ajouté à cette liste, et rien ne le signale.
+      #
+      # PÉRIMÈTRE ACTUEL : `hermes`, et lui seul (2026-09-23). Le namespace précédent a quitté le
+      # cluster le 2026-09-11 ; sa sauvegarde se joue hors de portée de velero.
+      #
+      # POURQUOI `hermes` EN PREMIER. C'est le cas qui revalide la chaîne au moindre coût : petit
+      # PVC (10Gi), un seul volume de données, et AUCUNE base CNPG — le piège de volume-policies
+      # décrit plus bas ne se déclenche donc pas. Et c'est aujourd'hui le seul composant du cluster
+      # dont l'état n'est couvert par rien : `/opt/data` porte `auth.json` (un flux device code à
+      # refaire à la main s'il disparaît), les sessions et la mémoire de l'agent.
+      #
+      # ⚠️ RESTE À FAIRE, et ce n'est pas cosmétique : un hook `pre.hook.backup.velero.io/command`
+      # sur le podTemplate de hermes, lançant `hermes -p <profil> backup`. Sans lui, kopia copie
+      # `state.db` et ses sidecars `-wal`/`-shm` à des instants différents — cohérent-CRASH, voire
+      # une paire déchirée. C'est le même arbitrage que pour les PVC CNPG ci-dessous, à ceci près
+      # qu'ici l'artefact cohérent-TRANSACTION voyage À L'INTÉRIEUR de la copie de volume, donc
+      # sans exclure quoi que ce soit de kopia. Non posé à ce jour : la présence de la commande
+      # `hermes backup` dans l'image épinglée (v2026.9.14) n'a pas été vérifiée.
+      #
+      # ⚠️ LISTE VIDE = TOUS LES NAMESPACES, côté velero. C'est précisément pourquoi la schedule
+      # est `disabled: true` au-dessus plutôt que laissée active avec une liste vide : la
+      # réactiver sans remplir cette liste sauvegarderait le cluster ENTIER toutes les nuits,
+      # TSDB Prometheus compris.
+      #
+      # Candidat au remplissage SUIVANT, un namespace à la fois, en vérifiant à chaque ajout la
+      # présence des `podvolumebackups` attendus :
+      #   - donetick — MÊME FORME QUE HERMES et même angle mort : SQLite sur PVC, aucune chaîne
+      #     native, donc rien ne le sauvegarde aujourd'hui. Il n'a pas été ajouté ici parce que le
+      #     périmètre a été arbitré (2026-09-23) avant qu'il n'entre dans le dépôt, pas parce
+      #     qu'il aurait été écarté. À trancher explicitement.
+      #   - monitoring (27Gi dont 20Gi de TSDB Prometheus, reconstructible) — écarté pour l'instant :
+      #     lecture nocturne intégrale d'un volume dont le contenu se reconstruit seul.
+      # ⚠️ Toute base CNPG d'un namespace ajouté ici est exclue de kopia par la règle de
+      #    volume-policies : sans ObjectStore à elle, l'ajouter ne la sauvegarderait PAS.
+      #
+      # ⚠️ UN NAMESPACE PEUT ÊTRE RETIRÉ DE CETTE LISTE, et ça s'est déjà produit. Le critère :
+      # quand une chaîne native produit une copie cohérente-TRANSACTION là où kopia ne copie le PVC
+      # que de façon cohérente-CRASH, ET qu'elle est réellement testée, velero n'ajoute qu'une copie
+      # de moindre qualité — payée chaque nuit par la lecture intégrale du volume.
+      #
+      # Ce que velero apporte malgré tout, et qu'il faut remplacer AVANT de retirer quoi que ce
+      # soit : un second domaine de panne, et surtout la détection passive d'une chaîne de
+      # sauvegarde morte en silence. C'est le rôle des alertes de cnpg-monitoring pour les PVC CNPG
+      # exclus par volume-policies.yaml. Les supprimer rendrait l'exclusion indéfendable.
+      #
+      # Reste hors de portée de tout ce qui précède : une lifecycle rule GCS posée par erreur, qui
+      # purgerait un bucket sans qu'aucune métrique du cluster ne le voie. Seule une restauration
+      # d'épreuve périodique y répond, et elle est manuelle (`script/velero-script.sh
+      # restore`, README §Opérations).
+      includedNamespaces:
+        - hermes
+      snapshotVolumes: false   # cohérent avec snapshotsEnabled: false — les données passent par kopia
+      # Garde-fou du mode opt-out : ignore la copie des `emptyDir` (rien à restaurer par
+      # construction, et un pod terminé fait échouer la sauvegarde ENTIÈRE sur un volume déjà
+      # démonté par kubelet). Le raisonnement complet est dans le ConfigMap lui-même, rendu par
+      # `manifests/volume-policies.yaml`. Référence NON validée à la création de la Schedule : un
+      # nom erroné n'échouerait qu'au premier backup déclenché.
+      resourcePolicy:
+        kind: configmap
+        name: velero-volume-policies
