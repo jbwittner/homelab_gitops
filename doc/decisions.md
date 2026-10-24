@@ -19,5 +19,6 @@
 | Une app-of-apps par cluster (`clusters/<nom>/apps.app.yaml`) | dans l'UI, tout ce qui est déployé sur un cluster est sous une seule Application | une app racine sur `clusters/**` |
 | Nom d'Application `<comp>-<cluster-court>` | un composant sur tous ses clusters côte à côte dans la liste ; la vue par cluster vient du filtre « Clusters » de l'UI | `<cluster-court>-<comp>` |
 | Mot de passe admin ArgoCD en SealedSecret `patch` sur `argocd-secret` | déclaratif, survit à une réinstallation ; `patch` garde les clés écrites par ArgoCD | changement manuel (perdu à la réinstallation) ; ESO `Merge` (attend OpenBao) |
+| Compte `argocd-manager` de kalecgos versionné (`cluster-admin`, jeton longue durée), repris par ArgoCD | même compte que `argocd cluster add`, mais déclaratif ; jeton régénérable en supprimant son Secret | `argocd cluster add` (impératif, hors Git) |
 | Unseal OpenBao manuel | pas de KMS ; homelab | auto-unseal |
 | Rotation de clé sealed-secrets désactivée | une seule sauvegarde reste valable ; secrets de boot seulement | rotation 30 j + sauvegarde à chaque rotation |

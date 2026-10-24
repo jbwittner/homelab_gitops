@@ -29,21 +29,22 @@ Puis :
 
 ## 2. Sceller l'accès Git
 
-```sh
-cp clusters/bleu-malygos/argocd/manifests/github-app.secret.example.yaml \
-   clusters/bleu-malygos/argocd/manifests/github-app.secret.yaml
-```
-
-Remplir `github-app.secret.yaml` (`stringData`) : App ID, Installation ID, contenu du `.pem`. Puis :
+App ID et Installation ID sont déjà dans le modèle (non sensibles). Remplir la clé depuis le `.pem` téléchargé, sceller, nettoyer :
 
 ```sh
+KEY=$(cat ~/Downloads/<app>.<date>.private-key.pem) \
+yq '.stringData.githubAppPrivateKey = strenv(KEY)' \
+  clusters/bleu-malygos/argocd/manifests/github-app.secret.example.yaml \
+  > clusters/bleu-malygos/argocd/manifests/github-app.secret.yaml
+
 kubeseal --context admin@bleu-malygos -o yaml \
   < clusters/bleu-malygos/argocd/manifests/github-app.secret.yaml \
   > clusters/bleu-malygos/argocd/manifests/github-app.sealed.yaml
-command rm clusters/bleu-malygos/argocd/manifests/github-app.secret.yaml
+
+command rm clusters/bleu-malygos/argocd/manifests/github-app.secret.yaml ~/Downloads/<app>.<date>.private-key.pem
 ```
 
-Supprimer aussi le `.pem` téléchargé. Clé perdue : en générer une nouvelle sur la GitHub App et resceller ; rien à sauvegarder.
+Rotation (clé perdue ou exposée) : nouvelle clé sur la GitHub App, supprimer l'ancienne, refaire cette section. Rien à sauvegarder.
 
 Commit + push du `.sealed.yaml`.
 
@@ -60,7 +61,7 @@ kubectl --context admin@bleu-malygos apply \
   -f clusters/bleu-malygos/apps.app.yaml -f clusters/bleu-kalecgos/apps.app.yaml
 ```
 
-Les Applications `*-kalecgos` restent en erreur (`cluster bleu-kalecgos not found`) jusqu'à l'étape 5.
+Les Applications `*-kalecgos` restent en erreur (`there are no clusters with this name: bleu-kalecgos`) jusqu'à l'[étape 5](05-kalecgos.md).
 
 ## Vérifier
 

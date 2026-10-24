@@ -8,4 +8,4 @@ Règle : le bootstrap n'applique que ce qui ne dépend de rien d'autre (CRDs, CN
 2. [Cilium](bootstrap/02-cilium.md)
 3. [Sealed Secrets](bootstrap/03-sealed-secrets.md) (malygos)
 4. [ArgoCD](bootstrap/04-argocd.md) (malygos)
-5. Déclarer kalecgos dans ArgoCD — à venir
+5. [Déclarer kalecgos dans ArgoCD](bootstrap/05-kalecgos.md)
