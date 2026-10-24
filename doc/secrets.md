@@ -20,7 +20,11 @@ Pas de nouveau SealedSecret hors boot.
 ## OpenBao
 
 - Sur malygos, 1 réplica, stockage raft.
-- Un mount d'auth Kubernetes par cluster : `auth/k8s-bleu-malygos`, `auth/k8s-bleu-kalecgos`.
+- Structure (KV, auth, policies) en Terraform : dépôt `homelab_terraform`, module `openbao/bleu-malygos`. Valeurs des secrets : `bao kv put`, à la main.
+- Secrets rangés en `secret/<comp>/<nom>` (KV v2), partagés entre clusters.
+- Un mount d'auth Kubernetes par cluster : `auth/k8s-bleu-malygos`, `auth/k8s-bleu-kalecgos`, rôle `eso` (ServiceAccount `external-secrets/external-secrets`, lecture seule).
+  - kalecgos : aucun jeton stocké dans OpenBao ; il valide le jeton d'ESO auprès de l'API de kalecgos, donc le compte d'ESO y porte `system:auth-delegator`.
+- Admin : utilisateur `userpass` (policy `admin`) ; token root révoqué, régénérable avec la clé d'unseal.
 - Accès :
   - malygos → service interne ;
   - kalecgos → `https://bao.lan.wittner.tech`.

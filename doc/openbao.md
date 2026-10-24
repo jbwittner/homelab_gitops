@@ -39,11 +39,15 @@ kubectl --context admin@bleu-malygos -n openbao port-forward svc/openbao-ui 8200
 
 `http://localhost:8200`, méthode Token.
 
+## Configurer
+
+Structure en Terraform : `homelab_terraform/openbao/bleu-malygos` (README du module : premier apply avec le token root, création de l'admin userpass, révocation du root).
+
 ## Sauvegarder (snapshot raft)
 
 ```sh
 kubectl --context admin@bleu-malygos -n openbao exec -it openbao-0 -- \
-  sh -c 'bao login && bao operator raft snapshot save /tmp/openbao.snap'   # token root demandé
+  sh -c 'bao login -method=userpass username=jbwittner && bao operator raft snapshot save /tmp/openbao.snap'
 kubectl --context admin@bleu-malygos -n openbao cp openbao-0:/tmp/openbao.snap ~/openbao-$(date +%F).snap
 kubectl --context admin@bleu-malygos -n openbao exec openbao-0 -- rm /tmp/openbao.snap
 ```
