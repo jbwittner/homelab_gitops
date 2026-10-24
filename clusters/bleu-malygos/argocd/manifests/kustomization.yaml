@@ -6,3 +6,12 @@ resources:
   - cluster-bleu-malygos.yaml
   - github-app.sealed.yaml
   - admin-password.sealed.yaml
+patches:
+  # sealed-secrets ne complète un Secret existant que s'il porte cette annotation (admin-password.sealed.yaml)
+  - patch: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: argocd-secret
+        annotations:
+          sealedsecrets.bitnami.com/patch: "true"
