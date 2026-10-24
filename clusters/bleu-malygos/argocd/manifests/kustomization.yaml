@@ -5,3 +5,4 @@ resources:
   - https://raw.githubusercontent.com/argoproj/argo-cd/refs/tags/v3.5.5/manifests/install.yaml
   - cluster-bleu-malygos.yaml
   - github-app.sealed.yaml
+  - admin-password.sealed.yaml

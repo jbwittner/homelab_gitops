@@ -45,7 +45,7 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
 - Tout changement de cluster passe par un commit + la réconciliation ArgoCD. Pas de `kubectl apply`/`create`/`patch` impératif, sauf le boot documenté (ArgoCD, sealed-secrets, `argocd-manager`).
 - Deux clusters (et des contextes GKE du travail dans le kubeconfig) : passer `--context` explicitement, même en lecture.
 - Secrets :
-  - **SealedSecrets** : boot seulement, sur malygos (GitHub App ArgoCD, secret de cluster kalecgos). Rien d'autre.
+  - **SealedSecrets** : boot seulement, sur malygos (GitHub App ArgoCD, mot de passe admin ArgoCD, secret de cluster kalecgos). Rien d'autre.
     Trois fichiers côte à côte : `x.secret.example.yaml` (modèle commité, valeurs factices), `x.secret.yaml` (clair, ignoré), `x.sealed.yaml` (commité). Secrets écrits en `stringData`.
   - **OpenBao + External Secrets** : tout le reste.
   - Ne jamais committer ce que `.gitignore` exclut : `*.secret.yaml`, `*.pem`, `*sealed-secrets-key*.yaml`, `*-backup.yaml`, `.env`.
