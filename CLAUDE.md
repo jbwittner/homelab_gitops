@@ -45,7 +45,7 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
 - Tout changement de cluster passe par un commit + la réconciliation ArgoCD. Pas de `kubectl apply`/`create`/`patch` impératif, sauf le boot documenté (ArgoCD, sealed-secrets, `argocd-manager`).
 - Deux clusters (et des contextes GKE du travail dans le kubeconfig) : passer `--context` explicitement, même en lecture.
 - Secrets :
-  - **SealedSecrets** : boot seulement, sur malygos (deploy key Forgejo, secret de cluster kalecgos). Rien d'autre.
+  - **SealedSecrets** : boot seulement, sur malygos (GitHub App ArgoCD, secret de cluster kalecgos). Rien d'autre.
   - **OpenBao + External Secrets** : tout le reste.
   - Ne jamais committer ce que `.gitignore` exclut : `*.secret.yaml`, `pub-cert.pem`, `*sealed-secrets-key*.yaml`, `*-backup.yaml`, `argocd-deploy-key*`, `.env`.
 - Exposition : Gateway API de Cilium. Tout hostname `*.lan.wittner.tech` doit aussi être déclaré sur le proxy LAN 192.168.1.50 (hors dépôt).
@@ -62,4 +62,4 @@ Les `description` de `renovate.json` citent encore `k8s/` et `docker/` : périm�
 
 ## Workflow Git
 
-Commits directs sur `main`. Un miroir push Forgejo → GitHub part à chaque commit.
+Commits directs sur `main`, poussés sur GitHub (`jbwittner/homelab_gitops` ; ArgoCD le lit via une GitHub App, public ou privé).

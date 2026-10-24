@@ -4,7 +4,7 @@
 
 | Étage | Pour quoi | Où |
 |---|---|---|
-| **SealedSecrets** | boot seulement : deploy key Forgejo, secret de cluster `bleu-kalecgos` | malygos |
+| **SealedSecrets** | boot seulement : GitHub App ArgoCD (`repo-creds`), secret de cluster `bleu-kalecgos` | malygos |
 | **OpenBao + External Secrets** | tout le reste | les deux clusters |
 
 Pas de nouveau SealedSecret hors boot.

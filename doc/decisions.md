@@ -14,5 +14,6 @@
 | ArgoCD en kustomize sur URL taguée (exception à « Helm en priorité ») | plus simple à surcharger : patches sur les manifestes officiels ; une version suivie par Renovate | chart Helm `argo/argo-cd` |
 | sealed-secrets en chart Helm + values | même schéma que Cilium ; un réglage (`keyrenewperiod`) sans patch | kustomize sur URL + patch JSON |
 | Namespace = celui de la doc upstream (Cilium, sealed-secrets : `kube-system` ; OpenEBS : `openebs`…) | CLI et procédures upstream sans `-n` ; `kube-system` exempté de PSA par Talos | un namespace dédié partout |
+| Accès Git d'ArgoCD par GitHub App (`repo-creds` sur `https://github.com/jbwittner`) | survit au passage du dépôt en privé ; URLs HTTPS inchangées ; lecture seule, jetons d'1 h | anonyme ; deploy key SSH (URLs à changer, une clé par dépôt) ; PAT (expire) |
 | Unseal OpenBao manuel | pas de KMS ; homelab | auto-unseal |
 | Rotation de clé sealed-secrets désactivée | une seule sauvegarde reste valable ; 2 secrets seulement | rotation 30 j + sauvegarde à chaque rotation |

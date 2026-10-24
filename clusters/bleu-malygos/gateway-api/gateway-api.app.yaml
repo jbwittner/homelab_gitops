@@ -8,7 +8,7 @@ spec:
   destination:
     name: bleu-malygos
   source:
-    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main
     path: components/gateway-api/manifests
   syncPolicy:

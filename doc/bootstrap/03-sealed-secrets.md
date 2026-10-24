@@ -1,6 +1,6 @@
 # 3. Sealed Secrets (malygos)
 
-Controller dans `kube-system`. Sert uniquement au boot (deploy key Forgejo, secret de cluster kalecgos).
+Controller dans `kube-system`. Sert uniquement au boot (GitHub App ArgoCD, secret de cluster kalecgos).
 
 ## Installer
 

@@ -17,10 +17,10 @@ spec:
         valueFiles:
           - $values/components/cilium/values.yaml
           - $values/clusters/bleu-kalecgos/cilium/values.yaml
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       ref: values
-    - repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
       targetRevision: main
       path: clusters/bleu-kalecgos/cilium/manifests
   syncPolicy:

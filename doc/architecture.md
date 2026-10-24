@@ -32,7 +32,7 @@ Talos 1.13, Kubernetes 1.36, Cilium 1.20 (kube-proxy replacement, L2 announcemen
 ```
                  bleu-malygos                          bleu-kalecgos
             ┌──────────────────────┐              ┌──────────────────────┐
- Forgejo ──►│ ArgoCD ──────────────┼── déploie ──►│                      │
+  GitHub ──►│ ArgoCD ──────────────┼── déploie ──►│                      │
             │                      │              │                      │
             │ OpenBao ◄────────────┼── ESO ───────┤ External Secrets     │
             │                      │              │                      │
