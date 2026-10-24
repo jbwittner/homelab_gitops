@@ -18,6 +18,7 @@
 | Secrets de cluster dans le kustomize d'ArgoCD (`clusters/bleu-malygos/argocd/manifests`) | un seul `apply -k` au boot ; l'app-of-apps ne charge que des `*.app.yaml` | `cluster.yaml` à la racine de chaque cluster, chargé par l'app-of-apps |
 | Une app-of-apps par cluster (`clusters/<nom>/apps.app.yaml`) | dans l'UI, tout ce qui est déployé sur un cluster est sous une seule Application | une app racine sur `clusters/**` |
 | Nom d'Application `<comp>-<cluster-court>` | un composant sur tous ses clusters côte à côte dans la liste ; la vue par cluster vient du filtre « Clusters » de l'UI | `<cluster-court>-<comp>` |
+| Label `layer: boot\|infra\|apps` sur les Applications | filtre « Labels » de l'UI : le socle d'un coup d'œil ; le cluster vient déjà du filtre « Clusters » | labels `cluster`, `component` ; tags Git en `targetRevision` |
 | Mot de passe admin ArgoCD en SealedSecret `patch` sur `argocd-secret` | déclaratif, survit à une réinstallation ; `patch` garde les clés écrites par ArgoCD | changement manuel (perdu à la réinstallation) ; ESO `Merge` (attend OpenBao) |
 | Compte `argocd-manager` de kalecgos versionné (`cluster-admin`, jeton longue durée), repris par ArgoCD | même compte que `argocd cluster add`, mais déclaratif ; jeton régénérable en supprimant son Secret | `argocd cluster add` (impératif, hors Git) |
 | Unseal OpenBao manuel | pas de KMS ; homelab | auto-unseal |

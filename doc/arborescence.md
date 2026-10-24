@@ -68,4 +68,12 @@ Le commun ne contient que ce qui vaut pour **tous** les clusters qui l'utilisent
 ## Nommage
 
 - Application : `<comp>-<cluster-court>` → `openbao-malygos`, `cert-manager-kalecgos`.
+- Label `layer` sur chaque Application (filtre « Labels » de l'UI, `-l layer=…`) :
+
+  | `layer` | Quoi |
+  |---|---|
+  | `boot` | posé à la main au bootstrap puis repris par ArgoCD (`doc/bootstrap/`), app-of-apps comprises |
+  | `infra` | plateforme déployée par ArgoCD : stockage, certificats, secrets, supervision, Gateway |
+  | `apps` | workloads |
+
 - Fichiers suivis par Renovate : `*.app.yaml`, dossiers `manifests/`.
