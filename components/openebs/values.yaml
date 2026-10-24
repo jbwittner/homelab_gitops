@@ -1,0 +1,25 @@
+# Chart parapluie : LVM seul (il active aussi zfs, hostpath, mayastor, loki, alloy par défaut)
+engines:
+  local:
+    lvm:
+      enabled: true
+    zfs:
+      enabled: false
+    hostpath:
+      enabled: false
+    rawfile:
+      enabled: false
+  replicated:
+    mayastor:
+      enabled: false
+loki:
+  enabled: false
+alloy:
+  enabled: false
+# hook pre-upgrade (PreSync ArgoCD à chaque sync) : utile surtout à Mayastor
+preUpgradeHook:
+  enabled: false
+
+lvm-localpv:
+  analytics:
+    enabled: false

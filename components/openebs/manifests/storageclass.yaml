@@ -1,0 +1,18 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-lvm
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+    # après vg-bootstrap (Healthy = VG créé sur tous les nœuds)
+    argocd.argoproj.io/sync-wave: "1"
+provisioner: local.csi.openebs.io
+parameters:
+  storage: lvm
+  volgroup: openebs-vg
+  fsType: ext4
+# thick : chaque volume réserve sa taille, pas de pool thin qui sature
+# Retain : supprimer un PVC garde le volume LVM (doc/stockage.md)
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true

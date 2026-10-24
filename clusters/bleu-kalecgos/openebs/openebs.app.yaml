@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openebs-kalecgos
+  namespace: argocd
+  labels:
+    layer: infra
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+    namespace: openebs
+  sources:
+    - repoURL: https://openebs.github.io/openebs
+      chart: openebs
+      targetRevision: 4.6.2
+      helm:
+        releaseName: openebs
+        valueFiles:
+          - $values/components/openebs/values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: components/openebs/manifests
+  syncPolicy:
+    # pas de prune : supprimer la CRD LVMVolume supprime les volumes LVM, Retain ou pas
+    automated:
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

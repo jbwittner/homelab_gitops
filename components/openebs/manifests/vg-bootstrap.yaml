@@ -1,0 +1,45 @@
+# Crée le VG openebs-vg sur la partition brute r-lvmpv (RawVolumeConfig Talos), sur chaque nœud,
+# y compris un nœud ajouté plus tard. Ne fait rien si le VG existe ; pvcreate refuse un disque
+# qui porte déjà une signature.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vg-bootstrap
+  namespace: openebs
+spec:
+  selector:
+    matchLabels:
+      app: vg-bootstrap
+  template:
+    metadata:
+      labels:
+        app: vg-bootstrap
+    spec:
+      initContainers:
+        - name: vgcreate
+          # image du driver : embarque lvm2 (Talos n'en a pas)
+          image: docker.io/openebs/lvm-driver:1.10.1
+          command: [sh, -ec]
+          args:
+            - |
+              DEV=/dev/disk/by-partlabel/r-lvmpv
+              if vgs openebs-vg >/dev/null 2>&1; then echo "openebs-vg présent"; exit 0; fi
+              pvs "$DEV" >/dev/null 2>&1 || pvcreate "$DEV"
+              vgcreate openebs-vg "$DEV"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory

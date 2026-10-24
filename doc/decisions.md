@@ -8,6 +8,9 @@
 | SealedSecrets pour le boot seulement | ArgoCD doit lire Git avant qu'OpenBao existe | tout en SealedSecrets ; tout en OpenBao |
 | OpenBao + External Secrets pour le reste | un seul coffre, secrets hors Git | SealedSecrets partout |
 | OpenEBS LocalPV LVM sur les deux clusters | même stockage partout, quotas et snapshots | Mayastor (hugepages, CPU dédiés) ; hostpath (sans quota) |
+| OpenEBS en chart parapluie `openebs`, LVM seul | chemin d'install upstream ; un autre moteur = un `enabled: true` | chart `lvm-localpv` seul (même rendu) |
+| VG `openebs-vg` créé par un DaemonSet (`vg-bootstrap`) | dans Git, idempotent, couvre un nœud ajouté ou réinstallé | `kubectl debug node` + `vgcreate` à la main |
+| StorageClass thick + `Retain` | thin : pool créé à la taille du 1er volume, jamais étendu (pas de `dmeventd` sur Talos) ; Retain : un PVC supprimé par erreur se récupère | thin ; `Delete` |
 | Pas de réplication du stockage | simplicité ; malygos n'a qu'un nœud | Mayastor ×3 sur kalecgos |
 | Gateway API de Cilium | déjà activé, pas de contrôleur en plus | Envoy Gateway, Traefik |
 | Prometheus agent sur kalecgos → malygos | une seule base de métriques, un seul Grafana | kube-prometheus-stack complet sur chaque cluster |
