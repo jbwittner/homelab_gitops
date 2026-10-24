@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: kalecgos-cilium
+  name: cilium-kalecgos
   namespace: argocd
 spec:
   project: default

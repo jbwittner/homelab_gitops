@@ -1,6 +1,6 @@
 # 4. ArgoCD (malygos)
 
-Kustomize sur `install.yaml` taguée. Ensuite ArgoCD se gère lui-même (`malygos-argocd`) et une app-of-apps par cluster (`malygos-apps`, `kalecgos-apps`) charge les `*.app.yaml` de son dossier.
+Kustomize sur `install.yaml` taguée. Ensuite ArgoCD se gère lui-même (`argocd-malygos`) et une app-of-apps par cluster (`apps-malygos`, `apps-kalecgos`) charge les `*.app.yaml` de son dossier.
 
 | Fichier (`clusters/bleu-malygos/` sauf mention) | Rôle |
 |---|---|
@@ -59,12 +59,12 @@ kubectl --context admin@bleu-malygos apply \
   -f clusters/bleu-malygos/apps.app.yaml -f clusters/bleu-kalecgos/apps.app.yaml
 ```
 
-Les Applications `kalecgos-*` restent en erreur (`cluster bleu-kalecgos not found`) jusqu'à l'étape 5.
+Les Applications `*-kalecgos` restent en erreur (`cluster bleu-kalecgos not found`) jusqu'à l'étape 5.
 
 ## Vérifier
 
 ```sh
-kubectl --context admin@bleu-malygos -n argocd get applications    # malygos-* Synced / Healthy
+kubectl --context admin@bleu-malygos -n argocd get applications    # *-malygos Synced / Healthy
 ```
 
 Interface (en attendant la Gateway) :

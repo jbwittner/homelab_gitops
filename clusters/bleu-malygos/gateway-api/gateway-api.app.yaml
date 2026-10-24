@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: malygos-gateway-api
+  name: gateway-api-malygos
   namespace: argocd
 spec:
   project: default

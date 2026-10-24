@@ -57,5 +57,5 @@ Le commun ne contient que ce qui vaut pour **tous** les clusters qui l'utilisent
 
 ## Nommage
 
-- Application : `<cluster-court>-<comp>` → `malygos-openbao`, `kalecgos-cert-manager`.
+- Application : `<comp>-<cluster-court>` → `openbao-malygos`, `cert-manager-kalecgos`.
 - Fichiers suivis par Renovate : `*.app.yaml`, dossiers `manifests/`.
