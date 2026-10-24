@@ -48,7 +48,17 @@ Un dossier par composant et par cluster. Pas de sous-niveau.
 # clusters/<nom>/<comp>/manifests/kustomization.yaml
 resources:
   - ../../../../components/<comp>/manifests
-patches: []
+patches:
+  - target:            # toujours explicite
+      kind: Deployment
+      name: <nom>
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: <nom>
+      spec:
+        replicas: 2
 ```
 
 ## Règle

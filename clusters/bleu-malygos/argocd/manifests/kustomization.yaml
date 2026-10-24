@@ -8,7 +8,10 @@ resources:
   - admin-password.sealed.yaml
 patches:
   # sealed-secrets ne complète un Secret existant que s'il porte cette annotation (admin-password.sealed.yaml)
-  - patch: |
+  - target:
+      kind: Secret
+      name: argocd-secret
+    patch: |
       apiVersion: v1
       kind: Secret
       metadata:
