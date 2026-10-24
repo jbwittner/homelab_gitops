@@ -24,8 +24,9 @@ Pas de nouveau SealedSecret hors boot.
 - Accès :
   - malygos → service interne ;
   - kalecgos → `https://bao.lan.wittner.tech`.
-- Unseal **manuel** (Shamir) après chaque redémarrage de malygos.
+- Unseal **manuel** (Shamir, 1 part) après chaque redémarrage de malygos.
 - Sauvegarde : snapshot raft, à la main.
+- Procédures : [openbao.md](openbao.md).
 
 ## Ne jamais committer
 

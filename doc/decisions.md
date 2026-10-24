@@ -24,5 +24,6 @@
 | Label `layer: boot\|infra\|apps` sur les Applications | filtre « Labels » de l'UI : le socle d'un coup d'œil ; le cluster vient déjà du filtre « Clusters » | labels `cluster`, `component` ; tags Git en `targetRevision` |
 | Mot de passe admin ArgoCD en SealedSecret `patch` sur `argocd-secret` | déclaratif, survit à une réinstallation ; `patch` garde les clés écrites par ArgoCD | changement manuel (perdu à la réinstallation) ; ESO `Merge` (attend OpenBao) |
 | Compte `argocd-manager` de kalecgos versionné (`cluster-admin`, jeton longue durée), repris par ArgoCD | même compte que `argocd cluster add`, mais déclaratif ; jeton régénérable en supprimant son Secret | `argocd cluster add` (impératif, hors Git) |
-| Unseal OpenBao manuel | pas de KMS ; homelab | auto-unseal |
+| OpenBao en raft à 1 réplica, sans PDB | snapshots raft ; le PDB du chart (`maxUnavailable: 0`) bloquerait le drain de malygos | mode standalone (pebbledb, sans snapshot raft) |
+| Unseal OpenBao manuel, Shamir 1 part / seuil 1 | pas de KMS ; un seul opérateur, un seul gestionnaire de mots de passe : plus de parts n'ajoutent rien | auto-unseal ; 5 parts / seuil 3 |
 | Rotation de clé sealed-secrets désactivée | une seule sauvegarde reste valable ; secrets de boot seulement | rotation 30 j + sauvegarde à chaque rotation |

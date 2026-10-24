@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openbao-malygos
+  namespace: argocd
+  labels:
+    layer: infra
+spec:
+  project: default
+  destination:
+    name: bleu-malygos
+    namespace: openbao
+  sources:
+    - repoURL: https://openbao.github.io/openbao-helm
+      chart: openbao
+      targetRevision: 0.30.4
+      helm:
+        releaseName: openbao
+        # Pod de test Helm : déjà ignoré par ArgoCD, explicite ici
+        skipTests: true
+        valueFiles:
+          - $values/clusters/bleu-malygos/openbao/values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=true
