@@ -27,7 +27,7 @@ C=bleu-kalecgos CTX=admin@bleu-kalecgos
 | PVC de 15 Gi | 15 Gi réservés tout de suite (thick) dans le VG d'**un** nœud |
 | Quel nœud | choisi au premier démarrage du pod (`WaitForFirstConsumer`), parmi ceux qui ont la place |
 | Ensuite | volume et pod liés à ce nœud ; nœud arrêté = pod `Pending` jusqu'à son retour |
-| Agrandir | monter `storage` dans la demande (commit) : `lvextend` + `resize2fs` à chaud, sans redémarrer le pod |
+| Agrandir | monter `storage` dans la demande (commit) : `lvextend` + `resize2fs` à chaud, sans redémarrer le pod ; système de fichiers à jour en 1-2 min (`FileSystemResizePending` entre-temps) |
 | Limite d'agrandissement | place libre du VG **de ce nœud** ; pas de déplacement vers un autre nœud |
 | Réduire | impossible (Kubernetes refuse) : nouveau PVC + copie |
 | StatefulSet | `volumeClaimTemplates` non modifiable : agrandir chaque PVC, puis aligner la valeur dans Git |
@@ -76,7 +76,7 @@ Le PV passe `Released`, le volume LVM reste.
 | Libérer la place | `kubectl --context $CTX -n openebs delete lvmvolume $PV` puis `kubectl --context $CTX delete pv $PV` |
 | Réutiliser les données | `kubectl --context $CTX patch pv $PV --type json -p '[{"op":"remove","path":"/spec/claimRef"}]'`, puis un PVC avec `volumeName: $PV` |
 
-Supprimer seulement le PV ne libère rien : c'est la suppression du `LVMVolume` qui efface le volume LVM.
+Supprimer seulement le PV ne libère rien : c'est la suppression du `LVMVolume` qui efface le volume LVM. `FREE` de `lvmnodes` se met à jour en 1 min environ.
 
 ## Vider un VG (disque réutilisé, ancien VG)
 
