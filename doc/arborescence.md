@@ -7,14 +7,14 @@ components/
     manifests/                   # base kustomize commune
 clusters/
   bleu-malygos/
-    cluster.yaml                 # déclaration du cluster dans ArgoCD
-    argocd/                      # contient aussi root.app.yaml (app-of-apps)
+    apps.app.yaml                # app-of-apps du cluster (*.app.yaml du dossier)
+    argocd/                      # manifests/ : install, secrets de cluster, accès GitHub
     cert-manager/
       cert-manager.app.yaml      # Application ArgoCD
       values.yaml                # surcharge (si besoin)
       manifests/                 # overlay (si besoin)
   bleu-kalecgos/
-    cluster.sealed.yaml
+    apps.app.yaml
     cert-manager/
     <app>/
 doc/

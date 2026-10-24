@@ -9,6 +9,14 @@
 
 Pas de nouveau SealedSecret hors boot.
 
+## Fichiers d'un SealedSecret
+
+| Fichier | Contenu | Commité |
+|---|---|---|
+| `x.secret.example.yaml` | modèle, valeurs factices, `stringData` | oui |
+| `x.secret.yaml` | copie remplie, en clair | non (ignoré) |
+| `x.sealed.yaml` | sortie de `kubeseal` | oui |
+
 ## OpenBao
 
 - Sur malygos, 1 réplica, stockage raft.
@@ -21,6 +29,6 @@ Pas de nouveau SealedSecret hors boot.
 
 ## Ne jamais committer
 
-`*.secret.yaml` · `pub-cert.pem` · `*sealed-secrets-key*.yaml` · `*-backup.yaml` · `argocd-deploy-key*` · `.env`
+`*.secret.yaml` · `*.pem` · `*sealed-secrets-key*.yaml` · `*-backup.yaml` · `.env`
 
 Clés d'unseal, token root et clé du controller sealed-secrets : hors dépôt.

@@ -36,12 +36,13 @@ kubectl --context admin@bleu-malygos -n kube-system rollout restart deploy/seale
 
 ## Sceller un secret
 
+Copier `x.secret.example.yaml` en `x.secret.yaml`, remplir les valeurs (`stringData`), puis :
+
 ```sh
-kubeseal --context admin@bleu-malygos --fetch-cert > pub-cert.pem
-kubeseal --cert pub-cert.pem -o yaml < x.secret.yaml > x.sealed.yaml
+kubeseal --context admin@bleu-malygos -o yaml < x.secret.yaml > x.sealed.yaml
 ```
 
-`x.secret.yaml` et `pub-cert.pem` ne sont jamais commités.
+`x.secret.yaml` n'est jamais commité (`.gitignore`).
 
 ## Vérifier
 

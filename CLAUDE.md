@@ -46,8 +46,9 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
 - Deux clusters (et des contextes GKE du travail dans le kubeconfig) : passer `--context` explicitement, même en lecture.
 - Secrets :
   - **SealedSecrets** : boot seulement, sur malygos (GitHub App ArgoCD, secret de cluster kalecgos). Rien d'autre.
+    Trois fichiers côte à côte : `x.secret.example.yaml` (modèle commité, valeurs factices), `x.secret.yaml` (clair, ignoré), `x.sealed.yaml` (commité). Secrets écrits en `stringData`.
   - **OpenBao + External Secrets** : tout le reste.
-  - Ne jamais committer ce que `.gitignore` exclut : `*.secret.yaml`, `pub-cert.pem`, `*sealed-secrets-key*.yaml`, `*-backup.yaml`, `argocd-deploy-key*`, `.env`.
+  - Ne jamais committer ce que `.gitignore` exclut : `*.secret.yaml`, `*.pem`, `*sealed-secrets-key*.yaml`, `*-backup.yaml`, `.env`.
 - Exposition : Gateway API de Cilium. Tout hostname `*.lan.wittner.tech` doit aussi être déclaré sur le proxy LAN 192.168.1.50 (hors dépôt).
 
 ## Conventions imposées par `renovate.json`

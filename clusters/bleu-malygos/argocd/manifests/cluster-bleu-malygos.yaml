@@ -1,0 +1,12 @@
+# Cluster local sous son nom (remplace « in-cluster »). Rien de sensible : ArgoCD utilise son propre SA.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-bleu-malygos
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+    role: infra
+stringData:
+  name: bleu-malygos
+  server: https://kubernetes.default.svc
+  config: '{"tlsClientConfig":{"insecure":false}}'
