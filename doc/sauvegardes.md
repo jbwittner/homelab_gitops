@@ -32,6 +32,19 @@ C=bleu-malygos  CTX=admin@bleu-malygos
 C=bleu-kalecgos CTX=admin@bleu-kalecgos
 ```
 
+## CLI : `script/velero.sh`
+
+kubectl + binaire `velero` du pod serveur, rien à installer. `cluster` : `malygos` | `kalecgos`.
+
+| Commande | Effet |
+|---|---|
+| `script/velero.sh` / `status [cluster]` | stockage, node-agent, schedules (les deux clusters par défaut) |
+| `list [cluster]` | sauvegardes : schedule, phase, erreurs, début, expiration |
+| `run <cluster> <schedule>` | sauvegarde immédiate depuis un schedule |
+| `describe <cluster> <backup>` | détail (sans `--details`) |
+| `logs <cluster> <backup>` | lignes du serveur Velero pour cette sauvegarde (vie du pod seulement) |
+| `delete <cluster> <backup>` | supprime sauvegarde et données, après confirmation `oui` |
+
 ## Vérifier
 
 ```sh
