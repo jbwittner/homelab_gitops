@@ -26,6 +26,14 @@ script/                   # scripts .sh, jamais à côté d'un composant
 - Nom d'Application : `<cluster-court>-<comp>` (`malygos-openbao`, `kalecgos-cert-manager`).
 - Le commun ne contient que ce qui vaut pour **tous** les clusters qui l'utilisent. Voir `doc/arborescence.md`.
 
+## Docs (`doc/`)
+
+- Courtes : tableaux, listes, blocs de commandes ; peu de prose.
+- Toute commande s'exécute **depuis la racine du dépôt** (chemins relatifs `components/…`, `clusters/…`).
+- Contexte kubectl/helm toujours explicite :
+  - commande à jouer sur **les deux clusters** : variables `C`/`CTX` posées en tête de page, puis `--context $CTX`, `clusters/$C/…` ;
+  - commande pour **un seul cluster** : valeurs en dur dans la commande (`--context admin@bleu-malygos`, `clusters/bleu-malygos/…`), pas de variable.
+
 ## `archive/` : à ignorer
 
 Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référence. Renovate l'exclut déjà (`ignorePaths`).
@@ -46,7 +54,7 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
 - Manifestes Kubernetes bruts : sous un dossier `manifests/`.
 - Upstream dans un `kustomization.yaml` : URL taguée, `https://raw.githubusercontent.com/<org>/<repo>/refs/tags/<tag>/…` ou `https://github.com/<org>/<repo>/releases/download/<tag>/…`.
 - Version de chart Helm et tags d'image en dur, jamais dans un `.env`.
-- Une release doit avoir 7 jours ; automerge des pin/patch/minor ; Argo CD (`argoproj/argo-cd`) en merge manuel.
+- Une release doit avoir 7 jours ; automerge des pin/patch/minor ; merge manuel pour Argo CD (`argoproj/argo-cd`) et les CRDs Gateway API (`kubernetes-sigs/gateway-api`, couplées à la version de Cilium).
 
 Les `description` de `renovate.json` citent encore `k8s/` et `docker/` : périmées.
 

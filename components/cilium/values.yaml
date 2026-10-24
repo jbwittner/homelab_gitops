@@ -28,7 +28,7 @@ ipam:
   mode: kubernetes
 kubeProxyReplacement: true
 
-# LB-IPAM + annonces L2 (pool et policy dans clusters/<nom>/cilium/manifests)
+# LB-IPAM + annonces L2 (pool et policy : clusters/<nom>/cilium/manifests)
 l2announcements:
   enabled: true
   leaseDuration: 3s
@@ -38,6 +38,8 @@ k8sClientRateLimit:
   qps: 10
   burst: 20
 
+# Contrôleur Gateway API. Le chart crée la GatewayClass `cilium` si les CRDs (composant
+# gateway-api) existent au rendu : les poser avant Cilium.
 gatewayAPI:
   enabled: true
 

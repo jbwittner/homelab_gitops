@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: malygos-gateway-api
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    name: bleu-malygos
+  source:
+    repoURL: https://forgejo.wittner.tech/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: components/gateway-api/manifests
+  syncPolicy:
+    # pas de prune : supprimer une CRD supprime toutes ses ressources
+    automated:
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

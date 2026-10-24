@@ -45,6 +45,11 @@
       "description": "Argo CD est self-managed : merge manuel obligatoire, quel que soit le type d'update",
       "matchPackageNames": ["argoproj/argo-cd"],
       "automerge": false
+    },
+    {
+      "description": "CRDs Gateway API : la version doit être supportée par la mineure Cilium en place (doc Cilium, page Gateway API) : merge manuel",
+      "matchPackageNames": ["kubernetes-sigs/gateway-api"],
+      "automerge": false
     }
   ]
 }

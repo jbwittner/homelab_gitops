@@ -1,3 +1,0 @@
-resources:
-  - ../../../../components/cilium/manifests
-  - lb.yaml

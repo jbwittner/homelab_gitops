@@ -24,7 +24,7 @@ spec:
       targetRevision: main
       path: clusters/bleu-kalecgos/cilium/manifests
   syncPolicy:
-    # pas de prune : CNI et CRDs Gateway API, une suppression couperait le cluster
+    # pas de prune : une suppression dans le CNI couperait le cluster
     automated:
       selfHeal: true
     syncOptions:
