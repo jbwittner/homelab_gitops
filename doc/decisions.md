@@ -13,5 +13,6 @@
 | Prometheus agent sur kalecgos → malygos | une seule base de métriques, un seul Grafana | kube-prometheus-stack complet sur chaque cluster |
 | ArgoCD en kustomize sur URL taguée (exception à « Helm en priorité ») | plus simple à surcharger : patches sur les manifestes officiels ; une version suivie par Renovate | chart Helm `argo/argo-cd` |
 | sealed-secrets en chart Helm + values | même schéma que Cilium ; un réglage (`keyrenewperiod`) sans patch | kustomize sur URL + patch JSON |
+| Namespace = celui de la doc upstream (Cilium, sealed-secrets : `kube-system` ; OpenEBS : `openebs`…) | CLI et procédures upstream sans `-n` ; `kube-system` exempté de PSA par Talos | un namespace dédié partout |
 | Unseal OpenBao manuel | pas de KMS ; homelab | auto-unseal |
 | Rotation de clé sealed-secrets désactivée | une seule sauvegarde reste valable ; 2 secrets seulement | rotation 30 j + sauvegarde à chaque rotation |
