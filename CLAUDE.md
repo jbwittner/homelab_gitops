@@ -23,6 +23,7 @@ script/                   # scripts .sh, jamais à côté d'un composant
 ```
 
 - Un seul niveau sous `clusters/<nom>/`. Pas d'ApplicationSet.
+- Installer un composant : **chart Helm en priorité** (Application chart + `$values`). Kustomize sur URL taguée seulement s'il n'existe pas de chart (CRDs Gateway API) ou par exception décidée (ArgoCD : plus simple à surcharger).
 - Nom d'Application : `<cluster-court>-<comp>` (`malygos-openbao`, `kalecgos-cert-manager`).
 - Le commun ne contient que ce qui vaut pour **tous** les clusters qui l'utilisent. Voir `doc/arborescence.md`.
 
