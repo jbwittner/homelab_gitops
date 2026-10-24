@@ -45,6 +45,8 @@ Structure en Terraform : `homelab_terraform/openbao/bleu-malygos` (README du mod
 
 ## Sauvegarder (snapshot raft)
 
+Automatique chaque nuit par Velero ([sauvegardes.md](sauvegardes.md)). À la main :
+
 ```sh
 kubectl --context admin@bleu-malygos -n openbao exec -it openbao-0 -- \
   sh -c 'bao login -method=userpass username=jbwittner && bao operator raft snapshot save /tmp/openbao.snap'

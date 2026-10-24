@@ -1,0 +1,4 @@
+resources:
+  - ../../../../components/velero/manifests
+  - gcp-credentials.yaml
+  - schedule-openbao.yaml

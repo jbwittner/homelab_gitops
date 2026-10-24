@@ -1,0 +1,6 @@
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: gcp
+      bucket: homelab-velero-bleu-malygos-050ff71f
+      default: true

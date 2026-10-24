@@ -20,6 +20,7 @@ Talos 1.13, Kubernetes 1.36, Cilium 1.20 (kube-proxy replacement, L2 announcemen
 | OpenEBS LocalPV LVM (VG `openebs-vg`, [stockage](stockage.md)) | ✓ | ✓ |
 | cert-manager (wildcard `*.lan.wittner.tech`) | ✓ | ✓ |
 | External Secrets | ✓ | ✓ |
+| Velero ([sauvegardes](sauvegardes.md)) | ✓ | ✓ |
 | Sealed Secrets (boot) | ✓ | |
 | ArgoCD | ✓ | |
 | OpenBao | ✓ | |

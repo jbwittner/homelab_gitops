@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero-kalecgos
+  namespace: argocd
+  labels:
+    layer: infra
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+    namespace: velero
+  sources:
+    - repoURL: https://vmware-tanzu.github.io/helm-charts
+      chart: velero
+      targetRevision: 12.2.1
+      helm:
+        releaseName: velero
+        valueFiles:
+          - $values/components/velero/values.yaml
+          - $values/clusters/bleu-kalecgos/velero/values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: clusters/bleu-kalecgos/velero/manifests
+  syncPolicy:
+    # pas de prune : supprimer une CRD supprime les Backups et Schedules
+    automated:
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
