@@ -29,7 +29,7 @@ Pas de nouveau SealedSecret hors boot.
   - malygos → service interne ;
   - kalecgos → `https://openbao.lan.wittner.tech`.
 - Unseal **manuel** (Shamir, 1 part) après chaque redémarrage de malygos.
-- Sauvegarde : snapshot raft, à la main.
+- Sauvegarde : snapshot raft quotidien par Velero ([sauvegardes](sauvegardes.md)).
 - Procédures : [openbao.md](openbao.md).
 
 ## External Secrets
@@ -37,7 +37,7 @@ Pas de nouveau SealedSecret hors boot.
 | Cluster | `ClusterSecretStore` `openbao` | Auth |
 |---|---|---|
 | malygos | `http://openbao-active.openbao.svc:8200` | `auth/k8s-bleu-malygos`, rôle `eso` |
-| kalecgos | `https://openbao.lan.wittner.tech` (après cert-manager + Gateway) | `auth/k8s-bleu-kalecgos`, rôle `eso` ; compte d'ESO lié à `system:auth-delegator` |
+| kalecgos | `https://openbao.lan.wittner.tech` (Gateway de malygos) | `auth/k8s-bleu-kalecgos`, rôle `eso` ; compte d'ESO lié à `system:auth-delegator` |
 
 Lire un secret `secret/<comp>/<nom>` :
 
