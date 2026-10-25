@@ -1,0 +1,21 @@
+# Gateway partagé : TLS terminé ici, routes HTTPRoute depuis tous les namespaces.
+# IP fixe par cluster (overlay) : cible du proxy LAN 192.168.1.50.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: lan
+  namespace: gateway
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: "*.lan.wittner.tech"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: lan-wittner-tech-tls
+      allowedRoutes:
+        namespaces:
+          from: All

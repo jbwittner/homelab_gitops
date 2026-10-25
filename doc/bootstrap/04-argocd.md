@@ -69,13 +69,15 @@ Les Applications `*-kalecgos` restent en erreur (`there are no clusters with thi
 kubectl --context admin@bleu-malygos -n argocd get applications    # *-malygos Synced / Healthy
 ```
 
-Interface (en attendant la Gateway) :
+Interface : `https://argocd.lan.wittner.tech` ([exposition](../exposition.md)), utilisateur `admin`. CLI : `argocd login argocd.lan.wittner.tech --grpc-web`.
+
+Avant la Gateway (premier boot) :
 
 ```sh
-kubectl --context admin@bleu-malygos -n argocd port-forward svc/argocd-server 8080:443
+kubectl --context admin@bleu-malygos -n argocd port-forward svc/argocd-server 8080:80
 ```
 
-`https://localhost:8080`, utilisateur `admin`.
+`http://localhost:8080` (`server.insecure` : TLS terminé au Gateway).
 
 ## Mot de passe admin
 

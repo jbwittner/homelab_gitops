@@ -31,13 +31,7 @@ kubectl --context admin@bleu-malygos -n openbao exec openbao-0 -- bao status   #
 kubectl --context admin@bleu-malygos -n argocd get application openbao-malygos  # Synced / Healthy
 ```
 
-UI (en attendant la Gateway) :
-
-```sh
-kubectl --context admin@bleu-malygos -n openbao port-forward svc/openbao-ui 8200:8200
-```
-
-`http://localhost:8200`, méthode Token.
+UI : `https://bao.lan.wittner.tech` ([exposition](exposition.md)), méthode Username. CLI : `export BAO_ADDR=https://bao.lan.wittner.tech`.
 
 ## Configurer
 

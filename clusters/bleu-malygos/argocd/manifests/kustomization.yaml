@@ -7,7 +7,19 @@ resources:
   - github-app.sealed.yaml
   - admin-password.sealed.yaml
   - cluster-bleu-kalecgos.sealed.yaml
+  - httproute.yaml
 patches:
+  # TLS terminé au Gateway (httproute.yaml) ; lu au démarrage : redémarrer argocd-server après changement
+  - target:
+      kind: ConfigMap
+      name: argocd-cmd-params-cm
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-cmd-params-cm
+      data:
+        server.insecure: "true"
   # sealed-secrets ne complète un Secret existant que s'il porte cette annotation (admin-password.sealed.yaml)
   - target:
       kind: Secret

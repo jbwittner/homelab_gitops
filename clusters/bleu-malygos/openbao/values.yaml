@@ -15,3 +15,12 @@ server:
     # rendu en maxUnavailable: 0 avec 1 réplica : bloquerait le drain du nœud (talosctl upgrade)
     disruptionBudget:
       enabled: false
+  # TLS terminé au Gateway (auth Kubernetes et userpass seulement, pas d'auth par certificat)
+  gateway:
+    httpRoute:
+      enabled: true
+      hosts:
+        - bao.lan.wittner.tech
+      parentRefs:
+        - name: lan
+          namespace: gateway
