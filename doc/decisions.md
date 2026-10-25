@@ -31,3 +31,5 @@
 | Volumes sauvegardés par copie de fichiers (Kopia), OpenBao via hook `raft snapshot` | lvm-localpv ne restaure pas un snapshot thick (pas de data mover CSI) ; copie à chaud de raft non fiable | snapshots CSI ; copie brute d'OpenBao |
 | Unseal OpenBao manuel, Shamir 1 part / seuil 1 | pas de KMS ; un seul opérateur, un seul gestionnaire de mots de passe : plus de parts n'ajoutent rien | auto-unseal ; 5 parts / seuil 3 |
 | Rotation de clé sealed-secrets désactivée | une seule sauvegarde reste valable ; secrets de boot seulement | rotation 30 j + sauvegarde à chaque rotation |
+| TLS terminé au Gateway (wildcard `*.lan.wittner.tech`), services en HTTP derrière | un certificat par cluster ; ArgoCD et OpenBao sans TLS à gérer | TLS de bout en bout (`TLSRoute`, `BackendTLSPolicy`) |
+| Diff ArgoCD côté serveur (`controller.diff.server.side`) | valeurs par défaut de l'API (HTTPRoute…) pas vues comme un écart ; va avec ServerSideApply | annotation par Application ; `ignoreDifferences` |
