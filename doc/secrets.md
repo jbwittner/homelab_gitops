@@ -32,6 +32,35 @@ Pas de nouveau SealedSecret hors boot.
 - Sauvegarde : snapshot raft, à la main.
 - Procédures : [openbao.md](openbao.md).
 
+## External Secrets
+
+| Cluster | `ClusterSecretStore` `openbao` | Auth |
+|---|---|---|
+| malygos | `http://openbao-active.openbao.svc:8200` | `auth/k8s-bleu-malygos`, rôle `eso` |
+| kalecgos | `https://bao.lan.wittner.tech` (après cert-manager + Gateway) | `auth/k8s-bleu-kalecgos`, rôle `eso` ; compte d'ESO lié à `system:auth-delegator` |
+
+Lire un secret `secret/<comp>/<nom>` :
+
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: <nom>
+  namespace: <ns>
+spec:
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  refreshInterval: 1h
+  target:
+    name: <nom>          # Secret Kubernetes créé par ESO
+  data:
+    - secretKey: <clé dans le Secret>
+      remoteRef:
+        key: <comp>/<nom>  # sans secret/ ni data/
+        property: <champ du secret OpenBao>
+```
+
 ## Ne jamais committer
 
 `*.secret.yaml` · `*.pem` · `*sealed-secrets-key*.yaml` · `*-backup.yaml` · `.env`

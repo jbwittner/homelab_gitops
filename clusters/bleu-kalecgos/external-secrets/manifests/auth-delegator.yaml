@@ -1,0 +1,15 @@
+# OpenBao (malygos) ne stocke aucun jeton de kalecgos : il fait valider le
+# jeton présenté par ESO auprès de l'API de kalecgos (TokenReview), avec ce
+# même jeton. Le compte d'ESO doit donc pouvoir créer des TokenReviews.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: external-secrets-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets
+    namespace: external-secrets
