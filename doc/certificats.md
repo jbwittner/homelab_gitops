@@ -5,7 +5,7 @@
 | `components/cert-manager/values.yaml` | CRDs par le chart (gardées à la désinstallation) ; DNS-01 vérifié sur 1.1.1.1 |
 | `components/cert-manager/manifests/cloudflare-token.yaml` | `ExternalSecret` : jeton Cloudflare depuis `secret/cert-manager/cloudflare` |
 | `components/cert-manager/manifests/clusterissuer-*.yaml` | `letsencrypt-staging`, `letsencrypt-prod` : ACME DNS-01 Cloudflare, zone `wittner.tech` |
-| `clusters/bleu-malygos/cert-manager/cert-manager.app.yaml` | `cert-manager-malygos` |
+| `clusters/<nom>/cert-manager/cert-manager.app.yaml` | `cert-manager-<cluster-court>` |
 
 ## Jeton Cloudflare (une fois)
 
