@@ -12,6 +12,7 @@
 | VG `openebs-vg` créé par un DaemonSet (`vg-bootstrap`) | dans Git, idempotent, couvre un nœud ajouté ou réinstallé | `kubectl debug node` + `vgcreate` à la main |
 | StorageClass thick + `Retain` | thin : pool créé à la taille du 1er volume, jamais étendu (pas de `dmeventd` sur Talos) ; Retain : un PVC supprimé par erreur se récupère | thin ; `Delete` |
 | Pas de réplication du stockage | simplicité ; malygos n'a qu'un nœud | Mayastor ×3 sur kalecgos |
+| cert-manager + DNS-01 sur les deux clusters, jeton DNS lu dans OpenBao par ESO | clusters symétriques ; kalecgos renouvelle même malygos en panne (jeton déjà copié) ; le proxy LAN fait suivre le TLS, chaque cluster sert son certificat | wildcard émis sur malygos et recopié via OpenBao (`PushSecret`) |
 | Gateway API de Cilium | déjà activé, pas de contrôleur en plus | Envoy Gateway, Traefik |
 | Prometheus agent sur kalecgos → malygos | une seule base de métriques, un seul Grafana | kube-prometheus-stack complet sur chaque cluster |
 | ArgoCD en kustomize sur URL taguée (exception à « Helm en priorité ») | plus simple à surcharger : patches sur les manifestes officiels ; une version suivie par Renovate | chart Helm `argo/argo-cd` |
