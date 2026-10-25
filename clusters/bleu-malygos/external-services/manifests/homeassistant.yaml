@@ -1,0 +1,39 @@
+# Home Assistant : 192.168.1.15 (malygos, source des requêtes du Gateway) dans http.trusted_proxies
+apiVersion: v1
+kind: Service
+metadata:
+  name: homeassistant
+spec:
+  ports:
+    - name: http
+      port: 80
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: homeassistant
+  labels:
+    kubernetes.io/service-name: homeassistant
+    endpointslice.kubernetes.io/managed-by: argocd
+addressType: IPv4
+ports:
+  - name: http
+    port: 8123
+endpoints:
+  - addresses:
+      - 192.168.1.51
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: homeassistant
+spec:
+  parentRefs:
+    - name: lan
+      namespace: gateway
+  hostnames:
+    - ha.lan.wittner.tech
+  rules:
+    - backendRefs:
+        - name: homeassistant
+          port: 80

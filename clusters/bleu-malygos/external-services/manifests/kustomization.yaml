@@ -1,0 +1,21 @@
+# Machines du LAN hors Kubernetes, servies par le Gateway : un fichier par service
+# (Service sans selector + EndpointSlice + HTTPRoute), voir doc/exposition.md
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: external-services
+resources:
+  - namespace.yaml
+  - adguard.yaml
+  - homepage.yaml
+  - homeassistant.yaml
+  - pve-ysera.yaml
+  - zigbee2mqtt.yaml
+  - zyxel.yaml
+configMapGenerator:
+  # CA de cluster Proxmox (certificat public) pour la BackendTLSPolicy de pve-ysera
+  - name: pve-root-ca
+    files:
+      - ca.crt=pve-root-ca.crt
+generatorOptions:
+  # nom fixe : la BackendTLSPolicy le référence, kustomize ne la réécrit pas
+  disableNameSuffixHash: true

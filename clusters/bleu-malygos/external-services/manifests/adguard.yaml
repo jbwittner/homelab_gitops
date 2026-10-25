@@ -1,0 +1,39 @@
+# AdGuard Home
+apiVersion: v1
+kind: Service
+metadata:
+  name: adguard
+spec:
+  ports:
+    - name: http
+      port: 80
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: adguard
+  labels:
+    kubernetes.io/service-name: adguard
+    endpointslice.kubernetes.io/managed-by: argocd
+addressType: IPv4
+ports:
+  - name: http
+    port: 80
+endpoints:
+  - addresses:
+      - 192.168.1.2
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: adguard
+spec:
+  parentRefs:
+    - name: lan
+      namespace: gateway
+  hostnames:
+    - adguard.lan.wittner.tech
+  rules:
+    - backendRefs:
+        - name: adguard
+          port: 80
