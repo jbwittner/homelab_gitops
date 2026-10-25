@@ -34,3 +34,73 @@ patches:
         name: argocd-secret
         annotations:
           sealedsecrets.bitnami.com/patch: "true"
+  # copie de resource.exclusions d'install.yaml (v3.5.5), un seul bloc modifié : la recopier à chaque montée d'ArgoCD
+  - target:
+      kind: ConfigMap
+      name: argocd-cm
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-cm
+      data:
+        resource.exclusions: |
+          ### Network resources created by the Kubernetes control plane and excluded to reduce the number of watched events and UI clutter
+          ### (modifié : EndpointSlice exclus sur kalecgos seulement ; malygos en déclare dans external-services)
+          - apiGroups:
+            - ''
+            kinds:
+            - Endpoints
+          - apiGroups:
+            - discovery.k8s.io
+            kinds:
+            - EndpointSlice
+            clusters:
+            - https://192.168.1.14:6443
+          ### Internal Kubernetes resources excluded reduce the number of watched events
+          - apiGroups:
+            - coordination.k8s.io
+            kinds:
+            - Lease
+          ### Internal Kubernetes Authz/Authn resources excluded reduce the number of watched events
+          - apiGroups:
+            - authentication.k8s.io
+            - authorization.k8s.io
+            kinds:
+            - SelfSubjectReview
+            - TokenReview
+            - LocalSubjectAccessReview
+            - SelfSubjectAccessReview
+            - SelfSubjectRulesReview
+            - SubjectAccessReview
+          ### Intermediate Certificate Request excluded reduce the number of watched events
+          - apiGroups:
+            - certificates.k8s.io
+            kinds:
+            - CertificateSigningRequest
+          - apiGroups:
+            - cert-manager.io
+            kinds:
+            - CertificateRequest
+          ### Cilium internal resources excluded reduce the number of watched events and UI Clutter
+          - apiGroups:
+            - cilium.io
+            kinds:
+            - CiliumIdentity
+            - CiliumEndpoint
+            - CiliumEndpointSlice
+          ### Kyverno intermediate and reporting resources excluded reduce the number of watched events and improve performance
+          - apiGroups:
+            - kyverno.io
+            - reports.kyverno.io
+            - wgpolicyk8s.io
+            kinds:
+            - PolicyReport
+            - ClusterPolicyReport
+            - EphemeralReport
+            - ClusterEphemeralReport
+            - AdmissionReport
+            - ClusterAdmissionReport
+            - BackgroundScanReport
+            - ClusterBackgroundScanReport
+            - UpdateRequest
