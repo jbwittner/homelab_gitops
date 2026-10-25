@@ -20,7 +20,7 @@ server:
     httpRoute:
       enabled: true
       hosts:
-        - bao.lan.wittner.tech
+        - openbao.lan.wittner.tech
       parentRefs:
         - name: lan
           namespace: gateway

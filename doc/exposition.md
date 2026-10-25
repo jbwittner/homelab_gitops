@@ -12,7 +12,7 @@ Navigateur → proxy LAN `192.168.1.50` (tous les `*.lan.wittner.tech` y résolv
 | Hostname | Cluster | Route |
 |---|---|---|
 | `argocd.lan.wittner.tech` | malygos | `clusters/bleu-malygos/argocd/manifests/httproute.yaml` → `argocd-server:80` |
-| `bao.lan.wittner.tech` | malygos | values du chart OpenBao (`server.gateway.httpRoute`) → `openbao-active:8200` |
+| `openbao.lan.wittner.tech` | malygos | values du chart OpenBao (`server.gateway.httpRoute`) → `openbao-active:8200` |
 
 ## Exposer un service
 

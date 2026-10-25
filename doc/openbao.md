@@ -5,7 +5,7 @@
 | `clusters/bleu-malygos/openbao/openbao.app.yaml` | `openbao-malygos`, namespace `openbao` |
 | `clusters/bleu-malygos/openbao/values.yaml` | raft 1 réplica, PVC 10 Gi `openebs-lvm`, UI, pas d'injector, pas de PDB |
 
-HTTP dans le cluster (`http://openbao.openbao:8200`). TLS au Gateway plus tard (`https://bao.lan.wittner.tech`).
+HTTP dans le cluster (`http://openbao.openbao:8200`). TLS au Gateway (`https://openbao.lan.wittner.tech`).
 
 Tant qu'OpenBao est scellé, `openbao-0` n'est pas prêt : `openbao-malygos` reste `Progressing`.
 
@@ -31,7 +31,7 @@ kubectl --context admin@bleu-malygos -n openbao exec openbao-0 -- bao status   #
 kubectl --context admin@bleu-malygos -n argocd get application openbao-malygos  # Synced / Healthy
 ```
 
-UI : `https://bao.lan.wittner.tech` ([exposition](exposition.md)), méthode Username. CLI : `export BAO_ADDR=https://bao.lan.wittner.tech`.
+UI : `https://openbao.lan.wittner.tech` ([exposition](exposition.md)), méthode Username. CLI : `export BAO_ADDR=https://openbao.lan.wittner.tech`.
 
 ## Configurer
 
