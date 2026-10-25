@@ -6,8 +6,8 @@ Navigateur → proxy LAN `192.168.1.50` (tous les `*.lan.wittner.tech` y résolv
 |---|---|
 | `components/gateway/manifests/gateway.yaml` | Gateway `gateway/lan` (classe `cilium`) : HTTPS 443, `*.lan.wittner.tech`, routes de tous les namespaces |
 | `components/gateway/manifests/certificate.yaml` | wildcard `*.lan.wittner.tech`, `letsencrypt-prod` ([certificats](certificats.md)) |
-| `clusters/bleu-malygos/gateway/manifests/kustomization.yaml` | IP fixe `192.168.1.80` |
-| `clusters/bleu-malygos/gateway/gateway.app.yaml` | `gateway-malygos` |
+| `clusters/<nom>/gateway/manifests/kustomization.yaml` | IP fixe : malygos `192.168.1.80`, kalecgos `192.168.1.85` |
+| `clusters/<nom>/gateway/gateway.app.yaml` | `gateway-<cluster-court>` |
 
 | Hostname | Cluster | Route |
 |---|---|---|
