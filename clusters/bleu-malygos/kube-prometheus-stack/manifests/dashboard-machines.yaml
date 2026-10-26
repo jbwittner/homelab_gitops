@@ -1,0 +1,3797 @@
+# Dashboard « Machines » : tous les nœuds (node-exporter) des deux clusters, variable cluster.
+# Chargé par le sidecar Grafana (label grafana_dashboard), rangé dans le dossier grafana_folder.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-machines
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: Wittnerlab
+data:
+  machines.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          },
+          {
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": false,
+            "iconColor": "purple",
+            "name": "ArgoCD deployments",
+            "target": {
+              "limit": 100,
+              "matchAny": false,
+              "tags": [
+                "argocd",
+                "deployed"
+              ],
+              "type": "tags"
+            }
+          }
+        ]
+      },
+      "description": "System view of every node running node-exporter, on both clusters (bleu-malygos, bleu-kalecgos). Essentials first; fine-grained analysis in the collapsed \"Diagnostic\" rows. Nodes, disks and sensors are discovered dynamically.",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 1
+          },
+          "id": 1,
+          "panels": [],
+          "title": "Overview",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Share of CPU time spent ANYWHERE but `idle`, averaged over all cores. `1 - avg(rate(idle))` rather than the sum of the other modes: same value, but it stays correct if a mode appears or disappears from one kernel version to the next.\n\n⚠️ THIS FIGURE ALONE MISLEADS: storage-bound workloads (databases, Git, image pulls) can be sluggish with a low CPU, a high `iowait` and a saturated disk. Read it next to \"Load (1 min)\" and \"Disk saturation\" further down — if the load goes above 1 while this square is green, the bottleneck is the disk, not the compute.\n\nNo alert is built on it, deliberately: a CPU spike is usually a build, a compaction or a reindexing, not an incident.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "unit": "percentunit",
+              "decimals": 0,
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.8
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.9
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 1,
+            "w": 6,
+            "h": 6
+          },
+          "id": 80,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\",mode=\"idle\"}[$__rate_interval]))",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "instant": false,
+              "refId": "A"
+            }
+          ],
+          "title": "CPU used",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "`1 - MemAvailable/MemTotal`. ⚠️ `MemAvailable` AND NOT `MemFree`: the latter ignores the reclaimable cache and would show 90% on a perfectly healthy machine — the classic misreading on Linux.\n\nThe red of this square is aligned on the threshold of the `ExternalNodeMemoryPressure` alert (less than 10% available for 20 min).\n\n⚠️ A brief trip to red when an application starts or reindexes is EXPECTED. Lasting, on the other hand, it ends in an OOM-kill — which will show as the service's own alert, without naming the cause.\n\nThe host carries 15 GiB for a handful of stacks: this square must stay very low. The detail — total, used, available, cache — is in the \"Memory\" panel.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "unit": "percentunit",
+              "decimals": 0,
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.8
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.9
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 6,
+            "y": 1,
+            "w": 6,
+            "h": 6
+          },
+          "id": 81,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "1 - (node_memory_MemAvailable_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} / node_memory_MemTotal_bytes{cluster=~\"$cluster\",instance=~\"$instance\"})",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "instant": false,
+              "refId": "A"
+            }
+          ],
+          "title": "RAM used",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "A DELIBERATELY SILENT tile: it shows a mount point only when one goes above 80% full. Otherwise it says \"all < 80%\" in green.\n\n⚠️ UNDERSTAND THE MECHANICS BEFORE CHANGING IT: the `> 0.80` is not formatting, it is a vector FILTER. Below the threshold the series does not exist — the tile is in the \"no data\" state, and what shows is the `noValue`. That is also why the first colour step is GREEN: it never colours a value (they are at least 0.80 by construction), it colours the absence.\n\n`topk(1, ...)` rather than `max(...)`: `max` would return a scalar with NO label, hence a percentage one could not attribute to anything. `topk` keeps the mount point, which the tile displays.\n\n⚠️ IT SHOWS ONLY ONE MOUNT AT A TIME. If two disks cross 80% together, the second is hidden. The \"Mounted filesystems\" panel further down shows them all — this one is a warning light, not an inventory.\n\nOrange at 80% is a HEADS-UP with no alert attached; red at 90% is the exact threshold of `ExternalNodeDiskAlmostFull` (severity critical). So a red square announces an alert that will fire within 30 min.\n\n`tmpfs` are dropped at scrape time: `/run/lock` is 5 MiB and would permanently top this ranking.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "unit": "percentunit",
+              "decimals": 0,
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.8
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.9
+                  }
+                ]
+              },
+              "noValue": "all < 80%"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 7,
+            "w": 5,
+            "h": 4
+          },
+          "id": 82,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "topk(1, (1 - (node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} / node_filesystem_size_bytes{cluster=~\"$cluster\",instance=~\"$instance\"})) > 0.80)",
+              "legendFormat": "{{instance}} · {{mountpoint}}",
+              "range": true,
+              "instant": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Disk in alert",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Hottest hwmon sensor of each machine (max across its sensors, not over time).\n· `{{instance}}`: last scraped value.\n· `{{instance}} · 5 min`: mean over a fixed 5-minute window, so a one-second spike does not read as a state.\nThe 70 °C / 85 °C colours are cosmetic: no alert rule behind them.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "unit": "celsius",
+              "decimals": 1,
+              "noValue": "no sensor",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 85
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 1,
+            "w": 12,
+            "h": 6
+          },
+          "id": 83,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance) ((node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\"} * on(instance,chip,sensor) group_left(label) node_hwmon_sensor_label{cluster=~\"$cluster\",instance=~\"$instance\"}) or on(instance,chip,sensor) node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\"})",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "instant": false,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "max by (instance) (avg_over_time(node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\"}[5m]))",
+              "legendFormat": "{{instance}} · 5 min",
+              "range": false,
+              "instant": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Hottest sensor",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "`up` of the machine's node-exporter. At 0, every panel freezes on its last value without a visible gap.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds",
+                "fixedColor": "text"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "KO",
+                      "color": "red",
+                      "index": 1
+                    },
+                    "1": {
+                      "text": "OK",
+                      "color": "green",
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 5,
+            "y": 7,
+            "w": 5,
+            "h": 4
+          },
+          "id": 84,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "up{job=\"node-exporter\",cluster=~\"$cluster\",instance=~\"$instance\"}",
+              "legendFormat": "{{instance}}",
+              "range": false,
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Scrape",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "`node_uname_info`: kernel nodename and release.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 10,
+            "y": 7,
+            "w": 5,
+            "h": 4
+          },
+          "id": 85,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "name",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "node_uname_info{cluster=~\"$cluster\",instance=~\"$instance\"}",
+              "legendFormat": "{{nodename}} · {{release}}",
+              "range": false,
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Machine",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "`node_time_seconds - node_boot_time_seconds`. An uptime falling back to zero with no intervention is an unplanned reboot: cross-read with the memory panel (OOM) and the host's journal.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 15,
+            "y": 7,
+            "w": 9,
+            "h": 4
+          },
+          "id": 86,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "node_time_seconds{cluster=~\"$cluster\",instance=~\"$instance\"} - node_boot_time_seconds{cluster=~\"$cluster\",instance=~\"$instance\"}",
+              "legendFormat": "uptime",
+              "range": false,
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Uptime",
+          "type": "stat"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 11,
+            "w": 24,
+            "h": 1
+          },
+          "id": 10,
+          "panels": [],
+          "title": "Load",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "One curve per node. For the per-mode breakdown (iowait, steal, system…), expand \"Diagnostic — CPU & memory\".",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 15,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percent",
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 12,
+            "w": 24,
+            "h": 8
+          },
+          "id": 50,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\",mode=\"idle\"}[$__rate_interval])) * 100)",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "CPU per node",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Based on MemAvailable: reclaimable cache is not counted as used. For the cache / buffers / free breakdown, expand \"Diagnostic — CPU & memory\".",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 15,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percent",
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 20,
+            "w": 24,
+            "h": 8
+          },
+          "id": 51,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "(1 - node_memory_MemAvailable_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} / node_memory_MemTotal_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}) * 100",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Memory per node",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "% of time tasks spend waiting for a resource. A more reliable contention signal than the usage ratio: this is the first panel to look at when things feel slow while neither CPU nor memory saturates.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 15,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percent",
+              "min": 0,
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 28,
+            "w": 24,
+            "h": 8
+          },
+          "id": 14,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_pressure_cpu_waiting_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\"}[$__rate_interval]) * 100",
+              "legendFormat": "{{instance}} — CPU",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_pressure_io_waiting_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\"}[$__rate_interval]) * 100",
+              "legendFormat": "{{instance}} — I/O",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_pressure_memory_waiting_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\"}[$__rate_interval]) * 100",
+              "legendFormat": "{{instance}} — Memory",
+              "range": true,
+              "refId": "C"
+            }
+          ],
+          "title": "Pressure (PSI)",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 36,
+            "w": 24,
+            "h": 1
+          },
+          "id": 16,
+          "panels": [],
+          "title": "Storage",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Fill level to watch. On Talos, `/var` is the EPHEMERAL partition (container images, logs, emptyDir). PVCs live in the LVM volume group `openebs-vg` and are not shown here.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 70
+                  },
+                  {
+                    "color": "orange",
+                    "value": 85
+                  },
+                  {
+                    "color": "red",
+                    "value": 95
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 37,
+            "w": 12,
+            "h": 8
+          },
+          "id": 25,
+          "options": {
+            "displayMode": "gradient",
+            "maxVizHeight": 300,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "sizing": "auto",
+            "valueMode": "color"
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "(1 - node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"} / node_filesystem_size_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}) * 100",
+              "legendFormat": "{{instance}} · {{mountpoint}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Mounted filesystems",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Writes are drawn negative for readability.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 15,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "Bps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 45,
+            "w": 24,
+            "h": 8
+          },
+          "id": 32,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_disk_read_bytes_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+\"}[$__rate_interval])",
+              "legendFormat": "{{instance}} · {{device}} — read",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "-rate(node_disk_written_bytes_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+\"}[$__rate_interval])",
+              "legendFormat": "{{instance}} · {{device}} — write",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Disk throughput",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "On NVMe, expect < 1 ms. Above 10 ms, investigate.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 53,
+            "w": 24,
+            "h": 8
+          },
+          "id": 33,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_disk_read_time_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+\"}[$__rate_interval]) / clamp_min(rate(node_disk_reads_completed_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+\"}[$__rate_interval]), 1)",
+              "legendFormat": "{{instance}} · {{device}} — read",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_disk_write_time_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+\"}[$__rate_interval]) / clamp_min(rate(node_disk_writes_completed_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+\"}[$__rate_interval]), 1)",
+              "legendFormat": "{{instance}} · {{device}} — write",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Latency per operation",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 61,
+            "w": 24,
+            "h": 1
+          },
+          "id": 36,
+          "panels": [],
+          "title": "Network",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Virtual interfaces (veth, cilium) excluded. Outbound drawn negative.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 15,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 62,
+            "w": 24,
+            "h": 8
+          },
+          "id": 37,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_network_receive_bytes_total{cluster=~\"$cluster\",instance=~\"$instance\",device!~\"lo|veth.*|cilium.*|lxc.*|docker.*|cni.*\"}[$__rate_interval]) * 8",
+              "legendFormat": "{{instance}} · {{device}} — inbound",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "-rate(node_network_transmit_bytes_total{cluster=~\"$cluster\",instance=~\"$instance\",device!~\"lo|veth.*|cilium.*|lxc.*|docker.*|cni.*\"}[$__rate_interval]) * 8",
+              "legendFormat": "{{instance}} · {{device}} — outbound",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Network traffic",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Should stay at zero. Any non-zero value deserves investigation (cable, MTU, saturation).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "pps",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 70,
+            "w": 24,
+            "h": 8
+          },
+          "id": 38,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_network_receive_errs_total{cluster=~\"$cluster\",instance=~\"$instance\",device!~\"lo|veth.*|cilium.*|lxc.*\"}[$__rate_interval])",
+              "legendFormat": "{{instance}} · {{device}} — RX errors",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_network_transmit_errs_total{cluster=~\"$cluster\",instance=~\"$instance\",device!~\"lo|veth.*|cilium.*|lxc.*\"}[$__rate_interval])",
+              "legendFormat": "{{instance}} · {{device}} — TX errors",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_network_receive_drop_total{cluster=~\"$cluster\",instance=~\"$instance\",device!~\"lo|veth.*|cilium.*|lxc.*\"}[$__rate_interval])",
+              "legendFormat": "{{instance}} · {{device}} — drops RX",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "rate(node_network_transmit_drop_total{cluster=~\"$cluster\",instance=~\"$instance\",device!~\"lo|veth.*|cilium.*|lxc.*\"}[$__rate_interval])",
+              "legendFormat": "{{instance}} · {{device}} — drops TX",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "title": "Errors & dropped packets",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 78,
+            "w": 24,
+            "h": 1
+          },
+          "id": 41,
+          "panels": [],
+          "title": "Thermal",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "High-level view: CPU package, NVMe composite (temp1, the sensor that drives throttling) and ACPI thermal zones. Per-core detail, internal sensors and vendor thresholds: expand \"Diagnostic — thermal\".",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 8,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "celsius",
+              "decimals": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 79,
+            "w": 24,
+            "h": 8
+          },
+          "id": 39,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"platform_coretemp.*\",sensor=\"temp1\"}",
+              "legendFormat": "{{instance}} · CPU package",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "label_replace(node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+              "legendFormat": "{{instance}} · NVMe {{disque}}",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"thermal.*\"}",
+              "legendFormat": "{{instance}} · {{chip}} ({{sensor}})",
+              "range": true,
+              "refId": "C"
+            }
+          ],
+          "title": "Temperatures",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "An alarm raised by the hardware itself, not by a dashboard threshold: 0 = no sensor above its critical threshold. Any non-zero value means the firmware has already engaged its throttling. Must stay flat at zero.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 87,
+            "w": 24,
+            "h": 8
+          },
+          "id": 47,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (instance, chip) (node_hwmon_temp_crit_alarm_celsius{cluster=~\"$cluster\",instance=~\"$instance\"})",
+              "legendFormat": "{{instance}} · {{chip}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Hardware thermal alarms (crit_alarm)",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "x": 0,
+            "y": 95,
+            "w": 24,
+            "h": 1
+          },
+          "id": 60,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Averaged over all nodes. High iowait = waiting on disk. steal = hypervisor contention.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 25,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "normal"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "percent",
+                  "min": 0,
+                  "decimals": 1
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 96,
+                "w": 24,
+                "h": 9
+              },
+              "id": 11,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "avg by (mode) (rate(node_cpu_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\",mode!=\"idle\"}[$__rate_interval])) * 100",
+                  "legendFormat": "{{mode}}",
+                  "range": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "CPU usage per mode",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "The cache is reclaimable — only 'Used' really counts.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 25,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "normal"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "bytes",
+                  "min": 0
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 105,
+                "w": 24,
+                "h": 9
+              },
+              "id": 12,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_memory_MemTotal_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} - node_memory_MemFree_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} - node_memory_Buffers_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} - node_memory_Cached_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} — Used",
+                  "range": true,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_memory_Cached_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} — Cache",
+                  "range": true,
+                  "refId": "B"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_memory_Buffers_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} — Buffers",
+                  "range": true,
+                  "refId": "C"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_memory_MemFree_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} — Free",
+                  "range": true,
+                  "refId": "D"
+                }
+              ],
+              "title": "Memory — detail",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Above the core count = saturation.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 5,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "short",
+                  "min": 0,
+                  "decimals": 2
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 114,
+                "w": 24,
+                "h": 9
+              },
+              "id": 13,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_load1{cluster=~\"$cluster\",instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} — 1m",
+                  "range": true,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_load5{cluster=~\"$cluster\",instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} — 5m",
+                  "range": true,
+                  "refId": "B"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_load15{cluster=~\"$cluster\",instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} — 15m",
+                  "range": true,
+                  "refId": "C"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "count by (instance) (node_cpu_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\",mode=\"idle\"})",
+                  "legendFormat": "{{instance}} — Core count",
+                  "range": true,
+                  "refId": "D"
+                }
+              ],
+              "title": "Load average",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 5,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "ops",
+                  "min": 0
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 123,
+                "w": 24,
+                "h": 9
+              },
+              "id": 15,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "rate(node_context_switches_total{cluster=~\"$cluster\",instance=~\"$instance\"}[$__rate_interval])",
+                  "legendFormat": "{{instance}} — context switches",
+                  "range": true,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "rate(node_intr_total{cluster=~\"$cluster\",instance=~\"$instance\"}[$__rate_interval])",
+                  "legendFormat": "{{instance}} — interrupts",
+                  "range": true,
+                  "refId": "B"
+                }
+              ],
+              "title": "Context switches & interrupts",
+              "type": "timeseries"
+            }
+          ],
+          "title": "Diagnostic — CPU & memory",
+          "type": "row"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "x": 0,
+            "y": 96,
+            "w": 24,
+            "h": 1
+          },
+          "id": 61,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "decimals": 1,
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "bytes"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 97,
+                "w": 6,
+                "h": 4
+              },
+              "id": 18,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "value_and_name",
+                "wideLayout": true
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\",mountpoint=\"/var\"}",
+                  "legendFormat": "{{instance}}",
+                  "range": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "/var — free",
+              "type": "stat"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "A filesystem can run out of inodes without running out of bytes (many small files).",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "max": 100,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "orange",
+                        "value": 85
+                      },
+                      {
+                        "color": "red",
+                        "value": 95
+                      }
+                    ]
+                  },
+                  "unit": "percent"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 101,
+                "w": 24,
+                "h": 8
+              },
+              "id": 27,
+              "options": {
+                "displayMode": "gradient",
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "(1 - node_filesystem_files_free{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"} / node_filesystem_files{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}) * 100",
+                  "legendFormat": "{{instance}} · {{mountpoint}}",
+                  "range": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "Inodes used",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Filesystem layer (node-exporter). On Talos, `/var` is the EPHEMERAL partition; PVCs (LVM `openebs-vg`) are not shown here.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 8,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "bytes",
+                  "min": 0
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 109,
+                "w": 24,
+                "h": 9
+              },
+              "id": 28,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}",
+                  "legendFormat": "{{instance}} · {{mountpoint}}",
+                  "range": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "Filesystems — free space",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Writes are drawn negative for readability.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 15,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "iops",
+                  "decimals": 0
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 118,
+                "w": 24,
+                "h": 9
+              },
+              "id": 31,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "rate(node_disk_reads_completed_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-[0-9]+\"}[$__rate_interval])",
+                  "legendFormat": "{{instance}} · {{device}} — read",
+                  "range": true,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "-rate(node_disk_writes_completed_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-[0-9]+\"}[$__rate_interval])",
+                  "legendFormat": "{{instance}} · {{device}} — write",
+                  "range": true,
+                  "refId": "B"
+                }
+              ],
+              "title": "IOPS",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "CAREFUL: on NVMe, utilisation can reach 100% with no real contention (requests are processed in parallel). Queue depth and latency are more reliable.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "none",
+                  "min": 0,
+                  "decimals": 2
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 127,
+                "w": 24,
+                "h": 9
+              },
+              "id": 34,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "rate(node_disk_io_time_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-[0-9]+\"}[$__rate_interval]) * 100",
+                  "legendFormat": "{{instance}} · {{device}} — utilisation",
+                  "range": true,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "rate(node_disk_io_time_weighted_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\",device=~\"nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|hd[a-z]+|dm-[0-9]+\"}[$__rate_interval])",
+                  "legendFormat": "{{instance}} · {{device}} — queue",
+                  "range": true,
+                  "refId": "B"
+                }
+              ],
+              "title": "Saturation & queue",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "The most reliable signal of disk contention: % of time tasks actually spend waiting on I/O. \"Full stall\" = no task progresses at all.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 15,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "percent",
+                  "min": 0,
+                  "decimals": 2
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 136,
+                "w": 24,
+                "h": 9
+              },
+              "id": 35,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "rate(node_pressure_io_waiting_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\"}[$__rate_interval]) * 100",
+                  "legendFormat": "{{instance}} — I/O wait",
+                  "range": true,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "rate(node_pressure_io_stalled_seconds_total{cluster=~\"$cluster\",instance=~\"$instance\"}[$__rate_interval]) * 100",
+                  "legendFormat": "{{instance}} — full I/O stall",
+                  "range": true,
+                  "refId": "B"
+                }
+              ],
+              "title": "I/O pressure (PSI)",
+              "type": "timeseries"
+            }
+          ],
+          "title": "Diagnostic — storage",
+          "type": "row"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "x": 0,
+            "y": 97,
+            "w": 24,
+            "h": 1
+          },
+          "id": 62,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Composite Temperature (temp1) against the WCTEMP threshold the disk announces. One bar per disk. Comparable across heterogeneous models, unlike raw °C: one SSD may announce a 79 °C threshold and another 99 °C. Only the composite is kept here — it is the only sensor WCTEMP/CCTEMP apply to, hence the only one whose ratio means anything. 100% = warning threshold reached, throttling imminent. A disk whose announced threshold falls outside the 0–200 °C range (0xFFFF K = threshold disabled) gets no bar: the ratio would be meaningless.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "decimals": 1,
+                  "mappings": [],
+                  "max": 100,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "orange",
+                        "value": 85
+                      },
+                      {
+                        "color": "red",
+                        "value": 95
+                      }
+                    ]
+                  },
+                  "unit": "percent"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 98,
+                "w": 24,
+                "h": 8
+              },
+              "id": 43,
+              "options": {
+                "displayMode": "gradient",
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "label_replace(node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) (node_hwmon_temp_max_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} > 0 < 200) * 100, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+                  "legendFormat": "{{instance}} · {{disque}}",
+                  "range": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "NVMe composite (% of the vendor threshold)",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "One disk = one hwmon chip (nvme_nvme0, nvme_nvme1, …), discovered dynamically. Reading hierarchy: thick solid line = Composite Temperature (temp1), the reference sensor WCTEMP/CCTEMP apply to and that triggers throttling. Thin dotted lines = secondary internal sensors (NAND, controller), informative, with no usable threshold — do not compare them with the threshold lines. Orange/red dashes = each disk's own WCTEMP/CCTEMP, which vary a lot between models, hence no fixed threshold here. Thresholds outside the 0–200 °C range are dropped: a disk with no configured threshold returns 0xFFFF K, which the kernel converts literally to 65261.9 °C — a value that flattened this graph's scale.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 8,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "celsius",
+                  "decimals": 1
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": ".*— composite$"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.lineWidth",
+                        "value": 3
+                      },
+                      {
+                        "id": "custom.fillOpacity",
+                        "value": 12
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": ".*— capteur temp.*"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.lineWidth",
+                        "value": 1
+                      },
+                      {
+                        "id": "custom.fillOpacity",
+                        "value": 0
+                      },
+                      {
+                        "id": "custom.lineStyle",
+                        "value": {
+                          "dash": [
+                            2,
+                            4
+                          ],
+                          "fill": "dot"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": ".*seuil warning.*"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.lineStyle",
+                        "value": {
+                          "dash": [
+                            10,
+                            10
+                          ],
+                          "fill": "dash"
+                        }
+                      },
+                      {
+                        "id": "custom.fillOpacity",
+                        "value": 0
+                      },
+                      {
+                        "id": "custom.lineWidth",
+                        "value": 1
+                      },
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "orange",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": ".*seuil critique.*"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.lineStyle",
+                        "value": {
+                          "dash": [
+                            4,
+                            6
+                          ],
+                          "fill": "dash"
+                        }
+                      },
+                      {
+                        "id": "custom.fillOpacity",
+                        "value": 0
+                      },
+                      {
+                        "id": "custom.lineWidth",
+                        "value": 1
+                      },
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "red",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 106,
+                "w": 24,
+                "h": 9
+              },
+              "id": 42,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "label_replace(node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+                  "legendFormat": "{{instance}} · {{disque}} — composite",
+                  "range": true,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "label_replace(node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor!=\"temp1\"}, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+                  "legendFormat": "{{instance}} · {{disque}} — sensor {{sensor}}",
+                  "range": true,
+                  "refId": "D"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_max_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\"} > 0 < 200), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+                  "legendFormat": "{{instance}} · {{disque}} — warning threshold",
+                  "range": true,
+                  "refId": "B"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "label_replace(max by (instance, chip) (node_hwmon_temp_crit_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\"} > 0 < 200), \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
+                  "legendFormat": "{{instance}} · {{disque}} — critical threshold",
+                  "range": true,
+                  "refId": "C"
+                }
+              ],
+              "title": "NVMe temperatures — sensors & thresholds",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "One core clearly hotter than the others can signal a heatsink contact problem.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "celsius",
+                  "decimals": 0
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 115,
+                "w": 24,
+                "h": 9
+              },
+              "id": 40,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"platform_coretemp.*\",sensor!=\"temp1\"}",
+                  "legendFormat": "{{instance}} · {{chip}}/{{sensor}}",
+                  "range": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "CPU temperatures per core",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Number of NVMe disks exposing hwmon sensors, per node. A control: if an SSD drops out of the count, it was unmounted or is no longer detected. The thermal gap compares the composite of the hottest disk with that of the coldest one on the same node: a wide gap signals a badly ventilated SSD, or one with no heatsink.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "decimals": 0,
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 124,
+                "w": 12,
+                "h": 5
+              },
+              "id": 44,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "value_and_name",
+                "wideLayout": true
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "count by (instance) (count by (instance, chip) (node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\"}))",
+                  "legendFormat": "{{instance}}",
+                  "range": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "NVMe disks detected",
+              "type": "stat"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Gap between the composite of the node's hottest disk and that of its coldest one. A disk-to-disk comparison: only temp1 is kept, otherwise the gap would measure the difference between two sensors of one disk instead of a difference between disks.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "decimals": 1,
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 15
+                      },
+                      {
+                        "color": "orange",
+                        "value": 25
+                      }
+                    ]
+                  },
+                  "unit": "celsius"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 12,
+                "y": 124,
+                "w": 12,
+                "h": 5
+              },
+              "id": 45,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "value_and_name",
+                "wideLayout": true
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "max by (instance) (node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}) - min by (instance) (node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"})",
+                  "legendFormat": "{{instance}}",
+                  "range": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "Thermal gap between NVMe disks",
+              "type": "stat"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Every available hwmon sensor, across all chips, with its vendor thresholds on the same row. A reference table for what the node actually exposes. An empty threshold cell is not a defect: either the sensor declares no threshold, or it declares an invalid one (0xFFFF K → 65261.9 °C, filtered here), which NVMe internal sensors commonly do. Only the composite (temp1) carries a genuinely usable WCTEMP/CCTEMP.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "custom": {
+                    "align": "auto",
+                    "cellOptions": {
+                      "type": "auto"
+                    },
+                    "inspect": false
+                  },
+                  "decimals": 1,
+                  "mappings": [],
+                  "noValue": "—",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "celsius"
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "°C"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.cellOptions",
+                        "value": {
+                          "mode": "basic",
+                          "type": "gauge",
+                          "valueDisplayMode": "text"
+                        }
+                      },
+                      {
+                        "id": "max",
+                        "value": 110
+                      },
+                      {
+                        "id": "min",
+                        "value": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 129,
+                "w": 24,
+                "h": 11
+              },
+              "id": 46,
+              "options": {
+                "cellHeight": "sm",
+                "footer": {
+                  "countRows": false,
+                  "fields": "",
+                  "reducer": [
+                    "sum"
+                  ],
+                  "show": false
+                },
+                "showHeader": true,
+                "sortBy": [
+                  {
+                    "desc": false,
+                    "displayName": "Chip"
+                  }
+                ]
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "max by (instance, chip, sensor) (node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\"})",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "",
+                  "range": false,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "max by (instance, chip, sensor) (node_hwmon_temp_max_celsius{cluster=~\"$cluster\",instance=~\"$instance\"} > 0 < 200)",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "",
+                  "range": false,
+                  "refId": "B"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "max by (instance, chip, sensor) (node_hwmon_temp_crit_celsius{cluster=~\"$cluster\",instance=~\"$instance\"} > 0 < 200)",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "",
+                  "range": false,
+                  "refId": "C"
+                }
+              ],
+              "title": "hwmon sensor inventory",
+              "transformations": [
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true
+                    },
+                    "indexByName": {},
+                    "renameByName": {}
+                  }
+                },
+                {
+                  "id": "merge",
+                  "options": {}
+                },
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {},
+                    "indexByName": {
+                      "Value #A": 3,
+                      "Value #B": 4,
+                      "Value #C": 5,
+                      "chip": 1,
+                      "instance": 0,
+                      "sensor": 2
+                    },
+                    "renameByName": {
+                      "Value #A": "°C",
+                      "Value #B": "Warning threshold",
+                      "Value #C": "Critical threshold",
+                      "chip": "Chip",
+                      "instance": "Node",
+                      "sensor": "Sensor"
+                    }
+                  }
+                }
+              ],
+              "type": "table"
+            }
+          ],
+          "title": "Diagnostic — thermal",
+          "type": "row"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "x": 0,
+            "y": 98,
+            "w": 24,
+            "h": 1
+          },
+          "id": 90,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "`node_scrape_collector_success` at 0 for a collector: that collector returns NOTHING, and its panels empty out with no error message. Only failing collectors are drawn — an EMPTY graph is the good state.\n\n⚠️ This is the panel that explains a half-empty dashboard while \"Scrape\" is green.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": true,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 99,
+                "w": 24,
+                "h": 7
+              },
+              "id": 88,
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_scrape_collector_success{cluster=~\"$cluster\",instance=~\"$instance\"} == 0",
+                  "legendFormat": "{{collector}}",
+                  "range": true,
+                  "instant": false,
+                  "refId": "A"
+                }
+              ],
+              "title": "Failing node-exporter collectors",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "description": "Useful for one question only: a collector whose duration approaches the `scrapeTimeout` (10 s) will fail the whole target, not just itself. The `filesystem` collector is the usual candidate on a machine with many mounts.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "never",
+                    "spanNulls": true,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "s",
+                  "min": 0
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "x": 0,
+                "y": 106,
+                "w": 24,
+                "h": 7
+              },
+              "id": 89,
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "displayMode": "list",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "pluginVersion": "10.4.0",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                  },
+                  "editorMode": "code",
+                  "expr": "node_scrape_collector_duration_seconds{cluster=~\"$cluster\",instance=~\"$instance\"}",
+                  "legendFormat": "{{collector}}",
+                  "range": true,
+                  "instant": false,
+                  "refId": "A"
+                }
+              ],
+              "title": "Scrape duration per collector",
+              "type": "timeseries"
+            }
+          ],
+          "title": "Diagnostic — monitoring health",
+          "type": "row"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "tags": [
+        "wittnerlab",
+        "machine",
+        "node",
+        "system"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {
+              "selected": true,
+              "text": [
+                "All"
+              ],
+              "value": [
+                "$__all"
+              ]
+            },
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "definition": "label_values(node_uname_info, cluster)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "cluster",
+            "multi": true,
+            "name": "cluster",
+            "options": [],
+            "query": {
+              "qryType": 1,
+              "query": "label_values(node_uname_info, cluster)",
+              "refId": "cluster"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query",
+            "description": "Kubernetes cluster (label set by each Prometheus scrapeClass)."
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "definition": "label_values(node_uname_info{cluster=~\"$cluster\"}, instance)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Node",
+            "multi": true,
+            "name": "instance",
+            "options": [],
+            "query": {
+              "qryType": 1,
+              "query": "label_values(node_uname_info{cluster=~\"$cluster\"}, instance)",
+              "refId": "instance"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query",
+            "description": "Machines exposing node-exporter, filtered by $cluster."
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "definition": "label_values(node_uname_info{cluster=~\"$cluster\"}, nodename)",
+            "hide": 2,
+            "includeAll": true,
+            "label": "Name",
+            "multi": true,
+            "name": "node",
+            "options": [],
+            "query": {
+              "qryType": 1,
+              "query": "label_values(node_uname_info{cluster=~\"$cluster\"}, nodename)",
+              "refId": "node"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query",
+            "description": "Machines exposing node-exporter, filtered by $cluster."
+          }
+        ]
+      },
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "utc",
+      "title": "Machines",
+      "uid": "machines-systeme",
+      "version": 1,
+      "weekStart": ""
+    }

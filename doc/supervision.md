@@ -14,6 +14,7 @@
 | `clusters/bleu-malygos/kube-prometheus-stack/values.yaml` | stockage, rétention, réception, routes, Grafana sans état |
 | `clusters/bleu-kalecgos/kube-prometheus-stack/values.yaml` | agent (`PrometheusAgent`), envoi vers `prometheus.lan.wittner.tech` ; sans Grafana, Alertmanager ni règles |
 | `clusters/bleu-malygos/kube-prometheus-stack/manifests/grafana-admin.yaml` | `ExternalSecret` : mot de passe admin depuis `secret/grafana` (`admin_password`) |
+| `clusters/bleu-malygos/kube-prometheus-stack/manifests/dashboard-*.yaml` | dashboards custom, dossier `Wittnerlab` |
 | `clusters/<nom>/kube-prometheus-stack/kube-prometheus-stack.app.yaml` | `kube-prometheus-stack-<cluster-court>` |
 
 | URL | |
@@ -33,6 +34,23 @@ unset PW
 ```
 
 Changer : même commande ; ESO relit toutes les heures, puis redémarrer Grafana (`kubectl --context admin@bleu-malygos -n monitoring rollout restart deploy/kube-prometheus-stack-grafana`).
+
+## Dashboards custom
+
+ConfigMap dans `clusters/bleu-malygos/kube-prometheus-stack/manifests/`, ajoutée à la `kustomization.yaml` :
+
+| Champ | Valeur |
+|---|---|
+| label | `grafana_dashboard: "1"` (chargé par le sidecar) |
+| annotation | `grafana_folder: Wittnerlab` (dossier dans l'UI) |
+| variables | `cluster` puis `instance`/`node` filtrés par `$cluster` |
+| mise en page | un graphique par ligne (`w: 24`), légende en liste à droite ; `stat` et `bargauge` groupés |
+
+| Dashboard | Contenu |
+|---|---|
+| `Machines` (`dashboard-machines.yaml`) | tous les nœuds node-exporter : CPU, RAM, PSI, disques, réseau, températures ; rangées « Diagnostic » repliées |
+
+Modifier : éditer le JSON dans Git (une modification dans l'UI est perdue au redémarrage) ; export depuis l'UI possible puis recopie dans la ConfigMap.
 
 ## Limites
 

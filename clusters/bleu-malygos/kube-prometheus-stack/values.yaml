@@ -56,6 +56,10 @@ grafana:
       root_url: https://grafana.lan.wittner.tech
   sidecar:
     dashboards:
+      # dossier pris dans l'annotation grafana_folder de chaque ConfigMap (dashboards custom)
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
       # variable « cluster » dans les tableaux de bord du chart
       multicluster:
         global:
