@@ -45,4 +45,3 @@ Sujets reportés volontairement, à reprendre au besoin.
 | Restauration OpenBao en prod | remise en place d'un snapshot raft (`-force`) jamais testée ; la restauration à côté l'est | [sauvegardes](doc/sauvegardes.md) |
 | NetBird | second peer routeur dans un cluster, en redondance du CT Proxmox | — |
 | Renovate : automerge | rétablir l'automerge (retirer `force.automerge: false`) après relecture du premier passage | `clusters/bleu-kalecgos/renovate/values.yaml` |
-| Renovate sur `homelab_terraform` | installer l'App sur le dépôt, `renovate.json` (providers), l'ajouter à `repositories` | `homelab_terraform`, `clusters/bleu-kalecgos/renovate/values.yaml` |

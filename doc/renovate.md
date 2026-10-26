@@ -13,7 +13,8 @@ Mises à jour des dépendances (charts, images, URLs taguées) par PR GitHub. Au
 | Dépôt | Ce qui est suivi |
 |---|---|
 | `homelab_gitops` | charts des `*.app.yaml`, images de `manifests/`, URLs taguées des `kustomization.yaml` |
-| `homelab_talos` | `talosVersion`, `kubernetesVersion` |
+| `homelab_talos` | `talosVersion`, `kubernetesVersion` des `talconfig.yaml` (regex) : merge manuel, upgrade par `talosctl` ; mineure Kubernetes : PR à part avec rappel de la matrice de support Talos |
+| `homelab_terraform` | providers Terraform et `.terraform.lock.hcl` (règles du dépôt) |
 
 Premier passage : `force.automerge: false` dans la config globale (PR seules, quelles que soient les règles des dépôts), à retirer après relecture.
 

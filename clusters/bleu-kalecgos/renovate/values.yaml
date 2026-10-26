@@ -5,6 +5,8 @@ cronjob:
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: "1"
   failedJobsHistoryLimit: "3"
+  # pas de nouvel essai : un passage raté (dépôt inaccessible…) attend l'heure suivante
+  jobBackoffLimit: "0"
   # GitHub App : Renovate n'accepte qu'un jeton d'installation (1 h), généré avant chaque passage
   # depuis l'App ID, l'Installation ID et la clé privée (OpenBao, secret/renovate)
   # affectation puis export : avec « export X=$(…) », un échec serait masqué (set -e)
@@ -18,7 +20,7 @@ renovate:
   config: |
     {
       "platform": "github",
-      "repositories": ["jbwittner/homelab_gitops", "jbwittner/homelab_talos"],
+      "repositories": ["jbwittner/homelab_gitops", "jbwittner/homelab_talos", "jbwittner/homelab_terraform"],
       "onboarding": false,
       "requireConfig": "required",
       "force": { "automerge": false }
