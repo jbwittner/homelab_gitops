@@ -52,6 +52,7 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
   - **OpenBao + External Secrets** : tout le reste.
   - Ne jamais committer ce que `.gitignore` exclut : `*.secret.yaml`, `*.pem`, `*sealed-secrets-key*.yaml`, `*-backup.yaml`, `.env`.
 - Exposition : Gateway API de Cilium. DNS AdGuard (192.168.1.2, hors dépôt) : `*.lan.wittner.tech` → 192.168.1.80 (Gateway malygos) ; un hostname servi par kalecgos est relayé par malygos (`clusters/bleu-malygos/external-services`, modèle `homepage.yaml`).
+- README, section « Déployé » : à tenir à jour dans le même commit que l'ajout, le retrait ou le déplacement d'une Application (composant, couche, clusters, namespace, accès). Pas de versions.
 - Homepage : tout service qui expose une page web (HTTPRoute, y compris une machine de `external-services` ; sauf Homepage elle-même) a sa tuile dans `clusters/bleu-kalecgos/homepage/manifests/config/services.yaml` (`href` + `siteMonitor`, groupe selon où il tourne), dans le même commit que sa route. Retirer la tuile avec la route.
 
 ## Conventions imposées par `renovate.json`

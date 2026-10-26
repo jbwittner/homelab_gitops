@@ -4,6 +4,30 @@ GitOps de deux clusters Kubernetes (`bleu-malygos` infra, `bleu-kalecgos` worker
 
 Docs : [architecture](doc/architecture.md) · [arborescence](doc/arborescence.md) · [secrets](doc/secrets.md) · [openbao](doc/openbao.md) · [stockage](doc/stockage.md) · [certificats](doc/certificats.md) · [exposition](doc/exposition.md) · [sauvegardes](doc/sauvegardes.md) · [supervision](doc/supervision.md) · [homepage](doc/homepage.md) · [décisions](doc/decisions.md)
 
+## Déployé
+
+Une ligne par composant ; Application ArgoCD `<comp>-<cluster-court>`. Versions : dans les `*.app.yaml` (Renovate).
+
+| Composant | Couche | malygos | kalecgos | Namespace | Accès |
+|---|---|:---:|:---:|---|---|
+| CRDs Gateway API | boot | ✓ | ✓ | — | — |
+| CRDs Prometheus Operator | boot | ✓ | ✓ | — | — |
+| Cilium (CNI, LB-IPAM, Gateway API) | boot | ✓ | ✓ | `kube-system` | — |
+| Sealed Secrets | boot | ✓ | | `kube-system` | — |
+| ArgoCD (pilote les deux clusters) + app-of-apps | boot | ✓ | | `argocd` | `argocd.lan.wittner.tech` |
+| Compte `argocd-manager` | boot | | ✓ | `kube-system` | — |
+| OpenEBS LocalPV LVM | infra | ✓ | ✓ | `openebs` | — |
+| cert-manager (Let's Encrypt DNS-01) | infra | ✓ | ✓ | `cert-manager` | — |
+| External Secrets | infra | ✓ | ✓ | `external-secrets` | — |
+| Gateway `lan` (wildcard `*.lan`) | infra | ✓ `.80` | ✓ `.85` | `gateway` | — |
+| OpenBao | infra | ✓ | | `openbao` | `openbao.lan.wittner.tech` |
+| Velero (GCS) | infra | ✓ | ✓ | `velero` | — |
+| kube-prometheus-stack | infra | ✓ complet | ✓ agent | `monitoring` | `grafana`, `prometheus`, `alertmanager` `.lan.wittner.tech` |
+| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | `adguard`, `ha`, `pve-ysera`, `z2m`, `zyxel`, `homepage` (relais) |
+| Homepage | apps | | ✓ | `homepage` | `homepage.lan.wittner.tech` |
+
+Hors dépôt (Proxmox `vert-ysera`) : AdGuard Home (DNS), Home Assistant, Zigbee2MQTT, client NetBird.
+
 ## À faire plus tard
 
 Sujets reportés volontairement, à reprendre au besoin.
