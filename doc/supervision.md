@@ -47,5 +47,5 @@ kubectl --context admin@bleu-malygos -n monitoring get pods,pvc
 kubectl --context admin@bleu-malygos -n monitoring get externalsecret      # SecretSynced
 curl -s https://prometheus.lan.wittner.tech/api/v1/targets?state=unhealthy | jq '.data.activeTargets | length'   # 0
 curl -s 'https://prometheus.lan.wittner.tech/api/v1/query?query=count(up)by(cluster)' | jq -c '.data.result[] | [.metric.cluster, .value[1]]'   # les deux clusters
-kubectl --context admin@bleu-kalecgos -n monitoring logs prometheus-kube-prometheus-stack-0 -c prometheus | grep -i remote   # erreurs d'envoi
+kubectl --context admin@bleu-kalecgos -n monitoring logs prom-agent-kube-prometheus-stack-prometheus-0 -c prometheus | grep -i remote   # erreurs d'envoi
 ```

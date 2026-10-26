@@ -11,6 +11,21 @@ prometheus:
     # sans authentification (LAN), comme la réception sur malygos
     remoteWrite:
       - url: https://prometheus.lan.wittner.tech/api/v1/write
+  # pas d'Alertmanager : sans ces séries, PrometheusNotConnectedToAlertmanagers ne sonne pas sur malygos
+  serviceMonitor:
+    metricRelabelings:
+      - action: drop
+        sourceLabels:
+          - __name__
+        regex: prometheus_notifications_.*
+
+# agent : horodatages de cadvisor + marqueurs de péremption rejetés comme hors d'ordre
+# (PrometheusOutOfOrderTimestamps) ; horodatage du scrape à la place (le chart impose
+# honorTimestamps tant que trackTimestampsStaleness est actif)
+kubelet:
+  serviceMonitor:
+    trackTimestampsStaleness: false
+    honorTimestamps: false
 
 # règles, alertes et tableaux de bord : sur malygos, qui reçoit les séries
 alertmanager:
