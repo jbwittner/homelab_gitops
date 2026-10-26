@@ -1,18 +1,24 @@
 ---
-# For configuration options and examples, please see:
 # https://gethomepage.dev/configs/bookmarks
 
-- Developer:
-    - Github:
-        - abbr: GH
-          href: https://github.com/
+- Dépôts:
+    - homelab_gitops:
+        - abbr: GO
+          href: https://github.com/jbwittner/homelab_gitops
+    - homelab_terraform:
+        - abbr: TF
+          href: https://github.com/jbwittner/homelab_terraform
+    - homelab_talos:
+        - abbr: TA
+          href: https://github.com/jbwittner/homelab_talos
+    - homelab_ysera:
+        - abbr: YS
+          href: https://github.com/jbwittner/homelab_ysera
 
-- Social:
-    - Reddit:
-        - abbr: RE
-          href: https://reddit.com/
-
-- Entertainment:
-    - YouTube:
-        - abbr: YT
-          href: https://youtube.com/
+- Cloud:
+    - Cloudflare:
+        - abbr: CF
+          href: https://dash.cloudflare.com/
+    - Google Cloud:
+        - abbr: GC
+          href: https://console.cloud.google.com/

@@ -1,4 +1,28 @@
 ---
 # https://gethomepage.dev/configs/settings/
 title: Wittnerlab
+language: fr
+theme: dark
+color: slate
+headerStyle: boxed
+statusStyle: dot
+hideVersion: true
 target: _blank
+
+# ordre et disposition des groupes (noms identiques à services.yaml)
+layout:
+  Clusters:
+    style: row
+    columns: 2
+  GitOps & secrets:
+    style: row
+    columns: 2
+  Supervision:
+    style: row
+    columns: 3
+  Réseau & hôtes:
+    style: row
+    columns: 3
+  Domotique:
+    style: row
+    columns: 2

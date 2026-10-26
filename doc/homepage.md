@@ -8,7 +8,9 @@ Page d'accueil du parc : `https://homepage.lan.wittner.tech`, sur kalecgos (pas 
 | `clusters/bleu-kalecgos/homepage/manifests/` | namespace, Deployment (`HOMEPAGE_ALLOWED_HOSTS`, probes TCP), Service, HTTPRoute (Gateway `.85`) |
 | `clusters/bleu-kalecgos/homepage/manifests/config/` | config Homepage ([doc](https://gethomepage.dev/configs)), ConfigMap `homepage-config-<hash>` |
 
-- Tuiles : `services.yaml`, liens statiques ; `siteMonitor` = point vert/rouge (requête HTTP depuis le pod).
+- Tuiles : `services.yaml`, groupées par usage (ordre et colonnes : `layout` de `settings.yaml`) ; `siteMonitor` = point vert/rouge (requête HTTP depuis le pod).
+- Chiffres : widget `prometheusmetric` (clusters, ArgoCD, Prometheus, sauvegarde OpenBao) sur `https://prometheus.lan.wittner.tech`, sans authentification ni secret. 4 valeurs max par tuile.
+- En-tête : date, météo Open-Meteo (centre de la commune, sans clé), recherche.
 - Pas d'intégration Kubernetes (`kubernetes.yaml` : `mode: disabled`), Docker ni Proxmox.
 - Accès : le wildcard DNS `*.lan` mène à malygos, qui relaie vers la Gateway de kalecgos (`external-services/homepage.yaml`, TLS vérifié avec ISRG Root X1). Malygos arrêté = Homepage injoignable par son nom.
 
