@@ -1,0 +1,57 @@
+---
+# https://gethomepage.dev/configs/services/ — siteMonitor : point vert/rouge (requête HTTP depuis le pod)
+- Socle (vert-ysera):
+    - AdGuard Home:
+        href: https://adguard.lan.wittner.tech/
+        siteMonitor: https://adguard.lan.wittner.tech/
+        description: DNS + DHCP
+        icon: adguard-home.png
+    - Proxmox:
+        href: https://pve-ysera.lan.wittner.tech/
+        siteMonitor: https://pve-ysera.lan.wittner.tech/
+        description: pve-ysera, socle 24/7
+        icon: proxmox.png
+    - Zyxel:
+        href: https://zyxel.lan.wittner.tech/
+        siteMonitor: https://zyxel.lan.wittner.tech/
+        description: Switch
+        icon: zyxel.png
+
+- Infrastructure (bleu-malygos):
+    - ArgoCD:
+        href: https://argocd.lan.wittner.tech/
+        siteMonitor: https://argocd.lan.wittner.tech/
+        description: GitOps des deux clusters
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/argo-cd.svg
+    - OpenBao:
+        href: https://openbao.lan.wittner.tech/
+        siteMonitor: https://openbao.lan.wittner.tech/v1/sys/health
+        description: Secrets
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/openbao.svg
+    - Grafana:
+        href: https://grafana.lan.wittner.tech/
+        siteMonitor: https://grafana.lan.wittner.tech/api/health
+        description: Tableaux de bord
+        icon: grafana.png
+    - Prometheus:
+        href: https://prometheus.lan.wittner.tech/
+        siteMonitor: https://prometheus.lan.wittner.tech/-/healthy
+        description: Métriques des deux clusters
+        icon: prometheus.png
+    - Alertmanager:
+        href: https://alertmanager.lan.wittner.tech/
+        siteMonitor: https://alertmanager.lan.wittner.tech/-/healthy
+        description: Alertes
+        icon: alertmanager.png
+
+- Domotique:
+    - Home Assistant:
+        href: https://ha.lan.wittner.tech/
+        siteMonitor: https://ha.lan.wittner.tech/
+        description: VM 206 (vert-ysera)
+        icon: home-assistant.png
+    - Zigbee2MQTT:
+        href: https://z2m.lan.wittner.tech/
+        siteMonitor: https://z2m.lan.wittner.tech/
+        description: Passerelle Zigbee, CT 202 (vert-ysera)
+        icon: zigbee2mqtt.png

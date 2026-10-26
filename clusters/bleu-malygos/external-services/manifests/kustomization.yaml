@@ -16,6 +16,10 @@ configMapGenerator:
   - name: pve-root-ca
     files:
       - ca.crt=pve-root-ca.crt
+  # racine Let's Encrypt (certificat public) : vérifie la Gateway de kalecgos (homepage)
+  - name: isrg-root-x1
+    files:
+      - ca.crt=isrg-root-x1.crt
 generatorOptions:
   # nom fixe : la BackendTLSPolicy le référence, kustomize ne la réécrit pas
   disableNameSuffixHash: true

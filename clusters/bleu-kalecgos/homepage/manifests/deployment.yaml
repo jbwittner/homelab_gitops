@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homepage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: homepage
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: homepage
+    spec:
+      containers:
+        - name: homepage
+          image: ghcr.io/gethomepage/homepage:v2.6.0
+          env:
+            # Homepage refuse tout autre Host (protection DNS rebinding) ; les probes TCP ne sont pas concernées
+            - name: HOMEPAGE_ALLOWED_HOSTS
+              value: homepage.lan.wittner.tech
+            # logs sur la sortie standard : la config est montée en lecture seule
+            - name: LOG_TARGETS
+              value: stdout
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            tcpSocket:
+              port: http
+          livenessProbe:
+            tcpSocket:
+              port: http
+          resources:
+            requests:
+              cpu: 20m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: homepage-config

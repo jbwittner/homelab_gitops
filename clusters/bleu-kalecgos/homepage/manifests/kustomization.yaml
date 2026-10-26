@@ -1,0 +1,22 @@
+# Homepage sur l'image officielle ; config (https://gethomepage.dev/configs) dans config/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: homepage
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - httproute.yaml
+# nom suffixé d'un hash, réécrit dans le Deployment : une config modifiée relance le pod
+configMapGenerator:
+  - name: homepage-config
+    files:
+      - config/settings.yaml
+      - config/services.yaml
+      - config/bookmarks.yaml
+      - config/widgets.yaml
+      - config/kubernetes.yaml
+      - config/docker.yaml
+      - config/proxmox.yaml
+      - config/custom.css
+      - config/custom.js

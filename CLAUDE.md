@@ -51,7 +51,7 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
     Trois fichiers côte à côte : `x.secret.example.yaml` (modèle commité, valeurs factices), `x.secret.yaml` (clair, ignoré), `x.sealed.yaml` (commité). Secrets écrits en `stringData`.
   - **OpenBao + External Secrets** : tout le reste.
   - Ne jamais committer ce que `.gitignore` exclut : `*.secret.yaml`, `*.pem`, `*sealed-secrets-key*.yaml`, `*-backup.yaml`, `.env`.
-- Exposition : Gateway API de Cilium. DNS AdGuard (192.168.1.2, hors dépôt) : `*.lan.wittner.tech` → 192.168.1.80 (Gateway malygos) ; un hostname servi par kalecgos demande un rewrite exact → 192.168.1.85.
+- Exposition : Gateway API de Cilium. DNS AdGuard (192.168.1.2, hors dépôt) : `*.lan.wittner.tech` → 192.168.1.80 (Gateway malygos) ; un hostname servi par kalecgos est relayé par malygos (`clusters/bleu-malygos/external-services`, modèle `homepage.yaml`).
 
 ## Conventions imposées par `renovate.json`
 
