@@ -2,6 +2,12 @@
 # For configuration options and examples, please see:
 # https://gethomepage.dev/configs/info-widgets/
 
+- datetime:
+    locale: fr
+    format:
+      dateStyle: full
+      timeStyle: short
+
 - search:
     provider: google
     target: _blank
