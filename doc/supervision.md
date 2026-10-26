@@ -55,7 +55,7 @@ ConfigMap dans `clusters/bleu-malygos/kube-prometheus-stack/manifests/`, ajouté
 |---|---|
 | label | `grafana_dashboard: "1"` (chargé par le sidecar) |
 | annotation | `grafana_folder: Wittnerlab` (dossier dans l'UI) |
-| variables | `cluster` puis `instance`/`node` filtrés par `$cluster` |
+| variables | `cluster` puis `instance`/`node`/`namespace` filtrés par `$cluster` ; choix unique quand les namespaces des deux clusters s'additionneraient |
 | mise en page | un graphique par ligne (`w: 24`), légende en liste à droite ; `stat` et `bargauge` groupés |
 
 | Dashboard | Contenu |
@@ -64,6 +64,9 @@ ConfigMap dans `clusters/bleu-malygos/kube-prometheus-stack/manifests/`, ajouté
 | `Storage — cluster` (`dashboard-stockage.yaml`) | état des nœuds (tableau) et VG LVM d'OpenEBS : capacité, place libre, métadonnées |
 | `Backups — velero` (`dashboard-velero.yaml`) | fraîcheur des sauvegardes, bucket, inventaire par schedule et par objet Backup, données kopia, restaurations |
 | `GitOps — ArgoCD` (`dashboard-argocd.yaml`) | Applications (sync/santé), synchros, contrôleur, repo-server Git, composants |
+| `Resources — cluster / namespaces / workloads / pods` (`dashboard-ressources-*.yaml`) | CPU et mémoire : utilisation, requests, limits, allouable ; un cluster à la fois |
+| `Resources — volumes` (`dashboard-ressources-volumes.yaml`) | PVC : remplissage, inodes, saturation, cycle de vie ; VG LVM. Un cluster à la fois |
+| `Alerts — cluster` (`dashboard-alertes.yaml`) | alertes actives et historique, par famille (Kubernetes, nœuds, supervision) |
 
 Modifier : éditer le JSON dans Git (une modification dans l'UI est perdue au redémarrage) ; export depuis l'UI possible puis recopie dans la ConfigMap.
 

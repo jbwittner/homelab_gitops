@@ -7,3 +7,9 @@ resources:
   - dashboard-stockage.yaml
   - dashboard-velero.yaml
   - dashboard-argocd.yaml
+  - dashboard-ressources-cluster.yaml
+  - dashboard-ressources-namespaces.yaml
+  - dashboard-ressources-workloads.yaml
+  - dashboard-ressources-pods.yaml
+  - dashboard-ressources-volumes.yaml
+  - dashboard-alertes.yaml
