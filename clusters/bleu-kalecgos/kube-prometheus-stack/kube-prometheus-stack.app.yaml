@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack-kalecgos
+  namespace: argocd
+  labels:
+    layer: infra
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+    namespace: monitoring
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 92.10.1
+      helm:
+        releaseName: kube-prometheus-stack
+        # pod de test Grafana (hook test)
+        skipTests: true
+        valueFiles:
+          - $values/components/kube-prometheus-stack/values.yaml
+          - $values/clusters/bleu-kalecgos/kube-prometheus-stack/values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: components/kube-prometheus-stack/manifests
+  syncPolicy:
+    # pas de prune : supprimer une CRD supprime les Prometheus, ServiceMonitors et règles
+    automated:
+      selfHeal: true
+    syncOptions:
+      # CRDs trop grosses pour l'annotation last-applied
+      - ServerSideApply=true

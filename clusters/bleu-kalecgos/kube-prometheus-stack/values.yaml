@@ -1,0 +1,21 @@
+# Agent : collecte et envoie tout à malygos, ne stocke rien (WAL seul)
+prometheus:
+  agentMode: true
+  prometheusSpec:
+    scrapeClasses:
+      - name: cluster
+        default: true
+        relabelings:
+          - targetLabel: cluster
+            replacement: bleu-kalecgos
+    # sans authentification (LAN), comme la réception sur malygos
+    remoteWrite:
+      - url: https://prometheus.lan.wittner.tech/api/v1/write
+
+# règles, alertes et tableaux de bord : sur malygos, qui reçoit les séries
+alertmanager:
+  enabled: false
+grafana:
+  enabled: false
+defaultRules:
+  create: false

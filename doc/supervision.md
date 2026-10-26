@@ -12,6 +12,7 @@
 | `components/kube-prometheus-stack/values.yaml` | control plane Talos et kube-proxy désactivés, sélecteurs ouverts, webhook certifié par cert-manager |
 | `components/kube-prometheus-stack/manifests/namespace.yaml` | `monitoring`, PSA `privileged` (node-exporter) |
 | `clusters/bleu-malygos/kube-prometheus-stack/values.yaml` | stockage, rétention, réception, routes, Grafana sans état |
+| `clusters/bleu-kalecgos/kube-prometheus-stack/values.yaml` | agent (`PrometheusAgent`), envoi vers `prometheus.lan.wittner.tech` ; sans Grafana, Alertmanager ni règles |
 | `clusters/bleu-malygos/kube-prometheus-stack/manifests/grafana-admin.yaml` | `ExternalSecret` : mot de passe admin depuis `secret/grafana` (`admin_password`) |
 | `clusters/<nom>/kube-prometheus-stack/kube-prometheus-stack.app.yaml` | `kube-prometheus-stack-<cluster-court>` |
 
@@ -45,5 +46,6 @@ Changer : même commande ; ESO relit toutes les heures, puis redémarrer Grafana
 kubectl --context admin@bleu-malygos -n monitoring get pods,pvc
 kubectl --context admin@bleu-malygos -n monitoring get externalsecret      # SecretSynced
 curl -s https://prometheus.lan.wittner.tech/api/v1/targets?state=unhealthy | jq '.data.activeTargets | length'   # 0
-curl -s 'https://prometheus.lan.wittner.tech/api/v1/query?query=count(up)by(cluster)' | jq -c '.data.result[] | [.metric.cluster, .value[1]]'
+curl -s 'https://prometheus.lan.wittner.tech/api/v1/query?query=count(up)by(cluster)' | jq -c '.data.result[] | [.metric.cluster, .value[1]]'   # les deux clusters
+kubectl --context admin@bleu-kalecgos -n monitoring logs prometheus-kube-prometheus-stack-0 -c prometheus | grep -i remote   # erreurs d'envoi
 ```
