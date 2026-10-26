@@ -14,17 +14,17 @@ Une ligne par composant ; Application ArgoCD `<comp>-<cluster-court>`. Versions 
 | CRDs Prometheus Operator | boot | ✓ | ✓ | — | — |
 | Cilium (CNI, LB-IPAM, Gateway API) | boot | ✓ | ✓ | `kube-system` | — |
 | Sealed Secrets | boot | ✓ | | `kube-system` | — |
-| ArgoCD (pilote les deux clusters) + app-of-apps | boot | ✓ | | `argocd` | `argocd.lan.wittner.tech` |
+| ArgoCD (pilote les deux clusters) + app-of-apps | boot | ✓ | | `argocd` | [argocd](https://argocd.lan.wittner.tech) |
 | Compte `argocd-manager` | boot | | ✓ | `kube-system` | — |
 | OpenEBS LocalPV LVM | infra | ✓ | ✓ | `openebs` | — |
 | cert-manager (Let's Encrypt DNS-01) | infra | ✓ | ✓ | `cert-manager` | — |
 | External Secrets | infra | ✓ | ✓ | `external-secrets` | — |
 | Gateway `lan` (wildcard `*.lan`) | infra | ✓ `.80` | ✓ `.85` | `gateway` | — |
-| OpenBao | infra | ✓ | | `openbao` | `openbao.lan.wittner.tech` |
+| OpenBao | infra | ✓ | | `openbao` | [openbao](https://openbao.lan.wittner.tech) |
 | Velero (GCS) | infra | ✓ | ✓ | `velero` | — |
-| kube-prometheus-stack | infra | ✓ complet | ✓ agent | `monitoring` | `grafana`, `prometheus`, `alertmanager` `.lan.wittner.tech` |
-| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | `adguard`, `ha`, `pve-ysera`, `z2m`, `zyxel`, `homepage` (relais) |
-| Homepage | apps | | ✓ | `homepage` | `homepage.lan.wittner.tech` |
+| kube-prometheus-stack | infra | ✓ complet | ✓ agent | `monitoring` | [grafana](https://grafana.lan.wittner.tech), [prometheus](https://prometheus.lan.wittner.tech), [alertmanager](https://alertmanager.lan.wittner.tech) |
+| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech) (relais) |
+| Homepage | apps | | ✓ | `homepage` | [homepage](https://homepage.lan.wittner.tech) |
 
 Hors dépôt (Proxmox `vert-ysera`) : AdGuard Home (DNS), Home Assistant, Zigbee2MQTT, client NetBird.
 
