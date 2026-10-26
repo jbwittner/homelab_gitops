@@ -1,7 +1,0 @@
-# Nom invalide (majuscules) : rendu sans erreur, refusé par l'API au dry-run → synchro Failed
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: Echec-Volontaire
-data:
-  raison: test du dashboard ArgoCD
