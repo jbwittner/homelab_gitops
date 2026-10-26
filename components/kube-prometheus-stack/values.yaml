@@ -36,3 +36,87 @@ prometheus-node-exporter:
         - sourceLabels:
             - __meta_kubernetes_pod_node_name
           targetLabel: instance
+
+# kube-state-metrics : objets velero en métriques (dashboard Backups — velero). Les métriques du
+# serveur velero sont agrégées par schedule et écrasées à chaque sauvegarde ; ici une série par
+# objet Backup (velero_backup_object_*) et par volume copié (velero_pvb_object_*).
+kube-state-metrics:
+  rbac:
+    extraRules:
+      - apiGroups:
+          - velero.io
+        resources:
+          - backups
+          - podvolumebackups
+        verbs:
+          - list
+          - watch
+  customResourceState:
+    enabled: true
+    config:
+      spec:
+        resources:
+          - groupVersionKind:
+              group: velero.io
+              version: v1
+              kind: Backup
+            metricNamePrefix: velero_backup_object
+            labelsFromPath:
+              backup: [metadata, name]
+            metrics:
+              - name: info
+                help: "Sauvegarde velero existante (1 par objet Backup)"
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      phase: [status, phase]
+                      # absent sur une sauvegarde lancée à la main
+                      schedule: [metadata, labels, velero.io/schedule-name]
+                      storage_location: [spec, storageLocation]
+              - name: items_backed_up
+                help: "Nombre d'éléments Kubernetes sauvegardés"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, progress, itemsBackedUp]
+                    nilIsZero: true
+              - name: start_time
+                help: "Début de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, startTimestamp]
+              - name: completion_time
+                help: "Fin de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    # pas de nilIsZero : une sauvegarde en cours s'afficherait en 1970
+                    path: [status, completionTimestamp]
+              - name: expiration
+                help: "Expiration (TTL) de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, expiration]
+          - groupVersionKind:
+              group: velero.io
+              version: v1
+              kind: PodVolumeBackup
+            metricNamePrefix: velero_pvb_object
+            labelsFromPath:
+              backup: [metadata, labels, velero.io/backup-name]
+              node: [spec, node]
+              volume: [spec, volume]
+              pod: [spec, pod, name]
+              volume_namespace: [spec, pod, namespace]
+            metrics:
+              - name: bytes
+                help: "Octets copiés par kopia pour ce volume"
+                each:
+                  type: Gauge
+                  gauge:
+                    # status.progress vide pour un volume sans donnée : compté 0, pas absent
+                    path: [status, progress, totalBytes]
+                    nilIsZero: true

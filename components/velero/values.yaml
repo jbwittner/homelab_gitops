@@ -52,5 +52,14 @@ nodeAgent:
 metrics:
   serviceMonitor:
     enabled: true
+    # sauvegarde lancée à la main : velero émet un schedule vide (label abandonné par
+    # Prometheus) ; réécrit en "manuel" pour la distinguer (dashboard Backups — velero)
+    metricRelabelings:
+      - sourceLabels:
+          - __name__
+          - schedule
+        regex: "velero_backup_.+;"
+        targetLabel: schedule
+        replacement: manuel
   nodeAgentPodMonitor:
     enabled: true

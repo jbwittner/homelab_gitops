@@ -4,3 +4,6 @@ resources:
   - ../../../../components/kube-prometheus-stack/manifests
   - grafana-admin.yaml
   - dashboard-machines.yaml
+  - dashboard-stockage.yaml
+  - dashboard-velero.yaml
+  - dashboard-argocd.yaml

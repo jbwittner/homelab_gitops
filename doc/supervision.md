@@ -44,7 +44,8 @@ Chaque composant déclare le sien ; Prometheus les prend tous (sélecteurs ouver
 |---|---|---|
 | ArgoCD (malygos) | 5 `ServiceMonitor` (controller, server, repo-server, notifications, applicationset) | `clusters/bleu-malygos/argocd/manifests/servicemonitors.yaml` |
 | OpenEBS LVM | `ServiceMonitor` `openebs-lvm-node`, `instance` = nom du nœud | `components/openebs/manifests/servicemonitor.yaml` |
-| Velero | `ServiceMonitor` serveur + `PodMonitor` node-agent | option `metrics` du chart, `components/velero/values.yaml` |
+| Velero | `ServiceMonitor` serveur (schedule vide réécrit en `manuel`) + `PodMonitor` node-agent | option `metrics` du chart, `components/velero/values.yaml` |
+| Objets velero (Backup, PodVolumeBackup) | kube-state-metrics `customResourceState` : `velero_backup_object_*`, `velero_pvb_object_*` | `components/kube-prometheus-stack/values.yaml` |
 
 ## Dashboards custom
 
@@ -60,6 +61,9 @@ ConfigMap dans `clusters/bleu-malygos/kube-prometheus-stack/manifests/`, ajouté
 | Dashboard | Contenu |
 |---|---|
 | `Machines` (`dashboard-machines.yaml`) | tous les nœuds node-exporter : CPU, RAM, PSI, disques, réseau, températures ; rangées « Diagnostic » repliées |
+| `Storage — cluster` (`dashboard-stockage.yaml`) | état des nœuds (tableau) et VG LVM d'OpenEBS : capacité, place libre, métadonnées |
+| `Backups — velero` (`dashboard-velero.yaml`) | fraîcheur des sauvegardes, bucket, inventaire par schedule et par objet Backup, données kopia, restaurations |
+| `GitOps — ArgoCD` (`dashboard-argocd.yaml`) | Applications (sync/santé), synchros, contrôleur, repo-server Git, composants |
 
 Modifier : éditer le JSON dans Git (une modification dans l'UI est perdue au redémarrage) ; export depuis l'UI possible puis recopie dans la ConfigMap.
 
