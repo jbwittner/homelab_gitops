@@ -1,0 +1,25 @@
+# Talos : scheduler, controller-manager et etcd n'exposent leurs métriques que sur
+# 127.0.0.1 (à ouvrir dans homelab_talos avant de les réactiver) ; Cilium remplace kube-proxy
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    # tous les ServiceMonitor, PodMonitor et règles du cluster, pas seulement ceux du chart
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+
+# certificat du webhook par cert-manager : pas de Jobs hook relancés à chaque synchro ArgoCD
+prometheusOperator:
+  admissionWebhooks:
+    certManager:
+      enabled: true

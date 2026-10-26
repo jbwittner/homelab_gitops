@@ -16,5 +16,5 @@ spec:
   data:
     - secretKey: api-token
       remoteRef:
-        key: cert-manager/cloudflare
-        property: api-token
+        key: cert-manager
+        property: cloudflare_secret

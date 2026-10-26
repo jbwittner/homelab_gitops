@@ -1,0 +1,70 @@
+prometheus:
+  prometheusSpec:
+    # label cluster sur toutes les séries locales (kalecgos pose le sien avant l'envoi)
+    scrapeClasses:
+      - name: cluster
+        default: true
+        relabelings:
+          - targetLabel: cluster
+            replacement: bleu-malygos
+    # reçoit l'agent de kalecgos (POST /api/v1/write), sans authentification (LAN)
+    enableRemoteWriteReceiver: true
+    retention: 15d
+    retentionSize: 45GB
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 50Gi
+  route:
+    main:
+      enabled: true
+      hostnames:
+        - prometheus.lan.wittner.tech
+      parentRefs:
+        - name: lan
+          namespace: gateway
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+  route:
+    main:
+      enabled: true
+      hostnames:
+        - alertmanager.lan.wittner.tech
+      parentRefs:
+        - name: lan
+          namespace: gateway
+
+grafana:
+  # sans état : tableaux de bord en ConfigMaps (sidecar), modifications dans l'UI perdues au redémarrage
+  admin:
+    existingSecret: grafana-admin
+  grafana.ini:
+    server:
+      root_url: https://grafana.lan.wittner.tech
+  sidecar:
+    dashboards:
+      # variable « cluster » dans les tableaux de bord du chart
+      multicluster:
+        global:
+          enabled: true
+  route:
+    main:
+      enabled: true
+      hostnames:
+        - grafana.lan.wittner.tech
+      parentRefs:
+        - name: lan
+          namespace: gateway

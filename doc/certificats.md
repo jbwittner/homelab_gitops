@@ -3,7 +3,7 @@
 | Fichier | Rôle |
 |---|---|
 | `components/cert-manager/values.yaml` | CRDs par le chart (gardées à la désinstallation) ; DNS-01 vérifié sur 1.1.1.1 |
-| `components/cert-manager/manifests/cloudflare-token.yaml` | `ExternalSecret` : jeton Cloudflare depuis `secret/cert-manager/cloudflare` |
+| `components/cert-manager/manifests/cloudflare-token.yaml` | `ExternalSecret` : jeton Cloudflare depuis `secret/cert-manager` (`cloudflare_secret`) |
 | `components/cert-manager/manifests/clusterissuer-*.yaml` | `letsencrypt-staging`, `letsencrypt-prod` : ACME DNS-01 Cloudflare, zone `wittner.tech` |
 | `clusters/<nom>/cert-manager/cert-manager.app.yaml` | `cert-manager-<cluster-court>` |
 
@@ -20,7 +20,7 @@ Cloudflare → My Profile → API Tokens → Create Token → modèle « Edit zo
 
 ```sh
 read -rs "CF?Jeton Cloudflare : "; echo
-printf %s "$CF" | bao kv put secret/cert-manager/cloudflare api-token=-
+printf %s "$CF" | bao kv put secret/cert-manager cloudflare_secret=-   # patch si secret/cert-manager a déjà d'autres champs
 unset CF
 ```
 

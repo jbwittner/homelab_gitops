@@ -21,7 +21,8 @@ Pas de nouveau SealedSecret hors boot.
 
 - Sur malygos, 1 réplica, stockage raft.
 - Structure (KV, auth, policies) en Terraform : dépôt `homelab_terraform`, module `openbao/bleu-malygos`. Valeurs des secrets : `bao kv put`, à la main.
-- Secrets rangés en `secret/<comp>/<nom>` (KV v2), partagés entre clusters.
+- Un secret par composant, `secret/<comp>` (KV v2), un champ par valeur nommé selon son sens (`secret/grafana` → `admin_password`, `secret/cert-manager` → `cloudflare_secret`) ; partagés entre clusters.
+  - Créer : `bao kv put` ; ajouter ou changer un champ d'un secret existant : `bao kv patch` (`put` remplace tout le secret).
 - Un mount d'auth Kubernetes par cluster : `auth/k8s-bleu-malygos`, `auth/k8s-bleu-kalecgos`, rôle `eso` (ServiceAccount `external-secrets/external-secrets`, lecture seule).
   - kalecgos : aucun jeton stocké dans OpenBao ; il valide le jeton d'ESO auprès de l'API de kalecgos, donc le compte d'ESO y porte `system:auth-delegator`.
 - Admin : utilisateur `userpass` (policy `admin`) ; token root révoqué, régénérable avec la clé d'unseal.
@@ -39,7 +40,7 @@ Pas de nouveau SealedSecret hors boot.
 | malygos | `http://openbao-active.openbao.svc:8200` | `auth/k8s-bleu-malygos`, rôle `eso` |
 | kalecgos | `https://openbao.lan.wittner.tech` (Gateway de malygos) | `auth/k8s-bleu-kalecgos`, rôle `eso` ; compte d'ESO lié à `system:auth-delegator` |
 
-Lire un secret `secret/<comp>/<nom>` :
+Lire un champ de `secret/<comp>` :
 
 ```yaml
 apiVersion: external-secrets.io/v1
@@ -57,8 +58,8 @@ spec:
   data:
     - secretKey: <clé dans le Secret>
       remoteRef:
-        key: <comp>/<nom>  # sans secret/ ni data/
-        property: <champ du secret OpenBao>
+        key: <comp>        # sans secret/ ni data/
+        property: <champ>  # admin_password, cloudflare_secret…
 ```
 
 ## Ne jamais committer
