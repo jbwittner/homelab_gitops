@@ -1,3 +1,7 @@
+# CRDs de l'opérateur : Application prometheus-operator-crds-<cluster> (posées au bootstrap)
+crds:
+  enabled: false
+
 # Talos : scheduler, controller-manager et etcd n'exposent leurs métriques que sur
 # 127.0.0.1 (à ouvrir dans homelab_talos avant de les réactiver) ; Cilium remplace kube-proxy
 kubeControllerManager:

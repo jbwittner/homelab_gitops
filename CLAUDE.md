@@ -26,6 +26,7 @@ script/                   # scripts .sh, jamais à côté d'un composant
 - Installer un composant : **chart Helm en priorité** (Application chart + `$values`). Kustomize sur URL taguée seulement s'il n'existe pas de chart (CRDs Gateway API) ou par exception décidée (ArgoCD : plus simple à surcharger).
 - Namespace : celui de la doc upstream (`kube-system` pour Cilium et sealed-secrets).
 - Nom d'Application : `<comp>-<cluster-court>` (`openbao-malygos`, `cert-manager-kalecgos`), label `layer: boot|infra|apps` (voir `doc/arborescence.md`).
+- Supervision : chaque composant déclare ses `ServiceMonitor`/`PodMonitor` (option du chart, sinon dans son `manifests/`). CRDs de l'opérateur posées au bootstrap (`prometheus-operator-crds`), pas par kube-prometheus-stack.
 - Patch kustomize : toujours avec un bloc `target:` explicite (`kind`, `name`), même quand le patch porte déjà son identité.
 - Le commun ne contient que ce qui vaut pour **tous** les clusters qui l'utilisent. Voir `doc/arborescence.md`.
 
@@ -58,7 +59,7 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
 - Manifestes Kubernetes bruts : sous un dossier `manifests/`.
 - Upstream dans un `kustomization.yaml` : URL taguée, `https://raw.githubusercontent.com/<org>/<repo>/refs/tags/<tag>/…` ou `https://github.com/<org>/<repo>/releases/download/<tag>/…`.
 - Version de chart Helm et tags d'image en dur, jamais dans un `.env`.
-- Une release doit avoir 7 jours ; automerge des pin/patch/minor ; merge manuel pour Argo CD (`argoproj/argo-cd`) et les CRDs Gateway API (`kubernetes-sigs/gateway-api`, couplées à la version de Cilium).
+- Une release doit avoir 7 jours ; automerge des pin/patch/minor ; merge manuel pour Argo CD (`argoproj/argo-cd`) et les CRDs Gateway API (`kubernetes-sigs/gateway-api`, couplées à la version de Cilium) ; `prometheus-operator-crds` et `kube-prometheus-stack` groupés (même opérateur).
 
 Les `description` de `renovate.json` citent encore `k8s/` et `docker/` : périmées.
 

@@ -8,6 +8,8 @@ resources:
   - admin-password.sealed.yaml
   - cluster-bleu-kalecgos.sealed.yaml
   - httproute.yaml
+  # CRD ServiceMonitor : bootstrap étape 1
+  - servicemonitors.yaml
 patches:
   # lu au démarrage : redémarrer argocd-server / argocd-application-controller après changement
   - target:

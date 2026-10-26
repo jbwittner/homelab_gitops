@@ -50,6 +50,11 @@
       "description": "CRDs Gateway API : la version doit être supportée par la mineure Cilium en place (doc Cilium, page Gateway API) : merge manuel",
       "matchPackageNames": ["kubernetes-sigs/gateway-api"],
       "automerge": false
+    },
+    {
+      "description": "Même opérateur Prometheus : CRDs (prometheus-operator-crds) et chart kube-prometheus-stack montés ensemble",
+      "matchPackageNames": ["prometheus-operator-crds", "kube-prometheus-stack"],
+      "groupName": "prometheus-operator"
     }
   ]
 }

@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-operator-crds-kalecgos
+  namespace: argocd
+  labels:
+    layer: boot
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+  sources:
+    # CRDs de l'opérateur (ServiceMonitor, PodMonitor…) posées au bootstrap (doc/bootstrap/01-crds.md),
+    # avant tout composant qui déclare un moniteur. Même opérateur que kube-prometheus-stack
+    # (32.0.1 = v0.94.1 = kube-prometheus-stack 92.10.1) : groupés dans Renovate.
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: prometheus-operator-crds
+      targetRevision: 32.0.1
+      helm:
+        releaseName: prometheus-operator-crds
+  syncPolicy:
+    # pas de prune : supprimer une CRD supprime toutes ses ressources
+    automated:
+      selfHeal: true
+    syncOptions:
+      # CRDs trop grosses pour l'annotation last-applied
+      - ServerSideApply=true

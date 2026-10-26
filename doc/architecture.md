@@ -17,6 +17,7 @@ Talos 1.13, Kubernetes 1.36, Cilium 1.20 (kube-proxy replacement, L2 announcemen
 |---|:---:|:---:|
 | Cilium | ✓ | ✓ |
 | CRDs Gateway API + `Gateway` partagé | ✓ | ✓ |
+| CRDs Prometheus Operator (bootstrap) | ✓ | ✓ |
 | OpenEBS LocalPV LVM (VG `openebs-vg`, [stockage](stockage.md)) | ✓ | ✓ |
 | cert-manager (wildcard `*.lan.wittner.tech`) | ✓ | ✓ |
 | External Secrets | ✓ | ✓ |

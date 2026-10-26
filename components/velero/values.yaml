@@ -47,3 +47,10 @@ extraVolumeMounts: &gcpMounts
 nodeAgent:
   extraVolumes: *gcpVolumes
   extraVolumeMounts: *gcpMounts
+
+# métriques velero_* (serveur) et node-agent (kopia) : moniteurs créés si la CRD existe
+metrics:
+  serviceMonitor:
+    enabled: true
+  nodeAgentPodMonitor:
+    enabled: true

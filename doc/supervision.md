@@ -9,7 +9,8 @@
 
 | Fichier | Rôle |
 |---|---|
-| `components/kube-prometheus-stack/values.yaml` | control plane Talos et kube-proxy désactivés, sélecteurs ouverts, webhook certifié par cert-manager |
+| `clusters/<nom>/prometheus-operator-crds/` | CRDs de l'opérateur (`ServiceMonitor`, `PodMonitor`…), posées au [bootstrap](bootstrap/01-crds.md) |
+| `components/kube-prometheus-stack/values.yaml` | CRDs non installées par le chart, control plane Talos et kube-proxy désactivés, sélecteurs ouverts, webhook certifié par cert-manager, `instance` node-exporter = nom du nœud |
 | `components/kube-prometheus-stack/manifests/namespace.yaml` | `monitoring`, PSA `privileged` (node-exporter) |
 | `clusters/bleu-malygos/kube-prometheus-stack/values.yaml` | stockage, rétention, réception, routes, Grafana sans état |
 | `clusters/bleu-kalecgos/kube-prometheus-stack/values.yaml` | agent (`PrometheusAgent`), envoi vers `prometheus.lan.wittner.tech` ; sans Grafana, Alertmanager ni règles |
@@ -34,6 +35,16 @@ unset PW
 ```
 
 Changer : même commande ; ESO relit toutes les heures, puis redémarrer Grafana (`kubectl --context admin@bleu-malygos -n monitoring rollout restart deploy/kube-prometheus-stack-grafana`).
+
+## Moniteurs des composants
+
+Chaque composant déclare le sien ; Prometheus les prend tous (sélecteurs ouverts).
+
+| Composant | Moniteur | Où |
+|---|---|---|
+| ArgoCD (malygos) | 5 `ServiceMonitor` (controller, server, repo-server, notifications, applicationset) | `clusters/bleu-malygos/argocd/manifests/servicemonitors.yaml` |
+| OpenEBS LVM | `ServiceMonitor` `openebs-lvm-node`, `instance` = nom du nœud | `components/openebs/manifests/servicemonitor.yaml` |
+| Velero | `ServiceMonitor` serveur + `PodMonitor` node-agent | option `metrics` du chart, `components/velero/values.yaml` |
 
 ## Dashboards custom
 
