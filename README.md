@@ -2,7 +2,7 @@
 
 GitOps de deux clusters Kubernetes (`bleu-malygos` infra, `bleu-kalecgos` worker), réconciliés par ArgoCD.
 
-Docs : [architecture](doc/architecture.md) · [arborescence](doc/arborescence.md) · [secrets](doc/secrets.md) · [openbao](doc/openbao.md) · [stockage](doc/stockage.md) · [certificats](doc/certificats.md) · [exposition](doc/exposition.md) · [sauvegardes](doc/sauvegardes.md) · [supervision](doc/supervision.md) · [homepage](doc/homepage.md) · [décisions](doc/decisions.md)
+Docs : [architecture](doc/architecture.md) · [arborescence](doc/arborescence.md) · [secrets](doc/secrets.md) · [openbao](doc/openbao.md) · [stockage](doc/stockage.md) · [certificats](doc/certificats.md) · [exposition](doc/exposition.md) · [sauvegardes](doc/sauvegardes.md) · [supervision](doc/supervision.md) · [homepage](doc/homepage.md) · [renovate](doc/renovate.md) · [décisions](doc/decisions.md)
 
 ## Déployé
 
@@ -25,6 +25,7 @@ Une ligne par composant ; Application ArgoCD `<comp>-<cluster-court>`. Versions 
 | kube-prometheus-stack | infra | ✓ complet | ✓ agent | `monitoring` | [grafana](https://grafana.lan.wittner.tech), [prometheus](https://prometheus.lan.wittner.tech), [alertmanager](https://alertmanager.lan.wittner.tech) |
 | external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech) (relais) |
 | Homepage | apps | | ✓ | `homepage` | [homepage](https://homepage.lan.wittner.tech) |
+| Renovate (CronJob, GitHub App) | apps | | ✓ | `renovate` | — |
 
 Hors dépôt (Proxmox `vert-ysera`) : AdGuard Home (DNS), Home Assistant, Zigbee2MQTT, client NetBird.
 
@@ -43,3 +44,5 @@ Sujets reportés volontairement, à reprendre au besoin.
 | Retry ArgoCD | avant un boot à blanc : ArgoCD ne retente que 5 fois, une Application dont une dépendance arrive tard reste en échec | `*.app.yaml` (`syncPolicy.retry`) |
 | Restauration OpenBao en prod | remise en place d'un snapshot raft (`-force`) jamais testée ; la restauration à côté l'est | [sauvegardes](doc/sauvegardes.md) |
 | NetBird | second peer routeur dans un cluster, en redondance du CT Proxmox | — |
+| Renovate : automerge | rétablir l'automerge (retirer `force.automerge: false`) après relecture du premier passage | `clusters/bleu-kalecgos/renovate/values.yaml` |
+| Renovate sur `homelab_terraform` | installer l'App sur le dépôt, `renovate.json` (providers), l'ajouter à `repositories` | `homelab_terraform`, `clusters/bleu-kalecgos/renovate/values.yaml` |

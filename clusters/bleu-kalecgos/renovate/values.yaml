@@ -1,0 +1,53 @@
+cronjob:
+  # toutes les heures (Renovate ne refait que ce qui a changé)
+  schedule: "17 * * * *"
+  timeZone: Europe/Paris
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: "1"
+  failedJobsHistoryLimit: "3"
+  # GitHub App : Renovate n'accepte qu'un jeton d'installation (1 h), généré avant chaque passage
+  # depuis l'App ID, l'Installation ID et la clé privée (OpenBao, secret/renovate)
+  # affectation puis export : avec « export X=$(…) », un échec serait masqué (set -e)
+  preCommand: |
+    RENOVATE_TOKEN="$(node /github-app/token.js)"
+    export RENOVATE_TOKEN
+
+renovate:
+  # force.automerge false : TEMPORAIRE, premier passage en PR seules (relecture des retards
+  # accumulés) ; à retirer pour rendre la main aux règles automerge des renovate.json
+  config: |
+    {
+      "platform": "github",
+      "repositories": ["jbwittner/homelab_gitops", "jbwittner/homelab_talos"],
+      "onboarding": false,
+      "requireConfig": "required",
+      "force": { "automerge": false }
+    }
+
+env:
+  GITHUB_APP_ID: "5417686"
+  GITHUB_APP_INSTALLATION_ID: "175555325"
+  GITHUB_APP_KEY_FILE: /github-app/key/private_key
+
+extraVolumes:
+  - name: github-app-script
+    configMap:
+      name: renovate-github-app-token
+  - name: github-app-key
+    secret:
+      secretName: renovate-github-app
+
+extraVolumeMounts:
+  - name: github-app-script
+    mountPath: /github-app/token.js
+    subPath: token.js
+  - name: github-app-key
+    mountPath: /github-app/key
+    readOnly: true
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 2Gi

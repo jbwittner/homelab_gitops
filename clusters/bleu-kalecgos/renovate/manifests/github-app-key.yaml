@@ -1,0 +1,17 @@
+# Clé privée de la GitHub App Renovate, lue dans OpenBao (secret/renovate, champ private_key)
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: renovate-github-app
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: renovate-github-app
+  data:
+    - secretKey: private_key
+      remoteRef:
+        key: renovate
+        property: private_key
