@@ -208,7 +208,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "1 - (node_memory_MemAvailable_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} / node_memory_MemTotal_bytes{cluster=~\"$cluster\",instance=~\"$instance\"})",
+              "expr": "max by (instance) (1 - (node_memory_MemAvailable_bytes{cluster=~\"$cluster\",instance=~\"$instance\"} / node_memory_MemTotal_bytes{cluster=~\"$cluster\",instance=~\"$instance\"}))",
               "legendFormat": "{{instance}}",
               "range": true,
               "instant": false,
@@ -300,7 +300,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Hottest hwmon sensor of each machine (max across its sensors, not over time).\n· `{{instance}}`: last scraped value.\n· `{{instance}} · 5 min`: mean over a fixed 5-minute window, so a one-second spike does not read as a state.\nThe 70 °C / 85 °C colours are cosmetic: no alert rule behind them.",
+          "description": "Hottest hwmon sensor of each machine (max across its sensors, not over time), last scraped value. The 70 °C / 85 °C colours are cosmetic: no alert rule behind them.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -333,7 +333,7 @@ data:
           "gridPos": {
             "x": 12,
             "y": 1,
-            "w": 12,
+            "w": 6,
             "h": 6
           },
           "id": 83,
@@ -365,7 +365,70 @@ data:
               "range": true,
               "instant": false,
               "refId": "A"
+            }
+          ],
+          "title": "Hottest sensor — now",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Same sensor averaged over a fixed 5-minute window: a one-second spike does not read as a state. Compare with the tile on the left.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "unit": "celsius",
+              "decimals": 1,
+              "noValue": "no sensor",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 85
+                  }
+                ]
+              }
             },
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 18,
+            "y": 1,
+            "w": 6,
+            "h": 6
+          },
+          "id": 91,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
             {
               "datasource": {
                 "type": "prometheus",
@@ -373,13 +436,13 @@ data:
               },
               "editorMode": "code",
               "expr": "max by (instance) (avg_over_time(node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\"}[5m]))",
-              "legendFormat": "{{instance}} · 5 min",
-              "range": false,
-              "instant": true,
-              "refId": "B"
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "instant": false,
+              "refId": "A"
             }
           ],
-          "title": "Hottest sensor",
+          "title": "Hottest sensor — 5 min avg",
           "type": "stat"
         },
         {
@@ -457,10 +520,10 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "up{job=\"node-exporter\",cluster=~\"$cluster\",instance=~\"$instance\"}",
+              "expr": "max by (instance) (up{job=\"node-exporter\",cluster=~\"$cluster\",instance=~\"$instance\"})",
               "legendFormat": "{{instance}}",
-              "range": false,
-              "instant": true,
+              "range": true,
+              "instant": false,
               "refId": "A"
             }
           ],
@@ -522,10 +585,10 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "node_uname_info{cluster=~\"$cluster\",instance=~\"$instance\"}",
+              "expr": "max by (instance, nodename, release) (node_uname_info{cluster=~\"$cluster\",instance=~\"$instance\"})",
               "legendFormat": "{{nodename}} · {{release}}",
-              "range": false,
-              "instant": true,
+              "range": true,
+              "instant": false,
               "refId": "A"
             }
           ],
@@ -588,10 +651,10 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "node_time_seconds{cluster=~\"$cluster\",instance=~\"$instance\"} - node_boot_time_seconds{cluster=~\"$cluster\",instance=~\"$instance\"}",
-              "legendFormat": "uptime",
-              "range": false,
-              "instant": true,
+              "expr": "max by (instance) (node_time_seconds{cluster=~\"$cluster\",instance=~\"$instance\"} - node_boot_time_seconds{cluster=~\"$cluster\",instance=~\"$instance\"})",
+              "legendFormat": "{{instance}}",
+              "range": true,
+              "instant": false,
               "refId": "A"
             }
           ],
@@ -1005,10 +1068,11 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "(1 - node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"} / node_filesystem_size_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}) * 100",
+              "expr": "max by (instance, mountpoint) ((1 - node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"} / node_filesystem_size_bytes{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}) * 100)",
               "legendFormat": "{{instance}} · {{mountpoint}}",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "instant": false
             }
           ],
           "title": "Mounted filesystems",
@@ -2230,10 +2294,11 @@ data:
                     "uid": "${DS_PROMETHEUS}"
                   },
                   "editorMode": "code",
-                  "expr": "node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\",mountpoint=\"/var\"}",
+                  "expr": "max by (instance) (node_filesystem_avail_bytes{cluster=~\"$cluster\",instance=~\"$instance\",mountpoint=\"/var\"})",
                   "legendFormat": "{{instance}}",
                   "range": true,
-                  "refId": "A"
+                  "refId": "A",
+                  "instant": false
                 }
               ],
               "title": "/var — free",
@@ -2311,10 +2376,11 @@ data:
                     "uid": "${DS_PROMETHEUS}"
                   },
                   "editorMode": "code",
-                  "expr": "(1 - node_filesystem_files_free{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"} / node_filesystem_files{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}) * 100",
+                  "expr": "max by (instance, mountpoint) ((1 - node_filesystem_files_free{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"} / node_filesystem_files{cluster=~\"$cluster\",instance=~\"$instance\",fstype!~\"tmpfs|overlay|squashfs|ramfs\",mountpoint!~\"/(run|dev|sys|proc).*\"}) * 100)",
                   "legendFormat": "{{instance}} · {{mountpoint}}",
                   "range": true,
-                  "refId": "A"
+                  "refId": "A",
+                  "instant": false
                 }
               ],
               "title": "Inodes used",
@@ -2818,10 +2884,11 @@ data:
                     "uid": "${DS_PROMETHEUS}"
                   },
                   "editorMode": "code",
-                  "expr": "label_replace(node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) (node_hwmon_temp_max_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} > 0 < 200) * 100, \"disque\", \"$1\", \"chip\", \"nvme_(.*)\")",
-                  "legendFormat": "{{instance}} · {{disque}}",
+                  "expr": "max by (instance, nvme) (label_replace(node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} / on (instance, chip) (node_hwmon_temp_max_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"} > 0 < 200) * 100, \"nvme\", \"$1\", \"chip\", \"nvme_(.*)\"))",
+                  "legendFormat": "{{instance}} · {{nvme}}",
                   "range": true,
-                  "refId": "A"
+                  "refId": "A",
+                  "instant": false
                 }
               ],
               "title": "NVMe composite (% of the vendor threshold)",
@@ -3217,7 +3284,8 @@ data:
                   "expr": "count by (instance) (count by (instance, chip) (node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\"}))",
                   "legendFormat": "{{instance}}",
                   "range": true,
-                  "refId": "A"
+                  "refId": "A",
+                  "instant": false
                 }
               ],
               "title": "NVMe disks detected",
@@ -3291,7 +3359,8 @@ data:
                   "expr": "max by (instance) (node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"}) - min by (instance) (node_hwmon_temp_celsius{cluster=~\"$cluster\",instance=~\"$instance\",chip=~\"nvme.*\",sensor=\"temp1\"})",
                   "legendFormat": "{{instance}}",
                   "range": true,
-                  "refId": "A"
+                  "refId": "A",
+                  "instant": false
                 }
               ],
               "title": "Thermal gap between NVMe disks",
