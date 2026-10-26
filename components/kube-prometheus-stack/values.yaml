@@ -23,3 +23,12 @@ prometheusOperator:
   admissionWebhooks:
     certManager:
       enabled: true
+
+# instance = nom du nœud (vert-emeriss…) au lieu de IP:9100, lisible dans les dashboards
+prometheus-node-exporter:
+  prometheus:
+    monitor:
+      relabelings:
+        - sourceLabels:
+            - __meta_kubernetes_pod_node_name
+          targetLabel: instance
