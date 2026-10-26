@@ -39,9 +39,9 @@ Talos 1.13, Kubernetes 1.36, Cilium 1.20 (kube-proxy replacement, L2 announcemen
             │                      │              │                      │
             │ Prometheus ◄─────────┼─ remote-write┤ Prometheus agent     │
             └──────────┬───────────┘              └──────────┬───────────┘
-                       │ Gateway .80-82                      │ Gateway .85-89
-                       └──────────── proxy LAN 192.168.1.50 ─┘
-                                 (*.lan.wittner.tech)
+                       │ Gateway .80                         │ Gateway .85
+                       └──────── DNS AdGuard 192.168.1.2 ────┘
+                  (*.lan.wittner.tech → .80 ; rewrite exact → .85)
 ```
 
 ## Limites connues

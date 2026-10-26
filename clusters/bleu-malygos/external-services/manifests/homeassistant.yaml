@@ -1,4 +1,4 @@
-# Home Assistant : 192.168.1.15 (malygos, source des requêtes du Gateway) dans http.trusted_proxies
+# Home Assistant : 192.168.1.15 (malygos, source des requêtes du Gateway) dans les trusted proxies (Paramètres → Système → Réseau → HTTP server, pas configuration.yaml)
 apiVersion: v1
 kind: Service
 metadata:

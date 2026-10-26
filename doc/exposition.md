@@ -1,6 +1,6 @@
 # Exposition (Gateway)
 
-Navigateur → proxy LAN `192.168.1.50` (tous les `*.lan.wittner.tech` y résolvent) → Gateway du cluster → service.
+Navigateur → DNS AdGuard (`192.168.1.2`, hors dépôt) : rewrite `*.lan.wittner.tech` → `192.168.1.80` → Gateway de malygos → service. Hostname servi par kalecgos : rewrite exact → `192.168.1.85` (prioritaire sur le wildcard).
 
 | Fichier | Rôle |
 |---|---|
@@ -18,7 +18,7 @@ Navigateur → proxy LAN `192.168.1.50` (tous les `*.lan.wittner.tech` y résolv
 ## Exposer un service
 
 1. `HTTPRoute` (ou values du chart) : `parentRefs: [{name: lan, namespace: gateway}]`, hostname `<x>.lan.wittner.tech`.
-2. Proxy `192.168.1.50` (hors dépôt) : déclarer le hostname, cible `<IP du Gateway>:443`, SNI et Host conservés.
+2. malygos : rien d'autre (wildcard DNS). kalecgos : rewrite AdGuard `<x>.lan.wittner.tech` → `192.168.1.85`.
 
 ## Service hors cluster (malygos)
 
@@ -61,15 +61,13 @@ spec:
 
 Backend en HTTPS seulement (Proxmox) : Gateway API n'a pas d'`insecureSkipVerify`. `BackendTLSPolicy` avec la CA du backend (certificat public en `.crt`, `*.pem` est exclu par `.gitignore`) et un `hostname` présent dans son certificat : modèle `pve-ysera.yaml`.
 
-Puis déclarer le hostname sur le proxy .50, cible `192.168.1.80:443`.
-
 ## Vérifier
 
 ```sh
 kubectl --context admin@bleu-malygos -n gateway get gateway,certificate    # PROGRAMMED True, ADDRESS 192.168.1.80 ; READY True
 kubectl --context admin@bleu-malygos get httproute -A
-curl -sI --resolve argocd.lan.wittner.tech:443:192.168.1.80 https://argocd.lan.wittner.tech   # direct Gateway
-curl -sI https://argocd.lan.wittner.tech                                                       # via proxy
+dig +short argocd.lan.wittner.tech                  # 192.168.1.80
+curl -sI https://argocd.lan.wittner.tech            # server: envoy
 ```
 
-Direct OK mais via proxy `404` : hostname absent du proxy.
+`404` avec `server: envoy` : aucune HTTPRoute pour ce hostname sur ce Gateway (mauvais cluster ou route absente).
