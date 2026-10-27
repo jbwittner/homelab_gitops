@@ -1,0 +1,20 @@
+# Secret du client OIDC grafana (Authelia), lu dans OpenBao (secret/grafana, champ oidc_client_secret)
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-oidc
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: grafana-oidc
+  data:
+    - secretKey: client-secret
+      remoteRef:
+        key: grafana
+        property: oidc_client_secret

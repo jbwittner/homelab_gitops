@@ -1,0 +1,53 @@
+# Clients OIDC (https://www.authelia.com/integration/openid-connect/clients/) : tous ici, jamais dans un autre fichier
+# client_secret : hash pbkdf2 seul ; le secret en clair est dans OpenBao, côté application (doc/authelia.md)
+identity_providers:
+  oidc:
+    # Grafana ne lit pas les claims via userinfo : les mettre dans l'ID token
+    claims_policies:
+      grafana:
+        id_token: [email, name, groups, preferred_username]
+    clients:
+      - client_id: argocd
+        client_name: Argo CD
+        client_secret: '$pbkdf2-sha512$310000$hgFxqX2lrdQ20x498P3RVA$X02slCmPnbAXk.4Y4aedLwiYWCgMHX4VA.pIebGlfsUyhu4FR7hN9ti94NBaja3YZoREkzQZXogdvROTale4WA'
+        public: false
+        authorization_policy: two_factor
+        redirect_uris:
+          - https://argocd.lan.wittner.tech/auth/callback
+        scopes: [openid, groups, email]
+        response_types: [code]
+        grant_types: [authorization_code]
+        access_token_signed_response_alg: none
+        userinfo_signed_response_alg: none
+        token_endpoint_auth_method: client_secret_basic
+      # argocd login --sso
+      - client_id: argocd-cli
+        client_name: Argo CD (CLI)
+        public: true
+        authorization_policy: two_factor
+        require_pkce: true
+        pkce_challenge_method: S256
+        redirect_uris:
+          - http://localhost:8085/auth/callback
+        scopes: [openid, offline_access, groups, email]
+        response_types: [code]
+        grant_types: [authorization_code, refresh_token]
+        access_token_signed_response_alg: none
+        userinfo_signed_response_alg: none
+        token_endpoint_auth_method: none
+      - client_id: grafana
+        client_name: Grafana
+        client_secret: '$pbkdf2-sha512$310000$SM2y938BHhIpzJ8tUJBILA$VBYkzu3bVX385TgkKCXmzNS7gOfHRtrFa4KVjcW/sP3gXB.3m6fFS2sCS92TBWqA4IfY2UG2WMa0IJyOPXvCng'
+        public: false
+        authorization_policy: two_factor
+        claims_policy: grafana
+        require_pkce: true
+        pkce_challenge_method: S256
+        redirect_uris:
+          - https://grafana.lan.wittner.tech/login/generic_oauth
+        scopes: [openid, profile, groups, email]
+        response_types: [code]
+        grant_types: [authorization_code]
+        access_token_signed_response_alg: none
+        userinfo_signed_response_alg: none
+        token_endpoint_auth_method: client_secret_basic

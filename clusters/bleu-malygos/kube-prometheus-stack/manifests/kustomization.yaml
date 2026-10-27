@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - ../../../../components/kube-prometheus-stack/manifests
   - grafana-admin.yaml
+  - grafana-oidc.yaml
   - dashboard-machines.yaml
   - dashboard-stockage.yaml
   - dashboard-velero.yaml

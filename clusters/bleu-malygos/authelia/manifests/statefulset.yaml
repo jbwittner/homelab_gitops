@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: authelia
+spec:
+  replicas: 1
+  serviceName: authelia
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authelia
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authelia
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 8000
+        runAsGroup: 8000
+        fsGroup: 8000
+      containers:
+        - name: authelia
+          image: ghcr.io/authelia/authelia:4.39.28
+          command:
+            - authelia
+          env:
+            # liste explicite : un dossier de ConfigMap contient aussi ..data, lu comme config
+            - name: X_AUTHELIA_CONFIG
+              value: /etc/authelia/configuration.yml,/etc/authelia/clients.yml
+            # {{ secret "…" }} dans la config (clé JWKS)
+            - name: X_AUTHELIA_CONFIG_FILTERS
+              value: template
+            - name: AUTHELIA_SESSION_SECRET_FILE
+              value: /secrets/session_secret
+            - name: AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE
+              value: /secrets/storage_encryption_key
+            - name: AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE
+              value: /secrets/oidc_hmac_secret
+            # sonde intégrée à l'image inutile : probes Kubernetes
+            - name: AUTHELIA_SERVER_DISABLE_HEALTHCHECK
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 9091
+            - name: metrics
+              containerPort: 9959
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 12
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              # argon2id : 64 Mio par connexion
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /etc/authelia
+              readOnly: true
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            - name: data
+              mountPath: /config
+      volumes:
+        - name: config
+          configMap:
+            name: authelia-config
+        - name: secrets
+          secret:
+            secretName: authelia
+  # SQLite (passkeys, TOTP, consentements) et fichier des notifications
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 100Mi

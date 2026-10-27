@@ -20,7 +20,7 @@
 
 | URL | |
 |---|---|
-| `https://grafana.lan.wittner.tech` | utilisateur `admin` |
+| `https://grafana.lan.wittner.tech` | Authelia (groupe `admins` → Admin, sinon Viewer) ; utilisateur `admin` en secours |
 | `https://prometheus.lan.wittner.tech` | UI, API ; écriture distante sur `/api/v1/write`, **sans authentification** (LAN) |
 | `https://alertmanager.lan.wittner.tech` | aucun destinataire configuré |
 

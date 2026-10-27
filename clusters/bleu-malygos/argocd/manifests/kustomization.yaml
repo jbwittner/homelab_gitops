@@ -8,6 +8,7 @@ resources:
   - admin-password.sealed.yaml
   - cluster-bleu-kalecgos.sealed.yaml
   - httproute.yaml
+  - oidc.externalsecret.yaml
   # CRD ServiceMonitor : bootstrap étape 1
   - servicemonitors.yaml
 patches:
@@ -36,6 +37,42 @@ patches:
         name: argocd-secret
         annotations:
           sealedsecrets.bitnami.com/patch: "true"
+  # connexion par Authelia (clients argocd, argocd-cli : clusters/bleu-malygos/authelia) ; compte admin gardé en secours
+  - target:
+      kind: ConfigMap
+      name: argocd-cm
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-cm
+      data:
+        url: https://argocd.lan.wittner.tech
+        oidc.config: |
+          name: Authelia
+          issuer: https://auth.lan.wittner.tech
+          clientID: argocd
+          clientSecret: $argocd-oidc:clientSecret
+          cliClientID: argocd-cli
+          requestedScopes:
+            - openid
+            - email
+            - groups
+          # groupes absents de l'ID token : lus sur userinfo
+          enableUserInfoGroups: true
+          userInfoPath: /api/oidc/userinfo
+  # groupe Authelia admins → administrateur ; les autres n'ont aucun droit
+  - target:
+      kind: ConfigMap
+      name: argocd-rbac-cm
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-rbac-cm
+      data:
+        policy.csv: |
+          g, admins, role:admin
   # copie de resource.exclusions d'install.yaml (v3.5.5), un seul bloc modifié : la recopier à chaque montée d'ArgoCD
   - target:
       kind: ConfigMap

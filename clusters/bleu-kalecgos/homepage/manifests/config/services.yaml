@@ -111,6 +111,11 @@
               query: count(velero_backup_object_info{cluster="bleu-malygos",schedule="openbao"})
               format:
                 type: number
+    - Authelia:
+        href: https://auth.lan.wittner.tech/
+        siteMonitor: https://auth.lan.wittner.tech/api/health
+        description: Connexion unique (OIDC)
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/authelia.svg
 
 - Supervision:
     - Grafana:

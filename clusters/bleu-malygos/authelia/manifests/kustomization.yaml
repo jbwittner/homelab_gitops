@@ -1,0 +1,18 @@
+# Authelia sur l'image officielle ; config (https://www.authelia.com/configuration/) dans config/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: authelia
+resources:
+  - namespace.yaml
+  - externalsecret.yaml
+  - statefulset.yaml
+  - service.yaml
+  - httproute.yaml
+  - servicemonitor.yaml
+# nom suffixé d'un hash, réécrit dans le StatefulSet : une config modifiée relance le pod
+# (Authelia ne recharge pas sa config à chaud)
+configMapGenerator:
+  - name: authelia-config
+    files:
+      - config/configuration.yml
+      - config/clients.yml

@@ -12,6 +12,7 @@ Navigateur → DNS AdGuard (`192.168.1.2`, hors dépôt) : rewrite `*.lan.wittne
 | Hostname | Cluster | Route |
 |---|---|---|
 | `argocd.lan.wittner.tech` | malygos | `clusters/bleu-malygos/argocd/manifests/httproute.yaml` → `argocd-server:80` |
+| `auth.lan.wittner.tech` | malygos | `clusters/bleu-malygos/authelia/manifests/httproute.yaml` → `authelia:9091` ([authelia](authelia.md)) |
 | `openbao.lan.wittner.tech` | malygos | values du chart OpenBao (`server.gateway.httpRoute`) → `openbao-active:8200` |
 | `homepage.lan.wittner.tech` | kalecgos, relayé par malygos | malygos : `external-services/manifests/homepage.yaml` → `192.168.1.85:443` ; kalecgos : `homepage/manifests/httproute.yaml` → `homepage:3000` ([homepage](homepage.md)) |
 | `adguard`, `ha`, `pve-ysera`, `z2m`, `zyxel` `.lan.wittner.tech` | malygos → LAN | `clusters/bleu-malygos/external-services/manifests/` (section suivante) |
