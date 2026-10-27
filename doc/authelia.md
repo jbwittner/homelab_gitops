@@ -16,8 +16,9 @@ Pas de forward-auth : le Gateway Cilium ne le fait pas. Seules les applis OIDC s
 |---|---|---|
 | `argocd`, `argocd-cli` | `argocd/manifests/kustomization.yaml` (`argocd-cm`, `argocd-rbac-cm`) | `secret/argocd` → `oidc_client_secret` |
 | `grafana` | `kube-prometheus-stack/values.yaml` (`auth.generic_oauth`) | `secret/grafana` → `oidc_client_secret` |
+| `openbao` | `homelab_terraform`, `openbao/bleu-malygos/auth_oidc.tf` (secret lu en éphémère, hors state) | `secret/openbao` → `oidc_client_secret` |
 
-Secours : `admin` ArgoCD et `admin` Grafana restent actifs.
+Secours : `admin` ArgoCD, `admin` Grafana et `userpass` OpenBao restent actifs.
 
 ## Secrets (une fois)
 

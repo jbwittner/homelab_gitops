@@ -31,7 +31,7 @@ kubectl --context admin@bleu-malygos -n openbao exec openbao-0 -- bao status   #
 kubectl --context admin@bleu-malygos -n argocd get application openbao-malygos  # Synced / Healthy
 ```
 
-UI : `https://openbao.lan.wittner.tech` ([exposition](exposition.md)), méthode Username. CLI : `export BAO_ADDR=https://openbao.lan.wittner.tech`.
+UI : `https://openbao.lan.wittner.tech` ([exposition](exposition.md)), méthode OIDC (Authelia), Username en secours. CLI : `export BAO_ADDR=https://openbao.lan.wittner.tech`, puis `bao login -method=oidc`.
 
 ## Configurer
 

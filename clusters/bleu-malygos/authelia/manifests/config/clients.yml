@@ -2,10 +2,12 @@
 # client_secret : hash pbkdf2 seul ; le secret en clair est dans OpenBao, côté application (doc/authelia.md)
 identity_providers:
   oidc:
-    # Grafana ne lit pas les claims via userinfo : les mettre dans l'ID token
+    # Grafana, OpenBao : claims lus dans l'ID token, pas via userinfo
     claims_policies:
       grafana:
         id_token: [email, name, groups, preferred_username]
+      openbao:
+        id_token: [email, groups, preferred_username]
     clients:
       - client_id: argocd
         client_name: Argo CD
@@ -45,6 +47,25 @@ identity_providers:
         pkce_challenge_method: S256
         redirect_uris:
           - https://grafana.lan.wittner.tech/login/generic_oauth
+        scopes: [openid, profile, groups, email]
+        response_types: [code]
+        grant_types: [authorization_code]
+        access_token_signed_response_alg: none
+        userinfo_signed_response_alg: none
+        token_endpoint_auth_method: client_secret_basic
+      # auth oidc et rôle authelia : homelab_terraform (openbao/bleu-malygos/auth_oidc.tf)
+      - client_id: openbao
+        client_name: OpenBao
+        client_secret: '$pbkdf2-sha512$310000$ILdA2PWIw3.48T3W4DBylg$W4x7oZ8qKGd7MtTqwrA9AVTAi2Ta.jNkB5NHnkd6wUpjjHX2QVbQawsUWhm1S4VEIgolE3iXg9bB2IXXh.o39w'
+        public: false
+        authorization_policy: two_factor
+        claims_policy: openbao
+        require_pkce: true
+        pkce_challenge_method: S256
+        redirect_uris:
+          - https://openbao.lan.wittner.tech/ui/vault/auth/oidc/oidc/callback
+          # bao login -method=oidc
+          - http://localhost:8250/oidc/callback
         scopes: [openid, profile, groups, email]
         response_types: [code]
         grant_types: [authorization_code]
