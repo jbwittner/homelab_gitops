@@ -73,7 +73,7 @@ patches:
       data:
         policy.csv: |
           g, admins, role:admin
-  # copie de resource.exclusions d'install.yaml (v3.5.5), un seul bloc modifié : la recopier à chaque montée d'ArgoCD
+  # copie de resource.exclusions d'install.yaml (v3.5.6), un seul bloc modifié : la recopier à chaque montée d'ArgoCD
   - target:
       kind: ConfigMap
       name: argocd-cm

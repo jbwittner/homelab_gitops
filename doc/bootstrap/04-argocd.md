@@ -44,9 +44,7 @@ kubeseal --context admin@bleu-malygos -o yaml \
 command rm clusters/bleu-malygos/argocd/manifests/github-app.secret.yaml ~/Downloads/<app>.<date>.private-key.pem
 ```
 
-Rotation (clé perdue ou exposée) : nouvelle clé sur la GitHub App, supprimer l'ancienne, refaire cette section. Rien à sauvegarder.
-
-Commit + push du `.sealed.yaml`.
+Commit + push du `.sealed.yaml`. Changer de clé : [rotation](#rotation-de-la-clé).
 
 ## 3. Installer
 
@@ -109,3 +107,33 @@ kubectl --context admin@bleu-malygos -n argocd delete secret argocd-initial-admi
 ```
 
 Changer de mot de passe : refaire la section (nouveau hash, nouvelle date).
+
+## Rotation de la clé
+
+Clé perdue, exposée ou supprimée côté GitHub. Symptôme : `401 Unauthorized` sur `…/app/installations/<id>/access_tokens` (logs d'`argocd-repo-server`), toutes les Applications en `Unknown`.
+
+1. GitHub App → Private keys → Generate a private key ; noter l'empreinte `SHA256:…` affichée.
+2. Vérifier le `.pem` téléchargé (même empreinte que GitHub) :
+   ```sh
+   PEM=$(command ls -t ~/Downloads/*.pem | head -1); echo $PEM
+   openssl rsa -in $PEM -pubout -outform DER 2>/dev/null | openssl sha256 -binary | openssl base64
+   ```
+3. Section 2 avec `KEY=$(cat $PEM)`. Avant `kubeseal`, revérifier le fichier en clair (une clé vide se scelle sans erreur) :
+   ```sh
+   yq '.stringData.githubAppPrivateKey' clusters/bleu-malygos/argocd/manifests/github-app.secret.yaml \
+     | openssl rsa -pubout -outform DER 2>/dev/null | openssl sha256 -binary | openssl base64
+   ```
+4. Commit + push **avant** d'appliquer : dès l'accès retrouvé, `argocd-malygos` (selfHeal) réapplique ce qui est dans Git.
+5. Attendre 3 min (cache de résolution de `main` du repo-server, sinon il ressert l'ancien commit), puis :
+   ```sh
+   kubectl --context admin@bleu-malygos apply -f clusters/bleu-malygos/argocd/manifests/github-app.sealed.yaml
+   ```
+6. Supprimer l'ancienne clé sur GitHub si elle y est encore.
+
+Vérifier :
+
+```sh
+kubectl --context admin@bleu-malygos -n argocd logs deploy/argocd-repo-server --since=2m | grep -c 401   # 0
+kubectl --context admin@bleu-malygos -n argocd get application argocd-malygos -o jsonpath='{.status.sync.revision}'; echo
+git rev-parse origin/main                                                                                 # même commit
+```
