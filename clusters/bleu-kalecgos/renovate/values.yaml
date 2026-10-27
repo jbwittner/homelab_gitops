@@ -1,6 +1,6 @@
 cronjob:
   # toutes les heures (Renovate ne refait que ce qui a changé)
-  schedule: "17 * * * *"
+  schedule: "0 * * * *"
   timeZone: Europe/Paris
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: "1"
@@ -15,15 +15,12 @@ cronjob:
     export RENOVATE_TOKEN
 
 renovate:
-  # force.automerge false : TEMPORAIRE, premier passage en PR seules (relecture des retards
-  # accumulés) ; à retirer pour rendre la main aux règles automerge des renovate.json
   config: |
     {
       "platform": "github",
       "repositories": ["jbwittner/homelab_gitops", "jbwittner/homelab_talos", "jbwittner/homelab_terraform"],
       "onboarding": false,
-      "requireConfig": "required",
-      "force": { "automerge": false }
+      "requireConfig": "required"
     }
 
 env:

@@ -44,4 +44,3 @@ Sujets reportés volontairement, à reprendre au besoin.
 | Retry ArgoCD | avant un boot à blanc : ArgoCD ne retente que 5 fois, une Application dont une dépendance arrive tard reste en échec | `*.app.yaml` (`syncPolicy.retry`) |
 | Restauration OpenBao en prod | remise en place d'un snapshot raft (`-force`) jamais testée ; la restauration à côté l'est | [sauvegardes](doc/sauvegardes.md) |
 | NetBird | second peer routeur dans un cluster, en redondance du CT Proxmox | — |
-| Renovate : automerge | rétablir l'automerge (retirer `force.automerge: false`) après relecture du premier passage | `clusters/bleu-kalecgos/renovate/values.yaml` |

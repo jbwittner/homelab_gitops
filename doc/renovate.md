@@ -16,8 +16,6 @@ Mises à jour des dépendances (charts, images, URLs taguées) par PR GitHub. Au
 | `homelab_talos` | `talosVersion`, `kubernetesVersion` des `talconfig.yaml` (regex) : merge manuel, upgrade par `talosctl` ; mineure Kubernetes : PR à part avec rappel de la matrice de support Talos |
 | `homelab_terraform` | providers Terraform et `.terraform.lock.hcl` (règles du dépôt) |
 
-Premier passage : `force.automerge: false` dans la config globale (PR seules, quelles que soient les règles des dépôts), à retirer après relecture.
-
 ## GitHub App (une fois)
 
 Settings → Developer settings → GitHub Apps → New : webhook décoché, « Only on this account ». Permissions de dépôt : Contents, Pull requests, Issues, Checks, Commit statuses, Workflows en lecture-écriture ; Administration, Dependabot alerts, Metadata en lecture. Installer sur les dépôts suivis. App ID et Installation ID : `values.yaml` (non sensibles).
