@@ -26,7 +26,7 @@ CLI locale connectée à OpenBao ([openbao](openbao.md)), Docker pour les hash. 
 
 ```sh
 export BAO_ADDR=https://openbao.lan.wittner.tech
-bao login -method=userpass username=jbwittner
+bao login -method=oidc
 ```
 
 Authelia : clés, mot de passe, e-mail.

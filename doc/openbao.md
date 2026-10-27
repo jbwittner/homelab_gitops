@@ -31,7 +31,7 @@ kubectl --context admin@bleu-malygos -n openbao exec openbao-0 -- bao status   #
 kubectl --context admin@bleu-malygos -n argocd get application openbao-malygos  # Synced / Healthy
 ```
 
-UI : `https://openbao.lan.wittner.tech` ([exposition](exposition.md)), méthode OIDC (Authelia), Username en secours. CLI : `export BAO_ADDR=https://openbao.lan.wittner.tech`, puis `bao login -method=oidc`.
+UI : `https://openbao.lan.wittner.tech` ([exposition](exposition.md)), méthode OIDC (Authelia), Username `admin` en secours. CLI : `export BAO_ADDR=https://openbao.lan.wittner.tech`, puis `bao login -method=oidc`.
 
 ## Configurer
 
@@ -42,10 +42,9 @@ Structure en Terraform : `homelab_terraform/openbao/bleu-malygos` (README du mod
 Automatique chaque nuit par Velero ([sauvegardes.md](sauvegardes.md)). À la main :
 
 ```sh
-kubectl --context admin@bleu-malygos -n openbao exec -it openbao-0 -- \
-  sh -c 'bao login -method=userpass username=jbwittner && bao operator raft snapshot save /tmp/openbao.snap'
-kubectl --context admin@bleu-malygos -n openbao cp openbao-0:/tmp/openbao.snap ~/openbao-$(date +%F).snap
-kubectl --context admin@bleu-malygos -n openbao exec openbao-0 -- rm /tmp/openbao.snap
+export BAO_ADDR=https://openbao.lan.wittner.tech
+bao login -method=oidc
+bao operator raft snapshot save ~/openbao-$(date +%F).snap
 ```
 
 Snapshot chiffré, mais inutilisable sans la clé d'unseal : les ranger ensemble hors dépôt.
