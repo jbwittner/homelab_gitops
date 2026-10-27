@@ -1,6 +1,6 @@
 # Clients OIDC (https://www.authelia.com/integration/openid-connect/clients/) : tous ici, jamais dans un autre fichier
 # client_secret : hash pbkdf2 seul ; le secret en clair est dans OpenBao, côté application (doc/authelia.md)
-# consent_mode implicit : applis à soi, pas d'écran de consentement à chaque connexion
+# consent_mode pre-configured : consentement demandé une fois, retenu un an (case « se souvenir » ; base SQLite)
 identity_providers:
   oidc:
     # Grafana, OpenBao : claims lus dans l'ID token, pas via userinfo
@@ -15,7 +15,8 @@ identity_providers:
         client_secret: '$pbkdf2-sha512$310000$hgFxqX2lrdQ20x498P3RVA$X02slCmPnbAXk.4Y4aedLwiYWCgMHX4VA.pIebGlfsUyhu4FR7hN9ti94NBaja3YZoREkzQZXogdvROTale4WA'
         public: false
         authorization_policy: two_factor
-        consent_mode: implicit
+        consent_mode: pre-configured
+        pre_configured_consent_duration: 1 year
         redirect_uris:
           - https://argocd.lan.wittner.tech/auth/callback
         scopes: [openid, groups, email]
@@ -29,7 +30,8 @@ identity_providers:
         client_name: Argo CD (CLI)
         public: true
         authorization_policy: two_factor
-        consent_mode: implicit
+        consent_mode: pre-configured
+        pre_configured_consent_duration: 1 year
         require_pkce: true
         pkce_challenge_method: S256
         redirect_uris:
@@ -45,7 +47,8 @@ identity_providers:
         client_secret: '$pbkdf2-sha512$310000$SM2y938BHhIpzJ8tUJBILA$VBYkzu3bVX385TgkKCXmzNS7gOfHRtrFa4KVjcW/sP3gXB.3m6fFS2sCS92TBWqA4IfY2UG2WMa0IJyOPXvCng'
         public: false
         authorization_policy: two_factor
-        consent_mode: implicit
+        consent_mode: pre-configured
+        pre_configured_consent_duration: 1 year
         claims_policy: grafana
         require_pkce: true
         pkce_challenge_method: S256
@@ -63,7 +66,8 @@ identity_providers:
         client_secret: '$pbkdf2-sha512$310000$ILdA2PWIw3.48T3W4DBylg$W4x7oZ8qKGd7MtTqwrA9AVTAi2Ta.jNkB5NHnkd6wUpjjHX2QVbQawsUWhm1S4VEIgolE3iXg9bB2IXXh.o39w'
         public: false
         authorization_policy: two_factor
-        consent_mode: implicit
+        consent_mode: pre-configured
+        pre_configured_consent_duration: 1 year
         claims_policy: openbao
         require_pkce: true
         pkce_challenge_method: S256
