@@ -26,6 +26,20 @@ patches:
         server.insecure: "true"
         # diff par dry-run de l'API : valeurs par défaut (HTTPRoute…) pas vues comme un écart
         controller.diff.server.side: "true"
+  # polling Git toutes les 60 s, sans webhook (doc/decisions.md) ; sert aussi de durée au cache des refs
+  # du repo-server (--revision-cache-expiration, 3 min sinon)
+  # lu au démarrage : redémarrer argocd-repo-server et argocd-application-controller après changement
+  - target:
+      kind: ConfigMap
+      name: argocd-cm
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-cm
+      data:
+        timeout.reconciliation: 60s
+        timeout.reconciliation.jitter: 10s
   # sealed-secrets ne complète un Secret existant que s'il porte cette annotation (admin-password.sealed.yaml)
   - target:
       kind: Secret
