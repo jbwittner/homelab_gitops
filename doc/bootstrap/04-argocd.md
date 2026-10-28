@@ -59,7 +59,12 @@ kubectl --context admin@bleu-malygos apply \
   -f clusters/bleu-malygos/apps.app.yaml -f clusters/bleu-kalecgos/apps.app.yaml
 ```
 
-Les Applications `*-kalecgos` restent en erreur (`there are no clusters with this name: bleu-kalecgos`) jusqu'à l'[étape 5](05-kalecgos.md).
+Erreurs attendues au premier boot :
+
+| Erreur | Cause | Levée par |
+|---|---|---|
+| `no matches for kind "ExternalSecret"` (au `apply -k`, le reste est appliqué) | `oidc.externalsecret.yaml` : CRD posée par `external-secrets-malygos` | `argocd-malygos` la pose ensuite ; s'il reste en échec : Sync |
+| `there are no clusters with this name: bleu-kalecgos` | Applications `*-kalecgos` | [étape 5](05-kalecgos.md) |
 
 ## Vérifier
 
@@ -67,7 +72,7 @@ Les Applications `*-kalecgos` restent en erreur (`there are no clusters with thi
 kubectl --context admin@bleu-malygos -n argocd get applications    # *-malygos Synced / Healthy
 ```
 
-Interface : `https://argocd.lan.wittner.tech` ([exposition](../exposition.md)), utilisateur `admin`. CLI : `argocd login argocd.lan.wittner.tech --grpc-web`.
+Interface : `https://argocd.lan.wittner.tech` ([exposition](../exposition.md)), connexion Authelia (après l'[étape 6](06-openbao.md)), `admin` en secours. CLI : `argocd login argocd.lan.wittner.tech --grpc-web`.
 
 Avant la Gateway (premier boot) :
 
