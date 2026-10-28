@@ -1,0 +1,37 @@
+# OpenBao : snapshot raft cohérent (hook) puis copie du volume data par Kopia.
+# Le hook s'authentifie avec le jeton Kubernetes du pod (rôle raft-snapshot,
+# homelab_terraform openbao/bleu-malygos/raft_snapshot.tf).
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: openbao
+  namespace: velero
+spec:
+  schedule: "0 3 * * *"   # UTC
+  template:
+    includedNamespaces:
+      - openbao
+    snapshotVolumes: false
+    defaultVolumesToFsBackup: true
+    ttl: 720h0m0s
+    hooks:
+      resources:
+        - name: raft-snapshot
+          includedNamespaces:
+            - openbao
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: openbao
+              component: server
+          pre:
+            - exec:
+                container: openbao
+                onError: Fail
+                timeout: 2m
+                command:
+                  - /bin/sh
+                  - -ec
+                  - |
+                    export BAO_TOKEN="$(bao write -field=token auth/k8s-bleu-malygos/login role=raft-snapshot jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token)"
+                    bao operator raft snapshot save /openbao/data/openbao.snap
+                    bao token revoke -self

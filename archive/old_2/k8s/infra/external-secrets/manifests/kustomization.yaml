@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Pas de champ `namespace:` ici, contrairement aux autres composants : la ressource est
+# cluster-scoped (`Namespace`). Le transformer de namespace de kustomize ne connaît pas les CRDs et
+# poserait un `metadata.namespace` parasite sur tout objet d'un groupe tiers ajouté ici.
+#
+# ⚠️ Il n'y a plus de `ClusterSecretStore` : le coffre qui l'alimentait a été retiré du dépôt. Ce
+# composant ne pose donc plus qu'un namespace vide, et reste lui-même en `.noapp.yaml`. Remonter un
+# backend de secrets suppose d'écrire un nouveau store ici.
+resources:
+  - namespace.yaml

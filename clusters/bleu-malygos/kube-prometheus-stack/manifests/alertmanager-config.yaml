@@ -1,0 +1,68 @@
+# Configuration Alertmanager entière, rendue par ESO : le destinataire (secret/alertmanager,
+# champ email) reste dans OpenBao, le dépôt est public. Lue via alertmanagerSpec.configSecret.
+# Envoi par le relais du cluster (doc/smtp.md) : sans authentification ni TLS.
+# Partie texte du mail : modèle alertmanager-templates.yaml (HTML : celui d'Alertmanager).
+# Accolades d'Alertmanager protégées du moteur d'ESO par une chaîne brute entre accents graves.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: alertmanager-config
+    template:
+      data:
+        alertmanager.yaml: |
+          global:
+            resolve_timeout: 5m
+            smtp_smarthost: smtp-relay.smtp-relay.svc.cluster.local:587
+            smtp_from: Alertmanager <alertmanager@wittner.tech>
+            smtp_hello: alertmanager.lan.wittner.tech
+            smtp_require_tls: false
+          route:
+            receiver: mail
+            group_by: [alertname, cluster, namespace]
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 12h
+            routes:
+              # toujours en alerte (preuve que la chaîne vit) : jamais envoyée
+              - receiver: "null"
+                matchers:
+                  - alertname = "Watchdog"
+              - receiver: "null"
+                matchers:
+                  - alertname = "InfoInhibitor"
+          receivers:
+            - name: "null"
+            - name: mail
+              email_configs:
+                - to: "{{ .email }}"
+                  send_resolved: true
+                  text: '{{ `{{ template "email.texte" . }}` }}'
+          templates:
+            - /etc/alertmanager/configmaps/alertmanager-templates/*.tmpl
+          # celles du chart : une alerte plus grave masque les moins graves du même nom
+          inhibit_rules:
+            - source_matchers: ["severity = critical"]
+              target_matchers: ["severity =~ warning|info"]
+              equal: [namespace, alertname]
+            - source_matchers: ["severity = warning"]
+              target_matchers: ["severity = info"]
+              equal: [namespace, alertname]
+            - source_matchers: ["alertname = InfoInhibitor"]
+              target_matchers: ["severity = info"]
+              equal: [namespace]
+            - target_matchers: ["alertname = InfoInhibitor"]
+  data:
+    - secretKey: email
+      remoteRef:
+        key: alertmanager
+        property: email

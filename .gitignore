@@ -1,0 +1,7 @@
+*.pem
+*.secret.yaml
+*-backup.yaml
+*sealed-secrets-key*.yaml
+.DS_Store
+# Piles docker/ : valeurs réelles des `.env`. Le `.example` à côté est la copie de référence.
+.env

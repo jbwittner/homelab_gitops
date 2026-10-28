@@ -1,0 +1,24 @@
+---
+# https://gethomepage.dev/configs/bookmarks
+
+- Dépôts:
+    - homelab_gitops:
+        - abbr: GO
+          href: https://github.com/jbwittner/homelab_gitops
+    - homelab_terraform:
+        - abbr: TF
+          href: https://github.com/jbwittner/homelab_terraform
+    - homelab_talos:
+        - abbr: TA
+          href: https://github.com/jbwittner/homelab_talos
+    - homelab_ysera:
+        - abbr: YS
+          href: https://github.com/jbwittner/homelab_ysera
+
+- Cloud:
+    - Cloudflare:
+        - abbr: CF
+          href: https://dash.cloudflare.com/
+    - Google Cloud:
+        - abbr: GC
+          href: https://console.cloud.google.com/

@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Tous les manifestes de test atterrissent dans le namespace test-nginx.
+namespace: test-nginx
+resources:
+  - namespace.yaml
+  - test-nginx.yaml
+  - pgsql-test.yaml
+  - test-pvc.yaml

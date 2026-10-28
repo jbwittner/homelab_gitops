@@ -1,0 +1,23 @@
+# Identifiants SMTP du fournisseur (Resend : username resend, password = clé API),
+# lus dans OpenBao, passés en variables d'environnement à Postfix
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: smtp-relay-relayhost
+  namespace: smtp-relay
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: smtp-relay-relayhost
+  data:
+    - secretKey: RELAYHOST_USERNAME
+      remoteRef:
+        key: smtp-relay
+        property: username
+    - secretKey: RELAYHOST_PASSWORD
+      remoteRef:
+        key: smtp-relay
+        property: password

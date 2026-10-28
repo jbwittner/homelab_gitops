@@ -1,0 +1,106 @@
+prometheus:
+  prometheusSpec:
+    # liens des alertes (« Source ») : le chart déduit http:// de la route, le Gateway n'écoute qu'en HTTPS
+    externalUrl: https://prometheus.lan.wittner.tech
+    # label cluster sur toutes les séries locales (kalecgos pose le sien avant l'envoi)
+    scrapeClasses:
+      - name: cluster
+        default: true
+        relabelings:
+          - targetLabel: cluster
+            replacement: bleu-malygos
+    # reçoit l'agent de kalecgos (POST /api/v1/write), sans authentification (LAN)
+    enableRemoteWriteReceiver: true
+    retention: 15d
+    retentionSize: 45GB
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 50Gi
+  route:
+    main:
+      enabled: true
+      hostnames:
+        - prometheus.lan.wittner.tech
+      parentRefs:
+        - name: lan
+          namespace: gateway
+
+alertmanager:
+  alertmanagerSpec:
+    # liens des mails d'alerte : le chart déduit http:// de la route, le Gateway n'écoute qu'en HTTPS
+    externalUrl: https://alertmanager.lan.wittner.tech
+    # config entière dans manifests/alertmanager-config.yaml (ESO : destinataire dans OpenBao)
+    useExistingSecret: true
+    configSecret: alertmanager-config
+    configMaps:
+      - alertmanager-templates
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+  route:
+    main:
+      enabled: true
+      hostnames:
+        - alertmanager.lan.wittner.tech
+      parentRefs:
+        - name: lan
+          namespace: gateway
+
+grafana:
+  # sans état : tableaux de bord en ConfigMaps (sidecar), modifications dans l'UI perdues au redémarrage
+  admin:
+    existingSecret: grafana-admin
+  grafana.ini:
+    server:
+      root_url: https://grafana.lan.wittner.tech
+    # connexion par Authelia (client grafana : clusters/bleu-malygos/authelia) ; formulaire admin gardé en secours
+    auth.generic_oauth:
+      enabled: true
+      name: Authelia
+      icon: signin
+      client_id: grafana
+      scopes: openid profile email groups
+      empty_scopes: false
+      auth_url: https://auth.lan.wittner.tech/api/oidc/authorization
+      token_url: https://auth.lan.wittner.tech/api/oidc/token
+      api_url: https://auth.lan.wittner.tech/api/oidc/userinfo
+      login_attribute_path: preferred_username
+      groups_attribute_path: groups
+      name_attribute_path: name
+      use_pkce: true
+      auth_style: InHeader
+      # groupe Authelia admins → Admin, les autres en lecture
+      role_attribute_path: contains(groups[*], 'admins') && 'Admin' || 'Viewer'
+  envValueFrom:
+    GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+      secretKeyRef:
+        name: grafana-oidc
+        key: client-secret
+  sidecar:
+    dashboards:
+      # dossier pris dans l'annotation grafana_folder de chaque ConfigMap (dashboards custom)
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+      # variable « cluster » dans les tableaux de bord du chart
+      multicluster:
+        global:
+          enabled: true
+  route:
+    main:
+      enabled: true
+      hostnames:
+        - grafana.lan.wittner.tech
+      parentRefs:
+        - name: lan
+          namespace: gateway

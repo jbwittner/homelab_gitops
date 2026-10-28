@@ -1,0 +1,27 @@
+authentik:
+  # DB portée par le Cluster CNPG authentik-db (service RW + secret générés par l'opérateur).
+  postgresql:
+    host: authentik-db-rw
+    name: app
+    user: app
+
+global:
+  env:
+    # Password issu du secret auto-généré par CNPG pour le Cluster authentik-db.
+    - name: AUTHENTIK_POSTGRESQL__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-app
+          key: password
+    # secret_key hors values (SealedSecret) : ne jamais le changer après la première install.
+    - name: AUTHENTIK_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: authentik-secrets
+          key: secret-key
+
+# Postgres bundlé réservé aux démos selon la doc authentik — CNPG à la place.
+postgresql:
+  enabled: false
+
+# Exposition gérée par manifests/authentik-httproute.yaml (ingress/route du chart désactivés par défaut).

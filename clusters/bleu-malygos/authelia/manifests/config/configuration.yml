@@ -1,0 +1,62 @@
+# Authelia, fournisseur OIDC seul : pas de forward-auth (le Gateway Cilium ne le fait pas)
+# Secrets : variables *_FILE (statefulset.yaml) et fonction secret du filtre template (pas d'accolades dans les commentaires : interprétées)
+theme: auto
+
+server:
+  address: tcp://:9091/
+
+log:
+  level: info
+
+telemetry:
+  metrics:
+    enabled: true
+    address: tcp://:9959/metrics
+
+# heure tenue par Talos : pas de requête NTP sortante au démarrage
+ntp:
+  disable_startup_check: true
+
+totp:
+  issuer: auth.lan.wittner.tech
+
+webauthn:
+  display_name: Homelab
+
+# un seul utilisateur, défini dans OpenBao (externalsecret.yaml) : rien à écrire dans le fichier
+authentication_backend:
+  password_reset:
+    disable: true
+  password_change:
+    disable: true
+  file:
+    path: /secrets/users_database.yml
+
+# aucune règle : sert seulement de politique par défaut (les clients OIDC ont la leur)
+access_control:
+  default_policy: two_factor
+
+session:
+  cookies:
+    - domain: lan.wittner.tech
+      authelia_url: https://auth.lan.wittner.tech
+      default_redirection_url: https://homepage.lan.wittner.tech
+
+storage:
+  local:
+    path: /config/db.sqlite3
+
+# relais du cluster (doc/smtp.md) : sans authentification ni TLS ; destinataire = user_email (OpenBao)
+notifier:
+  smtp:
+    address: smtp://smtp-relay.smtp-relay.svc.cluster.local:587
+    sender: Authelia <auth@wittner.tech>
+    disable_require_tls: true
+
+identity_providers:
+  oidc:
+    jwks:
+      - key_id: main
+        algorithm: RS256
+        use: sig
+        key: {{ secret "/secrets/oidc_jwks_key" | mindent 10 "|" | msquote }}

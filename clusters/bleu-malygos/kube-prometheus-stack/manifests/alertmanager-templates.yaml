@@ -1,0 +1,23 @@
+# Partie texte des mails d'alerte (la partie HTML reste le modèle par défaut d'Alertmanager)
+# Monté par alertmanagerSpec.configMaps dans /etc/alertmanager/configmaps/alertmanager-templates/
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-templates
+  namespace: monitoring
+data:
+  email.tmpl: |
+    {{ define "email.texte" -}}
+    {{ range .Alerts -}}
+    [{{ .Status | toUpper }}] {{ .Labels.alertname }} ({{ .Labels.severity }})
+    Cluster : {{ .Labels.cluster }}    Namespace : {{ .Labels.namespace }}
+    {{ with .Annotations.summary }}Résumé : {{ . }}
+    {{ end }}{{ with .Annotations.description }}{{ . }}
+    {{ end }}Début : {{ .StartsAt.Local.Format "2006-01-02 15:04:05 MST" }}
+    {{ if eq .Status "resolved" }}Fin : {{ .EndsAt.Local.Format "2006-01-02 15:04:05 MST" }}
+    {{ end }}{{ with .Annotations.runbook_url }}Runbook : {{ . }}
+    {{ end }}Source : {{ .GeneratorURL }}
+
+    {{ end -}}
+    Alertmanager : {{ .ExternalURL }}/#/alerts
+    {{- end }}

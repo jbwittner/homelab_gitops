@@ -1,0 +1,24 @@
+# Jeton d'installation GitHub App (valable 1 h) : JWT signé avec la clé privée, échangé contre
+# un jeton via l'API GitHub. Node sans dépendance (image Renovate).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-github-app-token
+data:
+  token.js: |
+    const crypto = require("crypto");
+    const fs = require("fs");
+    const { GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, GITHUB_APP_KEY_FILE } = process.env;
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const now = Math.floor(Date.now() / 1000);
+    const unsigned = b64({ alg: "RS256", typ: "JWT" }) + "." + b64({ iat: now - 60, exp: now + 540, iss: GITHUB_APP_ID });
+    const sig = crypto.sign("RSA-SHA256", Buffer.from(unsigned), fs.readFileSync(GITHUB_APP_KEY_FILE)).toString("base64url");
+    fetch(`https://api.github.com/app/installations/${GITHUB_APP_INSTALLATION_ID}/access_tokens`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${unsigned}.${sig}`, Accept: "application/vnd.github+json", "User-Agent": "renovate-homelab" },
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j.token) { console.error("jeton GitHub App refusé :", j.message); process.exit(1); }
+        process.stdout.write(j.token);
+      });

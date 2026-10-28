@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openebs
+  labels:
+    # DaemonSets privileged (node-plugin LVM, vg-bootstrap) : rejetés par la PSA baseline de Talos
+    pod-security.kubernetes.io/enforce: privileged

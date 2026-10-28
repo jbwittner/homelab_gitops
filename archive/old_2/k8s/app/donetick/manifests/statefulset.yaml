@@ -1,0 +1,85 @@
+# SQLite est un état mutable sur un volume RWO : une seule réplique et un StatefulSet
+# empêchent deux pods d'ouvrir la même base pendant un rollout.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: donetick
+  namespace: donetick
+  labels:
+    app.kubernetes.io/name: donetick
+spec:
+  serviceName: donetick
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: donetick
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: donetick
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: donetick
+          image: donetick/donetick:v0.1.80@sha256:eb94251e1a22d1613b2cc05546509461e708f30c6ae02e0907c4a6d44ceaa18c
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+          envFrom:
+            - configMapRef:
+                name: donetick-vars
+            - secretRef:
+                name: donetick-env
+          ports:
+            - name: http
+              containerPort: 2021
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /donetick-data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        storageClassName: openebs-lvm-thin
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi

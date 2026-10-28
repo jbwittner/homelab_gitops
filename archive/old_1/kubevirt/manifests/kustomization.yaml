@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# KubeVirt (hyperviseur) et CDI (import des images disque), installs upstream épinglés par URL.
+# Ces tags sont la SOURCE UNIQUE des deux versions — aucun README ne doit les répéter, et le
+# customManager `renovate.json` les suit (datasource github-releases).
+#
+# ⚠️ KubeVirt et CDI se versionnent SÉPARÉMENT et n'ont pas de matrice de compatibilité publiée :
+# la règle upstream est « la CDI la plus récente marche avec les KubeVirt supportés ». Renovate
+# proposera les deux bumps indépendamment ; rien n'oblige à les merger ensemble.
+#
+# ⚠️ Chaque paire est en DEUX fichiers, et l'ordre est porté par des sync-waves de ressource
+# (`patches` plus bas), pas par l'ordre de cette liste : `*-cr.yaml` instancie une CRD posée par
+# `*-operator.yaml`. Sans wave, le premier sync échoue sur « no matches for kind KubeVirt ».
+resources:
+  - https://github.com/kubevirt/kubevirt/releases/download/v1.9.1/kubevirt-operator.yaml
+  - https://github.com/kubevirt/kubevirt/releases/download/v1.9.1/kubevirt-cr.yaml
+  - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.66.1/cdi-operator.yaml
+  - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.66.1/cdi-cr.yaml
+
+patches:
+  # --- KubeVirt : wave 1 + configuration du cluster -------------------------------------------
+  - patch: |
+      apiVersion: kubevirt.io/v1
+      kind: KubeVirt
+      metadata:
+        name: kubevirt
+        namespace: kubevirt
+        annotations:
+          argocd.argoproj.io/sync-wave: "1"
+      spec:
+        configuration:
+          # ⚠️ AUCUNE migration à chaud possible sur ce cluster, et ce n'est pas un réglage
+          # frileux : `openebs-lvm-thin` est node-local et ne sert que du RWO. Une VM est clouée
+          # au nœud qui porte son volume. `None` dit à KubeVirt de ne PAS tenter de migrer sur
+          # drain — sinon un `kubectl drain` reste bloqué indéfiniment sur une migration qui ne
+          # peut pas aboutir. Conséquence assumée : drainer le nœud ÉTEINT la VM.
+          evictionStrategy: None
+
+  # --- CDI : wave 1 + scratch space ------------------------------------------------------------
+  - patch: |
+      apiVersion: cdi.kubevirt.io/v1beta1
+      kind: CDI
+      metadata:
+        name: cdi
+        annotations:
+          argocd.argoproj.io/sync-wave: "1"
+      spec:
+        config:
+          # L'import qcow2 → raw a besoin d'un PVC temporaire de la taille de l'image. Sans cette
+          # clé, CDI prend la StorageClass par défaut — qui se trouve être la bonne ici, mais on
+          # ne veut pas que ce composant dépende de QUELLE classe est marquée `default`.
+          scratchSpaceStorageClass: openebs-lvm-thin

@@ -1,0 +1,119 @@
+# Alertes THERMIQUES des machines — le pendant en règles de la section « Thermique » de
+# `dashboard-machines.yaml`, et comme lui SANS filtre de job : nœuds Talos (`node-exporter`) et
+# machines hors cluster (`external-node`) passent par la même expression.
+#
+# ⚠️ PRINCIPE DIRECTEUR, hérité de `hosts-monitoring` et de l'incident du 2026-09-09 : une
+# expression qui compare une série ABSENTE ne se déclenche JAMAIS. **Série absente ≠ série à
+# zéro.** La valeur surveillée est donc doublée d'un `absent(...)`, et le SEUIL lui-même — qui est
+# ici une série, pas une constante — est doublé d'un contrôle de plausibilité. Les trois se
+# déplacent ensemble ; en retirer une rouvre un trou.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: machine-thermal-alerts
+  namespace: monitoring
+  labels:
+    # ⚠️ OBLIGATOIRE : sélecteur du prometheus-operator (`ruleSelectorNilUsesHelmValues`). Sans ce
+    # label, l'objet est ignoré SANS ERREUR — les règles n'existent simplement jamais.
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # ═══════════════════════════════════════════════════════════════════════════════════════════
+    - name: machine-thermal.rules
+    # ═══════════════════════════════════════════════════════════════════════════════════════════
+    # Créé le 2026-09-28. AUCUNE des ~40 règles `node-exporter.rules` du chart ne parle de
+    # température : l'amont n'en fournit pas, parce qu'aucun seuil universel n'existe. D'où ce
+    # groupe, et d'où sa forme.
+    #
+    # ⚠️ LE SEUIL N'EST PAS ÉCRIT EN DUR, et c'est le choix central de ce fichier. `60 °C` ou
+    # `85 °C` ne veut rien dire hors contexte : le CPU des nœuds Talos annonce Tjmax = 100 °C,
+    # les NVMe annoncent 79-87 °C selon le modèle. Un seuil unique serait soit muet sur les NVMe,
+    # soit bavard sur le CPU. La règle lit donc le seuil que le MATÉRIEL publie
+    # (`node_hwmon_temp_crit_celsius`) et alerte à 85 % de celui-ci — 85 °C côté CPU, ~72 °C côté
+    # NVMe. Remplacer un jour ces machines ne demandera aucune retouche ici.
+    #
+    # ⚠️ CONTEXTE DE RÉFÉRENCE (mesuré le 2026-09-28, à conserver pour savoir ce qui est normal) :
+    # package CPU à 52-59 °C, moyenne 7 j de 54,6 à 57 °C, p95 à 58-60 °C, max 7 j à 84 °C sur
+    # `vert-itharius` (transitoire, invisible au pas de 30 min). NVMe composite 35-49 °C, capteur
+    # 2 à 53-58 °C. `node_hwmon_temp_crit_alarm_celsius` = 0 partout : AUCUN throttling. Les 60 °C
+    # qui ont motivé ce fichier sont donc le régime NORMAL de ces mini-PC — charge CPU réelle de
+    # 3-4 %, fréquence moyenne 1,1-1,5 GHz pour un turbo à 4,8 GHz : ils chauffent à vide parce
+    # que le dissipateur est petit, pas parce qu'ils travaillent. Cette règle n'existe pas pour
+    # surveiller ce régime, elle existe pour le cas où il change.
+      rules:
+        # La jointure porte sur (job, instance, chip, sensor) : c'est l'identité d'un capteur.
+        # `group_left ()` garde les labels de la série de GAUCHE — donc ceux de la mesure.
+        #
+        # ⚠️ TOUS LES CAPTEURS NE PUBLIENT PAS DE SEUIL, et ceux-là sortent SILENCIEUSEMENT de la
+        # jointure (16 séries sur 55 le 2026-09-28). Ce n'est pas un bug, c'est le prix du seuil
+        # lu au matériel, et il faut savoir CE QUI est ainsi non couvert :
+        #   - `vert-emeriss` en ENTIER (job `external-node`) : ses 2 capteurs AMD ne publient
+        #     aucun `crit`. Cette machine n'a donc AUCUNE surveillance thermique. Elle tourne à
+        #     36 °C, ce qui rend le trou peu urgent — mais il est réel, et il ne se verra pas.
+        #   - les `thermal_thermal_zone0` (acpitz) : figés à 27,8 °C, ils ne mesurent rien d'utile.
+        #   - les capteurs NVMe AUTRES que `temp1` (« Composite ») — donc « Sensor 1 », qui est le
+        #     plus CHAUD (53-58 °C). Le Composite est celui sur lequel le disque throttle, donc
+        #     celui qui compte ; mais le point chaud, lui, n'est pas surveillé.
+        #
+        # ⚠️ `for: 10m` : une compilation, une sauvegarde ou un `velero backup` font monter le
+        # package de plusieurs dizaines de degrés pendant quelques secondes — le pic à 84 °C du
+        # 7 dernier jours en est un. Ce qui mérite un réveil, c'est une température qui RESTE.
+        #
+        # ⚠️ `warning` et non `critical` : à 85 % du seuil constructeur, il ne se passe encore
+        # RIEN — le matériel se protège tout seul en abaissant sa fréquence bien avant de casser.
+        # Ce qu'on perd sans le savoir, c'est de la PERFORMANCE. C'est une alerte de dérive
+        # (ventilateur encrassé, pâte thermique morte, flux d'air obstrué), pas de panne.
+        - alert: MachineSensorNearCritical
+          expr: |
+            node_hwmon_temp_celsius
+              >= on (job, instance, chip, sensor) group_left ()
+                 (node_hwmon_temp_crit_celsius * 0.85)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} : capteur {{ $labels.chip }}/{{ $labels.sensor }} à {{ $value | printf \"%.1f\" }} °C"
+            description: "Le capteur `{{ $labels.sensor }}` de `{{ $labels.chip }}` sur {{ $labels.instance }} tient au-dessus de 85 % de son seuil constructeur depuis 10 min ({{ $value | printf \"%.1f\" }} °C). ⚠️ CE N'EST PAS ENCORE UNE PANNE : le matériel throttle avant de casser, ce qui est perdu ici est de la performance, pas de la donnée. Le nom lisible du capteur (« Package id 0 », « Core 4 », « Composite »…) n'est PAS dans cette alerte — les annotations ne peuvent pas interroger Prometheus. Il se lit avec `node_hwmon_sensor_label{instance=\"{{ $labels.instance }}\", chip=\"{{ $labels.chip }}\", sensor=\"{{ $labels.sensor }}\"}`, ou dans la section « Thermique » du dashboard « Machines — system ». Diagnostic dans l'ordre : `node_hwmon_temp_crit_alarm_celsius` (à 1 = le throttling a commencé), puis la charge réelle de la machine — un nœud à 4 % de CPU qui chauffe n'a pas un problème de charge mais de refroidissement (ventilateur, pâte, flux d'air). Sur un chip `nvme_*`, regarder d'abord le débit d'écriture : un `velero backup` ou une resynchronisation OpenEBS chauffe un SSD bien plus que le CPU."
+
+        # Complément INDISPENSABLE de la précédente : une comparaison ne peut rien dire d'une
+        # série qui n'existe plus. Même couple valeur + `absent(...)` que `ExternalNodeDown` /
+        # `ExternalNodeScrapeMissing` dans hosts-monitoring.
+        #
+        # ⚠️ FILTRÉ SUR `job="node-exporter"`, alors que la règle ci-dessus ne l'est pas, et
+        # l'écart est voulu. `absent()` ne rend quelque chose que si la série est absente
+        # ENTIÈREMENT : sans ce matcher, la disparition des 3 nœuds Talos resterait muette tant
+        # que `vert-emeriss` publierait encore un capteur. Le versant `external-node` est déjà
+        # couvert par `ExternalNodeScrapeMissing` (hosts-monitoring), qui tombe sur `up` et voit
+        # donc plus large que la seule thermique.
+        #
+        # ⚠️ CE N'EST PAS UN DOUBLON DE `TargetDown` : cette règle-ci attrape le cas où le scrape
+        # RÉUSSIT mais ne porte plus de température — collecteur `hwmon` désactivé, module noyau
+        # absent après une montée de Talos, capteurs disparus derrière un changement de carte. Le
+        # target est vert, la surveillance thermique est morte, et rien d'autre ne le dit.
+        - alert: MachineSensorMetricsMissing
+          expr: absent(node_hwmon_temp_celsius{job="node-exporter"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "plus aucune température sur les nœuds Talos"
+            description: "Plus une seule série `node_hwmon_temp_celsius{job=\"node-exporter\"}` depuis 15 min : ce n'est pas une machine froide, c'est la MESURE qui a disparu. Tant que cette alerte sonne, le silence de `MachineSensorNearCritical` ne prouve RIEN. Causes par ordre de probabilité : collecteur `hwmon` du node-exporter désactivé dans `helm-values.yaml`, module noyau `coretemp`/`nvme` absent après une montée de version de Talos, ou DaemonSet node-exporter à plat (auquel cas `TargetDown` sonne aussi, et c'est lui qu'il faut lire). Vérifier : `kubectl -n monitoring get ds kube-prometheus-stack-prometheus-node-exporter`, puis la présence de la métrique dans /metrics d'un pod."
+
+        # ⚠️ LE SEUIL EST UNE SÉRIE, DONC IL PEUT MENTIR — et c'est le mode de panne propre à ce
+        # fichier, celui qu'aucune des deux règles ci-dessus ne verrait. Un `crit` aberrant ne
+        # produit pas d'erreur : il rend la comparaison INATTEIGNABLE, et `MachineSensorNearCritical`
+        # se tait pour toujours sur ce capteur, exactement comme si tout allait bien.
+        #
+        # ⚠️ CE N'EST PAS UNE HYPOTHÈSE. La métrique voisine `node_hwmon_temp_max_celsius` publie
+        # déjà **65261,8 °C** sur plusieurs capteurs NVMe de ce parc (attribut SMART non renseigné,
+        # rendu en brut). Les `crit` sont sains aujourd'hui (79-100 °C) ; rien ne garantit qu'un
+        # disque remplacé demain le soit. 150 °C : au-dessus de tout Tjmax réel, en dessous de
+        # toute valeur-poubelle plausible.
+        - alert: MachineSensorThresholdImplausible
+          expr: node_hwmon_temp_crit_celsius > 150
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} : seuil thermique aberrant sur {{ $labels.chip }}/{{ $labels.sensor }}"
+            description: "Le capteur `{{ $labels.sensor }}` de `{{ $labels.chip }}` sur {{ $labels.instance }} annonce un seuil critique de {{ $value | printf \"%.1f\" }} °C, ce qui n'est pas une température mais un attribut SMART non renseigné rendu en brut (même famille que les 65261,8 °C déjà visibles sur `node_hwmon_temp_max_celsius`). ⚠️ CONSÉQUENCE : `MachineSensorNearCritical` est DÉFINITIVEMENT MUETTE sur ce capteur — 85 % d'une valeur absurde est inatteignable. Le matériel continue de se protéger tout seul ; ce qui est perdu, c'est le préavis. Correctif : écarter ce capteur de la règle par un matcher explicite et lui donner un seuil en dur, OU accepter le trou et le noter dans le README. Ne pas relever le plafond de 150 °C : il n'est pas le problème."

@@ -1,0 +1,8 @@
+crds:
+  enabled: true
+  keep: true
+
+# DNS-01 : vérifier la propagation sur des résolveurs publics, pas sur le DNS
+# du LAN (il peut répondre lui-même pour *.lan.wittner.tech)
+dns01RecursiveNameservers: "1.1.1.1:53,1.0.0.1:53"
+dns01RecursiveNameserversOnly: true

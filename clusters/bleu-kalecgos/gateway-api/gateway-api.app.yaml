@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateway-api-kalecgos
+  namespace: argocd
+  labels:
+    layer: boot
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: components/gateway-api/manifests
+  syncPolicy:
+    # pas de prune : supprimer une CRD supprime toutes ses ressources
+    automated:
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

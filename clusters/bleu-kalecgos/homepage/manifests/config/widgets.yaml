@@ -1,0 +1,21 @@
+---
+# https://gethomepage.dev/configs/info-widgets/
+
+- datetime:
+    locale: fr
+    format:
+      dateStyle: full
+      timeStyle: short
+
+# centre de la commune (geo.api.gouv.fr), pas d'adresse
+- openmeteo:
+    label: Grandchamp-des-Fontaines
+    latitude: 47.3629
+    longitude: -1.6234
+    timezone: Europe/Paris
+    units: metric
+    cache: 15
+
+- search:
+    provider: google
+    target: _blank

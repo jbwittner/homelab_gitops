@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateway-kalecgos
+  namespace: argocd
+  labels:
+    layer: infra
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: clusters/bleu-kalecgos/gateway/manifests
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

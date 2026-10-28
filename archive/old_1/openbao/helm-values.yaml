@@ -1,0 +1,180 @@
+# helm-values — openbao (gestionnaire de secrets, stockage raft intégré)
+
+global:
+  # TLS terminé au Gateway, backends joints en HTTP clair — comme tout le repo
+  # (doc/reseau.md). Sans effet sur le chiffrement AU REPOS d'OpenBao, qui est
+  # indépendant : seul le transport intra-cluster est en clair.
+  tlsDisable: true
+
+# --- Agent injector ---
+# Activé par défaut dans le chart (`"-"` + `global.enabled: true`) ; explicité ici parce que
+# c'est un choix. Il n'injecte RIEN tant que la méthode d'auth `kubernetes`, une policy et un
+# role n'existent pas côté OpenBao — configuration interne au coffre, qui ne vit pas dans ce
+# repo (cf. README, section « Ce qui n'est pas GitOps »).
+injector:
+  enabled: true
+
+server:
+  # HA + raft à UN SEUL replica. Sur ce cluster le coût est identique à un `standalone`
+  # (un pod, un PVC) — un cluster raft à un nœud est leader sans élection — mais on gagne :
+  #   - un stockage transactionnel, là où l'upstream déconseille explicitement `file`
+  #     en production (« not transactional and lacks system-level file locking ») ;
+  #   - `bao operator raft snapshot save`, qui sauvegarde À CHAUD — seul filet réel, le
+  #     contenu d'OpenBao étant la seule chose du homelab absente de Git.
+  #
+  # Pour monter en HA, deux règles apprises à la dure (cf. README, section Opérations) :
+  #   - le compte de replicas doit être IMPAIR. Le quorum est la majorité stricte : à 2
+  #     replicas il faut 2 votants, soit zéro panne tolérée pour deux fois la surface de panne
+  #     d'un nœud unique — strictement pire que 1. Aller de 1 à 3, jamais s'arrêter à 2.
+  #   - il faut AUTANT DE NŒUDS que de replicas : l'anti-affinité du chart est
+  #     `requiredDuringScheduling` sur `kubernetes.io/hostname`, les pods en trop restent
+  #     `Pending`.
+  # Et pour REDESCENDRE : `bao operator raft remove-peer <pod>` AVANT de baisser `replicas`.
+  # Un scale down ne retire pas le pair de la configuration raft — le quorum est alors calculé
+  # sur des votants injoignables, et le coffre part en élection perpétuelle.
+  ha:
+    enabled: true
+    replicas: 1
+    raft:
+      enabled: true
+      # Node ID = nom du pod. Sinon un ID aléatoire est régénéré à chaque redémarrage et le
+      # nœud se réenregistre comme un nouveau pair dans la configuration raft.
+      setNodeId: true
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          # Requis par le ServiceMonitor : /v1/sys/metrics est sinon authentifié, et
+          # Prometheus n'a pas de token. N'expose que des compteurs et jauges — jamais
+          # le contenu d'un secret — et le port 8200 n'est pas routé hors cluster pour
+          # ce chemin (l'HTTPRoute sert l'UI, mais l'endpoint reste en ClusterIP).
+          telemetry {
+            unauthenticated_metrics_access = "true"
+          }
+        }
+
+        storage "raft" {
+          path = "/openbao/data"
+
+          # Sans `retry_join`, un pod dont le PVC est vide ne rejoint JAMAIS le raft : il
+          # démarre `Initialized false` + `Sealed true`, la readiness probe échoue, et il reste
+          # `0/1` indéfiniment — sans rien dans les logs qui ressemble à une erreur.
+          # Sans effet à 1 replica (un nœud qui a déjà un état raft ignore ces stanzas), mais
+          # c'est exactement ce qui manque le jour où on ajoute un nœud. Adresses résolues par
+          # le Service HEADLESS `openbao-internal`, donc pod par pod, contrairement à `openbao`.
+          # En `http` : `global.tlsDisable` ci-dessus.
+          retry_join {
+            leader_api_addr = "http://openbao-0.openbao-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://openbao-1.openbao-internal:8200"
+          }
+          retry_join {
+            leader_api_addr = "http://openbao-2.openbao-internal:8200"
+          }
+        }
+
+        # Pose sur le pod les labels dont dépendent les Services `-active` / `-standby`
+        # et le ServiceMonitor (notamment `openbao-active`).
+        service_registration "kubernetes" {}
+
+        telemetry {
+          prometheus_retention_time = "30s"
+          disable_hostname = true
+        }
+
+    # À un replica, le helper `openbao.pdb.maxUnavailable` du chart calcule 0 — ce qui BLOQUE
+    # tout drain du nœud (`kubectl drain` attend indéfiniment, `ALLOWED DISRUPTIONS: 0`).
+    # Le PDB ne protège aucune HA ici : désactivé volontairement. À réactiver en même temps
+    # que le passage à 3 replicas, où le helper calcule 1 et où il protège vraiment le quorum.
+    disruptionBudget:
+      enabled: false
+
+  dataStorage:
+    enabled: true
+    # Un coffre tient dans très peu : ce sont des KV chiffrés, pas des données applicatives.
+    # StorageClass par défaut du cluster = openebs-lvm-thin.
+    size: 5Gi
+    # ⚠️ NE PAS mettre `annotations: {argocd.argoproj.io/sync-options: Prune=false}` ici : le
+    # champ atterrit dans `volumeClaimTemplates`, qui est IMMUABLE sur un StatefulSet existant
+    # (« updates to statefulset spec for fields other than 'replicas', … are forbidden »), donc
+    # la sync ArgoCD échoue — et l'annotation ne s'appliquerait de toute façon qu'aux PVC créés
+    # ENSUITE, pas à `data-openbao-0`. La protection contre le prune se règle au niveau
+    # d'ArgoCD, cf. README section Contraintes.
+
+  # Protège d'UN SEUL chemin : le garbage collector du StatefulSet (suppression du STS, passage
+  # à 0 replica). Il ne protège PAS du `prune` ArgoCD, qui adopte ce PVC via son label
+  # `app.kubernetes.io/instance` et l'a déjà détruit une fois (`data-openbao-1`, reprovisionné à
+  # vide). Avec `reclaimPolicy: Delete` sur openebs-lvm-thin, cette suppression emporte le LV.
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+
+# `ui = true` dans la config HCL ci-dessus sert déjà l'interface sur le port 8200 du Service
+# `openbao`, vers lequel pointe l'HTTPRoute. Le Service `openbao-ui` créé ici est donc
+# redondant et non routé — inoffensif, mais on peut repasser à `false` sans rien casser.
+ui:
+  enabled: true
+
+serverTelemetry:
+  # ⚠️ NE PAS REPASSER À `true` : le ServiceMonitor est déployé par le composant frère
+  # `openbao-monitoring` (wave 2), pas par le chart, et le remettre ici en ferait deux.
+  #
+  # Raison du basculement : la doc de ce chart prévient que « the Prometheus operator *must* be
+  # installed before enabling this feature, if not the chart will fail to install due to missing
+  # CustomResourceDefinitions ». C'était vrai tant qu'openbao vivait sous `k8s/app/`, aux
+  # côtés de kube-prometheus-stack ; depuis son passage dans `k8s/infra/`, plus aucune
+  # relation d'ordre ne lie les deux (les waves ne s'ordonnent qu'à l'intérieur d'un
+  # app-of-apps) et la sync échouait au bootstrap. Le ServiceMonitor a donc été sorti du chart
+  # plutôt que supprimé — cf. k8s/infra/openbao-monitoring/README.md.
+  serviceMonitor:
+    enabled: false
+
+  # Dashboard upstream du chart NON déployé : il ne porte pas l'annotation `grafana_folder`
+  # qui range les dashboards maison dans le dossier « Wittnerlab ».
+  grafanaDashboard:
+    enabled: false
+
+# Secrets montés en volume via le Secrets Store CSI driver — driver absent du repo.
+csi:
+  enabled: false
+
+
+# --- Sauvegarde : CronJob de snapshot raft vers GCS ---
+# `bao operator raft snapshot save` À CHAUD puis upload via s3cmd. GCS n'est pas
+# une cible supportée par l'agent (« only supports S3 as the final storage »), mais
+# le script passe `--host` ET `--host-bucket` à chaque appel s3cmd : l'API
+# d'interopérabilité S3 de GCS est donc atteignable. Chemin non documenté —
+# validé par un `restore` réel, pas par la présence d'un fichier dans le bucket.
+snapshotAgent:
+  enabled: true
+
+  schedule: "0 3 * * *"
+
+  # SealedSecret (cf. manifests/) — PAS un ExternalSecret : la sauvegarde du coffre
+  # ne peut pas dépendre du coffre. C'est le seul cas anti-cycle du repo à ce jour.
+  s3CredentialsSecret: "openbao-snapshot-gcs"
+
+  config:
+    s3Host: "storage.googleapis.com"
+    # ⚠️ `s3Bucket` n'est PAS le nom du bucket : il alimente `--host-bucket`,
+    # c'est-à-dire le gabarit d'URL de s3cmd. Le bucket réel vient de `s3Uri`.
+    # Le défaut du chart (même valeur dans les deux) est incohérent.
+    s3Bucket: "storage.googleapis.com"
+    s3Uri: "s3://homelab-openbao-snapshots-6d84c670"
+    s3ExpireDays: "14"
+
+    # Un mount d'auth par cluster — même mount que celui d'external-secrets.
+    baoAuthPath: "kubernetes-bleu-kalecgos"
+    baoRole: "snapshot"
+
+  # Nœud à 16 Go dans le cluster : pas de Job sans limites.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

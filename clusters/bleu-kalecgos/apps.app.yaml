@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: apps-kalecgos
+  namespace: argocd
+  labels:
+    layer: boot
+spec:
+  project: default
+  # les Applications vivent sur malygos (namespace argocd), quel que soit le cluster cible
+  destination:
+    name: bleu-malygos
+    namespace: argocd
+  # app-of-apps du cluster : tous les *.app.yaml de clusters/bleu-kalecgos (y compris celle-ci)
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: clusters/bleu-kalecgos
+    directory:
+      recurse: true
+      include: '*.app.yaml'
+  syncPolicy:
+    # prune : les Applications n'ont pas de finalizer, en supprimer une laisse ses ressources en place
+    automated:
+      selfHeal: true
+      prune: true

@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homepage-kalecgos
+  namespace: argocd
+  labels:
+    layer: apps
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+  # manifestes simples sur l'image officielle (exception à « Helm en priorité », doc/decisions.md)
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: clusters/bleu-kalecgos/homepage/manifests
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

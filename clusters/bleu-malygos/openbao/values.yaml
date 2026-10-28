@@ -1,0 +1,26 @@
+injector:
+  enabled: false
+ui:
+  enabled: true
+server:
+  dataStorage:
+    size: 10Gi
+    storageClass: openebs-lvm
+  # raft à 1 réplica : `bao operator raft snapshot` (le mode standalone du chart est en pebbledb)
+  ha:
+    enabled: true
+    replicas: 1
+    raft:
+      enabled: true
+    # rendu en maxUnavailable: 0 avec 1 réplica : bloquerait le drain du nœud (talosctl upgrade)
+    disruptionBudget:
+      enabled: false
+  # TLS terminé au Gateway (auth Kubernetes et userpass seulement, pas d'auth par certificat)
+  gateway:
+    httpRoute:
+      enabled: true
+      hosts:
+        - openbao.lan.wittner.tech
+      parentRefs:
+        - name: lan
+          namespace: gateway

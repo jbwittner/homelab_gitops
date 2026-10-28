@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: hermes
+resources:
+  - namespace.yaml
+  # Produit par kubeseal (cf. README §Câblage des secrets). Le StatefulSet ne démarre pas sans :
+  # `envFrom` sur un Secret absent bloque le pod en CreateContainerConfigError.
+  - hermes-env.sealed.yaml
+  - statefulset.yaml
+  - service.yaml
+  - hermes-httproute.yaml
+  # ⚠️ AUCUNE CiliumNetworkPolicy ici : ce composant a une SORTIE RÉSEAU LIBRE. C'était d'abord
+  # le témoin d'une comparaison avec un jumeau contraint (`hermes-close`), depuis supprimé.
+  # L'absence de policy est donc désormais un choix par défaut hérité, pas une décision motivée
+  # — la réexaminer avant tout usage sérieux. L'agent exécute du code décidé par un LLM.
+
+# ConfigMap `hermes-bootstrap` : il ne sème RIEN. Le contenu du PVC — `config.yaml`, skills,
+# mémoires, workspace, `home/.profile` — n'est reconstruit ni d'ici ni d'ailleurs : il vit dans
+# /opt/data, son seul filet est Velero (cf. README §`$HERMES_HOME` : ni versionné, ni semé).
+# Il ne sert plus qu'à son suffixe de hash, que kustomize réécrit dans le volume `bootstrap` du
+# StatefulSet : c'est ce qui déclenche un rollout lors d'un rescellement de hermes-env.
+configMapGenerator:
+  - name: hermes-bootstrap
+    files:
+      # `hermes-env.sealed.yaml` n'est PAS de la configuration : il est là uniquement pour que
+      # la révision du secret entre dans le hash. Le Secret `hermes-env` est produit par le
+      # contrôleur sealed-secrets, hors de portée de kustomize, et un `envFrom` dont le Secret
+      # change ne redémarre rien. Resceller change ce fichier (kubeseal régénère un nonce à chaque
+      # passe, même à valeurs égales), donc le hash, donc le nom du ConfigMap, donc le pod template.
+      - hermes-env.sealed.yaml
+
+  # Variables d'environnement NON secrètes du conteneur hermes. `envs:` et non `files:` :
+  # kustomize parse le KEY=VALUE et produit une clé de ConfigMap par variable, ce que `envFrom`
+  # sait exporter. Le suffixe de hash déclenche également le rollout à chaque modification.
+  - name: hermes-vars
+    envs:
+      - config/hermes.env

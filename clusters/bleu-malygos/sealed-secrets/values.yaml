@@ -1,0 +1,4 @@
+# Noms par défaut de kubeseal : aucun flag --controller-* à passer
+fullnameOverride: sealed-secrets-controller
+# Pas de rotation de clé : une seule sauvegarde reste valable (cf. doc/bootstrap/03-sealed-secrets.md)
+keyrenewperiod: "0"

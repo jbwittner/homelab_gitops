@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: renovate-kalecgos
+  namespace: argocd
+  labels:
+    layer: apps
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+    namespace: renovate
+  sources:
+    - repoURL: https://docs.renovatebot.com/helm-charts
+      chart: renovate
+      targetRevision: 46.375.5
+      helm:
+        releaseName: renovate
+        valueFiles:
+          - $values/clusters/bleu-kalecgos/renovate/values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: clusters/bleu-kalecgos/renovate/manifests
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "description": [
+    "Cooldown supply-chain : une release doit exister depuis 7 jours avant d'être proposée.",
+    "internalChecksFilter=strict est le défaut, mais explicité ici car load-bearing : les versions encore 'pending' sont filtrées AVANT création de branche/PR, donc rien n'est ni ouvert ni automergé avant J+7. Sans strict, ignoreTests=true ci-dessous rendrait le check renovate/stability-days vert d'office et l'automerge passerait immédiatement.",
+    "DEUX ARBRES, UN RÉGIME : k8s/ (ArgoCD) et docker/ (Komodo) se déploient tous deux seuls après un merge sur main — ArgoCD par self-heal, Komodo par sa procédure deploiement-auto (docker/komodo-sync/piles.toml). L'automerge des patch/minor vaut donc pour les deux. Komodo lui-même (sa pile, mongo) n'est PAS ici : il vit dans homelab_emeriss, dont le renovate.json garde ses règles d'approbation et son absence d'automerge. Le manager docker-compose, actif par défaut, lit les image: des compose.yaml de docker/ : les tags y sont EN DUR, jamais dans un .env, que Renovate ne lit pas."
+  ],
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "ignorePaths": [
+    "archive/**",
+    "doc/**"
+  ],
+  "argocd": {
+    "managerFilePatterns": ["/\\.app\\.yaml$/", "/\\.appset\\.yaml$/"]
+  },
+  "kubernetes": {
+    "managerFilePatterns": ["/manifests/.+\\.yaml$/"]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Manifestes upstream épinglés par URL dans les kustomization.yaml (le manager kustomize ne voit que les URLs git avec ?ref=)",
+      "managerFilePatterns": ["/(^|/)kustomization\\.ya?ml$/"],
+      "matchStrings": [
+        "https://raw\\.githubusercontent\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/refs/tags/(?<currentValue>[^/\\s]+)/",
+        "https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/releases/download/(?<currentValue>[^/\\s]+)/"
+      ],
+      "datasourceTemplate": "github-releases"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["pin", "patch", "minor"],
+      "automerge": true,
+      "ignoreTests": true
+    },
+    {
+      "matchPackageNames": ["renovate/renovate"],
+      "automerge": true,
+      "ignoreTests": true
+    },
+    {
+      "description": "Argo CD est self-managed : merge manuel obligatoire, quel que soit le type d'update",
+      "matchPackageNames": ["argoproj/argo-cd"],
+      "automerge": false
+    },
+    {
+      "description": "CRDs Gateway API : la version doit être supportée par la mineure Cilium en place (doc Cilium, page Gateway API) : merge manuel",
+      "matchPackageNames": ["kubernetes-sigs/gateway-api"],
+      "automerge": false
+    },
+    {
+      "description": "Même opérateur Prometheus : CRDs (prometheus-operator-crds) et chart kube-prometheus-stack montés ensemble",
+      "matchPackageNames": ["prometheus-operator-crds", "kube-prometheus-stack"],
+      "groupName": "prometheus-operator"
+    }
+  ]
+}

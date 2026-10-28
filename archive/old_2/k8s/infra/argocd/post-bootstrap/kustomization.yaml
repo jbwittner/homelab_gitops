@@ -1,0 +1,46 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+
+# ⚠️ Dossier SÉPARÉ de `../manifests/`, et c'est load-bearing : `manifests/` est aussi la cible
+# de l'`apply -k` manuel du bootstrap (étape 1 du README), exécuté quand seul ArgoCD existe.
+# Tout ce qui vit ici consomme une CRD posée PLUS TARD par le tier-1 — le geste d'amorçage
+# échouerait dessus sur `no matches for kind` :
+#   - `SealedSecret`    → CRD posée en wave -8 par sealed-secrets
+#   - `HTTPRoute`       → CRD posée en wave -10 par gateway-api
+# Les deux dossiers sont deux `source` de la même Application `argocd`, qui les applique en
+# wave -1 : à ce moment-là les deux CRDs sont là depuis longtemps.
+#
+# Critère d'aiguillage : ce qui CASSE l'apply d'amorçage vient ici. Ce qui s'applique proprement
+# reste dans `manifests/`, même si c'est inutile à ce stade — les patchs RBAC (authentik),
+# notifications (Grafana) et l'annotation `managed` du Secret de notifications sont dans ce cas :
+# inertes tant que leur interlocuteur n'existe pas, mais sans conséquence sur le démarrage d'Argo.
+resources:
+  # --- À DÉCOMMENTER QUAND LEUR INTERLOCUTEUR EXISTE. Les deux fichiers `.sealed.yaml` SONT
+  # dans le repo (scellés), mais restent hors du build tant que leur destinataire est absent :
+  # authentik pour l'OIDC, une clé d'API Grafana pour les notifications. Procédures dans le
+  # README, §Notifications et §SSO.
+  #
+  # `argocd-notifications.sealed.yaml` : clé `grafana-api-key`. Sans lui, le
+  # notifications-controller tourne avec un Secret vide → aucune annotation Grafana (échec
+  # silencieux). ⚠️ Son consommateur, kube-prometheus-stack, est bien DÉPLOYÉ
+  # (`kube-prometheus-stack.app.yaml`) : c'est la clé d'API Grafana qui reste à produire.
+#   - argocd-notifications.sealed.yaml
+  # --- DÉSACTIVÉ : authentik non déployé. ---
+#   - argocd-oidc.sealed.yaml
+  # `repo-homelab-gitops-github.sealed.yaml` : credential GitHub App (Contents read-only, installée
+  # sur ce seul dépôt) avec lequel `argocd-repo-server` clone https://github.com/jbwittner/homelab_gitops.git.
+  # ⚠️ Il ne suffit PAS à l'amorçage : à ce moment-là ni la CRD `SealedSecret` n'existe, ni le
+  # dépôt n'est lisible. Le Secret est posé à la main avant `kubectl apply -f k8s/root.yaml`
+  # (cf. README §Accès au dépôt privé), et ce SealedSecret ne fait que le REPRENDRE en gestion —
+  # ce que permet l'annotation `sealedsecrets.bitnami.com/managed` qu'il porte.
+  - repo-homelab-gitops-github.sealed.yaml
+  # `argocd-webhook.sealed.yaml` : clé `webhook.github.secret` AJOUTÉE à `argocd-secret` (mode
+  # `patch`, cf. `../manifests/argocd-secret.yaml`). Plus AUCUN webhook ne l'utilise depuis la
+  # bascule sur GitHub (qui ne joint pas le LAN) — gardée parce que `/api/webhook` reste joignable
+  # sans session depuis le LAN, et que sans clé ArgoCD accepterait n'importe quelle livraison.
+  # ⚠️ Ici et non dans `manifests/` pour la raison habituelle : la CRD `SealedSecret` (wave -8)
+  # n'existe pas à l'amorçage. L'ANNOTATION qui autorise ce patch, elle, est bien dans
+  # `manifests/` — c'est un simple Secret, et elle doit être posée sur l'objet existant.
+  - argocd-webhook.sealed.yaml
+  - argocd-httproute.yaml

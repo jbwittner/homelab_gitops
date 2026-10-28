@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lan-wittner-tech
+  namespace: gateway
+spec:
+  secretName: lan-wittner-tech-tls
+  dnsNames:
+    - "*.lan.wittner.tech"
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod

@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-manager-kalecgos
+  namespace: argocd
+  labels:
+    layer: boot
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+    namespace: kube-system
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: clusters/bleu-kalecgos/argocd-manager/manifests
+  syncPolicy:
+    # pas de prune : supprimer le compte couperait ArgoCD de kalecgos
+    automated:
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

@@ -1,0 +1,65 @@
+# CRDs appliquées par ArgoCD (dossier crds/ du chart), pas par le Job hook kubectl
+upgradeCRDs: false
+
+initContainers:
+  - name: velero-plugin-for-gcp
+    image: velero/velero-plugin-for-gcp:v1.14.4
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# Pas de clé : Workload Identity Federation (homelab_terraform, gcp/homelab/velero.tf).
+# Jeton projeté (audience gcp-wif) + fichier d'identifiants du ConfigMap velero-gcp.
+credentials:
+  useSecret: false
+
+# Snapshots CSI inutilisables (lvm-localpv ne restaure pas un snapshot thick) :
+# copie des fichiers des volumes par le node-agent (Kopia)
+snapshotsEnabled: false
+deployNodeAgent: true
+
+configuration:
+  # backupStorageLocation : par cluster (bucket)
+  volumeSnapshotLocation: []
+  # vaut aussi pour le node-agent
+  extraEnvVars:
+    - name: GOOGLE_APPLICATION_CREDENTIALS
+      value: /var/run/secrets/gcp/credentials.json
+
+extraVolumes: &gcpVolumes
+  - name: gcp
+    projected:
+      sources:
+        - serviceAccountToken:
+            audience: gcp-wif
+            expirationSeconds: 3600
+            path: token
+        - configMap:
+            name: velero-gcp
+            items:
+              - key: credentials.json
+                path: credentials.json
+extraVolumeMounts: &gcpMounts
+  - name: gcp
+    mountPath: /var/run/secrets/gcp
+    readOnly: true
+
+nodeAgent:
+  extraVolumes: *gcpVolumes
+  extraVolumeMounts: *gcpMounts
+
+# métriques velero_* (serveur) et node-agent (kopia) : moniteurs créés si la CRD existe
+metrics:
+  serviceMonitor:
+    enabled: true
+    # sauvegarde lancée à la main : velero émet un schedule vide (label abandonné par
+    # Prometheus) ; réécrit en "manuel" pour la distinguer (dashboard Backups — velero)
+    metricRelabelings:
+      - sourceLabels:
+          - __name__
+          - schedule
+        regex: "velero_backup_.+;"
+        targetLabel: schedule
+        replacement: manuel
+  nodeAgentPodMonitor:
+    enabled: true

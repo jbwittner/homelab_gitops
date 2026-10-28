@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-bleu-kalecgos
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+# Nomme le cluster LOCAL. Sans ce Secret, ArgoCD expose son propre cluster sous l'entrée codée
+# en dur `in-cluster` / `https://kubernetes.default.svc` ; avec lui, il prend ce nom et toutes les
+# Applications du repo — hub comme spoke — désignent leur cible de la même façon
+# (`destination.name: <cluster>`), sans URL anonyme.
+#
+# ⚠️ Ce Secret ne porte AUCUN credential, contrairement à cluster-bleu-arcanagos : dès que
+# `server` vaut l'adresse interne, ArgoCD se connecte via son propre ServiceAccount
+# (rest.InClusterConfig()) et ignore toute identité qu'on mettrait dans `config`. Il est donc
+# committé en clair — il n'y a rien à sceller.
+#
+# ⚠️ Sa disparition casse TOUT : une destination `name:` non résolue met chaque Application en
+# ComparisonError « cluster not found ». Il est posé par l'`apply -k` du bootstrap (étape 2),
+# donc avant le tier-1 (étape 4) — ne pas le sortir de ce kustomize.
+stringData:
+  name: bleu-kalecgos            # doit matcher destination.name des manifestes de ce repo
+  server: https://kubernetes.default.svc
+  config: |
+    {"tlsClientConfig":{"insecure":false}}

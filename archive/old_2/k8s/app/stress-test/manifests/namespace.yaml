@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stress-test
+  labels:
+    # `baseline` et non `restricted` : le conteneur installe stress-ng au démarrage, donc il
+    # démarre root. `baseline` l'autorise, `restricted` l'interdirait (runAsNonRoot).
+    pod-security.kubernetes.io/enforce: baseline

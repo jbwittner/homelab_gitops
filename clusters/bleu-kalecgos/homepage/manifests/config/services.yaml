@@ -1,0 +1,181 @@
+---
+# https://gethomepage.dev/configs/services/
+# siteMonitor : point vert/rouge (requête HTTP depuis le pod). Widgets prometheusmetric : Prometheus
+# de malygos, sans authentification. Règle (CLAUDE.md) : toute page web exposée a sa tuile ici.
+
+- Clusters:
+    - bleu-malygos:
+        href: https://grafana.lan.wittner.tech/d/machines-systeme/machines?var-cluster=bleu-malygos
+        description: Infra · 1 nœud
+        icon: kubernetes.png
+        widget:
+          type: prometheusmetric
+          url: https://prometheus.lan.wittner.tech
+          refreshInterval: 30000
+          metrics:
+            - label: CPU
+              query: 100 * (1 - avg(rate(node_cpu_seconds_total{cluster="bleu-malygos",mode="idle"}[5m])))
+              format:
+                type: percent
+                options:
+                  maximumFractionDigits: 0
+            - label: RAM
+              query: 100 * (1 - sum(node_memory_MemAvailable_bytes{cluster="bleu-malygos"}) / sum(node_memory_MemTotal_bytes{cluster="bleu-malygos"}))
+              format:
+                type: percent
+                options:
+                  maximumFractionDigits: 0
+            - label: Nœuds prêts
+              query: sum(kube_node_status_condition{cluster="bleu-malygos",condition="Ready",status="true"})
+              format:
+                type: number
+            - label: Pods
+              query: sum(kube_pod_status_phase{cluster="bleu-malygos",phase="Running"})
+              format:
+                type: number
+    - bleu-kalecgos:
+        href: https://grafana.lan.wittner.tech/d/machines-systeme/machines?var-cluster=bleu-kalecgos
+        description: Workloads · 3 nœuds
+        icon: kubernetes.png
+        widget:
+          type: prometheusmetric
+          url: https://prometheus.lan.wittner.tech
+          refreshInterval: 30000
+          metrics:
+            - label: CPU
+              query: 100 * (1 - avg(rate(node_cpu_seconds_total{cluster="bleu-kalecgos",mode="idle"}[5m])))
+              format:
+                type: percent
+                options:
+                  maximumFractionDigits: 0
+            - label: RAM
+              query: 100 * (1 - sum(node_memory_MemAvailable_bytes{cluster="bleu-kalecgos"}) / sum(node_memory_MemTotal_bytes{cluster="bleu-kalecgos"}))
+              format:
+                type: percent
+                options:
+                  maximumFractionDigits: 0
+            - label: Nœuds prêts
+              query: sum(kube_node_status_condition{cluster="bleu-kalecgos",condition="Ready",status="true"})
+              format:
+                type: number
+            - label: Pods
+              query: sum(kube_pod_status_phase{cluster="bleu-kalecgos",phase="Running"})
+              format:
+                type: number
+
+- GitOps & secrets:
+    - ArgoCD:
+        href: https://argocd.lan.wittner.tech/
+        siteMonitor: https://argocd.lan.wittner.tech/
+        description: GitOps des deux clusters
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/argo-cd.svg
+        widget:
+          type: prometheusmetric
+          url: https://prometheus.lan.wittner.tech
+          refreshInterval: 30000
+          metrics:
+            - label: Applications
+              query: count(argocd_app_info)
+              format:
+                type: number
+            - label: Synced
+              query: count(argocd_app_info{sync_status="Synced"}) or vector(0)
+              format:
+                type: number
+            - label: OutOfSync
+              query: count(argocd_app_info{sync_status="OutOfSync"}) or vector(0)
+              format:
+                type: number
+            - label: Degraded
+              query: count(argocd_app_info{health_status="Degraded"}) or vector(0)
+              format:
+                type: number
+    - OpenBao:
+        href: https://openbao.lan.wittner.tech/
+        siteMonitor: https://openbao.lan.wittner.tech/v1/sys/health
+        description: Secrets
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/openbao.svg
+        widget:
+          type: prometheusmetric
+          url: https://prometheus.lan.wittner.tech
+          refreshInterval: 300000
+          metrics:
+            - label: Dernière sauvegarde
+              query: max(velero_backup_last_successful_timestamp{cluster="bleu-malygos",schedule="openbao"})
+              format:
+                type: relativeDate
+                scale: 1000
+                options:
+                  numeric: auto
+            - label: Sauvegardes
+              query: count(velero_backup_object_info{cluster="bleu-malygos",schedule="openbao"})
+              format:
+                type: number
+    - Authelia:
+        href: https://auth.lan.wittner.tech/
+        siteMonitor: https://auth.lan.wittner.tech/api/health
+        description: Connexion unique (OIDC)
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/authelia.svg
+
+- Supervision:
+    - Grafana:
+        href: https://grafana.lan.wittner.tech/
+        siteMonitor: https://grafana.lan.wittner.tech/api/health
+        description: Tableaux de bord
+        icon: grafana.png
+    - Prometheus:
+        href: https://prometheus.lan.wittner.tech/
+        siteMonitor: https://prometheus.lan.wittner.tech/-/healthy
+        description: Métriques des deux clusters
+        icon: prometheus.png
+        widget:
+          type: prometheusmetric
+          url: https://prometheus.lan.wittner.tech
+          refreshInterval: 30000
+          metrics:
+            - label: Cibles up
+              query: sum(up)
+              format:
+                type: number
+            - label: Cibles
+              query: count(up)
+              format:
+                type: number
+            - label: Alertes actives
+              query: count(ALERTS{alertstate="firing",alertname!="Watchdog"}) or vector(0)
+              format:
+                type: number
+    - Alertmanager:
+        href: https://alertmanager.lan.wittner.tech/
+        siteMonitor: https://alertmanager.lan.wittner.tech/-/healthy
+        description: Alertes
+        icon: alertmanager.png
+
+- Réseau & hôtes:
+    - AdGuard Home:
+        href: https://adguard.lan.wittner.tech/
+        siteMonitor: https://adguard.lan.wittner.tech/
+        description: DNS + DHCP
+        icon: adguard-home.png
+    - Proxmox:
+        href: https://pve-ysera.lan.wittner.tech/
+        siteMonitor: https://pve-ysera.lan.wittner.tech/
+        description: pve-ysera, socle 24/7
+        icon: proxmox.png
+    - Zyxel:
+        href: https://zyxel.lan.wittner.tech/
+        siteMonitor: https://zyxel.lan.wittner.tech/
+        description: Switch
+        icon: zyxel.png
+
+- Domotique:
+    - Home Assistant:
+        href: https://ha.lan.wittner.tech/
+        siteMonitor: https://ha.lan.wittner.tech/
+        description: VM 206 (vert-ysera)
+        icon: home-assistant.png
+    - Zigbee2MQTT:
+        href: https://z2m.lan.wittner.tech/
+        siteMonitor: https://z2m.lan.wittner.tech/
+        description: Passerelle Zigbee, CT 202 (vert-ysera)
+        icon: zigbee2mqtt.png

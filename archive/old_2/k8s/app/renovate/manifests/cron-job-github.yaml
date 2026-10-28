@@ -1,0 +1,82 @@
+# Bot Renovate de **GitHub** (github.com) — le seul bot du composant. `platform` est un réglage
+# GLOBAL de Renovate : un second hébergeur de dépôts demanderait un second CronJob, pas un
+# second bloc dans celui-ci.
+#
+# Il s'authentifie comme **GitHub App**, pas comme utilisateur : le jeton d'installation (1 h) est
+# produit à chaque run par `config.mjs`, à partir de la clé privée du Secret `renovate-github`.
+# PR, commits et automerges sont donc signés par le compte `<slug>[bot]` de l'App, plus par un
+# compte humain.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate-github
+spec:
+  # Tous les soirs : le cooldown supply-chain est porté par minimumReleaseAge (7 jours)
+  # dans renovate.json, pas par la cadence du cron. Un run quotidien évite d'ajouter
+  # jusqu'à 7 jours d'attente par-dessus le cooldown.
+  schedule: "0 2 * * *"
+  timeZone: "Europe/Paris"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 300
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: renovate
+              image: renovate/renovate:44.14.10
+              # Pas d'`args` : autodiscover (voir plus bas). Le périmètre n'est écrit nulle part
+              # dans ce dépôt — c'est l'installation de l'App dans GitHub qui le fixe.
+              env:
+                - name: LOG_LEVEL
+                  value: info
+                - name: RENOVATE_PLATFORM
+                  value: github
+                # Avec un jeton d'installation, l'autodiscover rend EXACTEMENT les dépôts cochés
+                # dans l'installation de l'App (« Only select repositories »). Ajouter ou retirer
+                # un dépôt se fait donc dans GitHub, sans commit ici.
+                #
+                # ⚠️ Un dépôt nouvellement coché reçoit une PR d'onboarding au run suivant. Une
+                # installation passée en « All repositories » ferait de même sur TOUS les dépôts
+                # du compte, en leur donnant l'écriture à l'App.
+                - name: RENOVATE_AUTODISCOVER
+                  value: "true"
+                # Porte `token`, calculé au démarrage (cf. config.mjs). `gitAuthor` n'est fixé
+                # nulle part : Renovate le déduit de l'App.
+                # ⚠️ Ne PAS remettre de RENOVATE_TOKEN ni de RENOVATE_GIT_AUTHOR dans cet `env` :
+                # l'environnement prime sur ce fichier et les écraserait sans erreur.
+                - name: RENOVATE_CONFIG_FILE
+                  value: /etc/renovate/config.mjs
+                # Plafonne le heap V8 sous la limite du conteneur : Node déclenche un GC au lieu
+                # de se faire tuer par le cgroup (exit 137, logs trompeurs car ils semblent complets).
+                - name: NODE_OPTIONS
+                  value: "--max-old-space-size=2048"
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/renovate
+                  readOnly: true
+                - name: github-app
+                  mountPath: /etc/renovate-github-app
+                  readOnly: true
+              resources:
+                requests:
+                  memory: 1Gi
+                  cpu: 100m
+                limits:
+                  memory: 3Gi
+          volumes:
+            - name: config
+              configMap:
+                name: renovate-github-config
+            # Monté en fichiers et non en `envFrom` : la clé privée reste hors de l'environnement
+            # du process (et des sous-process que Renovate lance).
+            #
+            # Pas d'`items:` exprès : une clé manquante dans le Secret ne bloque pas le montage
+            # (pod coincé en `ContainerCreating`), elle fait échouer `config.mjs` avec le nom du
+            # fichier absent dans les logs.
+            - name: github-app
+              secret:
+                secretName: renovate-github
+          restartPolicy: Never

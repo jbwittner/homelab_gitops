@@ -1,0 +1,50 @@
+# Talos : API via KubePrism, cgroup déjà monté, pas de SYS_MODULE
+k8sServiceHost: localhost
+k8sServicePort: 7445
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+
+ipam:
+  mode: kubernetes
+kubeProxyReplacement: true
+
+# LB-IPAM + annonces L2 (pool et policy : clusters/<nom>/cilium/manifests)
+l2announcements:
+  enabled: true
+  leaseDuration: 3s
+  leaseRenewDeadline: 1s
+  leaseRetryPeriod: 500ms
+k8sClientRateLimit:
+  qps: 10
+  burst: 20
+
+# Contrôleur Gateway API. Le chart crée la GatewayClass `cilium` si les CRDs (composant
+# gateway-api) existent au rendu : les poser avant Cilium.
+gatewayAPI:
+  enabled: true
+
+hubble:
+  tls:
+    auto:
+      # certificats générés en cluster : la méthode helm en recrée à chaque rendu ArgoCD
+      method: cronJob

@@ -1,0 +1,48 @@
+# Scrape des métriques du coffre. Reproduit à l'identique ce que rendait le template du chart
+# (`serverTelemetry.serviceMonitor`, chart openbao 0.29.0) — voir l'en-tête de l'Application pour
+# la raison d'être de ce composant.
+#
+# Le côté serveur est déjà câblé dans `openbao/helm-values.yaml`, et les trois morceaux sont
+# indissociables :
+#   - `telemetry { unauthenticated_metrics_access = "true" }` dans le listener → /v1/sys/metrics
+#     répond sans token (Prometheus n'en a pas) ;
+#   - `telemetry { prometheus_retention_time = "30s" }` au niveau racine → l'endpoint existe ;
+#   - `service_registration "kubernetes" {}` → c'est LUI qui pose le label `openbao-active: "true"`
+#     sur le pod leader, donc qui donne un endpoint au Service ciblé ci-dessous.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: openbao
+  namespace: openbao
+  labels:
+    # Sélecteur du prometheus-operator de kube-prometheus-stack
+    # (`serviceMonitorSelectorNilUsesHelmValues`) : sans ce label, l'objet est ignoré en silence.
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - openbao
+  # Cible le Service `openbao-active`, PAS `openbao` : le chart fait de même en mode HA, et c'est
+  # ce qui évite de scraper deux fois le même coffre le jour où l'on montera à 3 replicas (seul
+  # le leader sert des métriques utiles, les standby renvoient l'essentiel à zéro).
+  # Conséquence à connaître, exploitée par les alertes : coffre SCELLÉ ⇒ pas de leader ⇒ le
+  # Service n'a plus d'endpoint ⇒ la cible DISPARAÎT de Prometheus (elle ne passe pas `up == 0`).
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: openbao
+      app.kubernetes.io/instance: openbao
+      openbao-active: "true"
+  endpoints:
+    # Port `http` (nom du port 8200 du Service quand `global.tlsDisable: true`, ce qui est le cas
+    # ici : le TLS est terminé au Gateway, cf. doc/reseau.md). En https le port se nommerait
+    # `https` — les deux sont à changer ensemble.
+    - port: http
+      scheme: http
+      path: /v1/sys/metrics
+      # OpenBao sert du JSON par défaut sur cet endpoint : sans ce paramètre, Prometheus reçoit
+      # un corps qu'il ne sait pas parser et la cible est en erreur de format, pas en `up == 0`.
+      params:
+        format:
+          - prometheus
+      interval: 30s
+      scrapeTimeout: 10s

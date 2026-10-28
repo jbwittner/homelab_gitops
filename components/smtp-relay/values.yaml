@@ -1,0 +1,77 @@
+# Relais Postfix vers Resend, un par cluster, ClusterIP seulement (pas d'IP LB)
+fullnameOverride: smtp-relay
+
+# true injecte un horodatage à chaque rendu : ArgoCD redémarrerait le pod en boucle.
+# Contrecoup : un changement de config.* ne redémarre pas le pod (voir doc/smtp.md)
+recreateOnRedeploy: false
+
+# Pas de PVC : la file d'attente est vide sauf panne de Resend, et un volume LVM
+# lierait le pod à un nœud. Une file non vide est perdue au redémarrage du pod.
+persistence:
+  enabled: false
+
+# Identifiants du fournisseur (RELAYHOST_USERNAME, RELAYHOST_PASSWORD), ExternalSecret dans manifests/.
+# Renommer ce Secret relance le pod : seul moyen GitOps de recharger les identifiants (lus au démarrage)
+existingSecret: smtp-relay-relayhost
+
+config:
+  general:
+    TZ: Europe/Paris
+    RELAYHOST: "[smtp.resend.com]:587"
+    # expéditeur hors wittner.tech refusé ici plutôt que rejeté par Resend
+    ALLOWED_SENDER_DOMAINS: wittner.tech
+  postfix:
+    # pods du cluster seulement (ipam kubernetes, 10.244.0.0/16 sur les deux)
+    mynetworks: 127.0.0.0/8,10.244.0.0/16
+    # identifiants jamais en clair vers le fournisseur
+    smtp_tls_security_level: encrypt
+    # côté pods : pas de STARTTLS. L'image l'offre avec un certificat snakeoil, que les
+    # clients qui négocient TLS d'office (Authelia, Grafana…) rejettent
+    smtpd_tls_security_level: none
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# Sans clé DKIM (le fournisseur signe), opendkim n'est pas garanti : sonde du chart sans lui
+startupProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 12
+  exec:
+    command:
+      - sh
+      - -c
+      - >-
+        ps axf | fgrep -v grep | egrep -q '\{supervisord\}|/usr/bin/supervisord' &&
+        ps axf | fgrep -v grep | fgrep -q "postfix-script"
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+  image:
+    # pas de tag versionné publié : latest figé par digest
+    tag: latest@sha256:0a46a0c599b564f34ffc650f2cb3c108a867c1bb0b18a496d12d2d5cdcbaf6af
+  logrotate:
+    # Fichier monté depuis une ConfigMap (lecture seule). Au démarrage, l'image fait
+    # un sed -i dessus si une ligne commence par /var/log/mail.log, ce qui échoue
+    # (« Device or resource busy ») : chemin entre guillemets pour l'éviter.
+    logrotate.conf: |
+      "/var/log/mail.log" {
+          copytruncate
+          rotate 1
+          monthly
+          minsize 1M
+          compress
+          missingok
+          notifempty
+          dateext
+          olddir /var/log/
+          maxage 90
+      }
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
