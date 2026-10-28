@@ -63,7 +63,7 @@ Erreurs attendues au premier boot :
 
 | Erreur | Cause | Levée par |
 |---|---|---|
-| `no matches for kind "ExternalSecret"` (au `apply -k`, le reste est appliqué) | `oidc.externalsecret.yaml` : CRD posée par `external-secrets-malygos` | `argocd-malygos` la pose ensuite ; s'il reste en échec : Sync |
+| `no matches for kind "ExternalSecret"` (au `apply -k`, le reste est appliqué) | `oidc.externalsecret.yaml` : CRD posée par `external-secrets-malygos` | `argocd-malygos` la pose ensuite (retry sans fin) |
 | `there are no clusters with this name: bleu-kalecgos` | Applications `*-kalecgos` | [étape 5](05-kalecgos.md) |
 
 ## Vérifier

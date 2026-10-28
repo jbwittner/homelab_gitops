@@ -19,14 +19,14 @@ Tout `ExternalSecret` attend OpenBao, y compris sur kalecgos (store via `https:/
 | 2 | structure : Terraform `homelab_terraform/openbao/bleu-malygos` (token root) | dans le snapshot |
 | 3 | valeurs : `bao kv put secret/<comp> …` ([secrets](../secrets.md)) | dans le snapshot |
 
-Puis :
+Les Applications en échec se rattrapent seules (retry sans fin, essai toutes les 10 min au plus).
 
-1. Applications restées en échec (dépendance arrivée après les 5 essais automatiques d'ArgoCD) : Sync.
-2. OIDC ArgoCD : une fois le Secret `argocd-oidc` créé, `argocd-server` doit le relire :
-   ```sh
-   kubectl --context admin@bleu-malygos -n argocd get secret argocd-oidc
-   kubectl --context admin@bleu-malygos -n argocd rollout restart deploy/argocd-server
-   ```
+Puis OIDC ArgoCD : une fois le Secret `argocd-oidc` créé, `argocd-server` doit le relire :
+
+```sh
+kubectl --context admin@bleu-malygos -n argocd get secret argocd-oidc
+kubectl --context admin@bleu-malygos -n argocd rollout restart deploy/argocd-server
+```
 
 ## Vérifier
 

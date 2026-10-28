@@ -30,3 +30,10 @@ spec:
       prune: true
     syncOptions:
       - CreateNamespace=true
+    # sans fin : une dépendance (CRD, secret) d'une autre Application peut arriver tard (boot à blanc)
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

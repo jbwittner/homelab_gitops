@@ -42,7 +42,6 @@ Sujets reportés volontairement, à reprendre au besoin.
 | Audit OpenBao | journal des accès au coffre | `homelab_terraform`, [openbao](doc/openbao.md) |
 | Reloader | redémarrer un pod quand un Secret ESO lu au démarrage change (aujourd'hui : `grafana-admin`, à la main) | nouveau composant |
 | Widgets Homepage à identifiants | AdGuard, Proxmox (`PVEAuditor`), Home Assistant : OpenBao → ESO → `HOMEPAGE_VAR_*` (va avec Reloader) | `clusters/bleu-kalecgos/homepage/` |
-| Retry ArgoCD | avant un boot à blanc : ArgoCD ne retente que 5 fois, une Application dont une dépendance arrive tard reste en échec | `*.app.yaml` (`syncPolicy.retry`) |
 | Restauration OpenBao en prod | remise en place d'un snapshot raft (`-force`) jamais testée ; la restauration à côté l'est | [sauvegardes](doc/sauvegardes.md) |
 | NetBird | second peer routeur dans un cluster, en redondance du CT Proxmox | — |
 | OIDC : Proxmox | realm OpenID ; client dans `clients.yml` | [authelia](doc/authelia.md) |
