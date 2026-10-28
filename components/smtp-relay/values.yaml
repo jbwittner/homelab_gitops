@@ -50,6 +50,23 @@ metrics:
   image:
     # pas de tag versionné publié : latest figé par digest
     tag: latest@sha256:0a46a0c599b564f34ffc650f2cb3c108a867c1bb0b18a496d12d2d5cdcbaf6af
+  logrotate:
+    # Fichier monté depuis une ConfigMap (lecture seule). Au démarrage, l'image fait
+    # un sed -i dessus si une ligne commence par /var/log/mail.log, ce qui échoue
+    # (« Device or resource busy ») : chemin entre guillemets pour l'éviter.
+    logrotate.conf: |
+      "/var/log/mail.log" {
+          copytruncate
+          rotate 1
+          monthly
+          minsize 1M
+          compress
+          missingok
+          notifempty
+          dateext
+          olddir /var/log/
+          maxage 90
+      }
   resources:
     requests:
       cpu: 10m
