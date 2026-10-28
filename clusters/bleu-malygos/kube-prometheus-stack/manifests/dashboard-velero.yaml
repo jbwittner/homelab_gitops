@@ -421,7 +421,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Same reading as the table below, but aggregated: one row per schedule instead of one per backup. \"manuel\" groups the hand-launched backups. The totals cover the backups STILL PRESENT: they drop when the TTL expires. \"Data copied\" is the sum of the PodVolumeBackups before kopia deduplication — it is not the bucket usage.",
+          "description": "One row per schedule (\"manuel\" groups the hand-launched backups). Counts and ages cover the backups STILL PRESENT: they drop when the TTL expires. \"Data copied\" is the sum of the PodVolumeBackups before kopia deduplication — it is not the bucket usage.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -443,7 +443,8 @@ data:
                     "value": null
                   }
                 ]
-              }
+              },
+              "noValue": "—"
             },
             "overrides": [
               {
@@ -483,24 +484,24 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Start (last)"
+                  "options": "Last backup"
                 },
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "dateTimeAsIso"
+                    "value": "dateTimeFromNow"
                   }
                 ]
               },
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "End (last)"
+                  "options": "Oldest backup"
                 },
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "dateTimeAsIso"
+                    "value": "dateTimeFromNow"
                   }
                 ]
               },
@@ -513,25 +514,6 @@ data:
                   {
                     "id": "unit",
                     "value": "bytes"
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "gauge",
-                      "mode": "gradient"
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Next expiry"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeAsIso"
                   }
                 ]
               }
@@ -548,13 +530,11 @@ data:
             "cellHeight": "sm",
             "footer": {
               "countRows": false,
-              "fields": [
-                "Data copied"
-              ],
+              "fields": "",
               "reducer": [
                 "sum"
               ],
-              "show": true
+              "show": false
             },
             "showHeader": true,
             "sortBy": [
@@ -572,7 +552,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(label_replace(count by (cluster, schedule) (velero_backup_object_info{cluster=~\"$cluster\"}), \"schedule\", \"manuel\", \"schedule\", \"^$\"), \"schedule\", \" · \", \"cluster\", \"schedule\")",
+              "expr": "label_replace(count by (cluster, schedule) (velero_backup_object_info{cluster=~\"$cluster\"}), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
@@ -584,7 +564,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(velero_backup_last_status{cluster=~\"$cluster\",schedule=~\"$schedule\"}, \"schedule\", \" · \", \"cluster\", \"schedule\")",
+              "expr": "max by (cluster, schedule) (velero_backup_last_status{cluster=~\"$cluster\",schedule=~\"$schedule\"})",
               "format": "table",
               "instant": true,
               "range": false,
@@ -596,7 +576,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(label_replace(max by (cluster, schedule) ((velero_backup_object_start_time{cluster=~\"$cluster\"} * on(cluster, backup) group_left(schedule) velero_backup_object_info{cluster=~\"$cluster\"})) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\"), \"schedule\", \" · \", \"cluster\", \"schedule\")",
+              "expr": "label_replace(max by (cluster, schedule) (velero_backup_object_completion_time{cluster=~\"$cluster\"} * on(cluster, backup) group_left(schedule) velero_backup_object_info{cluster=~\"$cluster\"}), \"schedule\", \"manuel\", \"schedule\", \"^$\") * 1000",
               "format": "table",
               "instant": true,
               "range": false,
@@ -608,7 +588,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(label_replace(max by (cluster, schedule) ((velero_backup_object_completion_time{cluster=~\"$cluster\"} * on(cluster, backup) group_left(schedule) velero_backup_object_info{cluster=~\"$cluster\"})) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\"), \"schedule\", \" · \", \"cluster\", \"schedule\")",
+              "expr": "label_replace(min by (cluster, schedule) (velero_backup_object_start_time{cluster=~\"$cluster\"} * on(cluster, backup) group_left(schedule) velero_backup_object_info{cluster=~\"$cluster\"}), \"schedule\", \"manuel\", \"schedule\", \"^$\") * 1000",
               "format": "table",
               "instant": true,
               "range": false,
@@ -620,183 +600,50 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(label_replace(sum by (cluster, schedule) ((velero_backup_object_items_backed_up{cluster=~\"$cluster\"} * on(cluster, backup) group_left(schedule) velero_backup_object_info{cluster=~\"$cluster\"})), \"schedule\", \"manuel\", \"schedule\", \"^$\"), \"schedule\", \" · \", \"cluster\", \"schedule\")",
+              "expr": "label_replace(sum by (cluster, schedule) (sum by (cluster, backup) (velero_pvb_object_bytes{cluster=~\"$cluster\"}) * on(cluster, backup) group_left(schedule) velero_backup_object_info{cluster=~\"$cluster\"}), \"schedule\", \"manuel\", \"schedule\", \"^$\")",
               "format": "table",
               "instant": true,
               "range": false,
               "refId": "E"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "label_join(label_replace(sum by (cluster, schedule) (sum by (cluster, backup) (velero_pvb_object_bytes{cluster=~\"$cluster\"}) * on(cluster, backup) group_left(schedule) velero_backup_object_info{cluster=~\"$cluster\"}), \"schedule\", \"manuel\", \"schedule\", \"^$\"), \"schedule\", \" · \", \"cluster\", \"schedule\")",
-              "format": "table",
-              "instant": true,
-              "range": false,
-              "refId": "F"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${DS_PROMETHEUS}"
-              },
-              "editorMode": "code",
-              "expr": "label_join(label_replace(min by (cluster, schedule) ((velero_backup_object_expiration{cluster=~\"$cluster\"} * on(cluster, backup) group_left(schedule) velero_backup_object_info{cluster=~\"$cluster\"})) * 1000, \"schedule\", \"manuel\", \"schedule\", \"^$\"), \"schedule\", \" · \", \"cluster\", \"schedule\")",
-              "format": "table",
-              "instant": true,
-              "range": false,
-              "refId": "G"
             }
           ],
           "title": "Per schedule (aggregated)",
           "transformations": [
             {
-              "id": "joinByField",
+              "id": "organize",
               "options": {
-                "byField": "schedule",
-                "mode": "outer"
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {}
               }
+            },
+            {
+              "id": "merge",
+              "options": {}
             },
             {
               "id": "organize",
               "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "Time 1": true,
-                  "Time 2": true,
-                  "Time 3": true,
-                  "Time 4": true,
-                  "Time 5": true,
-                  "Time 6": true,
-                  "Time 7": true,
-                  "__name__": true,
-                  "__name__ 1": true,
-                  "__name__ 2": true,
-                  "__name__ 3": true,
-                  "__name__ 4": true,
-                  "__name__ 5": true,
-                  "__name__ 6": true,
-                  "__name__ 7": true,
-                  "container": true,
-                  "container 1": true,
-                  "container 2": true,
-                  "container 3": true,
-                  "container 4": true,
-                  "container 5": true,
-                  "container 6": true,
-                  "container 7": true,
-                  "endpoint": true,
-                  "endpoint 1": true,
-                  "endpoint 2": true,
-                  "endpoint 3": true,
-                  "endpoint 4": true,
-                  "endpoint 5": true,
-                  "endpoint 6": true,
-                  "endpoint 7": true,
-                  "instance": true,
-                  "instance 1": true,
-                  "instance 2": true,
-                  "instance 3": true,
-                  "instance 4": true,
-                  "instance 5": true,
-                  "instance 6": true,
-                  "instance 7": true,
-                  "job": true,
-                  "job 1": true,
-                  "job 2": true,
-                  "job 3": true,
-                  "job 4": true,
-                  "job 5": true,
-                  "job 6": true,
-                  "job 7": true,
-                  "namespace": true,
-                  "namespace 1": true,
-                  "namespace 2": true,
-                  "namespace 3": true,
-                  "namespace 4": true,
-                  "namespace 5": true,
-                  "namespace 6": true,
-                  "namespace 7": true,
-                  "pod": true,
-                  "pod 1": true,
-                  "pod 2": true,
-                  "pod 3": true,
-                  "pod 4": true,
-                  "pod 5": true,
-                  "pod 6": true,
-                  "pod 7": true,
-                  "service": true,
-                  "service 1": true,
-                  "service 2": true,
-                  "service 3": true,
-                  "service 4": true,
-                  "service 5": true,
-                  "service 6": true,
-                  "service 7": true,
-                  "uid": true,
-                  "uid 1": true,
-                  "uid 2": true,
-                  "uid 3": true,
-                  "uid 4": true,
-                  "uid 5": true,
-                  "uid 6": true,
-                  "uid 7": true,
-                  "customresource_group": true,
-                  "customresource_group 1": true,
-                  "customresource_group 2": true,
-                  "customresource_group 3": true,
-                  "customresource_group 4": true,
-                  "customresource_group 5": true,
-                  "customresource_group 6": true,
-                  "customresource_group 7": true,
-                  "customresource_kind": true,
-                  "customresource_kind 1": true,
-                  "customresource_kind 2": true,
-                  "customresource_kind 3": true,
-                  "customresource_kind 4": true,
-                  "customresource_kind 5": true,
-                  "customresource_kind 6": true,
-                  "customresource_kind 7": true,
-                  "customresource_version": true,
-                  "customresource_version 1": true,
-                  "customresource_version 2": true,
-                  "customresource_version 3": true,
-                  "customresource_version 4": true,
-                  "customresource_version 5": true,
-                  "customresource_version 6": true,
-                  "customresource_version 7": true,
-                  "storage_location": true,
-                  "storage_location 1": true,
-                  "storage_location 2": true,
-                  "storage_location 3": true,
-                  "storage_location 4": true,
-                  "storage_location 5": true,
-                  "storage_location 6": true,
-                  "storage_location 7": true,
-                  "cluster": true,
-                  "cluster 1": true,
-                  "cluster 2": true,
-                  "cluster 3": true,
-                  "cluster 4": true,
-                  "cluster 5": true,
-                  "cluster 6": true,
-                  "cluster 7": true,
-                  "cluster 8": true,
-                  "cluster 9": true
+                "excludeByName": {},
+                "indexByName": {
+                  "cluster": 0,
+                  "schedule": 1,
+                  "Value #B": 2,
+                  "Value #C": 3,
+                  "Value #D": 4,
+                  "Value #A": 5,
+                  "Value #E": 6
                 },
-                "indexByName": {},
                 "renameByName": {
+                  "cluster": "Cluster",
                   "schedule": "Schedule",
-                  "Value #A": "Backups",
+                  "Value #A": "Retained",
                   "Value #B": "Last status",
-                  "Value #C": "Start (last)",
-                  "Value #D": "End (last)",
-                  "Value #E": "Items (total)",
-                  "Value #F": "Data copied",
-                  "Value #G": "Next expiry"
+                  "Value #C": "Last backup",
+                  "Value #D": "Oldest backup",
+                  "Value #E": "Data copied"
                 }
               }
             }
@@ -808,7 +655,7 @@ data:
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "The real inventory of the Backup objects, one row per backup — impossible to get from velero's native metrics, which are aggregated per schedule and overwritten on every run. Source: kube-state-metrics customResourceState (components/kube-prometheus-stack/values.yaml). \"Data copied\" is the sum of the PodVolumeBackups before kopia deduplication — it is not the bucket usage.",
+          "description": "The real inventory of the Backup objects, one row per backup — impossible to get from velero's native metrics, which are aggregated per schedule and overwritten on every run. Source: kube-state-metrics customResourceState (components/kube-prometheus-stack/values.yaml). No duration while the backup is in progress. \"Data copied\" is the sum of the PodVolumeBackups before kopia deduplication — it is not the bucket usage.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -830,7 +677,8 @@ data:
                     "value": null
                   }
                 ]
-              }
+              },
+              "noValue": "—"
             },
             "overrides": [
               {
@@ -889,19 +737,19 @@ data:
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "dateTimeAsIso"
+                    "value": "time:YYYY-MM-DD HH:mm"
                   }
                 ]
               },
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "End"
+                  "options": "Duration"
                 },
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "dateTimeAsIso"
+                    "value": "s"
                   }
                 ]
               },
@@ -914,25 +762,18 @@ data:
                   {
                     "id": "unit",
                     "value": "bytes"
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "gauge",
-                      "mode": "gradient"
-                    }
                   }
                 ]
               },
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Expires on"
+                  "options": "Expires"
                 },
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "dateTimeAsIso"
+                    "value": "dateTimeFromNow"
                   }
                 ]
               }
@@ -949,13 +790,11 @@ data:
             "cellHeight": "sm",
             "footer": {
               "countRows": false,
-              "fields": [
-                "Data copied"
-              ],
+              "fields": "",
               "reducer": [
                 "sum"
               ],
-              "show": true
+              "show": false
             },
             "showHeader": true,
             "sortBy": [
@@ -973,7 +812,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(label_replace(velero_backup_object_info{cluster=~\"$cluster\"}, \"schedule\", \"manuel\", \"schedule\", \"^$\"), \"backup\", \" · \", \"cluster\", \"backup\")",
+              "expr": "max by (cluster, backup, phase) (velero_backup_object_info{cluster=~\"$cluster\"})",
               "format": "table",
               "instant": true,
               "range": false,
@@ -985,7 +824,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(velero_backup_object_start_time{cluster=~\"$cluster\"} * 1000, \"backup\", \" · \", \"cluster\", \"backup\")",
+              "expr": "max by (cluster, backup) (velero_backup_object_start_time{cluster=~\"$cluster\"}) * 1000",
               "format": "table",
               "instant": true,
               "range": false,
@@ -997,7 +836,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(velero_backup_object_completion_time{cluster=~\"$cluster\"} * 1000, \"backup\", \" · \", \"cluster\", \"backup\")",
+              "expr": "max by (cluster, backup) (velero_backup_object_completion_time{cluster=~\"$cluster\"} - velero_backup_object_start_time{cluster=~\"$cluster\"})",
               "format": "table",
               "instant": true,
               "range": false,
@@ -1009,7 +848,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(velero_backup_object_items_backed_up{cluster=~\"$cluster\"}, \"backup\", \" · \", \"cluster\", \"backup\")",
+              "expr": "max by (cluster, backup) (velero_backup_object_items_backed_up{cluster=~\"$cluster\"})",
               "format": "table",
               "instant": true,
               "range": false,
@@ -1021,7 +860,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(sum by (cluster, backup) (velero_pvb_object_bytes{cluster=~\"$cluster\"}), \"backup\", \" · \", \"cluster\", \"backup\")",
+              "expr": "sum by (cluster, backup) (velero_pvb_object_bytes{cluster=~\"$cluster\"})",
               "format": "table",
               "instant": true,
               "range": false,
@@ -1033,7 +872,7 @@ data:
                 "uid": "${DS_PROMETHEUS}"
               },
               "editorMode": "code",
-              "expr": "label_join(velero_backup_object_expiration{cluster=~\"$cluster\"} * 1000, \"backup\", \" · \", \"cluster\", \"backup\")",
+              "expr": "max by (cluster, backup) (velero_backup_object_expiration{cluster=~\"$cluster\"}) * 1000",
               "format": "table",
               "instant": true,
               "range": false,
@@ -1043,136 +882,44 @@ data:
           "title": "All backups (Backup objects)",
           "transformations": [
             {
-              "id": "joinByField",
+              "id": "organize",
               "options": {
-                "byField": "backup",
-                "mode": "outer"
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {}
               }
+            },
+            {
+              "id": "merge",
+              "options": {}
             },
             {
               "id": "organize",
               "options": {
                 "excludeByName": {
-                  "Time": true,
-                  "Time 1": true,
-                  "Time 2": true,
-                  "Time 3": true,
-                  "Time 4": true,
-                  "Time 5": true,
-                  "Time 6": true,
-                  "__name__": true,
-                  "__name__ 1": true,
-                  "__name__ 2": true,
-                  "__name__ 3": true,
-                  "__name__ 4": true,
-                  "__name__ 5": true,
-                  "__name__ 6": true,
-                  "container": true,
-                  "container 1": true,
-                  "container 2": true,
-                  "container 3": true,
-                  "container 4": true,
-                  "container 5": true,
-                  "container 6": true,
-                  "endpoint": true,
-                  "endpoint 1": true,
-                  "endpoint 2": true,
-                  "endpoint 3": true,
-                  "endpoint 4": true,
-                  "endpoint 5": true,
-                  "endpoint 6": true,
-                  "instance": true,
-                  "instance 1": true,
-                  "instance 2": true,
-                  "instance 3": true,
-                  "instance 4": true,
-                  "instance 5": true,
-                  "instance 6": true,
-                  "job": true,
-                  "job 1": true,
-                  "job 2": true,
-                  "job 3": true,
-                  "job 4": true,
-                  "job 5": true,
-                  "job 6": true,
-                  "namespace": true,
-                  "namespace 1": true,
-                  "namespace 2": true,
-                  "namespace 3": true,
-                  "namespace 4": true,
-                  "namespace 5": true,
-                  "namespace 6": true,
-                  "pod": true,
-                  "pod 1": true,
-                  "pod 2": true,
-                  "pod 3": true,
-                  "pod 4": true,
-                  "pod 5": true,
-                  "pod 6": true,
-                  "service": true,
-                  "service 1": true,
-                  "service 2": true,
-                  "service 3": true,
-                  "service 4": true,
-                  "service 5": true,
-                  "service 6": true,
-                  "uid": true,
-                  "uid 1": true,
-                  "uid 2": true,
-                  "uid 3": true,
-                  "uid 4": true,
-                  "uid 5": true,
-                  "uid 6": true,
-                  "customresource_group": true,
-                  "customresource_group 1": true,
-                  "customresource_group 2": true,
-                  "customresource_group 3": true,
-                  "customresource_group 4": true,
-                  "customresource_group 5": true,
-                  "customresource_group 6": true,
-                  "customresource_kind": true,
-                  "customresource_kind 1": true,
-                  "customresource_kind 2": true,
-                  "customresource_kind 3": true,
-                  "customresource_kind 4": true,
-                  "customresource_kind 5": true,
-                  "customresource_kind 6": true,
-                  "customresource_version": true,
-                  "customresource_version 1": true,
-                  "customresource_version 2": true,
-                  "customresource_version 3": true,
-                  "customresource_version 4": true,
-                  "customresource_version 5": true,
-                  "customresource_version 6": true,
-                  "storage_location": true,
-                  "storage_location 1": true,
-                  "storage_location 2": true,
-                  "storage_location 3": true,
-                  "storage_location 4": true,
-                  "storage_location 5": true,
-                  "storage_location 6": true,
-                  "Value #A": true,
-                  "cluster": true,
-                  "cluster 1": true,
-                  "cluster 2": true,
-                  "cluster 3": true,
-                  "cluster 4": true,
-                  "cluster 5": true,
-                  "cluster 6": true,
-                  "cluster 7": true,
-                  "cluster 8": true,
-                  "cluster 9": true
+                  "Value #A": true
                 },
-                "indexByName": {},
+                "indexByName": {
+                  "cluster": 0,
+                  "backup": 1,
+                  "phase": 2,
+                  "Value #B": 3,
+                  "Value #C": 4,
+                  "Value #D": 5,
+                  "Value #E": 6,
+                  "Value #F": 7
+                },
                 "renameByName": {
+                  "cluster": "Cluster",
                   "backup": "Backup",
                   "phase": "Phase",
-                  "schedule": "Schedule",
                   "Value #B": "Start",
-                  "Value #C": "End",
+                  "Value #C": "Duration",
                   "Value #D": "Items",
                   "Value #E": "Data copied",
-                  "Value #F": "Expires on"
+                  "Value #F": "Expires"
                 }
               }
             }
