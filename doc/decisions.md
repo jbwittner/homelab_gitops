@@ -45,4 +45,4 @@
 | Pas de forward-auth : seules les applis OIDC passent par Authelia | le Gateway Cilium ne fait pas d'`ext_authz` | oauth2-proxy devant chaque appli (au besoin, à faire plus tard) |
 | Clients OIDC dans Git, `client_secret` en hash pbkdf2 ; secret en clair dans OpenBao, côté appli | un commit par client ; hash inexploitable sur 64 caractères aléatoires | secret lu par Authelia via `{{ secret }}` (un ExternalSecret de plus par client) |
 | Authelia : SQLite non sauvegardé, codes de vérification dans un fichier | perdu = passkey et TOTP à réenregistrer ; copie à chaud de SQLite non fiable ; pas de serveur SMTP | Velero ; SMTP |
-| Renovate auto-hébergé sur kalecgos (CronJob horaire), GitHub App dédiée, clé dans OpenBao | tout chez soi et dans Git ; outil, pas infra : pics de charge hors de malygos ; App distincte de celle d'ArgoCD (lecture seule) | app Mend hébergée ; GitHub Actions ; malygos |
+| Renovate auto-hébergé sur kalecgos (CronJob quotidien), GitHub App dédiée, clé dans OpenBao | tout chez soi et dans Git ; outil, pas infra : pics de charge hors de malygos ; App distincte de celle d'ArgoCD (lecture seule) | app Mend hébergée ; GitHub Actions ; malygos |

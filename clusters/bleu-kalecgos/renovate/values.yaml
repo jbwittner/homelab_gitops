@@ -1,11 +1,11 @@
 cronjob:
-  # toutes les heures (Renovate ne refait que ce qui a changé)
-  schedule: "0 * * * *"
+  # une fois par jour, à 5 h
+  schedule: "0 5 * * *"
   timeZone: Europe/Paris
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: "1"
   failedJobsHistoryLimit: "3"
-  # pas de nouvel essai : un passage raté (dépôt inaccessible…) attend l'heure suivante
+  # pas de nouvel essai : un passage raté (dépôt inaccessible…) attend le lendemain
   jobBackoffLimit: "0"
   # GitHub App : Renovate n'accepte qu'un jeton d'installation (1 h), généré avant chaque passage
   # depuis l'App ID, l'Installation ID et la clé privée (OpenBao, secret/renovate)

@@ -1,6 +1,6 @@
 # Renovate
 
-Mises à jour des dépendances (charts, images, URLs taguées) par PR GitHub. Auto-hébergé sur kalecgos (CronJob, toutes les heures à :17), authentifié par une GitHub App.
+Mises à jour des dépendances (charts, images, URLs taguées) par PR GitHub. Auto-hébergé sur kalecgos (CronJob, une fois par jour à 5 h), authentifié par une GitHub App.
 
 | Fichier | Rôle |
 |---|---|
