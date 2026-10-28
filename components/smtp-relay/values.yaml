@@ -1,0 +1,56 @@
+# Relais Postfix vers Brevo, un par cluster, ClusterIP seulement (pas d'IP LB)
+fullnameOverride: smtp-relay
+
+# true injecte un horodatage à chaque rendu : ArgoCD redémarrerait le pod en boucle.
+# Contrecoup : un changement de config.* ne redémarre pas le pod (voir doc/smtp.md)
+recreateOnRedeploy: false
+
+# Pas de PVC : la file d'attente est vide sauf panne de Brevo, et un volume LVM
+# lierait le pod à un nœud. Une file non vide est perdue au redémarrage du pod.
+persistence:
+  enabled: false
+
+# Identifiants Brevo (RELAYHOST_USERNAME, RELAYHOST_PASSWORD), ExternalSecret dans manifests/
+existingSecret: smtp-relay-brevo
+
+config:
+  general:
+    TZ: Europe/Paris
+    RELAYHOST: "[smtp-relay.brevo.com]:587"
+    # expéditeur hors wittner.tech refusé ici plutôt que rejeté par Brevo
+    ALLOWED_SENDER_DOMAINS: wittner.tech
+  postfix:
+    # pods du cluster seulement (ipam kubernetes, 10.244.0.0/16 sur les deux)
+    mynetworks: 127.0.0.0/8,10.244.0.0/16
+    # identifiants Brevo jamais en clair
+    smtp_tls_security_level: encrypt
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# Sans clé DKIM (Brevo signe), opendkim n'est pas garanti : sonde du chart sans lui
+startupProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  failureThreshold: 12
+  exec:
+    command:
+      - sh
+      - -c
+      - >-
+        ps axf | fgrep -v grep | egrep -q '\{supervisord\}|/usr/bin/supervisord' &&
+        ps axf | fgrep -v grep | fgrep -q "postfix-script"
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+  image:
+    # pas de tag versionné publié : latest figé par digest
+    tag: latest@sha256:0a46a0c599b564f34ffc650f2cb3c108a867c1bb0b18a496d12d2d5cdcbaf6af
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
