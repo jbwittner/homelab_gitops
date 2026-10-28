@@ -1,5 +1,7 @@
 prometheus:
   prometheusSpec:
+    # liens des alertes (« Source ») : le chart déduit http:// de la route, le Gateway n'écoute qu'en HTTPS
+    externalUrl: https://prometheus.lan.wittner.tech
     # label cluster sur toutes les séries locales (kalecgos pose le sien avant l'envoi)
     scrapeClasses:
       - name: cluster
@@ -30,6 +32,8 @@ prometheus:
 
 alertmanager:
   alertmanagerSpec:
+    # liens des mails d'alerte : le chart déduit http:// de la route, le Gateway n'écoute qu'en HTTPS
+    externalUrl: https://alertmanager.lan.wittner.tech
     # config entière dans manifests/alertmanager-config.yaml (ESO : destinataire dans OpenBao)
     useExistingSecret: true
     configSecret: alertmanager-config
