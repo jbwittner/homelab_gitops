@@ -30,6 +30,9 @@ prometheus:
 
 alertmanager:
   alertmanagerSpec:
+    # config entière dans manifests/alertmanager-config.yaml (ESO : destinataire dans OpenBao)
+    useExistingSecret: true
+    configSecret: alertmanager-config
     storage:
       volumeClaimTemplate:
         spec:

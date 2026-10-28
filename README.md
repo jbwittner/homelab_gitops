@@ -37,7 +37,6 @@ Sujets reportés volontairement, à reprendre au besoin.
 
 | Sujet | Quoi | Où |
 |---|---|---|
-| Alertmanager | aucun destinataire : les alertes ne partent nulle part (mail, Discord, ntfy…) | `clusters/bleu-malygos/kube-prometheus-stack/values.yaml` |
 | Control plane Talos | métriques scheduler, controller-manager, etcd servies sur `127.0.0.1` : les ouvrir puis réactiver | `homelab_talos`, puis `components/kube-prometheus-stack/values.yaml` |
 | Cilium et Hubble | métriques (agent, opérateur, Envoy, Hubble) + ServiceMonitors ; en option Hubble Relay et UI (`hubble.lan.wittner.tech`) | `components/cilium/values.yaml` |
 | Audit OpenBao | journal des accès au coffre | `homelab_terraform`, [openbao](doc/openbao.md) |

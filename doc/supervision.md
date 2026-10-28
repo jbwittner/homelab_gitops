@@ -14,6 +14,7 @@
 | `components/kube-prometheus-stack/manifests/namespace.yaml` | `monitoring`, PSA `privileged` (node-exporter) |
 | `clusters/bleu-malygos/kube-prometheus-stack/values.yaml` | stockage, rétention, réception, routes, Grafana sans état |
 | `clusters/bleu-kalecgos/kube-prometheus-stack/values.yaml` | agent (`PrometheusAgent`), envoi vers `prometheus.lan.wittner.tech` ; sans Grafana, Alertmanager ni règles |
+| `clusters/bleu-malygos/kube-prometheus-stack/manifests/alertmanager-config.yaml` | `ExternalSecret` : config Alertmanager entière, destinataire depuis `secret/alertmanager` (`email`) |
 | `clusters/bleu-malygos/kube-prometheus-stack/manifests/grafana-admin.yaml` | `ExternalSecret` : mot de passe admin depuis `secret/grafana` (`admin_password`) |
 | `clusters/bleu-malygos/kube-prometheus-stack/manifests/dashboard-*.yaml` | dashboards custom, dossier `Wittnerlab` |
 | `clusters/<nom>/kube-prometheus-stack/kube-prometheus-stack.app.yaml` | `kube-prometheus-stack-<cluster-court>` |
@@ -22,7 +23,26 @@
 |---|---|
 | `https://grafana.lan.wittner.tech` | Authelia (groupe `admins` → Admin, sinon Viewer) ; utilisateur `admin` en secours |
 | `https://prometheus.lan.wittner.tech` | UI, API ; écriture distante sur `/api/v1/write`, **sans authentification** (LAN) |
-| `https://alertmanager.lan.wittner.tech` | aucun destinataire configuré |
+| `https://alertmanager.lan.wittner.tech` | alertes par mail ([relais SMTP](smtp.md)), sauf `Watchdog` |
+
+## Destinataire des alertes (une fois)
+
+Hors dépôt (public) : dans OpenBao.
+
+```sh
+read -r "EMAIL?Destinataire des alertes : "
+bao kv put secret/alertmanager email="$EMAIL"
+unset EMAIL
+```
+
+Changer : même commande. ESO relit toutes les heures ; Alertmanager recharge seul (pas de redémarrage).
+
+Tester : une alerte factice, envoyée après `group_wait` (30 s).
+
+```sh
+curl -s -XPOST https://alertmanager.lan.wittner.tech/api/v2/alerts -H 'Content-Type: application/json' \
+  -d '[{"labels":{"alertname":"TestMail","severity":"warning","namespace":"test"},"annotations":{"summary":"test du mail"}}]'
+```
 
 ## Mot de passe Grafana (une fois)
 
