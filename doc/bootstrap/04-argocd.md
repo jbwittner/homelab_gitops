@@ -129,7 +129,7 @@ Clé perdue, exposée ou supprimée côté GitHub. Symptôme : `401 Unauthorized
      | openssl rsa -pubout -outform DER 2>/dev/null | openssl sha256 -binary | openssl base64
    ```
 4. Commit + push **avant** d'appliquer : dès l'accès retrouvé, `argocd-malygos` (selfHeal) réapplique ce qui est dans Git.
-5. Attendre 3 min (cache de résolution de `main` du repo-server, sinon il ressert l'ancien commit), puis :
+5. Attendre 1 min (cache de résolution de `main` du repo-server = `timeout.reconciliation`, sinon il ressert l'ancien commit), puis :
    ```sh
    kubectl --context admin@bleu-malygos apply -f clusters/bleu-malygos/argocd/manifests/github-app.sealed.yaml
    ```
