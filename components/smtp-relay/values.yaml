@@ -24,6 +24,9 @@ config:
     mynetworks: 127.0.0.0/8,10.244.0.0/16
     # identifiants Brevo jamais en clair
     smtp_tls_security_level: encrypt
+    # côté pods : pas de STARTTLS. L'image l'offre avec un certificat snakeoil, que les
+    # clients qui négocient TLS d'office (Authelia, Grafana…) rejettent
+    smtpd_tls_security_level: none
 
 resources:
   requests:

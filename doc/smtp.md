@@ -4,7 +4,7 @@ Un relais par cluster, joignable des pods de son cluster seulement. Aucun port s
 
 | | |
 |---|---|
-| Adresse (pods) | `smtp-relay.smtp-relay.svc.cluster.local:587`, sans authentification, sans TLS |
+| Adresse (pods) | `smtp-relay.smtp-relay.svc.cluster.local:587`, sans authentification, sans TLS (STARTTLS non proposé) |
 | Accepté de | `10.244.0.0/16` (pods du cluster) |
 | Expéditeur | `*@wittner.tech` seulement (ex. `homelab@wittner.tech`) |
 | Amont | `[smtp-relay.brevo.com]:587`, TLS obligatoire |
@@ -49,7 +49,7 @@ Idem après un changement de `config` dans `values.yaml` (ConfigMap lue au déma
 
 ```sh
 kubectl --context admin@bleu-malygos -n smtp-relay exec smtp-relay-0 -c mail -- \
-  sh -c 'printf "Subject: test relais malygos\n\nok\n" | sendmail -f homelab@wittner.tech jeanbaptiste.wittner@outlook.com'
+  sh -c 'printf "Subject: test relais malygos\n\nok\n" | sendmail -f homelab@wittner.tech moi@example.com'   # remplacer le destinataire
 kubectl --context admin@bleu-malygos -n smtp-relay logs smtp-relay-0 -c mail --tail 20   # status=sent (250 …)
 ```
 
@@ -61,5 +61,10 @@ Même chose avec `admin@bleu-kalecgos`.
 |---|---|
 | Hôte, port | `smtp-relay.smtp-relay.svc.cluster.local`, `587` |
 | Authentification | aucune |
-| TLS / STARTTLS | désactivé côté client (le relais n'a pas de certificat) |
+| TLS / STARTTLS | désactivé côté client (le relais ne le propose pas) |
 | From | `<service>@wittner.tech` |
+
+| Branché | From | Config |
+|---|---|---|
+| Authelia | `auth@wittner.tech` | `clusters/bleu-malygos/authelia/manifests/config/configuration.yml` (`notifier.smtp`) |
+| Alertmanager | `alertmanager@wittner.tech` | `clusters/bleu-malygos/kube-prometheus-stack/manifests/alertmanager-config.yaml` |
