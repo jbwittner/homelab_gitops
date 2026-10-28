@@ -46,10 +46,12 @@ storage:
   local:
     path: /config/db.sqlite3
 
-# pas de SMTP : codes de vérification (enregistrement d'une passkey, d'un TOTP) écrits ici, voir doc/authelia.md
+# relais du cluster (doc/smtp.md) : sans authentification ni TLS ; destinataire = user_email (OpenBao)
 notifier:
-  filesystem:
-    filename: /config/notification.txt
+  smtp:
+    address: smtp://smtp-relay.smtp-relay.svc.cluster.local:587
+    sender: Authelia <auth@wittner.tech>
+    disable_require_tls: true
 
 identity_providers:
   oidc:

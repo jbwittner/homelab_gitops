@@ -61,11 +61,7 @@ Puis, dans le même commit : entrée dans `clients.yml` (`client_secret` = hash 
 
 ## Second facteur (une fois)
 
-Se connecter sur `https://auth.lan.wittner.tech`, enregistrer une passkey (ou un TOTP). Pas de SMTP : le code de vérification, à usage unique, est écrit sur le PVC :
-
-```sh
-kubectl --context admin@bleu-malygos -n authelia exec authelia-0 -- cat /config/notification.txt
-```
+Se connecter sur `https://auth.lan.wittner.tech`, enregistrer une passkey (ou un TOTP). Le code de vérification, à usage unique, arrive par mail à `user_email` (`secret/authelia`), via le [relais SMTP](smtp.md).
 
 ## Changer le mot de passe
 
