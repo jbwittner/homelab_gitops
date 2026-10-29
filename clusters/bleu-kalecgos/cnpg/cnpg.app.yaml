@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cnpg-kalecgos
+  namespace: argocd
+  labels:
+    layer: infra
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+    namespace: cnpg-system
+  sources:
+    - repoURL: https://cloudnative-pg.github.io/charts
+      chart: cloudnative-pg
+      targetRevision: 0.29.1
+      helm:
+        releaseName: cnpg
+        valueFiles:
+          - $values/components/cnpg/values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+  syncPolicy:
+    # pas de prune : supprimer une CRD supprime tous les Clusters Postgres (et leurs PVC)
+    automated:
+      selfHeal: true
+    syncOptions:
+      # CRDs trop grosses pour l'annotation last-applied du client-side apply
+      - ServerSideApply=true
+      - CreateNamespace=true
+    # sans fin : une dépendance (CRD, secret) d'une autre Application peut arriver tard (boot à blanc)
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

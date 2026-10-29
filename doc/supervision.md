@@ -67,6 +67,7 @@ Chaque composant déclare le sien ; Prometheus les prend tous (sélecteurs ouver
 | OpenEBS LVM | `ServiceMonitor` `openebs-lvm-node`, `instance` = nom du nœud | `components/openebs/manifests/servicemonitor.yaml` |
 | Velero | `ServiceMonitor` serveur (schedule vide réécrit en `manuel`) + `PodMonitor` node-agent | option `metrics` du chart, `components/velero/values.yaml` |
 | Relais SMTP | `ServiceMonitor` `smtp-relay-metrics` (postfix-exporter : file d'attente, envois, rejets) | option `metrics` du chart, `components/smtp-relay/values.yaml` |
+| CloudNativePG | `PodMonitor` opérateur ; chaque `Cluster` Postgres : `PodMonitor` dans son `manifests/` (`enablePodMonitor` déprécié) | option `monitoring` du chart, `components/cnpg/values.yaml` |
 | Objets velero (Backup, PodVolumeBackup) | kube-state-metrics `customResourceState` : `velero_backup_object_*`, `velero_pvb_object_*` | `components/kube-prometheus-stack/values.yaml` |
 
 ## Dashboards custom

@@ -1,0 +1,3 @@
+# PodMonitor de l'opérateur ; chaque Cluster Postgres déclare le sien dans son manifests/ (enablePodMonitor déprécié)
+monitoring:
+  podMonitorEnabled: true

@@ -24,6 +24,7 @@ Une ligne par composant ; Application ArgoCD `<comp>-<cluster-court>`. Versions 
 | Authelia (OIDC : ArgoCD, Grafana, OpenBao) | infra | ✓ | | `authelia` | [auth](https://auth.lan.wittner.tech) |
 | Velero (GCS) | infra | ✓ | ✓ | `velero` | — |
 | Relais SMTP (Postfix → Resend) | infra | ✓ | ✓ | `smtp-relay` | — |
+| CloudNativePG (opérateur Postgres) | infra | ✓ | ✓ | `cnpg-system` | — |
 | kube-prometheus-stack | infra | ✓ complet | ✓ agent | `monitoring` | [grafana](https://grafana.lan.wittner.tech), [prometheus](https://prometheus.lan.wittner.tech), [alertmanager](https://alertmanager.lan.wittner.tech) |
 | external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech) (relais) |
 | Homepage | apps | | ✓ | `homepage` | [homepage](https://homepage.lan.wittner.tech) |
