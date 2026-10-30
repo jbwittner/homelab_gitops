@@ -51,6 +51,7 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
   - **SealedSecrets** : boot seulement, sur malygos (GitHub App ArgoCD, mot de passe admin ArgoCD, secret de cluster kalecgos). Rien d'autre.
     Trois fichiers côte à côte : `x.secret.example.yaml` (modèle commité, valeurs factices), `x.secret.yaml` (clair, ignoré), `x.sealed.yaml` (commité). Secrets écrits en `stringData`.
   - **OpenBao + External Secrets** : tout le reste.
+  - Image privée ghcr.io (kalecgos) : label `ghcr-pull: enabled` sur le namespace + `imagePullSecrets: [{name: ghcr-pull}]` (`ClusterExternalSecret`, voir `doc/secrets.md`).
   - Ne jamais committer ce que `.gitignore` exclut : `*.secret.yaml`, `*.pem`, `*sealed-secrets-key*.yaml`, `*-backup.yaml`, `.env`.
 - Exposition : Gateway API de Cilium. DNS AdGuard (192.168.1.2, hors dépôt) : `*.lan.wittner.tech` → 192.168.1.80 (Gateway malygos) ; un hostname servi par kalecgos est relayé par malygos (`clusters/bleu-malygos/external-services`, modèle `homepage.yaml`).
 - README, section « Déployé » : à tenir à jour dans le même commit que l'ajout, le retrait ou le déplacement d'une Application (composant, couche, clusters, namespace, accès en lien `[nom](https://nom.lan.wittner.tech)`). Pas de versions.

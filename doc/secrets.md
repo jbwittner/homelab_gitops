@@ -62,6 +62,19 @@ spec:
         property: <champ>  # admin_password, cloudflare_secret…
 ```
 
+## Images privées ghcr.io
+
+kalecgos : `ClusterExternalSecret` `ghcr-pull` (`clusters/bleu-kalecgos/external-secrets/manifests/ghcr-pull.yaml`) → Secret `ghcr-pull` dans chaque namespace labellisé `ghcr-pull: enabled`. Pod : `imagePullSecrets: [{name: ghcr-pull}]`.
+
+Jeton : PAT GitHub classic, scope `read:packages` seul (tous les packages du compte ; GitHub App et PAT fine-grained ne lisent pas ghcr) :
+
+```sh
+export BAO_ADDR=https://openbao.lan.wittner.tech
+bao login -method=oidc
+read -rs GHCR_TOKEN   # coller le PAT, non affiché
+bao kv put secret/ghcr token="$GHCR_TOKEN"; unset GHCR_TOKEN
+```
+
 ## Ne jamais committer
 
 `*.secret.yaml` · `*.pem` · `*sealed-secrets-key*.yaml` · `*-backup.yaml` · `.env`

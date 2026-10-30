@@ -12,7 +12,8 @@ spec:
       labels:
         app.kubernetes.io/name: bankwiz
     spec:
-      # image privée (ghcr.io), voir ghcr-pull.yaml
+      # image privée : Secret ghcr-pull posé par ESO dans les namespaces ghcr-pull: enabled
+      # (clusters/bleu-kalecgos/external-secrets/manifests/ghcr-pull.yaml)
       imagePullSecrets:
         - name: ghcr-pull
       containers:
