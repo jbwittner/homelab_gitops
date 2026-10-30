@@ -19,7 +19,7 @@ spec:
         - name: bankwiz
           # tag et digest posés par chaque env (<env>/manifests/deployment.yaml)
           image: ghcr.io/jbwittner/bankwiz
-          # config Spring : ConfigMap bankwiz-config de l'env ; identifiants de la base : Secret de CNPG
+          # identifiants de la base : Secret de CNPG
           env:
             - name: SPRING_DATASOURCE_USERNAME
               valueFrom:
@@ -55,12 +55,21 @@ spec:
               memory: 512Mi
             limits:
               memory: 768Mi
-          # ./config/ du WORKDIR /app : lu par Spring Boot, prioritaire sur l'application.yaml du jar
+          # ./config/ du WORKDIR /app, lu par Spring Boot : application.yaml commun, puis
+          # env/application.yaml de l'env (sous-dossier de config/ : prioritaire, fusionné)
           volumeMounts:
             - name: config
               mountPath: /app/config
               readOnly: true
       volumes:
         - name: config
-          configMap:
-            name: bankwiz-config
+          projected:
+            sources:
+              - configMap:
+                  name: bankwiz-config
+              # générée par l'env (<env>/manifests/kustomization.yaml)
+              - configMap:
+                  name: bankwiz-env-config
+                  items:
+                    - key: application.yaml
+                      path: env/application.yaml

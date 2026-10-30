@@ -1,0 +1,6 @@
+# Config Spring commune à tous les envs, montée sur /app/config/application.yaml (prioritaire sur
+# l'application.yaml du jar) ; celle de l'env (<env>/manifests/application.yaml) la surcharge.
+# Pas de secret ici : identifiants de la base en env, depuis le Secret CNPG bankwiz-db-app.
+spring:
+  datasource:
+    url: jdbc:postgresql://bankwiz-db-rw:5432/bankwiz

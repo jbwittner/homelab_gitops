@@ -6,3 +6,8 @@ resources:
   - service.yaml
   - database.yaml
   - ghcr-pull.yaml
+# nom suffixé d'un hash, réécrit dans le Deployment : une config modifiée relance le pod
+configMapGenerator:
+  - name: bankwiz-config
+    files:
+      - application.yaml

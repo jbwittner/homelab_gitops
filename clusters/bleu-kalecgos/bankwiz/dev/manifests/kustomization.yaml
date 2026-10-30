@@ -17,6 +17,6 @@ patches:
     path: deployment.yaml
 # nom suffixé d'un hash, réécrit dans le Deployment : une config modifiée relance le pod
 configMapGenerator:
-  - name: bankwiz-config
+  - name: bankwiz-env-config
     files:
       - application.yaml
