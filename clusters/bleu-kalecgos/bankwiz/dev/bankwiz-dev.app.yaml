@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bankwiz-dev-kalecgos
+  namespace: argocd
+  labels:
+    layer: apps
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+  # appli maison : commun dans ../manifests, overlay de l'env ici (doc/bankwiz.md)
+  source:
+    repoURL: https://github.com/jbwittner/homelab_gitops.git
+    targetRevision: main
+    path: clusters/bleu-kalecgos/bankwiz/dev/manifests
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # sans fin : une dépendance (CRD, secret) d'une autre Application peut arriver tard (boot à blanc)
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

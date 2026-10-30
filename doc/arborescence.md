@@ -16,12 +16,30 @@ clusters/
   bleu-kalecgos/
     apps.app.yaml
     cert-manager/
-    <app>/
+    <comp>/
+    bankwiz/                     # appli maison (section suivante)
+      manifests/                 # commun aux envs
+      dev/
+        bankwiz-dev.app.yaml
+        manifests/               # overlay de l'env
 doc/
 script/
 ```
 
 Un dossier par composant et par cluster. Pas de sous-niveau.
+
+## Appli maison (plusieurs envs)
+
+Exception au « pas de sous-niveau », pour les applis développées ici (pas les composants tiers).
+
+| Quoi | Où |
+|---|---|
+| commun à tous les envs | `clusters/<nom>/<app>/manifests/` |
+| Application | `clusters/<nom>/<app>/<env>/<app>-<env>.app.yaml` → `<app>-<env>-<cluster-court>` |
+| overlay de l'env (namespace `<app>-<env>`, image, route) | `clusters/<nom>/<app>/<env>/manifests/` |
+| config Spring de l'env | `clusters/<nom>/<app>/<env>/manifests/application.yaml` (configMapGenerator) |
+
+`apps-<cluster-court>` trouve les `*.app.yaml` des sous-dossiers (`recurse: true`).
 
 ## Surcharger le commun
 

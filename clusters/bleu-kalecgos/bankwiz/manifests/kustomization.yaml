@@ -1,0 +1,8 @@
+# Commun à tous les envs de bankwiz ; chaque env (<env>/manifests) fixe namespace, image, config et route
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+  - database.yaml
+  - ghcr-pull.yaml

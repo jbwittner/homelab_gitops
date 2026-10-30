@@ -1,0 +1,8 @@
+# Config Spring de l'env dev, montée sur /app/config (prioritaire sur l'application.yaml du jar).
+# Pas de secret ici : identifiants de la base en env, depuis le Secret CNPG bankwiz-db-app.
+spring:
+  profiles:
+    # application-dev.yaml du jar : données d'exemple (Flyway db/dev)
+    active: dev
+  datasource:
+    url: jdbc:postgresql://bankwiz-db-rw:5432/bankwiz

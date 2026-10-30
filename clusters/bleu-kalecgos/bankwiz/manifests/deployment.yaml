@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bankwiz
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bankwiz
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bankwiz
+    spec:
+      # image privée (ghcr.io), voir ghcr-pull.yaml
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: bankwiz
+          # tag et digest posés par chaque env (<env>/manifests/deployment.yaml)
+          image: ghcr.io/jbwittner/bankwiz
+          # config Spring : ConfigMap bankwiz-config de l'env ; identifiants de la base : Secret de CNPG
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: bankwiz-db-app
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bankwiz-db-app
+                  key: password
+          ports:
+            - name: http
+              containerPort: 8080
+          # démarrage JVM + migrations Flyway : jusqu'à 150 s avant la liveness
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 768Mi
+          # ./config/ du WORKDIR /app : lu par Spring Boot, prioritaire sur l'application.yaml du jar
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: bankwiz-config

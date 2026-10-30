@@ -26,3 +26,6 @@ layout:
   Domotique:
     style: row
     columns: 2
+  Applications:
+    style: row
+    columns: 3

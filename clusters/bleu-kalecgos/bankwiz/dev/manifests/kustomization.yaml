@@ -1,0 +1,22 @@
+# bankwiz, env dev : commun + namespace, image (CI), config Spring et route
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bankwiz-dev
+resources:
+  - ../../manifests
+  - namespace.yaml
+  - httproute.yaml
+labels:
+  - pairs:
+      environment: dev
+    includeTemplates: true
+patches:
+  - target:
+      kind: Deployment
+      name: bankwiz
+    path: deployment.yaml
+# nom suffixé d'un hash, réécrit dans le Deployment : une config modifiée relance le pod
+configMapGenerator:
+  - name: bankwiz-config
+    files:
+      - application.yaml

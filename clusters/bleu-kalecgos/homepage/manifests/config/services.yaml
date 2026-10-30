@@ -179,3 +179,10 @@
         siteMonitor: https://z2m.lan.wittner.tech/
         description: Passerelle Zigbee, CT 202 (vert-ysera)
         icon: zigbee2mqtt.png
+
+- Applications:
+    - bankwiz (dev):
+        href: https://bankwiz-dev.lan.wittner.tech/swagger-ui.html
+        siteMonitor: https://bankwiz-dev.lan.wittner.tech/actuator/health
+        description: API bankwiz, env dev (kalecgos)
+        icon: mdi-bank

@@ -1,0 +1,12 @@
+# Ligne image réécrite par la CI de bankwiz (develop.yml) à chaque push sur develop :
+# tag fixe develop-sha-<sha> épinglé à son digest
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bankwiz
+spec:
+  template:
+    spec:
+      containers:
+        - name: bankwiz
+          image: ghcr.io/jbwittner/bankwiz:develop

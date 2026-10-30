@@ -6,6 +6,7 @@ namespace: external-services
 resources:
   - namespace.yaml
   - adguard.yaml
+  - bankwiz-dev.yaml
   - homepage.yaml
   - homeassistant.yaml
   - pve-ysera.yaml
@@ -16,7 +17,7 @@ configMapGenerator:
   - name: pve-root-ca
     files:
       - ca.crt=pve-root-ca.crt
-  # racine Let's Encrypt (certificat public) : vérifie la Gateway de kalecgos (homepage)
+  # racine Let's Encrypt (certificat public) : vérifie la Gateway de kalecgos (homepage, bankwiz-dev)
   - name: isrg-root-x1
     files:
       - ca.crt=isrg-root-x1.crt

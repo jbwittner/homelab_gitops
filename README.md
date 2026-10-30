@@ -2,7 +2,7 @@
 
 GitOps de deux clusters Kubernetes (`bleu-malygos` infra, `bleu-kalecgos` worker), réconciliés par ArgoCD.
 
-Docs : [architecture](doc/architecture.md) · [arborescence](doc/arborescence.md) · [secrets](doc/secrets.md) · [openbao](doc/openbao.md) · [authelia](doc/authelia.md) · [stockage](doc/stockage.md) · [certificats](doc/certificats.md) · [exposition](doc/exposition.md) · [sauvegardes](doc/sauvegardes.md) · [smtp](doc/smtp.md) · [supervision](doc/supervision.md) · [homepage](doc/homepage.md) · [renovate](doc/renovate.md) · [décisions](doc/decisions.md)
+Docs : [architecture](doc/architecture.md) · [arborescence](doc/arborescence.md) · [secrets](doc/secrets.md) · [openbao](doc/openbao.md) · [authelia](doc/authelia.md) · [stockage](doc/stockage.md) · [certificats](doc/certificats.md) · [exposition](doc/exposition.md) · [sauvegardes](doc/sauvegardes.md) · [smtp](doc/smtp.md) · [supervision](doc/supervision.md) · [homepage](doc/homepage.md) · [bankwiz](doc/bankwiz.md) · [renovate](doc/renovate.md) · [décisions](doc/decisions.md)
 
 ## Déployé
 
@@ -26,9 +26,10 @@ Une ligne par composant ; Application ArgoCD `<comp>-<cluster-court>`. Versions 
 | Relais SMTP (Postfix → Resend) | infra | ✓ | ✓ | `smtp-relay` | — |
 | CloudNativePG (opérateur Postgres) | infra | ✓ | ✓ | `cnpg-system` | — |
 | kube-prometheus-stack | infra | ✓ complet | ✓ agent | `monitoring` | [grafana](https://grafana.lan.wittner.tech), [prometheus](https://prometheus.lan.wittner.tech), [alertmanager](https://alertmanager.lan.wittner.tech) |
-| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech) (relais) |
+| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech), [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech) (relais) |
 | Homepage | apps | | ✓ | `homepage` | [homepage](https://homepage.lan.wittner.tech) |
 | Renovate (CronJob, GitHub App) | apps | | ✓ | `renovate` | — |
+| bankwiz, env dev (appli maison, Postgres CNPG) | apps | | ✓ | `bankwiz-dev` | [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech) |
 
 Hors dépôt (Proxmox `vert-ysera`) : AdGuard Home (DNS), Home Assistant, Zigbee2MQTT, client NetBird.
 

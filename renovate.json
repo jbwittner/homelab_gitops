@@ -55,6 +55,11 @@
       "description": "Même opérateur Prometheus : CRDs (prometheus-operator-crds) et chart kube-prometheus-stack montés ensemble",
       "matchPackageNames": ["prometheus-operator-crds", "kube-prometheus-stack"],
       "groupName": "prometheus-operator"
+    },
+    {
+      "description": "Image de bankwiz (appli maison, registre privé) : la ligne image est réécrite par la CI de bankwiz (develop.yml), pas par Renovate",
+      "matchPackageNames": ["ghcr.io/jbwittner/bankwiz"],
+      "enabled": false
     }
   ]
 }
