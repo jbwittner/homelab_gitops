@@ -1,5 +1,5 @@
 # Config Spring de l'env dev, montée sur /app/config/env/application.yaml : surcharge la commune
-# (../../manifests/application.yaml), fusion propriété par propriété par Spring.
+# (../../common/application.yaml), fusion propriété par propriété par Spring.
 spring:
   profiles:
     # application-dev.yaml du jar : données d'exemple (Flyway db/dev)

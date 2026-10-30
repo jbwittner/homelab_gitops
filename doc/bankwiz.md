@@ -4,10 +4,10 @@ API Spring Boot ([jbwittner/bankwiz](https://github.com/jbwittner/bankwiz), priv
 
 | Fichier | Rôle |
 |---|---|
-| `clusters/bleu-kalecgos/bankwiz/manifests/deployment.yaml` | commun : probes actuator, ressources, identifiants base (Secret CNPG `bankwiz-db-app`), volume projeté des deux configs |
-| `clusters/bleu-kalecgos/bankwiz/manifests/application.yaml` | config Spring commune (URL de la base) → `/app/config/application.yaml` |
-| `clusters/bleu-kalecgos/bankwiz/manifests/database.yaml` | `Cluster` CNPG `bankwiz-db` (1 instance, 5 Gi) + `PodMonitor` |
-| `clusters/bleu-kalecgos/bankwiz/manifests/ghcr-pull.yaml` | pull secret ghcr.io (OpenBao `secret/bankwiz`, champ `ghcr_token`) |
+| `clusters/bleu-kalecgos/bankwiz/common/deployment.yaml` | commun : probes actuator, ressources, identifiants base (Secret CNPG `bankwiz-db-app`), volume projeté des deux configs |
+| `clusters/bleu-kalecgos/bankwiz/common/application.yaml` | config Spring commune (URL de la base) → `/app/config/application.yaml` |
+| `clusters/bleu-kalecgos/bankwiz/common/database.yaml` | `Cluster` CNPG `bankwiz-db` (1 instance, 5 Gi) + `PodMonitor` |
+| `clusters/bleu-kalecgos/bankwiz/common/ghcr-pull.yaml` | pull secret ghcr.io (OpenBao `secret/bankwiz`, champ `ghcr_token`) |
 | `clusters/bleu-kalecgos/bankwiz/dev/bankwiz-dev.app.yaml` | `bankwiz-dev-kalecgos`, namespace `bankwiz-dev` |
 | `clusters/bleu-kalecgos/bankwiz/dev/manifests/deployment.yaml` | ligne `image:` de dev, réécrite par la CI |
 | `clusters/bleu-kalecgos/bankwiz/dev/manifests/application.yaml` | config Spring de dev (profil `dev`) → `/app/config/env/application.yaml`, prioritaire sur la commune (sous-dossier de `config/`, fusion par Spring) |

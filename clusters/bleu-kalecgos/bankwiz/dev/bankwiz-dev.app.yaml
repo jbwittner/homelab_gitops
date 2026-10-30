@@ -9,7 +9,7 @@ spec:
   project: default
   destination:
     name: bleu-kalecgos
-  # appli maison : commun dans ../manifests, overlay de l'env ici (doc/bankwiz.md)
+  # appli maison : commun dans ../common, overlay de l'env ici (doc/bankwiz.md)
   source:
     repoURL: https://github.com/jbwittner/homelab_gitops.git
     targetRevision: main

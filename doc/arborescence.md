@@ -18,7 +18,7 @@ clusters/
     cert-manager/
     <comp>/
     bankwiz/                     # appli maison (section suivante)
-      manifests/                 # commun aux envs
+      common/                    # commun aux envs
       dev/
         bankwiz-dev.app.yaml
         manifests/               # overlay de l'env
@@ -34,10 +34,10 @@ Exception au « pas de sous-niveau », pour les applis développées ici (pas le
 
 | Quoi | Où |
 |---|---|
-| commun à tous les envs | `clusters/<nom>/<app>/manifests/` |
+| commun à tous les envs | `clusters/<nom>/<app>/common/` |
 | Application | `clusters/<nom>/<app>/<env>/<app>-<env>.app.yaml` → `<app>-<env>-<cluster-court>` |
 | overlay de l'env (namespace `<app>-<env>`, image, route) | `clusters/<nom>/<app>/<env>/manifests/` |
-| config Spring | `<app>/manifests/application.yaml` (commun, `/app/config/`) + `<app>/<env>/manifests/application.yaml` (`/app/config/env/`) : Spring lit les deux, l'env l'emporte, fusion propriété par propriété |
+| config Spring | `<app>/common/application.yaml` (commun, `/app/config/`) + `<app>/<env>/manifests/application.yaml` (`/app/config/env/`) : Spring lit les deux, l'env l'emporte, fusion propriété par propriété |
 
 `apps-<cluster-court>` trouve les `*.app.yaml` des sous-dossiers (`recurse: true`).
 
