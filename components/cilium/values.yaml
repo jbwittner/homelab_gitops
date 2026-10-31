@@ -43,6 +43,14 @@ k8sClientRateLimit:
 gatewayAPI:
   enabled: true
 
+envoy:
+  # en dur : le boot helm a posé `envoy-xds-mode: ads` (défaut 1.20.3), ArgoCD ne le retire pas ;
+  # le chart 1.20.4 ne pose plus rien et met Envoy en split → agent ADS / Envoy split = L7 coupé
+  xdsMode: split
+  # sans ça, un changement de configmap n'est pris qu'au prochain redémarrage des pods
+  rollOutPods: true
+rollOutCiliumPods: true
+
 hubble:
   tls:
     auto:
