@@ -52,6 +52,11 @@
       "automerge": false
     },
     {
+      "description": "CNI (Cilium) et CSI (OpenEBS) : un redéploiement coupe réseau ou stockage (Gateway malygos, donc accès OpenBao depuis kalecgos) : merge manuel, à un moment choisi",
+      "matchPackageNames": ["cilium", "openebs"],
+      "automerge": false
+    },
+    {
       "description": "Même opérateur Prometheus : CRDs (prometheus-operator-crds) et chart kube-prometheus-stack montés ensemble",
       "matchPackageNames": ["prometheus-operator-crds", "kube-prometheus-stack"],
       "groupName": "prometheus-operator"

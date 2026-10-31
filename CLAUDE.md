@@ -63,7 +63,7 @@ Ne pas lire, ne pas modifier, ne pas s'en servir comme modèle ni comme référe
 - Manifestes Kubernetes bruts : sous un dossier `manifests/`.
 - Upstream dans un `kustomization.yaml` : URL taguée, `https://raw.githubusercontent.com/<org>/<repo>/refs/tags/<tag>/…` ou `https://github.com/<org>/<repo>/releases/download/<tag>/…`.
 - Version de chart Helm et tags d'image en dur, jamais dans un `.env`.
-- Une release doit avoir 7 jours ; automerge des pin/patch/minor ; merge manuel pour Argo CD (`argoproj/argo-cd`) et les CRDs Gateway API (`kubernetes-sigs/gateway-api`, couplées à la version de Cilium) ; `prometheus-operator-crds` et `kube-prometheus-stack` groupés (même opérateur).
+- Une release doit avoir 7 jours ; automerge des pin/patch/minor ; merge manuel pour Argo CD (`argoproj/argo-cd`), les CRDs Gateway API (`kubernetes-sigs/gateway-api`, couplées à la version de Cilium), le CNI (`cilium`) et le CSI (`openebs`) ; `prometheus-operator-crds` et `kube-prometheus-stack` groupés (même opérateur).
 
 Les `description` de `renovate.json` citent encore `k8s/` et `docker/` : périmées.
 

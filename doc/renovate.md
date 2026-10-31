@@ -12,7 +12,7 @@ Mises à jour des dépendances (charts, images, URLs taguées) par PR GitHub. Au
 
 | Dépôt | Ce qui est suivi |
 |---|---|
-| `homelab_gitops` | charts des `*.app.yaml`, images de `manifests/`, URLs taguées des `kustomization.yaml` |
+| `homelab_gitops` | charts des `*.app.yaml`, images de `manifests/`, URLs taguées des `kustomization.yaml` ; automerge pin/patch/minor sauf merge manuel pour Argo CD, CRDs Gateway API, Cilium (CNI), OpenEBS (CSI) |
 | `homelab_talos` | `talosVersion`, `kubernetesVersion` des `talconfig.yaml` (regex) : merge manuel, upgrade par `talosctl` ; mineure Kubernetes : PR à part avec rappel de la matrice de support Talos |
 | `homelab_terraform` | providers Terraform et `.terraform.lock.hcl` (règles du dépôt) |
 
