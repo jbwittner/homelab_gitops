@@ -9,8 +9,15 @@ API Spring Boot ([jbwittner/bankwiz](https://github.com/jbwittner/bankwiz), priv
 | `clusters/bleu-kalecgos/bankwiz/common/database.yaml` | `Cluster` CNPG `bankwiz-db` (1 instance, 5 Gi) + `PodMonitor` |
 | `clusters/bleu-kalecgos/bankwiz/dev/bankwiz-dev.app.yaml` | `bankwiz-dev-kalecgos`, namespace `bankwiz-dev` (label `ghcr-pull: enabled` : pull secret, [secrets](secrets.md#images-privées-ghcrio)) |
 | `clusters/bleu-kalecgos/bankwiz/dev/manifests/deployment.yaml` | ligne `image:` de dev, réécrite par la CI |
-| `clusters/bleu-kalecgos/bankwiz/dev/manifests/application.yaml` | config Spring de dev (profil `dev`) → `/app/config/env/application.yaml`, prioritaire sur la commune (sous-dossier de `config/`, fusion par Spring) |
+| `clusters/bleu-kalecgos/bankwiz/dev/manifests/application.yaml` | config Spring de dev (profil `dev`, client OIDC Authelia) → `/app/config/env/application.yaml`, prioritaire sur la commune (sous-dossier de `config/`, fusion par Spring) |
+| `clusters/bleu-kalecgos/bankwiz/dev/manifests/externalsecret.yaml` | `secret/bankwiz/dev` (OpenBao) → Secret `bankwiz-oidc`, secret du client OIDC en env (`deployment.yaml` de dev) |
 | `clusters/bleu-malygos/external-services/manifests/bankwiz-dev.yaml` | relais de `bankwiz-dev.lan.wittner.tech` vers kalecgos |
+
+## SSO Authelia
+
+Bouton « Sign in with Authelia » sur la page de login, à côté du formulaire : client `bankwiz-dev` de [Authelia](authelia.md) (un client par env). Premier login : utilisateur créé sous le `preferred_username`, sans mot de passe dans bankwiz ; refusé si le nom est déjà pris par un compte local. Doc côté appli : `docs/authelia.md` de bankwiz.
+
+Découverte OIDC au démarrage : le pod ne démarre pas tant que `https://auth.lan.wittner.tech` ne répond pas.
 
 ## Déploiement en dev
 

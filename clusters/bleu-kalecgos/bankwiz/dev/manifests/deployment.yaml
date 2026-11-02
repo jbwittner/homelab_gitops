@@ -9,4 +9,11 @@ spec:
     spec:
       containers:
         - name: bankwiz
+          # fusionnée par nom avec l'env du commun (identifiants de la base)
+          env:
+            - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_AUTHELIA_CLIENTSECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bankwiz-oidc
+                  key: clientSecret
           image: ghcr.io/jbwittner/bankwiz:develop-sha-62e5242@sha256:6fece561a5987055f0256eeca92afaa3da4336de5569573caf2410a6bdb299bd

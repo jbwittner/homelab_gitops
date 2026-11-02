@@ -4,3 +4,18 @@ spring:
   profiles:
     # application-dev.yaml du jar : données d'exemple (Flyway db/dev)
     active: dev
+  # SSO Authelia (client bankwiz-dev de clusters/bleu-malygos/authelia/manifests/config/clients.yml) ;
+  # secret en env (externalsecret.yaml). Découverte OIDC au démarrage : pas de démarrage sans Authelia.
+  security:
+    oauth2:
+      client:
+        registration:
+          authelia:
+            client-id: bankwiz-dev
+            client-name: Authelia
+            scope: [openid, profile]
+            # en dur : doit égaler la redirect_uri du client, quels que soient les en-têtes X-Forwarded-*
+            redirect-uri: https://bankwiz-dev.lan.wittner.tech/login/oauth2/code/authelia
+        provider:
+          authelia:
+            issuer-uri: https://auth.lan.wittner.tech

@@ -6,6 +6,7 @@ resources:
   - ../../common
   - namespace.yaml
   - httproute.yaml
+  - externalsecret.yaml
 labels:
   - pairs:
       environment: dev

@@ -16,6 +16,7 @@ Pas de forward-auth : le Gateway Cilium ne le fait pas. Seules les applis OIDC s
 |---|---|---|
 | `argocd`, `argocd-cli` | `argocd/manifests/kustomization.yaml` (`argocd-cm`, `argocd-rbac-cm`) | `secret/argocd` → `oidc_client_secret` |
 | `grafana` | `kube-prometheus-stack/values.yaml` (`auth.generic_oauth`) | `secret/grafana` → `oidc_client_secret` |
+| `bankwiz-dev` | `bankwiz/dev/manifests/application.yaml` (kalecgos, `spring.security.oauth2.client`) ; lancement local (profil `dev`, secret en env sur le poste) | `secret/bankwiz/dev` → `oidc_client_secret` |
 | `openbao` | `homelab_terraform`, `openbao/bleu-malygos/auth_oidc.tf` (secret lu en éphémère, hors state) | `secret/openbao` → `oidc_client_secret` |
 
 Secours : `admin` ArgoCD, `admin` Grafana et `userpass` OpenBao restent actifs.
