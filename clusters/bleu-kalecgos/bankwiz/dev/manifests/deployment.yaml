@@ -9,4 +9,4 @@ spec:
     spec:
       containers:
         - name: bankwiz
-          image: ghcr.io/jbwittner/bankwiz:develop-sha-421cec8@sha256:fa6210dee5812ce5e0bc333657d12077476bc36132636b307db01efa3a1b96f7
+          image: ghcr.io/jbwittner/bankwiz:develop-sha-62e5242@sha256:6fece561a5987055f0256eeca92afaa3da4336de5569573caf2410a6bdb299bd
