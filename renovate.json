@@ -57,6 +57,11 @@
       "automerge": false
     },
     {
+      "description": "OpenBao : StatefulSet en OnDelete (défaut du chart) et unseal manuel : une montée n'est appliquée qu'à la suppression du pod, suivie d'un unseal : merge manuel, à un moment choisi",
+      "matchPackageNames": ["openbao"],
+      "automerge": false
+    },
+    {
       "description": "Même opérateur Prometheus : CRDs (prometheus-operator-crds) et chart kube-prometheus-stack montés ensemble",
       "matchPackageNames": ["prometheus-operator-crds", "kube-prometheus-stack"],
       "groupName": "prometheus-operator"
