@@ -9,6 +9,7 @@ resources:
   - dashboard-machines.yaml
   - dashboard-stockage.yaml
   - dashboard-velero.yaml
+  - dashboard-cnpg-backups.yaml
   - dashboard-argocd.yaml
   - dashboard-ressources-cluster.yaml
   - dashboard-ressources-namespaces.yaml

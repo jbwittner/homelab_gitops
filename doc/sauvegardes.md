@@ -131,6 +131,8 @@ Côté `homelab_terraform` : `gcp/homelab/cnpg.tf` (bucket `homelab-cnpg-bleu-ka
 
 ### Vérifier
 
+Dashboard Grafana `Backups — cnpg` ; à la main :
+
 ```sh
 kubectl --context admin@bleu-kalecgos -n filon-dev get cluster filon-db -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'   # status True
 kubectl --context admin@bleu-kalecgos -n filon-dev get backups                                   # PHASE completed

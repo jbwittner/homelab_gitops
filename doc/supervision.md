@@ -86,6 +86,7 @@ ConfigMap dans `clusters/bleu-malygos/kube-prometheus-stack/manifests/`, ajouté
 | `Machines` (`dashboard-machines.yaml`) | tous les nœuds node-exporter : CPU, RAM, PSI, disques, réseau, températures ; rangées « Diagnostic » repliées |
 | `Storage — cluster` (`dashboard-stockage.yaml`) | état des nœuds (tableau) et VG LVM d'OpenEBS : capacité, place libre, métadonnées |
 | `Backups — velero` (`dashboard-velero.yaml`) | fraîcheur des sauvegardes, bucket, inventaire par schedule et par objet Backup, données kopia, restaurations |
+| `Backups — cnpg` (`dashboard-cnpg-backups.yaml`) | bases Postgres : état et âge de la dernière sauvegarde, fenêtre de restauration, objets Backup, archivage des WAL |
 | `GitOps — ArgoCD` (`dashboard-argocd.yaml`) | Applications (sync/santé), synchros, contrôleur, repo-server Git, composants |
 | `Resources — cluster / namespaces / workloads / pods` (`dashboard-ressources-*.yaml`) | CPU et mémoire : utilisation, requests, limits, allouable ; un cluster à la fois |
 | `Resources — volumes` (`dashboard-ressources-volumes.yaml`) | PVC : remplissage, inodes, saturation, cycle de vie ; VG LVM. Un cluster à la fois |

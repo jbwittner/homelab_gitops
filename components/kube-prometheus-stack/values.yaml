@@ -40,6 +40,7 @@ prometheus-node-exporter:
 # kube-state-metrics : objets velero en métriques (dashboard Backups — velero). Les métriques du
 # serveur velero sont agrégées par schedule et écrasées à chaque sauvegarde ; ici une série par
 # objet Backup (velero_backup_object_*) et par volume copié (velero_pvb_object_*).
+# Idem pour les objets Backup de CloudNativePG (cnpg_backup_object_*, dashboard Backups — cnpg).
 kube-state-metrics:
   rbac:
     extraRules:
@@ -48,6 +49,13 @@ kube-state-metrics:
         resources:
           - backups
           - podvolumebackups
+        verbs:
+          - list
+          - watch
+      - apiGroups:
+          - postgresql.cnpg.io
+        resources:
+          - backups
         verbs:
           - list
           - watch
@@ -120,3 +128,41 @@ kube-state-metrics:
                     # status.progress vide pour un volume sans donnée : compté 0, pas absent
                     path: [status, progress, totalBytes]
                     nilIsZero: true
+          - groupVersionKind:
+              group: postgresql.cnpg.io
+              version: v1
+              kind: Backup
+            metricNamePrefix: cnpg_backup_object
+            labelsFromPath:
+              namespace: [metadata, namespace]
+              backup: [metadata, name]
+            metrics:
+              - name: info
+                help: "Sauvegarde CNPG existante (1 par objet Backup)"
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      phase: [status, phase]
+                      cluster_name: [spec, cluster, name]
+                      # absent sur une sauvegarde lancée à la main
+                      scheduled_backup: [metadata, labels, cnpg.io/scheduled-backup]
+                      error: [status, error]
+              - name: reconciliation_start_time
+                help: "Prise en charge par l'opérateur (timestamp Unix), présent même en échec"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, reconciliationStartedAt]
+              - name: start_time
+                help: "Début de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, startedAt]
+              - name: stop_time
+                help: "Fin de la sauvegarde (timestamp Unix)"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, stoppedAt]
