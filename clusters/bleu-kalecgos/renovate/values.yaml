@@ -15,10 +15,13 @@ cronjob:
     export RENOVATE_TOKEN
 
 renovate:
+  # dépôts traités : ceux accordés à l'installation de la GitHub App (réglages de l'App sur GitHub),
+  # parmi eux seuls ceux qui ont un renovate.json (requireConfig)
   config: |
     {
       "platform": "github",
-      "repositories": ["jbwittner/homelab_gitops", "jbwittner/homelab_talos", "jbwittner/homelab_terraform"],
+      "autodiscover": true,
+      "autodiscoverFilter": ["jbwittner/*"],
       "onboarding": false,
       "requireConfig": "required"
     }

@@ -5,10 +5,12 @@ Mises à jour des dépendances (charts, images, URLs taguées) par PR GitHub. Au
 | Fichier | Rôle |
 |---|---|
 | `clusters/bleu-kalecgos/renovate/renovate.app.yaml` | `renovate-kalecgos`, chart officiel `renovate` |
-| `clusters/bleu-kalecgos/renovate/values.yaml` | config globale (dépôts traités), App ID / Installation ID, `preCommand` qui génère le jeton |
+| `clusters/bleu-kalecgos/renovate/values.yaml` | config globale (autodiscover), App ID / Installation ID, `preCommand` qui génère le jeton |
 | `clusters/bleu-kalecgos/renovate/manifests/github-app-token.yaml` | script Node : JWT signé avec la clé → jeton d'installation (1 h) |
 | `clusters/bleu-kalecgos/renovate/manifests/github-app-key.yaml` | `ExternalSecret` : clé privée depuis `secret/renovate` (`private_key`) |
 | `renovate.json` (racine de chaque dépôt) | règles du dépôt ; un dépôt sans ce fichier est ignoré (`requireConfig: required`) |
+
+Dépôts traités : autodiscover, ceux accordés à l'installation de l'App (GitHub → Settings → Applications → l'App → Configure → *Only select repositories*), filtrés sur `jbwittner/*` et sur la présence d'un `renovate.json`. Ajouter un dépôt : l'accorder à l'App + `renovate.json`, aucun commit ici.
 
 | Dépôt | Ce qui est suivi |
 |---|---|
@@ -18,7 +20,7 @@ Mises à jour des dépendances (charts, images, URLs taguées) par PR GitHub. Au
 
 ## GitHub App (une fois)
 
-Settings → Developer settings → GitHub Apps → New : webhook décoché, « Only on this account ». Permissions de dépôt : Contents, Pull requests, Issues, Checks, Commit statuses, Workflows en lecture-écriture ; Administration, Dependabot alerts, Metadata en lecture. Installer sur les dépôts suivis. App ID et Installation ID : `values.yaml` (non sensibles).
+Settings → Developer settings → GitHub Apps → New : webhook décoché, « Only on this account ». Permissions de dépôt : Contents, Pull requests, Issues, Checks, Commit statuses, Workflows en lecture-écriture ; Administration, Dependabot alerts, Metadata en lecture. Installer sur les dépôts suivis (*Only select repositories*). App ID et Installation ID : `values.yaml` (non sensibles).
 
 Clé privée dans OpenBao, sans l'afficher :
 
@@ -37,4 +39,6 @@ kubectl --context admin@bleu-kalecgos -n renovate create job --from=cronjob/reno
 kubectl --context admin@bleu-kalecgos -n renovate logs -f job/renovate-manuel
 ```
 
-`jeton GitHub App refusé` : App ID, Installation ID ou clé ; l'App doit être installée sur le dépôt.
+Le log liste les dépôts trouvés (`Autodiscovered repositories`).
+
+`jeton GitHub App refusé` : App ID, Installation ID ou clé. Dépôt absent du passage : non accordé à l'installation, ou sans `renovate.json`.
