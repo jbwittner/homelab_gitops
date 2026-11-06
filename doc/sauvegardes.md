@@ -124,7 +124,7 @@ Côté `homelab_terraform` : `gcp/homelab/cnpg.tf` (bucket `homelab-cnpg-bleu-ka
 
 | Point | Choix |
 |---|---|
-| Identifiants | aucune clé : jeton du compte `<namespace>/<cluster>` (audience `gcp-wif`, `projectedVolumeTemplate` → `/projected/gcp`) échangé contre `cnpg-bleu-kalecgos` ; `googleCredentials.gkeEnvironment: true` = identifiants par défaut de Google ; `GOOGLE_CLOUD_PROJECT` dans l'env du sidecar (projet non déduit hors GKE) |
+| Identifiants | aucune clé : jeton du compte `<namespace>/<cluster>` (audience `gcp-wif`, `projectedVolumeTemplate` → `/projected/gcp`) échangé contre `cnpg-bleu-kalecgos` ; `googleCredentials.gkeEnvironment: true` = identifiants par défaut de Google ; `GOOGLE_CLOUD_PROJECT` dans `spec.env` du Cluster, hérité par le sidecar (projet non déduit hors GKE) ; un changement d'`instanceSidecarConfiguration` n'est pris qu'au redémarrage de l'instance |
 | Bucket | un pour kalecgos, un dossier par base (`destinationPath`) |
 | Rétention | `retentionPolicy` de l'`ObjectStore` (Barman purge) ; soft delete GCS 7 jours en plus |
 | Nouvelle base | sujet dans `local.cnpg_subjects` (`cnpg.tf`, `make apply`), puis `ObjectStore` + `plugins` + `projectedVolumeTemplate` + ConfigMap d'identifiants (modèle : filon) |

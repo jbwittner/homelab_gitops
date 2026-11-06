@@ -20,6 +20,3 @@ spec:
     env:
       - name: GOOGLE_APPLICATION_CREDENTIALS
         value: /projected/gcp/credentials.json
-      # le client GCS ne déduit pas le projet d'identifiants external_account (seulement sur GKE)
-      - name: GOOGLE_CLOUD_PROJECT
-        value: homelab-499008
