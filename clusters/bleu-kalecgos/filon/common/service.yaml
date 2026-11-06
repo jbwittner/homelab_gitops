@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: filon
+spec:
+  selector:
+    app.kubernetes.io/name: filon
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

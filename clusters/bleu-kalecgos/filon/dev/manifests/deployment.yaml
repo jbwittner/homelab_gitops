@@ -1,0 +1,11 @@
+# Ligne image réécrite par la CI de filon à chaque push sur main (main.yml) : tag fixe main-sha-<sha>, épinglé à son digest
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filon
+spec:
+  template:
+    spec:
+      containers:
+        - name: filon
+          image: ghcr.io/jbwittner/filon:main-sha-d0e256d@sha256:e283ad622c009a6d4f26d76b13df2b504b799efd738d4cd68538440d47ba8d96

@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: plugin-barman-cloud-kalecgos
+  namespace: argocd
+  labels:
+    layer: infra
+spec:
+  project: default
+  # namespace de l'opérateur CNPG : il y découvre ses plugins (Service barman-cloud)
+  destination:
+    name: bleu-kalecgos
+    namespace: cnpg-system
+  # sauvegardes Barman des Clusters CNPG (ObjectStore + sidecar) ; certificats mTLS par cert-manager
+  source:
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: plugin-barman-cloud
+    targetRevision: 0.8.1
+    helm:
+      releaseName: barman-cloud
+  syncPolicy:
+    # pas de prune : supprimer la CRD supprime tous les ObjectStore
+    automated:
+      selfHeal: true
+    syncOptions:
+      # CRDs trop grosses pour l'annotation last-applied du client-side apply
+      - ServerSideApply=true
+    # sans fin : une dépendance (CRD, secret) d'une autre Application peut arriver tard (boot à blanc)
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

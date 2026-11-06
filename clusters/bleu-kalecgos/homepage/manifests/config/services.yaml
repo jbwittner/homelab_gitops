@@ -186,3 +186,46 @@
         siteMonitor: https://bankwiz-dev.lan.wittner.tech/actuator/health
         description: API bankwiz, env dev (kalecgos)
         icon: mdi-bank
+    # pas encore d'interface : lien vers la santé de l'appli
+    - filon (dev):
+        href: https://filon-dev.lan.wittner.tech/actuator/health
+        siteMonitor: https://filon-dev.lan.wittner.tech/actuator/health
+        description: Pilotage des opportunités freelance, env dev (kalecgos)
+        icon: mdi-briefcase-search
+        # version déployée : version, commit de l'image et heure du build (/actuator/info de filon)
+        widget:
+          type: customapi
+          url: https://filon-dev.lan.wittner.tech/actuator/info
+          refreshInterval: 60000
+          mappings:
+            - label: Version
+              field:
+                build: version
+            - label: Commit
+              field:
+                build: commit
+            - label: Build
+              field:
+                build: time
+              format: relativeDate
+    - filon:
+        href: https://filon.lan.wittner.tech/actuator/health
+        siteMonitor: https://filon.lan.wittner.tech/actuator/health
+        description: Pilotage des opportunités freelance, prod (kalecgos)
+        icon: mdi-briefcase-search
+        # version déployée : version, commit de l'image et heure du build (/actuator/info de filon)
+        widget:
+          type: customapi
+          url: https://filon.lan.wittner.tech/actuator/info
+          refreshInterval: 60000
+          mappings:
+            - label: Version
+              field:
+                build: version
+            - label: Commit
+              field:
+                build: commit
+            - label: Build
+              field:
+                build: time
+              format: relativeDate

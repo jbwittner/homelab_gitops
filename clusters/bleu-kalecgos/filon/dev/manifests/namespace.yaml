@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: filon-dev
+  labels:
+    # Secret ghcr-pull (image privée) créé par ESO
+    ghcr-pull: enabled

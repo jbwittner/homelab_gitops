@@ -1,4 +1,8 @@
-# Sauvegardes (Velero)
+# Sauvegardes
+
+Volumes et OpenBao par Velero ; bases Postgres par le plugin barman-cloud de CloudNativePG ([plus bas](#bases-postgres-cnpg)).
+
+## Velero
 
 | Fichier | Rôle |
 |---|---|
@@ -10,7 +14,7 @@
 
 Côté `homelab_terraform` : `gcp/homelab/velero.tf` (buckets, comptes, Workload Identity Federation), `openbao/bleu-malygos/raft_snapshot.tf` (rôle du hook).
 
-## Fonctionnement
+### Fonctionnement
 
 | Point | Choix |
 |---|---|
@@ -32,7 +36,7 @@ C=bleu-malygos  CTX=admin@bleu-malygos
 C=bleu-kalecgos CTX=admin@bleu-kalecgos
 ```
 
-## CLI : `script/velero.sh`
+### CLI : `script/velero.sh`
 
 kubectl + binaire `velero` du pod serveur, rien à installer. `cluster` : `malygos` | `kalecgos`.
 
@@ -45,14 +49,14 @@ kubectl + binaire `velero` du pod serveur, rien à installer. `cluster` : `malyg
 | `logs <cluster> <backup>` | lignes du serveur Velero pour cette sauvegarde (vie du pod seulement) |
 | `delete <cluster> <backup>` | supprime sauvegarde et données, après confirmation `oui` |
 
-## Vérifier
+### Vérifier
 
 ```sh
 kubectl --context $CTX -n velero get backupstoragelocation   # PHASE Available
 kubectl --context $CTX -n velero get ds node-agent           # READY = nb de nœuds
 ```
 
-## Sauvegarder OpenBao à la main (malygos)
+### Sauvegarder OpenBao à la main (malygos)
 
 ```sh
 # pod du serveur (deploy/velero peut tomber sur un node-agent : mêmes labels)
@@ -63,7 +67,7 @@ kubectl --context admin@bleu-malygos -n velero get backups
 kubectl --context admin@bleu-malygos -n velero get podvolumebackups   # Completed
 ```
 
-## Restaurer OpenBao
+### Restaurer OpenBao
 
 Toujours dans un namespace à part : dans `openbao`, ArgoCD (selfHeal) recrée aussitôt le StatefulSet et son PVC vide.
 
@@ -105,3 +109,51 @@ kubectl --context admin@bleu-malygos delete pv $PV
 kubectl --context admin@bleu-malygos -n velero exec $P -c velero -- /velero restore delete openbao-restore --confirm
 command rm ~/openbao.snap
 ```
+
+## Bases Postgres (CNPG)
+
+Plugin barman-cloud (`plugin-barman-cloud-kalecgos`, namespace `cnpg-system`) : sidecar dans chaque pod Postgres, WAL archivés en continu + sauvegarde complète planifiée, restauration à un instant donné.
+
+| Fichier | Rôle |
+|---|---|
+| `clusters/bleu-kalecgos/plugin-barman-cloud/plugin-barman-cloud.app.yaml` | plugin (chart officiel), CRD `ObjectStore`, certificats mTLS par cert-manager |
+| `clusters/bleu-kalecgos/filon/common/database.yaml` | `Cluster` : `plugins` (archiveur WAL), jeton WIF projeté ; `ScheduledBackup` |
+| `clusters/bleu-kalecgos/filon/<env>/manifests/objectstore.yaml` | `ObjectStore` : dossier de la base, rétention, `GOOGLE_APPLICATION_CREDENTIALS` du sidecar |
+
+Côté `homelab_terraform` : `gcp/homelab/cnpg.tf` (bucket `homelab-cnpg-bleu-kalecgos-4d5b2c8d`, compte `cnpg-bleu-kalecgos`, provider WIF `cnpg`, sujets autorisés).
+
+| Point | Choix |
+|---|---|
+| Identifiants | aucune clé : jeton du compte `<namespace>/<cluster>` (audience `gcp-wif`, `projectedVolumeTemplate` → `/projected/gcp`) échangé contre `cnpg-bleu-kalecgos` ; `googleCredentials.gkeEnvironment: true` = identifiants par défaut de Google |
+| Bucket | un pour kalecgos, un dossier par base (`destinationPath`) |
+| Rétention | `retentionPolicy` de l'`ObjectStore` (Barman purge) ; soft delete GCS 7 jours en plus |
+| Nouvelle base | sujet dans `local.cnpg_subjects` (`cnpg.tf`, `make apply`), puis `ObjectStore` + `plugins` + `projectedVolumeTemplate` + ConfigMap d'identifiants (modèle : filon) |
+
+### Vérifier
+
+```sh
+kubectl --context admin@bleu-kalecgos -n filon-dev get cluster filon-db -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'   # status True
+kubectl --context admin@bleu-kalecgos -n filon-dev get backups                                   # PHASE completed
+kubectl --context admin@bleu-kalecgos -n filon-dev get objectstore filon-db -o jsonpath='{.status}'   # firstRecoverabilityPoint
+```
+
+### Sauvegarde à la main
+
+```sh
+kubectl --context admin@bleu-kalecgos -n filon-dev create -f - <<'YAML'
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  generateName: filon-db-manual-
+spec:
+  cluster:
+    name: filon-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+YAML
+```
+
+### Restaurer (pas encore testé)
+
+Toujours dans un nouveau `Cluster`, à côté : `bootstrap.recovery` depuis l'`ObjectStore` (cible `recoveryTarget.targetTime` pour un instant donné). Son compte (nom du nouveau Cluster) doit figurer dans `local.cnpg_subjects`. Doc : [CNPG, recovery](https://cloudnative-pg.io/plugin-barman-cloud/docs/usage/#restoring-a-cluster).

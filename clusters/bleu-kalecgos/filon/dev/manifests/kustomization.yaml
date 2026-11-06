@@ -1,0 +1,19 @@
+# filon, env dev : commun + namespace, image (CI), secret Unipile, ObjectStore et route
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: filon-dev
+resources:
+  - ../../common
+  - namespace.yaml
+  - externalsecret.yaml
+  - objectstore.yaml
+  - httproute.yaml
+labels:
+  - pairs:
+      environment: dev
+    includeTemplates: true
+patches:
+  - target:
+      kind: Deployment
+      name: filon
+    path: deployment.yaml

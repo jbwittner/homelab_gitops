@@ -70,6 +70,11 @@
       "description": "Image de bankwiz (appli maison, registre privé) : la ligne image est réécrite par la CI de bankwiz (develop.yml), pas par Renovate",
       "matchPackageNames": ["ghcr.io/jbwittner/bankwiz"],
       "enabled": false
+    },
+    {
+      "description": "Image de filon (appli maison, registre privé) : la ligne image est réécrite par la CI de filon (main.yml en dev, release.yml en prod), pas par Renovate",
+      "matchPackageNames": ["ghcr.io/jbwittner/filon"],
+      "enabled": false
     }
   ]
 }

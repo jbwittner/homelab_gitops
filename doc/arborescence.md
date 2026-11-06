@@ -22,6 +22,7 @@ clusters/
       dev/
         bankwiz-dev.app.yaml
         manifests/               # overlay de l'env
+    filon/                       # appli maison, envs dev et prod (doc/filon.md)
 doc/
 script/
 ```

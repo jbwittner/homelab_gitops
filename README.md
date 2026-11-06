@@ -2,7 +2,7 @@
 
 GitOps de deux clusters Kubernetes (`bleu-malygos` infra, `bleu-kalecgos` worker), réconciliés par ArgoCD.
 
-Docs : [architecture](doc/architecture.md) · [arborescence](doc/arborescence.md) · [secrets](doc/secrets.md) · [openbao](doc/openbao.md) · [authelia](doc/authelia.md) · [stockage](doc/stockage.md) · [certificats](doc/certificats.md) · [exposition](doc/exposition.md) · [sauvegardes](doc/sauvegardes.md) · [smtp](doc/smtp.md) · [supervision](doc/supervision.md) · [homepage](doc/homepage.md) · [bankwiz](doc/bankwiz.md) · [renovate](doc/renovate.md) · [décisions](doc/decisions.md)
+Docs : [architecture](doc/architecture.md) · [arborescence](doc/arborescence.md) · [secrets](doc/secrets.md) · [openbao](doc/openbao.md) · [authelia](doc/authelia.md) · [stockage](doc/stockage.md) · [certificats](doc/certificats.md) · [exposition](doc/exposition.md) · [sauvegardes](doc/sauvegardes.md) · [smtp](doc/smtp.md) · [supervision](doc/supervision.md) · [homepage](doc/homepage.md) · [bankwiz](doc/bankwiz.md) · [filon](doc/filon.md) · [renovate](doc/renovate.md) · [décisions](doc/decisions.md)
 
 ## Déployé
 
@@ -25,11 +25,14 @@ Une ligne par composant ; Application ArgoCD `<comp>-<cluster-court>`. Versions 
 | Velero (GCS) | infra | ✓ | ✓ | `velero` | — |
 | Relais SMTP (Postfix → Resend) | infra | ✓ | ✓ | `smtp-relay` | — |
 | CloudNativePG (opérateur Postgres) | infra | ✓ | ✓ | `cnpg-system` | — |
+| Plugin barman-cloud (sauvegardes CNPG vers GCS) | infra | | ✓ | `cnpg-system` | — |
 | kube-prometheus-stack | infra | ✓ complet | ✓ agent | `monitoring` | [grafana](https://grafana.lan.wittner.tech), [prometheus](https://prometheus.lan.wittner.tech), [alertmanager](https://alertmanager.lan.wittner.tech) |
-| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech), [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech) (relais) |
+| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech), [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech), [filon-dev](https://filon-dev.lan.wittner.tech), [filon](https://filon.lan.wittner.tech) (relais) |
 | Homepage | apps | | ✓ | `homepage` | [homepage](https://homepage.lan.wittner.tech) |
 | Renovate (CronJob, GitHub App) | apps | | ✓ | `renovate` | — |
 | bankwiz, env dev (appli maison, Postgres CNPG) | apps | | ✓ | `bankwiz-dev` | [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech) |
+| filon, env dev (appli maison, Postgres CNPG sauvegardé sur GCS) | apps | | ✓ | `filon-dev` | [filon-dev](https://filon-dev.lan.wittner.tech) |
+| filon, env prod (appli maison, Postgres CNPG sauvegardé sur GCS) | apps | | ✓ | `filon-prod` | [filon](https://filon.lan.wittner.tech) |
 
 Hors dépôt (Proxmox `vert-ysera`) : AdGuard Home (DNS), Home Assistant, Zigbee2MQTT, client NetBird.
 
@@ -44,6 +47,7 @@ Sujets reportés volontairement, à reprendre au besoin.
 | Audit OpenBao | journal des accès au coffre | `homelab_terraform`, [openbao](doc/openbao.md) |
 | Reloader | redémarrer un pod quand un Secret ESO lu au démarrage change (aujourd'hui : `grafana-admin`, à la main) | nouveau composant |
 | Widgets Homepage à identifiants | AdGuard, Proxmox (`PVEAuditor`), Home Assistant : OpenBao → ESO → `HOMEPAGE_VAR_*` (va avec Reloader) | `clusters/bleu-kalecgos/homepage/` |
+| Sauvegardes CNPG de bankwiz | `ObjectStore` + `plugins` + `ScheduledBackup` comme filon ; sujet `bankwiz-dev/bankwiz-db` dans `cnpg.tf` | `homelab_terraform`, [sauvegardes](doc/sauvegardes.md) |
 | Restauration OpenBao en prod | remise en place d'un snapshot raft (`-force`) jamais testée ; la restauration à côté l'est | [sauvegardes](doc/sauvegardes.md) |
 | NetBird | second peer routeur dans un cluster, en redondance du CT Proxmox | — |
 | OIDC : Proxmox | realm OpenID ; client dans `clients.yml` | [authelia](doc/authelia.md) |
