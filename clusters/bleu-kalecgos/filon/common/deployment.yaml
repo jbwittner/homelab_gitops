@@ -32,6 +32,17 @@ spec:
                 secretKeyRef:
                   name: filon-db-app
                   key: password
+            # utilisateur du login : OpenBao secret/filon/<env> (<env>/manifests/externalsecret.yaml)
+            - name: FILON_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: filon-login
+                  key: username
+            - name: FILON_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filon-login
+                  key: password
             # clé Unipile : OpenBao secret/filon/<env> (<env>/manifests/externalsecret.yaml)
             - name: UNIPILE_API_KEY
               valueFrom:
