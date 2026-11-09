@@ -49,6 +49,12 @@ spec:
                 secretKeyRef:
                   name: filon-unipile
                   key: apiKey
+            # compte LinkedIn connecté dans Unipile : OpenBao secret/filon (externalsecret.yaml)
+            - name: UNIPILE_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: filon-unipile
+                  key: accountId
             # jeton bearer du serveur MCP (/mcp) : OpenBao secret/filon (externalsecret.yaml)
             - name: FILON_MCP_TOKEN
               valueFrom:

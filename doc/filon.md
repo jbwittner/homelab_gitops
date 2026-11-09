@@ -5,11 +5,11 @@ Pilotage des opportunités freelance, Spring Boot ([jbwittner/filon](https://git
 | Fichier | Rôle |
 |---|---|
 | `clusters/bleu-kalecgos/filon/filon.app.yaml` | `filon-kalecgos`, namespace `filon` (label `ghcr-pull: enabled` : pull secret, [secrets](secrets.md#images-privées-ghcrio)) |
-| `clusters/bleu-kalecgos/filon/manifests/deployment.yaml` | ligne `image:` réécrite par la CI ; probes actuator, ressources, identifiants base (Secret CNPG `filon-db-app`), utilisateur du login (Secret `filon-login`), clé Unipile (Secret `filon-unipile`), jeton MCP (Secret `filon-mcp`), config Spring |
+| `clusters/bleu-kalecgos/filon/manifests/deployment.yaml` | ligne `image:` réécrite par la CI ; probes actuator, ressources, identifiants base (Secret CNPG `filon-db-app`), utilisateur du login (Secret `filon-login`), clé et compte Unipile (Secret `filon-unipile`), jeton MCP (Secret `filon-mcp`), config Spring |
 | `clusters/bleu-kalecgos/filon/manifests/application.yaml` | config Spring (URL de la base) → `/app/config/application.yaml` |
 | `clusters/bleu-kalecgos/filon/manifests/database.yaml` | `Cluster` CNPG `filon-db` (1 instance, 5 Gi, plugin barman-cloud, jeton WIF projeté) + `ScheduledBackup` (02:00 UTC) + `PodMonitor` |
 | `clusters/bleu-kalecgos/filon/manifests/gcp-credentials.yaml` | ConfigMap `filon-db-gcp` : fichier d'identifiants WIF (`terraform output -json cnpg`, pas de secret) |
-| `clusters/bleu-kalecgos/filon/manifests/externalsecret.yaml` | `secret/filon` (OpenBao) : champ `unipile_api_key` → Secret `filon-unipile` ; champs `login_username`, `login_password` → Secret `filon-login` (`FILON_USERNAME`, `FILON_PASSWORD`) ; champ `mcp_token` → Secret `filon-mcp` (`FILON_MCP_TOKEN`) |
+| `clusters/bleu-kalecgos/filon/manifests/externalsecret.yaml` | `secret/filon` (OpenBao) : champs `unipile_api_key`, `unipile_account_id` → Secret `filon-unipile` (`UNIPILE_API_KEY`, `UNIPILE_ACCOUNT_ID`) ; champs `login_username`, `login_password` → Secret `filon-login` (`FILON_USERNAME`, `FILON_PASSWORD`) ; champ `mcp_token` → Secret `filon-mcp` (`FILON_MCP_TOKEN`) |
 | `clusters/bleu-kalecgos/filon/manifests/objectstore.yaml` | `ObjectStore` `filon-db` : `gs://homelab-cnpg-bleu-kalecgos-4d5b2c8d/filon`, rétention 30 j |
 | `clusters/bleu-kalecgos/filon/manifests/httproute.yaml` | `filon.lan.wittner.tech` |
 | `clusters/bleu-malygos/external-services/manifests/filon.yaml` | relais de `filon.lan.wittner.tech` vers kalecgos |
@@ -23,6 +23,12 @@ export BAO_ADDR=https://openbao.lan.wittner.tech
 bao login -method=oidc
 read -rs UNIPILE_API_KEY   # coller la clé, non affichée
 bao kv put secret/filon unipile_api_key="$UNIPILE_API_KEY"; unset UNIPILE_API_KEY
+```
+
+Compte LinkedIn connecté (identifiant du compte dans le tableau de bord Unipile) ; sans lui la synchronisation échoue :
+
+```sh
+bao kv patch secret/filon unipile_account_id=<id du compte>
 ```
 
 Utilisateur unique du login (mot de passe en clair) ; `patch` garde les autres champs :
