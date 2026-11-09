@@ -1,6 +1,0 @@
-# Config Spring commune aux envs, montée sur /app/config/application.yaml (prioritaire sur
-# l'application.yaml du jar). Pas de secret ici : identifiants de la base en env, depuis le
-# Secret CNPG filon-db-app ; clé Unipile en env, depuis le Secret filon-unipile (ESO).
-spring:
-  datasource:
-    url: jdbc:postgresql://filon-db-rw:5432/filon
