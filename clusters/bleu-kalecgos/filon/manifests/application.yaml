@@ -4,3 +4,11 @@
 spring:
   datasource:
     url: jdbc:postgresql://filon-db-rw:5432/filon
+
+application:
+  unipile:
+    since: "2026-06-01T00:00:00Z"
+  scheduler:
+    enabled: true
+    conversations:
+      cron: "0 0 13 * * MON-FRI"
