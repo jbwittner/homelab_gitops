@@ -49,6 +49,12 @@ spec:
                 secretKeyRef:
                   name: filon-unipile
                   key: apiKey
+            # jeton bearer du serveur MCP (/mcp) : OpenBao secret/filon/<env> (<env>/manifests/externalsecret.yaml)
+            - name: FILON_MCP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: filon-mcp
+                  key: token
           ports:
             - name: http
               containerPort: 8080

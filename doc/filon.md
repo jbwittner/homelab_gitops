@@ -4,13 +4,13 @@ Pilotage des opportunités freelance, Spring Boot ([jbwittner/filon](https://git
 
 | Fichier | Rôle |
 |---|---|
-| `clusters/bleu-kalecgos/filon/common/deployment.yaml` | commun : probes actuator, ressources, identifiants base (Secret CNPG `filon-db-app`), utilisateur du login (Secret `filon-login`), clé Unipile (Secret `filon-unipile`), config Spring |
+| `clusters/bleu-kalecgos/filon/common/deployment.yaml` | commun : probes actuator, ressources, identifiants base (Secret CNPG `filon-db-app`), utilisateur du login (Secret `filon-login`), clé Unipile (Secret `filon-unipile`), jeton MCP (Secret `filon-mcp`), config Spring |
 | `clusters/bleu-kalecgos/filon/common/application.yaml` | config Spring commune (URL de la base) → `/app/config/application.yaml` |
 | `clusters/bleu-kalecgos/filon/common/database.yaml` | `Cluster` CNPG `filon-db` (1 instance, 5 Gi, plugin barman-cloud, jeton WIF projeté) + `ScheduledBackup` (02:00 UTC) + `PodMonitor` |
 | `clusters/bleu-kalecgos/filon/common/gcp-credentials.yaml` | ConfigMap `filon-db-gcp` : fichier d'identifiants WIF (`terraform output -json cnpg`, pas de secret) |
 | `clusters/bleu-kalecgos/filon/<env>/filon-<env>.app.yaml` | `filon-<env>-kalecgos`, namespace `filon-<env>` (label `ghcr-pull: enabled` : pull secret, [secrets](secrets.md#images-privées-ghcrio)) |
 | `clusters/bleu-kalecgos/filon/<env>/manifests/deployment.yaml` | ligne `image:` de l'env, réécrite par la CI |
-| `clusters/bleu-kalecgos/filon/<env>/manifests/externalsecret.yaml` | `secret/filon/<env>` (OpenBao) : champ `unipile_api_key` → Secret `filon-unipile` ; champs `login_username`, `login_password` → Secret `filon-login` (`FILON_USERNAME`, `FILON_PASSWORD`) |
+| `clusters/bleu-kalecgos/filon/<env>/manifests/externalsecret.yaml` | `secret/filon/<env>` (OpenBao) : champ `unipile_api_key` → Secret `filon-unipile` ; champs `login_username`, `login_password` → Secret `filon-login` (`FILON_USERNAME`, `FILON_PASSWORD`) ; champ `mcp_token` → Secret `filon-mcp` (`FILON_MCP_TOKEN`) |
 | `clusters/bleu-kalecgos/filon/<env>/manifests/objectstore.yaml` | `ObjectStore` `filon-db` : `gs://homelab-cnpg-bleu-kalecgos-4d5b2c8d/filon-<env>`, rétention 7 j (dev) / 30 j (prod) |
 | `clusters/bleu-malygos/external-services/manifests/filon-dev.yaml`, `filon.yaml` | relais de `filon-dev.lan.wittner.tech` et `filon.lan.wittner.tech` vers kalecgos |
 
@@ -35,7 +35,15 @@ read -rs LOGIN_PASSWORD    # mot de passe de prod
 bao kv patch secret/filon/prod login_username=jb login_password="$LOGIN_PASSWORD"; unset LOGIN_PASSWORD
 ```
 
-Sans ces champs, le pod ne démarre pas (Secret `filon-login` absent, ou appli qui refuse de démarrer sans `FILON_PASSWORD`).
+Jeton bearer du serveur MCP (`/mcp`, Claude Desktop), propre à chaque env :
+
+```sh
+bao kv patch secret/filon/dev mcp_token="$(openssl rand -hex 32)"
+bao kv patch secret/filon/prod mcp_token="$(openssl rand -hex 32)"
+bao kv get -field=mcp_token secret/filon/prod    # à recopier dans la config du client MCP
+```
+
+Sans ces champs, le pod ne démarre pas (Secret `filon-login` ou `filon-mcp` absent, ou appli qui refuse de démarrer sans `FILON_PASSWORD` ou `FILON_MCP_TOKEN`).
 
 Valeurs lues au démarrage : après un changement, relancer le pod (`kubectl rollout restart`).
 

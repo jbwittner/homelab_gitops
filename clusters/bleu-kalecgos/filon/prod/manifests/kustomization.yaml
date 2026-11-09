@@ -1,4 +1,4 @@
-# filon, env prod : commun + namespace, image (CI), secrets Unipile et login, ObjectStore et route
+# filon, env prod : commun + namespace, image (CI), secrets Unipile, login et MCP, ObjectStore et route
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: filon-prod
