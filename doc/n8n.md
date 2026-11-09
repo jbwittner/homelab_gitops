@@ -8,8 +8,8 @@ Pas repris du [compose upstream](https://docs.n8n.io/deploy/host-n8n/install-opt
 |---|---|
 | `clusters/bleu-kalecgos/n8n/n8n.app.yaml` | `n8n-kalecgos` : chart + `values.yaml` + `manifests/` |
 | `clusters/bleu-kalecgos/n8n/values.yaml` | standalone, PVC 2 Gi (`~/.n8n`), URL, fuseau, `N8N_PROXY_HOPS`, métriques, SMTP |
-| `clusters/bleu-kalecgos/n8n/manifests/externalsecret.yaml` | `secret/n8n` → Secret `n8n-secrets` (`N8N_ENCRYPTION_KEY`, `N8N_RUNNERS_AUTH_TOKEN`, `N8N_HOST`…) |
-| `clusters/bleu-kalecgos/n8n/manifests/database.yaml` | `Cluster` CNPG `n8n-db` (1 instance, 5 Gi, barman-cloud, jeton WIF) + `ScheduledBackup` (02:30 UTC) + `PodMonitor` |
+| `clusters/bleu-kalecgos/n8n/manifests/externalsecret.yaml` | `secret/n8n` → Secret `n8n-secrets` (`N8N_ENCRYPTION_KEY`, `N8N_RUNNERS_AUTH_TOKEN`, `N8N_HOST`…) ; champ `data_db_password` → Secret `n8n-db-data` (basic-auth, rôle `n8n_data`) |
+| `clusters/bleu-kalecgos/n8n/manifests/database.yaml` | `Cluster` CNPG `n8n-db` (1 instance, 5 Gi, barman-cloud, jeton WIF, rôle géré `n8n_data`) + `Database` `n8n_data` + `ScheduledBackup` (02:30 UTC) + `PodMonitor` |
 | `clusters/bleu-kalecgos/n8n/manifests/objectstore.yaml` | `ObjectStore` `n8n-db` : `gs://homelab-cnpg-bleu-kalecgos-4d5b2c8d/n8n`, 30 j |
 | `clusters/bleu-kalecgos/n8n/manifests/gcp-credentials.yaml` | ConfigMap `n8n-db-gcp` (même fichier WIF que filon) |
 | `clusters/bleu-kalecgos/n8n/manifests/httproute.yaml` | `n8n.lan.wittner.tech` → `n8n-main:5678` |
@@ -30,6 +30,24 @@ bao kv put secret/n8n encryption_key="$(openssl rand -hex 32)" runners_auth_toke
 `encryption_key` chiffre les identifiants stockés en base : la perdre = identifiants illisibles. Ne jamais la changer (OpenBao est sauvegardé par Velero).
 
 Sans `secret/n8n`, le pod reste en attente (Secret `n8n-secrets` absent).
+
+## Base des workflows (`n8n_data`)
+
+Données lues et écrites par les workflows : base `n8n_data`, rôle `n8n_data`, dans le Cluster `n8n-db`. Jamais la base interne `n8n` (schéma migré par n8n à chaque version). Mêmes sauvegardes ; une restauration ramène les deux bases ensemble. Petits besoins sans SQL : Data Tables de n8n.
+
+Mot de passe (une fois), sans affichage :
+
+```sh
+bao kv patch secret/n8n data_db_password="$(openssl rand -hex 32)"
+```
+
+Identifiant n8n **Postgres** : hôte `n8n-db-rw`, port `5432`, base et utilisateur `n8n_data`, SSL `disable`, mot de passe copié sans l'afficher :
+
+```sh
+bao kv get -field=data_db_password secret/n8n | pbcopy
+```
+
+Sans le champ, le rôle n'a pas de mot de passe (connexion refusée) et la `Database` attend.
 
 ## Premier accès
 

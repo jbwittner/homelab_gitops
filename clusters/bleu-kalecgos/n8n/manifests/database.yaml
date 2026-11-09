@@ -14,6 +14,14 @@ spec:
     initdb:
       database: n8n
       owner: n8n
+  # rôle des données des workflows (base n8n_data, plus bas), à part du rôle interne de n8n
+  managed:
+    roles:
+      - name: n8n_data
+        ensure: present
+        login: true
+        passwordSecret:
+          name: n8n-db-data
   storage:
     size: 5Gi
     storageClass: openebs-lvm
@@ -41,6 +49,18 @@ spec:
       isWALArchiver: true
       parameters:
         barmanObjectName: n8n-db
+---
+# Base des données des workflows (identifiant Postgres dans n8n, hôte n8n-db-rw) : jamais la
+# base interne n8n. Même Cluster, donc mêmes sauvegardes ; restauration commune avec n8n.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: n8n-data
+spec:
+  name: n8n_data
+  owner: n8n_data
+  cluster:
+    name: n8n-db
 ---
 # sauvegarde complète chaque nuit (02:30 UTC, après filon, avant OpenBao à 03:00) ; WAL archivés en continu
 apiVersion: postgresql.cnpg.io/v1
