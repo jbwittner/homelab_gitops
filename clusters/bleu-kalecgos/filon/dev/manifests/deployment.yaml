@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: filon
-          image: ghcr.io/jbwittner/filon:main-sha-415faf0@sha256:3499bf66f2bf814ccf93a364a5972ce6f1f1c095e85c0a88e61406248d160cae
+          image: ghcr.io/jbwittner/filon:main-sha-f0c0121@sha256:4ee1e5175e41186626aa7da38a3b38ba7c373256719716eeaf77b22f60c2c953
