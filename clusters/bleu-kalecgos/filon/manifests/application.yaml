@@ -7,7 +7,7 @@ spring:
 
 application:
   unipile:
-    since: "2026-06-01T00:00:00Z"
+    since: "2026-09-01T00:00:00Z"
   scheduler:
     enabled: true
     conversations:
