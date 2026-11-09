@@ -134,15 +134,15 @@ Côté `homelab_terraform` : `gcp/homelab/cnpg.tf` (bucket `homelab-cnpg-bleu-ka
 Dashboard Grafana `Backups — cnpg` ; à la main :
 
 ```sh
-kubectl --context admin@bleu-kalecgos -n filon-dev get cluster filon-db -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'   # status True
-kubectl --context admin@bleu-kalecgos -n filon-dev get backups                                   # PHASE completed
-kubectl --context admin@bleu-kalecgos -n filon-dev get objectstore filon-db -o jsonpath='{.status}'   # firstRecoverabilityPoint
+kubectl --context admin@bleu-kalecgos -n filon-prod get cluster filon-db -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'   # status True
+kubectl --context admin@bleu-kalecgos -n filon-prod get backups                                   # PHASE completed
+kubectl --context admin@bleu-kalecgos -n filon-prod get objectstore filon-db -o jsonpath='{.status}'   # firstRecoverabilityPoint
 ```
 
 ### Sauvegarde à la main
 
 ```sh
-kubectl --context admin@bleu-kalecgos -n filon-dev create -f - <<'YAML'
+kubectl --context admin@bleu-kalecgos -n filon-prod create -f - <<'YAML'
 apiVersion: postgresql.cnpg.io/v1
 kind: Backup
 metadata:
