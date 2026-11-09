@@ -31,7 +31,7 @@ Une ligne par composant ; Application ArgoCD `<comp>-<cluster-court>`. Versions 
 | Homepage | apps | | ✓ | `homepage` | [homepage](https://homepage.lan.wittner.tech) |
 | Renovate (CronJob, GitHub App) | apps | | ✓ | `renovate` | — |
 | bankwiz, env dev (appli maison, Postgres CNPG) | apps | | ✓ | `bankwiz-dev` | [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech) |
-| filon (appli maison, Postgres CNPG sauvegardé sur GCS) | apps | | ✓ | `filon` | [filon](https://filon.lan.wittner.tech) |
+| filon, env prod (appli maison, Postgres CNPG sauvegardé sur GCS) | apps | | ✓ | `filon-prod` | [filon](https://filon.lan.wittner.tech) |
 
 Hors dépôt (Proxmox `vert-ysera`) : AdGuard Home (DNS), Home Assistant, Zigbee2MQTT, client NetBird.
 

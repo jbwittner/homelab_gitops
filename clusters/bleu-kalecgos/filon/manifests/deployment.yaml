@@ -4,7 +4,8 @@ kind: Deployment
 metadata:
   name: filon
 spec:
-  replicas: 1
+  # 0 le temps de copier la base de filon-prod : Flyway ne doit pas créer le schéma avant
+  replicas: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: filon

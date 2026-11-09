@@ -72,7 +72,7 @@
       "enabled": false
     },
     {
-      "description": "Image de filon (appli maison, registre privé) : la ligne image est réécrite par la CI de filon (main.yml), pas par Renovate",
+      "description": "Image de filon (appli maison, registre privé) : la ligne image est réécrite par la CI de filon (main.yml, prod), pas par Renovate",
       "matchPackageNames": ["ghcr.io/jbwittner/filon"],
       "enabled": false
     }

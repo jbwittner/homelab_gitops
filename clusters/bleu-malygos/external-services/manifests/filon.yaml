@@ -1,4 +1,4 @@
-# filon tourne sur kalecgos : relais vers la Gateway de kalecgos (192.168.1.85, HTTPS), le
+# filon (prod) tourne sur kalecgos : relais vers la Gateway de kalecgos (192.168.1.85, HTTPS), le
 # wildcard DNS *.lan envoyant tout sur malygos. Certificat de kalecgos (Let's Encrypt) vérifié
 # avec la racine ISRG Root X1 (isrg-root-x1.crt, ConfigMap via kustomization.yaml).
 apiVersion: v1

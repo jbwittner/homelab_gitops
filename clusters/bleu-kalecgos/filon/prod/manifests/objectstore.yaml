@@ -1,0 +1,22 @@
+# Destination Barman de la base de l'env : dossier filon-prod du bucket CNPG de kalecgos
+# (homelab_terraform, gcp/homelab/cnpg.tf), WAL et sauvegardes complètes ; purge au-delà de 30d
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: filon-db
+spec:
+  retentionPolicy: 30d
+  configuration:
+    destinationPath: gs://homelab-cnpg-bleu-kalecgos-4d5b2c8d/filon-prod
+    # pas de clé : identifiants par défaut de Google (ADC), qui lisent le fichier
+    # external_account de GOOGLE_APPLICATION_CREDENTIALS (../../common/database.yaml)
+    googleCredentials:
+      gkeEnvironment: true
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  instanceSidecarConfiguration:
+    env:
+      - name: GOOGLE_APPLICATION_CREDENTIALS
+        value: /projected/gcp/credentials.json

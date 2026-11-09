@@ -1,0 +1,13 @@
+# Commun aux envs de filon ; chaque env (<env>/manifests) fixe namespace, image, secret, ObjectStore et route
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+  - database.yaml
+  - gcp-credentials.yaml
+# nom suffixé d'un hash, réécrit dans le Deployment : une config modifiée relance le pod
+configMapGenerator:
+  - name: filon-config
+    files:
+      - application.yaml

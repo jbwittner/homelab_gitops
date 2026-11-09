@@ -117,8 +117,8 @@ Plugin barman-cloud (`plugin-barman-cloud-kalecgos`, namespace `cnpg-system`) : 
 | Fichier | Rôle |
 |---|---|
 | `clusters/bleu-kalecgos/plugin-barman-cloud/plugin-barman-cloud.app.yaml` | plugin (chart officiel), CRD `ObjectStore`, certificats mTLS par cert-manager |
-| `clusters/bleu-kalecgos/filon/manifests/database.yaml` | `Cluster` : `plugins` (archiveur WAL), jeton WIF projeté ; `ScheduledBackup` |
-| `clusters/bleu-kalecgos/filon/manifests/objectstore.yaml` | `ObjectStore` : dossier de la base, rétention, `GOOGLE_APPLICATION_CREDENTIALS` du sidecar |
+| `clusters/bleu-kalecgos/filon/common/database.yaml` | `Cluster` : `plugins` (archiveur WAL), jeton WIF projeté ; `ScheduledBackup` |
+| `clusters/bleu-kalecgos/filon/<env>/manifests/objectstore.yaml` | `ObjectStore` : dossier de la base, rétention, `GOOGLE_APPLICATION_CREDENTIALS` du sidecar |
 
 Côté `homelab_terraform` : `gcp/homelab/cnpg.tf` (bucket `homelab-cnpg-bleu-kalecgos-4d5b2c8d`, compte `cnpg-bleu-kalecgos`, provider WIF `cnpg`, sujets autorisés).
 
@@ -134,15 +134,15 @@ Côté `homelab_terraform` : `gcp/homelab/cnpg.tf` (bucket `homelab-cnpg-bleu-ka
 Dashboard Grafana `Backups — cnpg` ; à la main :
 
 ```sh
-kubectl --context admin@bleu-kalecgos -n filon get cluster filon-db -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'   # status True
-kubectl --context admin@bleu-kalecgos -n filon get backups                                   # PHASE completed
-kubectl --context admin@bleu-kalecgos -n filon get objectstore filon-db -o jsonpath='{.status}'   # firstRecoverabilityPoint
+kubectl --context admin@bleu-kalecgos -n filon-prod get cluster filon-db -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")]}'   # status True
+kubectl --context admin@bleu-kalecgos -n filon-prod get backups                                   # PHASE completed
+kubectl --context admin@bleu-kalecgos -n filon-prod get objectstore filon-db -o jsonpath='{.status}'   # firstRecoverabilityPoint
 ```
 
 ### Sauvegarde à la main
 
 ```sh
-kubectl --context admin@bleu-kalecgos -n filon create -f - <<'YAML'
+kubectl --context admin@bleu-kalecgos -n filon-prod create -f - <<'YAML'
 apiVersion: postgresql.cnpg.io/v1
 kind: Backup
 metadata:
