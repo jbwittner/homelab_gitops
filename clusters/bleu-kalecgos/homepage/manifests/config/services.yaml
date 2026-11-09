@@ -186,6 +186,11 @@
         siteMonitor: https://bankwiz-dev.lan.wittner.tech/actuator/health
         description: API bankwiz, env dev (kalecgos)
         icon: mdi-bank
+    - n8n:
+        href: https://n8n.lan.wittner.tech/
+        siteMonitor: https://n8n.lan.wittner.tech/healthz
+        description: Automatisation de workflows (kalecgos)
+        icon: n8n.png
     - filon:
         href: https://filon.lan.wittner.tech/actuator/health
         siteMonitor: https://filon.lan.wittner.tech/actuator/health

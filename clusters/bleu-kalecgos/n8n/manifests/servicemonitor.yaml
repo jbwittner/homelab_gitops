@@ -1,0 +1,13 @@
+# Métriques n8n (N8N_METRICS, values.yaml) : pas d'option ServiceMonitor dans le chart
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: n8n
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: n8n
+      app.kubernetes.io/instance: n8n
+  endpoints:
+    - port: http
+      path: /metrics

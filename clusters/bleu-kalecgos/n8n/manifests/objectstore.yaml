@@ -1,0 +1,22 @@
+# Destination Barman de la base : dossier n8n du bucket CNPG de kalecgos
+# (homelab_terraform, gcp/homelab/cnpg.tf), WAL et sauvegardes complètes ; purge au-delà de 30d
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: n8n-db
+spec:
+  retentionPolicy: 30d
+  configuration:
+    destinationPath: gs://homelab-cnpg-bleu-kalecgos-4d5b2c8d/n8n
+    # pas de clé : identifiants par défaut de Google (ADC), qui lisent le fichier
+    # external_account de GOOGLE_APPLICATION_CREDENTIALS (database.yaml)
+    googleCredentials:
+      gkeEnvironment: true
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  instanceSidecarConfiguration:
+    env:
+      - name: GOOGLE_APPLICATION_CREDENTIALS
+        value: /projected/gcp/credentials.json

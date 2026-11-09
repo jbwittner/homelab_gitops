@@ -119,6 +119,7 @@ Plugin barman-cloud (`plugin-barman-cloud-kalecgos`, namespace `cnpg-system`) : 
 | `clusters/bleu-kalecgos/plugin-barman-cloud/plugin-barman-cloud.app.yaml` | plugin (chart officiel), CRD `ObjectStore`, certificats mTLS par cert-manager |
 | `clusters/bleu-kalecgos/filon/manifests/database.yaml` | `Cluster` : `plugins` (archiveur WAL), jeton WIF projeté ; `ScheduledBackup` |
 | `clusters/bleu-kalecgos/filon/manifests/objectstore.yaml` | `ObjectStore` : dossier de la base, rétention, `GOOGLE_APPLICATION_CREDENTIALS` du sidecar |
+| `clusters/bleu-kalecgos/n8n/manifests/{database,objectstore}.yaml` | idem pour la base de n8n (dossier `n8n`, 02:30 UTC) |
 
 Côté `homelab_terraform` : `gcp/homelab/cnpg.tf` (bucket `homelab-cnpg-bleu-kalecgos-4d5b2c8d`, compte `cnpg-bleu-kalecgos`, provider WIF `cnpg`, sujets autorisés).
 

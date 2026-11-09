@@ -1,0 +1,58 @@
+# n8n tourne sur kalecgos : relais vers la Gateway de kalecgos (192.168.1.85, HTTPS), le
+# wildcard DNS *.lan envoyant tout sur malygos. Certificat de kalecgos (Let's Encrypt) vérifié
+# avec la racine ISRG Root X1 (isrg-root-x1.crt, ConfigMap via kustomization.yaml).
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+spec:
+  ports:
+    - name: https
+      port: 443
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: n8n
+  labels:
+    kubernetes.io/service-name: n8n
+    endpointslice.kubernetes.io/managed-by: argocd
+addressType: IPv4
+ports:
+  - name: https
+    port: 443
+endpoints:
+  - addresses:
+      - 192.168.1.85
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: n8n
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: n8n
+  validation:
+    caCertificateRefs:
+      - group: ""
+        kind: ConfigMap
+        name: isrg-root-x1
+    # SNI et nom vérifié : couvert par le wildcard *.lan.wittner.tech de kalecgos
+    hostname: n8n.lan.wittner.tech
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: n8n
+spec:
+  parentRefs:
+    - name: lan
+      namespace: gateway
+  hostnames:
+    - n8n.lan.wittner.tech
+  rules:
+    - backendRefs:
+        - name: n8n
+          port: 443

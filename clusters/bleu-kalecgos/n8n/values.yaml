@@ -1,0 +1,67 @@
+# Chart officiel n8n (n8n-io/n8n-hosting), mode standalone : un pod main + sidecar task
+# runners, base Postgres CNPG (manifests/database.yaml). Sans sandbox Instance AI.
+
+# standalone : pas de workers ni de Redis
+queueMode:
+  enabled: false
+redis:
+  enabled: false
+
+# ~/.n8n : nœuds communautaires, données binaires des exécutions. PVC RWO : pas deux pods à la fois
+strategy:
+  type: Recreate
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClassName: openebs-lvm
+
+taskRunners:
+  enabled: true
+  authToken:
+    existingSecret: n8n-secrets
+    existingSecretKey: N8N_RUNNERS_AUTH_TOKEN
+
+# N8N_ENCRYPTION_KEY, N8N_HOST, N8N_PORT, N8N_PROTOCOL (manifests/externalsecret.yaml)
+secretRefs:
+  existingSecret: n8n-secrets
+
+# Cluster CNPG n8n-db : Service n8n-db-rw, Secret n8n-db-app
+database:
+  host: n8n-db-rw
+  passwordSecret:
+    name: n8n-db-app
+    key: password
+
+webhook:
+  url: https://n8n.lan.wittner.tech
+editor:
+  url: https://n8n.lan.wittner.tech
+
+config:
+  timezone: Europe/Paris
+  extraEnv:
+    # nom documenté par n8n (le chart ne pose que N8N_WEBHOOK_URL)
+    - name: WEBHOOK_URL
+      value: https://n8n.lan.wittner.tech
+    # nœuds Schedule et Cron
+    - name: GENERIC_TIMEZONE
+      value: Europe/Paris
+    # Gateway de malygos (relais) puis Gateway de kalecgos
+    - name: N8N_PROXY_HOPS
+      value: "2"
+    # /metrics sur le port http (manifests/servicemonitor.yaml)
+    - name: N8N_METRICS
+      value: "true"
+    # relais du cluster (doc/smtp.md) : sans authentification ni TLS ; invitations, mot de passe oublié
+    - name: N8N_EMAIL_MODE
+      value: smtp
+    - name: N8N_SMTP_HOST
+      value: smtp-relay.smtp-relay.svc.cluster.local
+    - name: N8N_SMTP_PORT
+      value: "587"
+    - name: N8N_SMTP_SSL
+      value: "false"
+    - name: N8N_SMTP_STARTTLS
+      value: "false"
+    - name: N8N_SMTP_SENDER
+      value: n8n <n8n@wittner.tech>

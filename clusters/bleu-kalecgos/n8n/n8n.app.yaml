@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: n8n-kalecgos
+  namespace: argocd
+  labels:
+    layer: apps
+spec:
+  project: default
+  destination:
+    name: bleu-kalecgos
+    namespace: n8n
+  sources:
+    # chart OCI public : pas de oci:// avec chart:, aucun dépôt à déclarer dans ArgoCD
+    - repoURL: ghcr.io/n8n-io/n8n-helm-chart
+      chart: n8n
+      targetRevision: 1.18.0
+      helm:
+        releaseName: n8n
+        valueFiles:
+          - $values/clusters/bleu-kalecgos/n8n/values.yaml
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/jbwittner/homelab_gitops.git
+      targetRevision: main
+      path: clusters/bleu-kalecgos/n8n/manifests
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    # sans fin : une dépendance (CRD, secret) d'une autre Application peut arriver tard (boot à blanc)
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m
