@@ -10,33 +10,33 @@ Pilotage des opportunités freelance, Spring Boot ([jbwittner/filon](https://git
 | `clusters/bleu-kalecgos/filon/common/gcp-credentials.yaml` | ConfigMap `filon-db-gcp` : fichier d'identifiants WIF (`terraform output -json cnpg`, pas de secret) |
 | `clusters/bleu-kalecgos/filon/<env>/filon-<env>.app.yaml` | `filon-<env>-kalecgos`, namespace `filon-<env>` (label `ghcr-pull: enabled` : pull secret, [secrets](secrets.md#images-privées-ghcrio)) |
 | `clusters/bleu-kalecgos/filon/<env>/manifests/deployment.yaml` | ligne `image:` de l'env, réécrite par la CI |
-| `clusters/bleu-kalecgos/filon/<env>/manifests/externalsecret.yaml` | `secret/filon/<env>` (OpenBao) : champ `unipile_api_key` → Secret `filon-unipile` ; champs `login_username`, `login_password` → Secret `filon-login` (`FILON_USERNAME`, `FILON_PASSWORD`) ; champ `mcp_token` → Secret `filon-mcp` (`FILON_MCP_TOKEN`) |
+| `clusters/bleu-kalecgos/filon/<env>/manifests/externalsecret.yaml` | `secret/filon` (OpenBao) : champ `unipile_api_key` → Secret `filon-unipile` ; champs `login_username`, `login_password` → Secret `filon-login` (`FILON_USERNAME`, `FILON_PASSWORD`) ; champ `mcp_token` → Secret `filon-mcp` (`FILON_MCP_TOKEN`) |
 | `clusters/bleu-kalecgos/filon/<env>/manifests/objectstore.yaml` | `ObjectStore` `filon-db` : `gs://homelab-cnpg-bleu-kalecgos-4d5b2c8d/filon-<env>`, rétention 30 j |
 | `clusters/bleu-malygos/external-services/manifests/filon.yaml` | relais de `filon.lan.wittner.tech` vers kalecgos |
 
 ## Secrets (OpenBao)
 
-Un secret par env, `secret/filon/prod` :
+Un seul secret, `secret/filon` :
 
 ```sh
 export BAO_ADDR=https://openbao.lan.wittner.tech
 bao login -method=oidc
 read -rs UNIPILE_API_KEY   # coller la clé, non affichée
-bao kv put secret/filon/prod unipile_api_key="$UNIPILE_API_KEY"; unset UNIPILE_API_KEY
+bao kv put secret/filon unipile_api_key="$UNIPILE_API_KEY"; unset UNIPILE_API_KEY
 ```
 
 Utilisateur unique du login (mot de passe en clair, propre à chaque env) ; `patch` garde les autres champs :
 
 ```sh
 read -rs LOGIN_PASSWORD    # non affiché
-bao kv patch secret/filon/prod login_username=jb login_password="$LOGIN_PASSWORD"; unset LOGIN_PASSWORD
+bao kv patch secret/filon login_username=jb login_password="$LOGIN_PASSWORD"; unset LOGIN_PASSWORD
 ```
 
 Jeton bearer du serveur MCP (`/mcp`, Claude Desktop), propre à chaque env :
 
 ```sh
-bao kv patch secret/filon/prod mcp_token="$(openssl rand -hex 32)"
-bao kv get -field=mcp_token secret/filon/prod    # à recopier dans la config du client MCP
+bao kv patch secret/filon mcp_token="$(openssl rand -hex 32)"
+bao kv get -field=mcp_token secret/filon    # à recopier dans la config du client MCP
 ```
 
 Sans ces champs, le pod ne démarre pas (Secret `filon-login` ou `filon-mcp` absent, ou appli qui refuse de démarrer sans `FILON_PASSWORD` ou `FILON_MCP_TOKEN`).
@@ -68,4 +68,4 @@ curl -s https://filon.lan.wittner.tech/actuator/info      # commit et heure du b
 
 Probes : liveness = l'appli seule (une panne de Postgres ne relance pas le pod), readiness = l'appli + la base (le pod sort du trafic tant que Postgres est absent). Tuile Homepage : commit déployé (`/actuator/info`).
 
-Interface web derrière un formulaire de login (utilisateur de `secret/filon/<env>`) ; la santé et `/actuator/info` répondent sans session, le reste de `/actuator` est refusé. Pas de métriques appli : seul Postgres est supervisé.
+Interface web derrière un formulaire de login (utilisateur de `secret/filon`) ; la santé et `/actuator/info` répondent sans session, le reste de `/actuator` est refusé. Pas de métriques appli : seul Postgres est supervisé.
