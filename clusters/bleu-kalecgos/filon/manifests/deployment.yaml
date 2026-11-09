@@ -1,0 +1,91 @@
+# Ligne image réécrite par la CI de filon à chaque push sur main (main.yml) : tag fixe main-sha-<sha>, épinglé à son digest
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filon
+spec:
+  # 0 le temps de copier la base de filon-prod : Flyway ne doit pas créer le schéma avant
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: filon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: filon
+    spec:
+      # image privée : Secret ghcr-pull posé par ESO dans les namespaces ghcr-pull: enabled
+      # (clusters/bleu-kalecgos/external-secrets/manifests/ghcr-pull.yaml)
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: filon
+          image: ghcr.io/jbwittner/filon:v0.1.0@sha256:f05c42e64a2a5732c21fbcddf3add6404f820d68720c332cccf27f05d2dab01b
+          env:
+            # identifiants de la base : Secret de CNPG
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: filon-db-app
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filon-db-app
+                  key: password
+            # utilisateur du login : OpenBao secret/filon (externalsecret.yaml)
+            - name: FILON_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: filon-login
+                  key: username
+            - name: FILON_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filon-login
+                  key: password
+            # clé Unipile : OpenBao secret/filon (externalsecret.yaml)
+            - name: UNIPILE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: filon-unipile
+                  key: apiKey
+            # jeton bearer du serveur MCP (/mcp) : OpenBao secret/filon (externalsecret.yaml)
+            - name: FILON_MCP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: filon-mcp
+                  key: token
+          ports:
+            - name: http
+              containerPort: 8080
+          # démarrage JVM (+ migrations Flyway à venir) : jusqu'à 150 s avant la liveness
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 768Mi
+          # ./config/ du WORKDIR /app, lu par Spring Boot : application.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: filon-config

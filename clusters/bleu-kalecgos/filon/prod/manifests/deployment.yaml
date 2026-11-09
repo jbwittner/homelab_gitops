@@ -4,6 +4,8 @@ kind: Deployment
 metadata:
   name: filon
 spec:
+  # gelée pendant la copie de la base vers le namespace filon
+  replicas: 0
   template:
     spec:
       containers:

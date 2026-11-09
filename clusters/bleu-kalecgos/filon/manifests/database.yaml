@@ -1,0 +1,74 @@
+# PostgreSQL de filon (opérateur CloudNativePG) ; CNPG crée le Secret filon-db-app
+# (username, password…) et le Service filon-db-rw. WAL et sauvegardes : plugin barman-cloud
+# vers GCS, ObjectStore filon-db (objectstore.yaml).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: filon-db
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-standard-trixie
+  # une seule instance : le PDB bloquerait le drain du nœud
+  enablePDB: false
+  bootstrap:
+    initdb:
+      database: filon
+      owner: filon
+  storage:
+    size: 5Gi
+    storageClass: openebs-lvm
+  # Workload Identity Federation (homelab_terraform, gcp/homelab/cnpg.tf) : jeton du compte
+  # filon-db (audience gcp-wif) + fichier d'identifiants, sous /projected/gcp ; le sidecar
+  # barman-cloud hérite des montages du conteneur postgres
+  projectedVolumeTemplate:
+    sources:
+      - serviceAccountToken:
+          audience: gcp-wif
+          expirationSeconds: 3600
+          path: gcp/token
+      - configMap:
+          name: filon-db-gcp
+          items:
+            - key: credentials.json
+              path: gcp/credentials.json
+  # hérité par le sidecar barman-cloud : le client GCS ne déduit pas le projet d'identifiants
+  # external_account (seulement sur GKE). Ici plutôt que dans l'ObjectStore : un changement
+  # d'env du Cluster relance l'instance, pas un changement d'ObjectStore.
+  env:
+    - name: GOOGLE_CLOUD_PROJECT
+      value: homelab-499008
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: filon-db
+---
+# sauvegarde complète chaque nuit (02:00 UTC, avant OpenBao à 03:00) ; WAL archivés en continu
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: filon-db
+spec:
+  # format cron à secondes
+  schedule: "0 0 2 * * *"
+  # une première sauvegarde dès la création : base restaurable tout de suite
+  immediate: true
+  backupOwnerReference: self
+  cluster:
+    name: filon-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+---
+# enablePodMonitor du Cluster déprécié : PodMonitor déclaré ici (doc/supervision.md)
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: filon-db
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: filon-db
+      cnpg.io/podRole: instance
+  podMetricsEndpoints:
+    - port: metrics

@@ -3,6 +3,9 @@ kind: Application
 metadata:
   name: filon-prod-kalecgos
   namespace: argocd
+  # retrait de l'env : supprimer l'Application supprime aussi ses ressources (namespace, base)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
   labels:
     layer: apps
 spec:

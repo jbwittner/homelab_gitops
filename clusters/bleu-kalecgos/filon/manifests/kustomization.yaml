@@ -1,0 +1,17 @@
+# filon (appli maison, un seul env) : appli, base CNPG sauvegardée sur GCS, secrets OpenBao
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: filon
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - database.yaml
+  - objectstore.yaml
+  - gcp-credentials.yaml
+  - externalsecret.yaml
+# nom suffixé d'un hash, réécrit dans le Deployment : une config modifiée relance le pod
+configMapGenerator:
+  - name: filon-config
+    files:
+      - application.yaml
