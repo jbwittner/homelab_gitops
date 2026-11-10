@@ -13,7 +13,7 @@ spec:
   sources:
     - repoURL: https://bokysan.github.io/docker-postfix
       chart: mail
-      targetRevision: 5.1.0
+      targetRevision: 5.2.1
       helm:
         releaseName: smtp-relay
         valueFiles:
