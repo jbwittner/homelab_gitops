@@ -1,0 +1,16 @@
+# Hermes Agent (Nous Research) en mode gateway, image officielle ; voir doc/hermes.md
+# Aucune CiliumNetworkPolicy : sortie réseau libre, choix assumé (doc/decisions.md)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: hermes
+resources:
+  - namespace.yaml
+  - externalsecret.yaml
+  - statefulset.yaml
+  - service.yaml
+  - httproute.yaml
+# variables non secrètes ; nom suffixé d'un hash, réécrit dans le StatefulSet : une modif relance le pod
+configMapGenerator:
+  - name: hermes-vars
+    envs:
+      - config/hermes.env

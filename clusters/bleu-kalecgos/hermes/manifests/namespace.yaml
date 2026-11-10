@@ -1,0 +1,6 @@
+# PodSecurity baseline (défaut Talos), pas restricted : l'image démarre en root (s6-overlay
+# chown /opt/data) puis descend sur l'uid 10000 pour chaque service
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hermes

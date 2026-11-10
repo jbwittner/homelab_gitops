@@ -21,18 +21,19 @@ Une ligne par composant ; Application ArgoCD `<comp>-<cluster-court>`. Versions 
 | External Secrets | infra | ✓ | ✓ | `external-secrets` | — |
 | Gateway `lan` (wildcard `*.lan`) | infra | ✓ `.80` | ✓ `.85` | `gateway` | — |
 | OpenBao | infra | ✓ | | `openbao` | [openbao](https://openbao.lan.wittner.tech) |
-| Authelia (OIDC : ArgoCD, Grafana, OpenBao) | infra | ✓ | | `authelia` | [auth](https://auth.lan.wittner.tech) |
+| Authelia (OIDC : ArgoCD, Grafana, OpenBao, Hermes) | infra | ✓ | | `authelia` | [auth](https://auth.lan.wittner.tech) |
 | Velero (GCS) | infra | ✓ | ✓ | `velero` | — |
 | Relais SMTP (Postfix → Resend) | infra | ✓ | ✓ | `smtp-relay` | — |
 | CloudNativePG (opérateur Postgres) | infra | ✓ | ✓ | `cnpg-system` | — |
 | Plugin barman-cloud (sauvegardes CNPG vers GCS) | infra | | ✓ | `cnpg-system` | — |
 | kube-prometheus-stack | infra | ✓ complet | ✓ agent | `monitoring` | [grafana](https://grafana.lan.wittner.tech), [prometheus](https://prometheus.lan.wittner.tech), [alertmanager](https://alertmanager.lan.wittner.tech) |
-| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech), [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech), [filon](https://filon.lan.wittner.tech), [n8n](https://n8n.lan.wittner.tech) (relais) |
+| external-services (machines du LAN, relais vers kalecgos) | infra | ✓ | | `external-services` | [adguard](https://adguard.lan.wittner.tech), [ha](https://ha.lan.wittner.tech), [pve-ysera](https://pve-ysera.lan.wittner.tech), [z2m](https://z2m.lan.wittner.tech), [zyxel](https://zyxel.lan.wittner.tech), [homepage](https://homepage.lan.wittner.tech), [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech), [filon](https://filon.lan.wittner.tech), [n8n](https://n8n.lan.wittner.tech), [hermes](https://hermes.lan.wittner.tech), [hermes-api](https://hermes-api.lan.wittner.tech) (relais) |
 | Homepage | apps | | ✓ | `homepage` | [homepage](https://homepage.lan.wittner.tech) |
 | Renovate (CronJob, GitHub App) | apps | | ✓ | `renovate` | — |
 | bankwiz, env dev (appli maison, Postgres CNPG) | apps | | ✓ | `bankwiz-dev` | [bankwiz-dev](https://bankwiz-dev.lan.wittner.tech) |
 | filon (appli maison, Postgres CNPG sauvegardé sur GCS) | apps | | ✓ | `filon` | [filon](https://filon.lan.wittner.tech) |
 | n8n (automatisation, Postgres CNPG sauvegardé sur GCS) | apps | | ✓ | `n8n` | [n8n](https://n8n.lan.wittner.tech) |
+| Hermes Agent (agent IA, PVC sauvegardé par Velero) | apps | | ✓ | `hermes` | [hermes](https://hermes.lan.wittner.tech), [hermes-api](https://hermes-api.lan.wittner.tech) |
 
 Hors dépôt (Proxmox `vert-ysera`) : AdGuard Home (DNS), Home Assistant, Zigbee2MQTT, client NetBird.
 

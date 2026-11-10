@@ -1,0 +1,80 @@
+# StatefulSet mono-réplica : tout l'état d'Hermes vit dans /opt/data (PVC RWO), rien d'autre ne
+# le reconstruit. Aucun initContainer : rien n'écrit dans le PVC à la place d'Hermes (doc/hermes.md).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hermes
+spec:
+  serviceName: hermes
+  replicas: 1
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hermes
+    spec:
+      # l'agent exécute du code décidé par un LLM : aucun jeton de ServiceAccount dans le pod
+      automountServiceAccountToken: false
+      # pas de runAsNonRoot : s6-overlay démarre en root, chown /opt/data, puis passe en 10000
+      securityContext:
+        fsGroup: 10000
+      containers:
+        - name: hermes
+          image: nousresearch/hermes-agent:v0.22.6
+          # pas de command : l'ENTRYPOINT lance s6 (supervision, dashboard, drop de privilèges)
+          args: ["gateway", "run"]
+          # ordre significatif : le dernier envFrom l'emporte (le secret peut surcharger)
+          envFrom:
+            - configMapRef:
+                name: hermes-vars
+            - secretRef:
+                name: hermes-env
+          ports:
+            - name: api
+              containerPort: 8642
+            - name: dashboard
+              containerPort: 9119
+          # PVC NEUF : sondes désactivées le temps de l'init manuelle (doc/hermes.md, « Premier
+          # boot ») ; sinon kubelet tue le conteneur au bout de 11 min, en pleine manipulation.
+          # À décommenter une fois 8642 et 9119 vivants.
+          # TCP et non HTTP (les deux ports sont derrière une auth) ; startup sur l'API, le
+          # dashboard bind bien avant la fin du démarrage de la gateway.
+          # startupProbe:
+          #   tcpSocket:
+          #     port: api
+          #   initialDelaySeconds: 60
+          #   periodSeconds: 10
+          #   failureThreshold: 60
+          # livenessProbe:
+          #   tcpSocket:
+          #     port: dashboard
+          #   periodSeconds: 30
+          #   failureThreshold: 3
+          # readinessProbe:
+          #   tcpSocket:
+          #     port: api
+          #   periodSeconds: 15
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+  # immuable : y toucher impose de supprimer le StatefulSet en --cascade=orphan ; la taille ne
+  # vaut que pour un PVC à créer
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        storageClassName: openebs-lvm
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 15Gi

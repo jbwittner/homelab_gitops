@@ -9,6 +9,7 @@ resources:
   - bankwiz-dev.yaml
   - filon.yaml
   - homepage.yaml
+  - hermes.yaml
   - n8n.yaml
   - homeassistant.yaml
   - pve-ysera.yaml
@@ -19,7 +20,7 @@ configMapGenerator:
   - name: pve-root-ca
     files:
       - ca.crt=pve-root-ca.crt
-  # racine Let's Encrypt (certificat public) : vérifie la Gateway de kalecgos (homepage, bankwiz-dev, filon, n8n)
+  # racine Let's Encrypt (certificat public) : vérifie la Gateway de kalecgos (homepage, bankwiz-dev, filon, n8n, hermes)
   - name: isrg-root-x1
     files:
       - ca.crt=isrg-root-x1.crt

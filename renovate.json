@@ -67,6 +67,11 @@
       "groupName": "prometheus-operator"
     },
     {
+      "description": "Hermes : Docker Hub garde les anciens tags datés (v2026.9.x), plus grands que v0.x pour Renovate : sans ce filtre, il proposerait de redescendre",
+      "matchPackageNames": ["nousresearch/hermes-agent"],
+      "allowedVersions": "<1000"
+    },
+    {
       "description": "Image de bankwiz (appli maison, registre privé) : la ligne image est réécrite par la CI de bankwiz (develop.yml), pas par Renovate",
       "matchPackageNames": ["ghcr.io/jbwittner/bankwiz"],
       "enabled": false

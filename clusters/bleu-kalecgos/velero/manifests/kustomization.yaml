@@ -1,3 +1,4 @@
 resources:
   - ../../../../components/velero/manifests
   - gcp-credentials.yaml
+  - schedule-hermes.yaml

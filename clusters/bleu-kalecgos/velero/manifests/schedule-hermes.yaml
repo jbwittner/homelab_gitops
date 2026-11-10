@@ -1,0 +1,16 @@
+# Hermes : seul filet de son PVC (config.yaml, skills, mémoire, auth.json, sessions), que rien
+# d'autre ne reconstruit. Copie des fichiers par Kopia, à chaud : les SQLite (state.db,
+# kanban.db, memory_store.db) peuvent être incohérents, accepté.
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: hermes
+  namespace: velero
+spec:
+  schedule: "0 3 * * *"   # UTC
+  template:
+    includedNamespaces:
+      - hermes
+    snapshotVolumes: false
+    defaultVolumesToFsBackup: true
+    ttl: 720h0m0s

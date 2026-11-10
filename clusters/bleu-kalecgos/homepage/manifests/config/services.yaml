@@ -191,6 +191,11 @@
         siteMonitor: https://n8n.lan.wittner.tech/healthz
         description: Automatisation de workflows (kalecgos)
         icon: n8n.png
+    - Hermes:
+        href: https://hermes.lan.wittner.tech/
+        siteMonitor: https://hermes.lan.wittner.tech/
+        description: Agent IA, dashboard (kalecgos)
+        icon: mdi-robot
     - filon:
         href: https://filon.lan.wittner.tech/actuator/health
         siteMonitor: https://filon.lan.wittner.tech/actuator/health

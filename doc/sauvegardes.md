@@ -11,6 +11,7 @@ Volumes et OpenBao par Velero ; bases Postgres par le plugin barman-cloud de Clo
 | `clusters/<nom>/velero/values.yaml` | BackupStorageLocation : bucket `homelab-velero-<nom>-050ff71f` |
 | `clusters/<nom>/velero/manifests/gcp-credentials.yaml` | ConfigMap `velero-gcp` (`terraform output -json velero`, pas de secret) |
 | `clusters/bleu-malygos/velero/manifests/schedule-openbao.yaml` | OpenBao chaque nuit (03:00 UTC), 30 jours |
+| `clusters/bleu-kalecgos/velero/manifests/schedule-hermes.yaml` | Hermes (PVC) chaque nuit (03:00 UTC), 30 jours ; SQLite copiés à chaud |
 
 Côté `homelab_terraform` : `gcp/homelab/velero.tf` (buckets, comptes, Workload Identity Federation), `openbao/bleu-malygos/raft_snapshot.tf` (rôle du hook).
 
