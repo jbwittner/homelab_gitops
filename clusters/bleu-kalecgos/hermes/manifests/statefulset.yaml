@@ -23,7 +23,7 @@ spec:
         fsGroup: 10000
       containers:
         - name: hermes
-          image: nousresearch/hermes-agent:v0.22.6
+          image: nousresearch/hermes-agent:v0.22.7
           # pas de command : l'ENTRYPOINT lance s6 (supervision, dashboard, drop de privilèges)
           args: ["gateway", "run"]
           # ordre significatif : le dernier envFrom l'emporte (le secret peut surcharger)
