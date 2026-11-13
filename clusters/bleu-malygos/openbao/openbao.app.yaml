@@ -13,7 +13,7 @@ spec:
   sources:
     - repoURL: https://openbao.github.io/openbao-helm
       chart: openbao
-      targetRevision: 0.30.6
+      targetRevision: 0.30.7
       helm:
         releaseName: openbao
         # Pod de test Helm : déjà ignoré par ArgoCD, explicite ici
