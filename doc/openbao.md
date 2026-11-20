@@ -24,6 +24,19 @@ Ranger **Unseal Key 1** et **Initial Root Token** dans le gestionnaire de mots d
 kubectl --context admin@bleu-malygos -n openbao exec -it openbao-0 -- bao operator unseal   # clé demandée, non affichée
 ```
 
+## Appliquer une montée de chart (`OnDelete`)
+
+Le StatefulSet est en `updateStrategy: OnDelete` : après un merge Renovate, `openbao-0` garde l'ancienne révision et `KubeStatefulSetUpdateNotRolledOut` se déclenche.
+
+```sh
+kubectl --context admin@bleu-malygos -n openbao get sts openbao \
+  -o jsonpath='{.status.updateRevision} {.status.updatedReplicas}/{.status.replicas}{"\n"}'   # 0/1 = à appliquer
+kubectl --context admin@bleu-malygos -n openbao delete pod openbao-0
+kubectl --context admin@bleu-malygos -n openbao exec -it openbao-0 -- bao operator unseal
+```
+
+Scellé entre le redémarrage et l'unseal : External Secrets ne lit plus rien (secrets déjà créés intacts). `currentRevision` reste figé sur la première révision : normal avec `OnDelete`, l'alerte ne regarde que `updatedReplicas`.
+
 ## Vérifier
 
 ```sh
