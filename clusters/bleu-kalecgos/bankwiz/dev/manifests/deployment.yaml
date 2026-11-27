@@ -16,4 +16,4 @@ spec:
                 secretKeyRef:
                   name: bankwiz-oidc
                   key: clientSecret
-          image: ghcr.io/jbwittner/bankwiz:develop-sha-65fc1c0@sha256:8f812affa1940e4348e514e963d52934b78542ca224552b30c6011688ab89eec
+          image: ghcr.io/jbwittner/bankwiz:develop-sha-2717b63@sha256:dfdd313c5040c5c440001ab3c91f0caf5b00d36ecfd783ad683721b1272c2c7a
