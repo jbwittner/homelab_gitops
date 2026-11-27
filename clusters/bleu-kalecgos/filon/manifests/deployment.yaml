@@ -19,7 +19,7 @@ spec:
         - name: ghcr-pull
       containers:
         - name: filon
-          image: ghcr.io/jbwittner/filon:main-sha-eb81348@sha256:9882ffe9623e6d50fa74110cd99a79ba58fae865768e94da64add16005964a85
+          image: ghcr.io/jbwittner/filon:main-sha-b94041b@sha256:6b14d9718f48f05a400d565779cff26670e692f416dabef2676922dbae430487
           env:
             # identifiants de la base : Secret de CNPG
             - name: SPRING_DATASOURCE_USERNAME
